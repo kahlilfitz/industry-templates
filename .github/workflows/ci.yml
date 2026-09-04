@@ -30,9 +30,9 @@ jobs:
 
       - name: Fail if generated content is out of date
         run: |
-          if ! git diff --quiet -- src/content public/bundles; then
+          if ! git diff --quiet -- src/content; then
             echo "::error::Generated content is out of date. Run 'npm run import:submissions' and commit the result."
-            git diff --stat -- src/content public/bundles
+            git diff --stat -- src/content
             exit 1
           fi
 

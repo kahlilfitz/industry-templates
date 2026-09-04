@@ -45,6 +45,12 @@ are for people, and shipping them to the agent would only waste its context.
 
 Everything else goes in verbatim — the bundle *is* the package the agent loads.
 
+Bundles are **not** committed to the repository (`public/bundles/` is gitignored): zip entry
+metadata is platform-specific, so a Windows-built archive never matches a Linux-built one
+byte-for-byte. CI rebuilds them from your submission before every deploy. The generated pages
+under `src/content/` *are* committed, so a reviewer can see exactly what your submission will
+publish.
+
 ## `metadata.json`
 
 ```json
