@@ -1,0 +1,288 @@
+{
+  "contract_version": "mfg.supplier-disruption.v1",
+  "disruption_id": "DISR-3308",
+  "trigger_channel": "portal_notice",
+  "disruption_type": "late_po",
+  "supplier_or_po": "PrecisionDrive GmbH / PO-55090",
+  "supplier": "PrecisionDrive GmbH",
+  "po_number": "PO-55090",
+  "reported_at": "2024-06-20",
+  "promised_date": "2024-06-21",
+  "revised_date": "2024-07-05",
+  "short_qty": 30,
+  "reason": "Sub-supplier power-module shortage; supplier-confirmed 14-day slip (portal). Sales email downplayed it as 'about a week' - portal date governs.",
+  "description": "PrecisionDrive GmbH is late on PO-55090 (SRV-2201 precision servo drive, 30 ea). The sales email calls it a 'minor... about a week' slip, but the supplier portal confirms delivery moves 2024-06-21 -> 2024-07-05 (14 days). SRV-2201 is a single-source critical part with almost no buffer.",
+  "part": {
+    "part_no": "SRV-2201",
+    "description": "Precision servo drive 3kW",
+    "uom": "ea",
+    "citation": "po-record.csv"
+  },
+  "supply": {
+    "on_hand": 2,
+    "on_order": 30,
+    "safety_stock": 4,
+    "lead_time_days": 42,
+    "single_source": true,
+    "substitutes": [
+      {
+        "part_no": "SRV-2205",
+        "description": "Servo drive 3kW (not approved for X9/L5)",
+        "approved": false,
+        "available_qty": 10,
+        "citation": "supplier-master.csv"
+      }
+    ],
+    "alternates": [
+      {
+        "supplier": "ServoAlt Industrial",
+        "lead_time_days": 45,
+        "qualified": false,
+        "citation": "supplier-master.csv"
+      }
+    ],
+    "source": "skill:supply-knowledge-retrieve",
+    "citation": "inventory-status.csv; supplier-master.csv"
+  },
+  "retrieved": {
+    "open_orders": [
+      {
+        "order_id": "SO-7788",
+        "order_type": "sales",
+        "product": "CNC Router X9",
+        "line": "Assembly 2",
+        "finished_qty": 12,
+        "per_unit": 1,
+        "need_by": "2024-06-27",
+        "customer": "Northwind Robotics",
+        "high_runner": true,
+        "citation": "open-orders.csv"
+      },
+      {
+        "order_id": "WO-6602",
+        "order_type": "production",
+        "product": "CNC Router X9",
+        "line": "Assembly 2",
+        "finished_qty": 20,
+        "per_unit": 1,
+        "need_by": "2024-06-30",
+        "customer": "",
+        "high_runner": true,
+        "citation": "open-orders.csv"
+      },
+      {
+        "order_id": "WO-6610",
+        "order_type": "production",
+        "product": "Lathe L5",
+        "line": "Assembly 1",
+        "finished_qty": 8,
+        "per_unit": 1,
+        "need_by": "2024-07-02",
+        "customer": "",
+        "high_runner": false,
+        "citation": "open-orders.csv"
+      },
+      {
+        "order_id": "WO-6620",
+        "order_type": "production",
+        "product": "CNC Router X9",
+        "line": "Assembly 2",
+        "finished_qty": 15,
+        "per_unit": 1,
+        "need_by": "2024-07-08",
+        "customer": "",
+        "high_runner": true,
+        "citation": "open-orders.csv"
+      }
+    ],
+    "supplier_master": [
+      {
+        "part_no": "SRV-2201",
+        "single_source": true,
+        "citation": "supplier-master.csv"
+      }
+    ],
+    "standards": [
+      {
+        "doc": "Sourcing & MRP",
+        "note": "Single-source risk; unapproved substitute cannot be used",
+        "citation": "sourcing-standards-excerpt.pdf"
+      }
+    ],
+    "source": "skill:supply-knowledge-retrieve",
+    "citation": "bom-where-used.csv; open-orders.csv"
+  },
+  "history": {
+    "window_days": 160,
+    "late_count": 4,
+    "on_time_pct": 0.0,
+    "chronic_pattern": true,
+    "prior_shipments": [
+      {
+        "po_number": "PO-53980",
+        "date": "2024-01-30",
+        "part_no": "SRV-2201",
+        "promised_date": "2024-01-30",
+        "actual_date": "2024-02-09",
+        "days_late": 10,
+        "citation": "supplier-ontime-history.csv"
+      },
+      {
+        "po_number": "PO-54350",
+        "date": "2024-03-12",
+        "part_no": "SRV-2201",
+        "promised_date": "2024-03-12",
+        "actual_date": "2024-03-25",
+        "days_late": 13,
+        "citation": "supplier-ontime-history.csv"
+      },
+      {
+        "po_number": "PO-54810",
+        "date": "2024-05-02",
+        "part_no": "SRV-2201",
+        "promised_date": "2024-05-02",
+        "actual_date": "2024-05-16",
+        "days_late": 14,
+        "citation": "supplier-ontime-history.csv"
+      }
+    ]
+  },
+  "escalations": [
+    "Projected balance dips below safety stock: stock-out risk even where no single order is formally short (impact-mapping-rules.md #2).",
+    "Customer order at risk of a late shipment: escalate to the materials manager + plant manager and notify customer service/account before the customer finds out (mitigation-escalation-rules.md #3.3).",
+    "Single-source critical part with no buffer: open a second-source qualification (mitigation-escalation-rules.md #3.4).",
+    "Chronic late-delivery pattern from this supplier: open a supplier-performance / SQM review; do not treat this as a one-off slip (mitigation-escalation-rules.md #3.5)."
+  ],
+  "impact_map": [
+    {
+      "order_id": "SO-7788",
+      "order_type": "sales",
+      "product": "CNC Router X9",
+      "line": "Assembly 2",
+      "customer": "Northwind Robotics",
+      "need_by": "2024-06-27",
+      "qty_at_risk": 10.0,
+      "status": "late_shipment",
+      "severity": "critical",
+      "source": "engine:shortage_impact_map",
+      "citation": "impact-mapping-rules.md #3, #4"
+    },
+    {
+      "order_id": "WO-6602",
+      "order_type": "production",
+      "product": "CNC Router X9",
+      "line": "Assembly 2",
+      "customer": "",
+      "need_by": "2024-06-30",
+      "qty_at_risk": 20.0,
+      "status": "line_down",
+      "severity": "high",
+      "source": "engine:shortage_impact_map",
+      "citation": "impact-mapping-rules.md #3, #4"
+    },
+    {
+      "order_id": "WO-6610",
+      "order_type": "production",
+      "product": "Lathe L5",
+      "line": "Assembly 1",
+      "customer": "",
+      "need_by": "2024-07-02",
+      "qty_at_risk": 8.0,
+      "status": "at_risk",
+      "severity": "medium",
+      "source": "engine:shortage_impact_map",
+      "citation": "impact-mapping-rules.md #3, #4"
+    },
+    {
+      "order_id": "WO-6620",
+      "order_type": "production",
+      "product": "CNC Router X9",
+      "line": "Assembly 2",
+      "customer": "",
+      "need_by": "2024-07-08",
+      "qty_at_risk": 0.0,
+      "status": "covered_by_incoming",
+      "severity": "low",
+      "source": "engine:shortage_impact_map",
+      "citation": "impact-mapping-rules.md #3, #4"
+    }
+  ],
+  "impact_summary": {
+    "worst_severity": "critical",
+    "first_impact_date": "2024-06-27",
+    "affected_products": 2,
+    "affected_orders": 3,
+    "affected_sales_orders": 1,
+    "total_qty_at_risk": 38.0,
+    "below_safety_stock": true,
+    "confidence": 0.92,
+    "source": "engine:shortage_impact_map",
+    "citation": "impact-mapping-rules.md #5, #6, #7"
+  },
+  "next_best_action": "Expedite 38 of the part (ServoAlt Industrial) to hit the first-impact date (2024-06-27). A customer order is at risk: notify account management and escalate per the matrix; reschedule downstream orders as a fallback.",
+  "provenance": {
+    "engines": [
+      "shortage_impact_map/1.0",
+      "mitigation_recommend/1.0"
+    ],
+    "generated_at": "2026-07-21T21:29:52+00:00"
+  },
+  "mitigation": {
+    "option": "expedite",
+    "urgency": "immediate",
+    "rationale": "No approved substitute and no qualified alternate can beat the first-impact date; expedite the current supplier and begin qualifying an alternate (mitigation-escalation-rules.md #1.4).",
+    "actions": [
+      "Request a partial shipment / premium (air) freight from the current supplier to hit the first-impact date, or a firm recovery plan.",
+      "Begin qualifying an alternate supplier (second source).",
+      "Reschedule downstream orders as a fallback if the expedite cannot close the gap."
+    ],
+    "substitute_part": {},
+    "alternate_supplier": {
+      "supplier": "ServoAlt Industrial",
+      "lead_time_days": 45.0,
+      "qualified": false,
+      "citation": "supplier-master.csv"
+    },
+    "confidence": 0.9,
+    "source": "engine:mitigation_recommend",
+    "citation": "mitigation-escalation-rules.md #1, #2"
+  },
+  "notifications": [
+    {
+      "role": "Buyer",
+      "name": "(owner)",
+      "reason": "Owns the PO",
+      "citation": "mitigation-escalation-rules.md #4.1"
+    },
+    {
+      "role": "Production planner",
+      "name": "(owner)",
+      "reason": "Schedule adjustment on the affected line",
+      "citation": "mitigation-escalation-rules.md #4.2"
+    },
+    {
+      "role": "Materials manager",
+      "name": "(owner)",
+      "reason": "A line will stop; approve expedite/premium freight",
+      "citation": "mitigation-escalation-rules.md #4.3"
+    },
+    {
+      "role": "Plant manager",
+      "name": "(owner)",
+      "reason": "A customer order will ship late",
+      "citation": "mitigation-escalation-rules.md #4.4"
+    },
+    {
+      "role": "Customer service / account manager",
+      "name": "(owner)",
+      "reason": "A customer sales order is at risk of a late shipment",
+      "citation": "mitigation-escalation-rules.md #4.5"
+    },
+    {
+      "role": "Supplier quality (SQM)",
+      "name": "(owner)",
+      "reason": "Chronic late-delivery pattern: supplier performance review",
+      "citation": "mitigation-escalation-rules.md #4.6"
+    }
+  ]
+}

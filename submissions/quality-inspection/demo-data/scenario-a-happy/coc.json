@@ -1,0 +1,4 @@
+{ "doc_id": "MPC-26-1188", "supplier": "Meridian Precision Components",
+  "claims": [
+    {"characteristics": ["anodize_thickness_um"], "claim": "surface treatment per drawing note 7", "citation": "CoC MPC-26-1188"}
+  ] }

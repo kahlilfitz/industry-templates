@@ -1,0 +1,9 @@
+{ "contract_version": "mfg.production-planning.v1", "plan_week": "2026-W34", "week_start": "2026-08-17", "line": "LINE-2",
+  "orders": [
+    {"order_id": "MO-9101", "product": "PUMP-AX200", "family": "PUMP", "run_hours": 20, "due_date": "2026-08-19", "committed": true},
+    {"order_id": "MO-9102", "product": "VALVE-VX9", "family": "VALVE", "run_hours": 16, "due_date": "2026-08-19", "committed": false},
+    {"order_id": "MO-9103", "product": "PUMP-AX210", "family": "PUMP", "run_hours": 14, "due_date": "2026-08-20", "committed": false},
+    {"order_id": "MO-9104", "product": "VALVE-VX12", "family": "VALVE", "run_hours": 12, "due_date": "2026-08-20", "committed": false},
+    {"order_id": "MO-9105", "product": "COMPRESSOR-CK4", "family": "COMP", "run_hours": 18, "due_date": "2026-08-20", "committed": true},
+    {"order_id": "MO-9106", "product": "PUMP-AX220", "family": "PUMP", "run_hours": 12, "due_date": "2026-08-22", "committed": false}
+  ], "escalations": [] }

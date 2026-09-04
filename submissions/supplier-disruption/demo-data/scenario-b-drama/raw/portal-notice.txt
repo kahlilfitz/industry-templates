@@ -1,0 +1,8 @@
+SUPPLIER PORTAL - DELIVERY EXCEPTION  (auto-exported 2024-06-20 18:40)
+PO: PO-55090   Supplier: PrecisionDrive GmbH   Part: SRV-2201 (precision servo drive)
+Original promised date: 2024-06-21
+REVISED CONFIRMED SHIP/ARRIVAL: 2024-07-05     (delay: 14 days)
+Reason code: COMPONENT-SHORTAGE (sub-supplier power module)
+Quantity: 30 units (unchanged)
+Note: This is the supplier's system-confirmed date. It is 14 days late - materially worse than the
+"about a week" stated in the sales email. Portal date governs.

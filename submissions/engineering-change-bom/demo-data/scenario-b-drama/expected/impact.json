@@ -1,0 +1,100 @@
+{
+  "contract_version": "mfg.engineering-change-bom.v1",
+  "ecr_id": "ECR-2026-091",
+  "part_number": "BRK-2047-A",
+  "change_type": "tolerance_relax",
+  "affected_characteristic": "hole_diameter_mm",
+  "escalations": [
+    "INTERFACE VIOLATION candidate: hole_diameter_mm on BRK-2047-A has interface-critical where-used link(s) - mating-part analysis + change-board review required; not a minor change (change-rules.md #2; ASME Y14.5 fit definition)",
+    "inspection plan IP-BRK-2047 is at obsolete rev A (current B) - release blocked until updated (change-rules.md #3)"
+  ],
+  "change_description": "Relax char 14 bore tolerance from +/-0.050 to +/-0.100 - cuts boring cycle 18% and scrap cost ~$40k/yr. Minor change, no form/fit impact expected.",
+  "where_used": [
+    {
+      "parent": "PUMP-AX200",
+      "level": 1,
+      "qty_per": 2,
+      "interface_critical": false,
+      "source": "engine:where_used",
+      "citation": "BOM link BRK-2047-A -> PUMP-AX200"
+    },
+    {
+      "parent": "SKID-700",
+      "level": 2,
+      "qty_per": 1,
+      "interface_critical": false,
+      "source": "engine:where_used",
+      "citation": "BOM link PUMP-AX200 -> SKID-700"
+    },
+    {
+      "parent": "ASM-LEGACY-9",
+      "level": 1,
+      "qty_per": 4,
+      "interface_critical": true,
+      "source": "engine:where_used",
+      "citation": "BOM link BRK-2047-A -> ASM-LEGACY-9"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "where_used/1.0",
+      "bom_impact/1.0"
+    ],
+    "generated_at": "2026-08-05T00:19:43+00:00"
+  },
+  "impact": {
+    "impact_class": "function",
+    "interface_violation": true,
+    "affected_items": [
+      {
+        "item": "PUMP-AX200",
+        "level": 1,
+        "reason": "where-used parent",
+        "source": "engine:bom_impact",
+        "citation": "BOM link BRK-2047-A -> PUMP-AX200"
+      },
+      {
+        "item": "SKID-700",
+        "level": 2,
+        "reason": "where-used parent",
+        "source": "engine:bom_impact",
+        "citation": "BOM link PUMP-AX200 -> SKID-700"
+      },
+      {
+        "item": "ASM-LEGACY-9",
+        "level": 1,
+        "reason": "where-used parent",
+        "source": "engine:bom_impact",
+        "citation": "BOM link BRK-2047-A -> ASM-LEGACY-9"
+      }
+    ],
+    "documents_to_update": [
+      {
+        "doc": "drawing BRK-2047-A",
+        "revision": "C",
+        "current_revision": "C",
+        "obsolete": false,
+        "source": "engine:bom_impact",
+        "citation": "drawing BRK-2047-A references hole_diameter_mm (change-rules.md #3)"
+      },
+      {
+        "doc": "inspection plan IP-BRK-2047",
+        "revision": "A",
+        "current_revision": "B",
+        "obsolete": true,
+        "source": "engine:bom_impact",
+        "citation": "inspection plan IP-BRK-2047 references hole_diameter_mm (change-rules.md #3)"
+      }
+    ],
+    "inventory_disposition": {
+      "policy": "hold WIP and on-hand pending change board",
+      "on_hand": 620,
+      "wip": 150,
+      "citation": "change-rules.md #4"
+    },
+    "release_blocked": true,
+    "confidence": 0.95,
+    "source": "engine:bom_impact",
+    "citation": "change-rules.md #1-#4"
+  }
+}

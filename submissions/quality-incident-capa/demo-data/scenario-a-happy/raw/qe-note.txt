@@ -1,0 +1,4 @@
+From: S. Patel (QE)  2026-07-17
+CAPA-2026-0031 opened off NCR-2026-0147 (BRK-2047-A bore oversize, lot held at MRB).
+Complaint pull for 180 days attached. HMC-3 boring op is the usual suspect - we have
+been through 9 or 10 of these since February. Need a proper 8D, not another insert swap.

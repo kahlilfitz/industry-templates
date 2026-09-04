@@ -1,0 +1,4 @@
+{ "name": "engineering-change-bom", "version": "1.0.0",
+  "description": "Manufacturing Wave 2 Cowork plugin: turn a change request into a decision. Reads the ECR, spec/drawing delta and BOM; traces impact across the BOM with where-used (where_used engine); classifies form/fit/function impact, flags interface violations and rolls up document and inventory dispositions (bom_impact engine); checks against drawing standards and design rules; drafts the ECN with the affected-item list. Draft-first; document-grounded.",
+  "author": { "name": "Microsoft Manufacturing Skills" },
+  "keywords": ["manufacturing", "engineering-change", "ECR", "ECN", "BOM", "where-used", "PLM", "GD&T"] }

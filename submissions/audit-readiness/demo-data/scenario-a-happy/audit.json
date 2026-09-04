@@ -1,0 +1,4 @@
+{ "contract_version": "mfg.audit-readiness.v1", "audit_id": "AUD-2026-S2", "standard": "ISO9001:2015",
+  "audit_date": "2026-09-15", "scope": ["production", "quality"], "active_roles": ["J. Okafor", "L. Tran"],
+  "owners": {"9.3": "Plant manager", "9.2": "Quality director", "7.2": "HR / Quality", "8.7": "Quality manager", "9.1.3": "Quality manager", "7.1.5": "Metrology lead"},
+  "escalations": [] }

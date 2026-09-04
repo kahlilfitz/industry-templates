@@ -1,0 +1,10 @@
+{ "contract_version": "mfg.supplier-qualification.v1", "as_of_date": "2026-08-01",
+  "supplier": {"name": "Vantage Global Machining"}, "category": "machined-components",
+  "category_region_concentration_pct": 68, "candidate_region_matches_concentration": true,
+  "ppap_required": ["PSW", "control_plan", "process_FMEA", "MSA"],
+  "dossier": {
+    "cert": {"standard": "IATF 16949", "doc_id": "BV-55107", "expiry": "2026-05-31"},
+    "audit_score": 84, "region": "APAC-South",
+    "ppap_elements": ["PSW", "process_FMEA", "MSA"],
+    "financials": {"quick_ratio": 0.72, "trend": "declining"}},
+  "escalations": [] }

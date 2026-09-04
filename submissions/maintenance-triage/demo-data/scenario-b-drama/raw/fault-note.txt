@@ -1,0 +1,10 @@
+FAULT NOTE — 2024-06-17  02:15
+Asset: P-201  Boiler Feed Water Pump A  (Boiler House)
+Reported by: M. Alvarez (Technician, C-shift)
+
+P-201 tripped on overload again overnight. This is the fourth time this quarter — last few
+times we just reset the overload relay and it ran fine, so I was going to reset it and move
+on. Motor is hot. One thing though: I can feel more vibration than usual at the drive end
+and the panel briefly flashed a high-vibration alarm this time, which is new. Boiler load is
+high and there is no second feed pump, so we need this back fast. Reset and go, or is
+something else going on?

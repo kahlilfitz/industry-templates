@@ -1,0 +1,293 @@
+{
+  "contract_version": "mfg.work-order-assist.v1",
+  "work_order_id": "WO-4501",
+  "wo_type": "corrective",
+  "asset_id": "CV-210",
+  "asset_name": "Line 2 Case Conveyor Gearbox GB-12",
+  "asset_class": "gearbox",
+  "component": "gearbox",
+  "asset_criticality": "B",
+  "redundancy": "parallel Line 3 available",
+  "location": "Packaging / Line 2",
+  "reported_by": "R. Deng (Planner)",
+  "reported_at": "2024-06-14T08:20:00",
+  "problem_description": "Oil weep at gearbox output shaft; housing running warm; throughput unaffected.",
+  "issue_keywords": [
+    {
+      "name": "oil_leak",
+      "confidence": 0.9,
+      "source": "skill:wo-intake",
+      "citation": "work-order.txt"
+    },
+    {
+      "name": "seal_weep",
+      "confidence": 0.9,
+      "source": "skill:wo-intake",
+      "citation": "work-order.txt"
+    },
+    {
+      "name": "high_temp",
+      "confidence": 0.85,
+      "source": "skill:wo-intake",
+      "citation": "work-order.txt"
+    }
+  ],
+  "sop_ref": {
+    "doc": "SOP-LUBE-07",
+    "title": "Gearbox oil-seal replacement",
+    "section": "Sec 4.2",
+    "default_remedy": "Replace output-shaft oil seal, renew gear oil, replace housing gasket; verify breather and oil level.",
+    "citation": "sop-library.md #1"
+  },
+  "required_parts": [
+    {
+      "part_no": "OS-45",
+      "description": "Output-shaft oil seal",
+      "qty": 1,
+      "criticality": "standard",
+      "source": "skill:wo-intake",
+      "citation": "SOP-LUBE-07"
+    },
+    {
+      "part_no": "GO-220",
+      "description": "Gear oil ISO VG220 (litre)",
+      "qty": 4,
+      "criticality": "standard",
+      "source": "skill:wo-intake",
+      "citation": "SOP-LUBE-07"
+    },
+    {
+      "part_no": "GK-12",
+      "description": "Gearbox housing gasket",
+      "qty": 1,
+      "criticality": "standard",
+      "source": "skill:wo-intake",
+      "citation": "SOP-LUBE-07"
+    }
+  ],
+  "retrieved": {
+    "sops": [
+      {
+        "doc": "SOP-LUBE-07",
+        "section": "Sec 4.2",
+        "citation": "sop-excerpt.pdf"
+      }
+    ],
+    "manuals": [
+      {
+        "doc": "GBX-40",
+        "section": "Sec 4.2",
+        "citation": "oem-manual-excerpt.pdf"
+      }
+    ],
+    "prior_fixes": [
+      {
+        "fix_note_id": "FN-410",
+        "wo_id": "WO-4120",
+        "summary": "Seal weep resolved by standard SOP-LUBE-07 remedy; no recurrence.",
+        "recommended_change": false,
+        "citation": "prior-fix-notes.md FN-410"
+      }
+    ],
+    "source": "skill:knowledge-retrieve",
+    "citation": "work-order-history.csv; prior-fix-notes.md"
+  },
+  "history": {
+    "window_days": 400,
+    "prior_work_orders": [
+      {
+        "wo_id": "WO-4120",
+        "date": "2023-11-08",
+        "asset_id": "CV-210",
+        "component": "gearbox",
+        "keywords": [
+          "oil_leak",
+          "seal_weep"
+        ],
+        "action_taken": "Replaced output oil seal and housing gasket; renewed gear oil",
+        "parts_used": [
+          "OS-45",
+          "GK-12",
+          "GO-220"
+        ],
+        "outcome": "resolved",
+        "citation": "WO-4120"
+      },
+      {
+        "wo_id": "WO-3980",
+        "date": "2023-05-20",
+        "asset_id": "CV-210",
+        "component": "gearbox",
+        "keywords": [
+          "high_temp"
+        ],
+        "action_taken": "Topped up gear oil, cleaned breather",
+        "parts_used": [
+          "GO-220"
+        ],
+        "outcome": "resolved",
+        "citation": "WO-3980"
+      },
+      {
+        "wo_id": "WO-4300",
+        "date": "2024-02-02",
+        "asset_id": "CV-220",
+        "asset_class": "gearbox",
+        "component": "gearbox",
+        "keywords": [
+          "oil_leak"
+        ],
+        "action_taken": "Replaced output oil seal",
+        "parts_used": [
+          "OS-45"
+        ],
+        "outcome": "resolved",
+        "citation": "WO-4300"
+      }
+    ],
+    "repeat_failures": 0,
+    "repeat_promotion": false
+  },
+  "parts_catalog": [
+    {
+      "part_no": "OS-45",
+      "description": "Output-shaft oil seal",
+      "on_hand": 6,
+      "min_stock": 2,
+      "superseded_by": "",
+      "lead_time_days": 10,
+      "criticality": "standard"
+    },
+    {
+      "part_no": "GO-220",
+      "description": "Gear oil ISO VG220 (litre)",
+      "on_hand": 40,
+      "min_stock": 10,
+      "superseded_by": "",
+      "lead_time_days": 5,
+      "criticality": "standard"
+    },
+    {
+      "part_no": "GK-12",
+      "description": "Gearbox housing gasket",
+      "on_hand": 8,
+      "min_stock": 2,
+      "superseded_by": "",
+      "lead_time_days": 10,
+      "criticality": "standard"
+    }
+  ],
+  "escalations": [],
+  "similar_work": [
+    {
+      "rank": 1,
+      "wo_id": "WO-4120",
+      "similarity_score": 0.459,
+      "shared_signals": [
+        "asset:CV-210",
+        "component:gearbox",
+        "keyword:oil_leak",
+        "keyword:seal_weep",
+        "part:GK-12",
+        "part:GO-220",
+        "part:OS-45"
+      ],
+      "outcome": "resolved",
+      "recommended_fix": "Replaced output oil seal and housing gasket; renewed gear oil",
+      "repeat_failure": false,
+      "confidence": 0.84,
+      "source": "engine:similar_work",
+      "citation": "WO-4120; similar-work-rules.md #2"
+    },
+    {
+      "rank": 2,
+      "wo_id": "WO-3980",
+      "similarity_score": 0.297,
+      "shared_signals": [
+        "asset:CV-210",
+        "component:gearbox",
+        "keyword:high_temp",
+        "part:GO-220"
+      ],
+      "outcome": "resolved",
+      "recommended_fix": "Topped up gear oil, cleaned breather",
+      "repeat_failure": false,
+      "confidence": 0.84,
+      "source": "engine:similar_work",
+      "citation": "WO-3980; similar-work-rules.md #2"
+    },
+    {
+      "rank": 3,
+      "wo_id": "WO-4300",
+      "similarity_score": 0.243,
+      "shared_signals": [
+        "class:gearbox",
+        "component:gearbox",
+        "keyword:oil_leak",
+        "part:OS-45"
+      ],
+      "outcome": "resolved",
+      "recommended_fix": "Replaced output oil seal",
+      "repeat_failure": false,
+      "confidence": 0.84,
+      "source": "engine:similar_work",
+      "citation": "WO-4300; similar-work-rules.md #2"
+    }
+  ],
+  "superseding_fix": {
+    "active": false,
+    "source": "engine:similar_work",
+    "confidence": 0.0,
+    "citation": "similar-work-rules.md #3.3"
+  },
+  "next_best_action": "Proceed per SOP-LUBE-07: Replace output-shaft oil seal, renew gear oil, replace housing gasket; verify breather and oil level.",
+  "provenance": {
+    "engines": [
+      "similar_work/1.0",
+      "parts_readiness/1.0"
+    ],
+    "generated_at": "2026-07-21T20:26:55+00:00"
+  },
+  "parts_readiness": {
+    "status": "READY",
+    "lines": [
+      {
+        "part_no": "OS-45",
+        "description": "Output-shaft oil seal",
+        "required_qty": 1.0,
+        "on_hand": 6.0,
+        "line_status": "IN_STOCK",
+        "effective_part": "OS-45",
+        "lead_time_days": 10,
+        "note": "",
+        "citation": "parts-catalog.csv OS-45; parts-readiness-rules.md #1"
+      },
+      {
+        "part_no": "GO-220",
+        "description": "Gear oil ISO VG220 (litre)",
+        "required_qty": 4.0,
+        "on_hand": 40.0,
+        "line_status": "IN_STOCK",
+        "effective_part": "GO-220",
+        "lead_time_days": 5,
+        "note": "",
+        "citation": "parts-catalog.csv GO-220; parts-readiness-rules.md #1"
+      },
+      {
+        "part_no": "GK-12",
+        "description": "Gearbox housing gasket",
+        "required_qty": 1.0,
+        "on_hand": 8.0,
+        "line_status": "IN_STOCK",
+        "effective_part": "GK-12",
+        "lead_time_days": 10,
+        "note": "",
+        "citation": "parts-catalog.csv GK-12; parts-readiness-rules.md #1"
+      }
+    ],
+    "blockers": [],
+    "confidence": 0.9,
+    "source": "engine:parts_readiness",
+    "citation": "parts-readiness-rules.md #1-#4; parts-catalog.csv"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "quality-inspection-nonconformance",
+  "version": "2.0.0",
+  "description": "Manufacturing Wave 1 Cowork plugin: clear an inspection lot. Reads part specs, drawings, inspection plans, CoC and measurement exports; compares actual measurements against tolerances (deterministic tolerance_check, with CoC-vs-measurement cross-check); grades each defect by severity and disposition (deterministic defect_grade rules engine); drafts the nonconformance report with every call cited to the spec. Draft-first; document-grounded. Ends at NCR creation and hands off to Quality Incident & CAPA (Wave 2).",
+  "author": { "name": "Microsoft Manufacturing Skills" },
+  "keywords": ["manufacturing", "quality", "inspection", "NCR", "nonconformance", "tolerance", "MRB", "GD&T", "CoC"]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "my-industry-template",
+  "version": "1.0.0",
+  "description": "The AGENT-facing description of the package: what it reads, which deterministic engines it runs, what it drafts, and where it stops. Keep it dense and action-oriented \u2014 this is what the model reads to decide the package applies.",
+  "author": {
+    "name": "Your Name"
+  },
+  "keywords": [
+    "example",
+    "replace-me"
+  ]
+}

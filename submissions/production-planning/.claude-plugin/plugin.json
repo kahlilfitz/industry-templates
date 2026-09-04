@@ -1,0 +1,4 @@
+{ "name": "production-planning", "version": "1.0.0",
+  "description": "Manufacturing Wave 2 Cowork plugin - the heaviest build in the set. Pulls the demand forecast and open orders; checks capacity, constraints and material availability (capacity_check engine); optimizes the weekly sequence for changeovers with a deterministic campaign heuristic (sequence_optimize engine); drafts the shift plan for the planner to publish. Draft-first, document-grounded; a live solver/APS is the graduation, not v1.",
+  "author": { "name": "Microsoft Manufacturing Skills" },
+  "keywords": ["manufacturing", "operations", "scheduling", "production-planning", "changeover", "capacity"] }

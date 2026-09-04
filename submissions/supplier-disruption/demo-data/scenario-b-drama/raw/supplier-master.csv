@@ -1,0 +1,2 @@
+part_no,supplier,single_source,alternate_supplier,alt_lead_time_days,alt_qualified,substitute_part,substitute_approved,substitute_on_hand
+SRV-2201,PrecisionDrive GmbH,yes,ServoAlt Industrial,45,no,SRV-2205,no,10

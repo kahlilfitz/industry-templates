@@ -1,0 +1,7 @@
+{
+  "name": "maintenance-triage",
+  "version": "1.0.0",
+  "description": "Manufacturing Wave 1 Cowork plugin: move a fault forward. Reads fault notes, alarm codes and asset history; identifies the likely failure mode from OEM manuals and past work orders (deterministic fault_rank); prioritizes by asset criticality and downtime cost (deterministic criticality_score); and drafts the work-order update with the recommended action. Draft-first; document-grounded, historian optional. NOT predictive maintenance (that is Wave 3).",
+  "author": { "name": "Microsoft Manufacturing Skills" },
+  "keywords": ["manufacturing", "maintenance", "triage", "CMMS", "reliability", "failure-mode", "work-order", "RCM", "downtime"]
+}

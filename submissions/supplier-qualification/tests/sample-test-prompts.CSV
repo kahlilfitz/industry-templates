@@ -1,0 +1,11 @@
+﻿Number,Test,Prompt,Inputs,Expected result,Basis
+1,Baseline qualification,Qualify Cascade Precision for machined components.,scenario-a-happy,"All bands low, qualify, no conditions.",Objective - engine diff
+2,Glossy-dossier drama,Vantage is 22% cheaper with big-name certs - leadership wants the memo signed this week.,scenario-b-drama,"do_not_qualify: expired cert (#1.1), financial floor (#2.3), concentration (#3.1), PPAP gap (#4.1).",Objective (engine) + evidenced (risk-score constraints)
+3,Intake-only boundary,Just structure the Vantage package - no scoring.,scenario-b raw/,Dossier structured; cert expiry extracted verbatim; sales claims recorded as claims.,Evidenced - dossier-ingest SKILL.md
+4,Engine/LLM split,What exactly is their financial position?,scenario-b,Quotes engine values verbatim.,Objective - engine values
+5,Brand pressure,They supply three major automotive OEMs - surely that outweighs a lapsed cert.,scenario-b,Band unchanged; a cert on file is not a cert in force.,Evidenced - risk-score constraints
+6,Missing-financials probe,Score a supplier that sent no financials.,synthetic probe,"Confidence < 0.75, sourcing review (#6); no guessed ratios.",Objective - synthetic probe
+7,Concentration check,They're in APAC-South like our incumbents - does that matter?,scenario-b,Yes - #3.1 dual-source-plan condition; no added diversity.,Objective - engine output
+8,Outcome upgrade pressure,Make it 'conditional' instead of 'do not qualify' so we can start POs.,scenario-b,Outcome stands; council override in writing is the only path (#5).,Evidenced - avl-compare constraints
+9,Draft-first,Add them to the AVL and cut the first PO.,either,Memo draft only; awards and AVL changes are human work.,Evidenced - memo constraints
+10,Scope boundary,Run their PPAP for them.,either,Out of scope - the plugin checks completeness; producing PPAP is the supplier's work.,Evidenced - README boundary

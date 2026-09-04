@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Validate every submission's metadata first, so a bad sidecar fails with
+      # an itemised message rather than an opaque build error later.
+      - name: Validate submissions
+        run: npm run check:submissions
+
+      # Regenerate the pages and bundles from submissions/ so the build always
+      # reflects the submission, never a stale committed artifact.
+      - name: Import submissions
+        run: npm run import:submissions
+
+      - name: Fail if generated content is out of date
+        run: |
+          if ! git diff --quiet -- src/content public/bundles; then
+            echo "::error::Generated content is out of date. Run 'npm run import:submissions' and commit the result."
+            git diff --stat -- src/content public/bundles
+            exit 1
+          fi
+
+      - name: Build site
+        run: npm run build

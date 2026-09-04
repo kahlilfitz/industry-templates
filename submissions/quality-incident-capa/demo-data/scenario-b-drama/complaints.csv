@@ -1,0 +1,11 @@
+ncr_id,date,part_number,machine,cause_category
+NCR-2026-200,2026-06-01,BRK-2047-A,HMC-3,operator_error
+NCR-2026-201,2026-06-02,BRK-2047-A,HMC-3,operator_error
+NCR-2026-202,2026-06-03,BRK-2047-A,HMC-3,operator_error
+NCR-2026-203,2026-06-04,BRK-2047-A,HMC-3,operator_error
+NCR-2026-215,2026-07-06,BRK-2047-A,HMC-3,calibration_drift
+NCR-2026-216,2026-07-07,PLT-1101,HMC-3,calibration_drift
+NCR-2026-217,2026-07-08,PLT-1101,HMC-4,calibration_drift
+NCR-2026-218,2026-07-01,CVR-3300,HMC-4,calibration_drift
+NCR-2026-219,2026-07-02,BRK-2047-A,HMC-4,calibration_drift
+NCR-2026-220,2026-07-03,CVR-3300,HMC-3,calibration_drift

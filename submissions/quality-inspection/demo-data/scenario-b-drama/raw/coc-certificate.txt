@@ -1,0 +1,7 @@
+CERTIFICATE OF CONFORMANCE  MPC-26-1245
+Meridian Precision Components - 2026-07-21 - PO 4500129016
+Part BRK-2047-A rev C, Lot LOT-2026-0722-01, Qty 250.
+We certify material 6061-T6 per AMS-QQ-A-250/11. Machined surfaces finished per
+drawing note 4; surface finish process qualified and in statistical control
+(Ra <= 1.6 um, mating face). Surface treatment per drawing note 7.
+Authorized: R. Vance, Quality Manager

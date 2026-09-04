@@ -1,0 +1,182 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { getCollection } from "astro:content";
+import { withBase } from "../lib/url";
+import { authorKey, normalizeLogin } from "../lib/authors";
+import { CONTRIBUTING_URL } from "../lib/issues";
+import { coverGradient, initials, INDUSTRY_COLORS } from "../lib/templates";
+import type { Industry } from "../lib/templates";
+
+const templates = await getCollection("templates");
+
+type Contributor = {
+  key: string;
+  name: string;
+  login: string;
+  url?: string;
+  count: number;
+  industries: Set<Industry>;
+  newest: number;
+};
+
+const byKey = new Map<string, Contributor>();
+for (const t of templates) {
+  const key = authorKey(t.data.authorGithub, t.data.author);
+  if (!key) continue;
+  const when = (t.data.updatedAt ?? t.data.createdAt ?? new Date(0)).getTime();
+  const existing = byKey.get(key);
+  if (existing) {
+    existing.count++;
+    existing.industries.add(t.data.industry);
+    existing.newest = Math.max(existing.newest, when);
+    existing.url ??= t.data.authorUrl;
+  } else {
+    byKey.set(key, {
+      key,
+      name: t.data.author,
+      login: normalizeLogin(t.data.authorGithub),
+      url: t.data.authorUrl,
+      count: 1,
+      industries: new Set([t.data.industry]),
+      newest: when,
+    });
+  }
+}
+
+const contributors = [...byKey.values()].sort(
+  (a, b) => b.count - a.count || a.name.localeCompare(b.name),
+);
+
+const totalTemplates = templates.length;
+const totalIndustries = new Set(templates.map((t) => t.data.industry)).size;
+---
+
+<Layout
+  title="Contributors"
+  description="Everyone who has shipped an industry template to the gallery."
+>
+  <section class="border-b border-border bg-surface/40">
+    <div class="mx-auto max-w-8xl px-4 py-8 sm:px-6 sm:py-10">
+      <a
+        href={withBase("/")}
+        class="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg transition-colors"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          class="h-4 w-4"
+        >
+          <path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"
+          ></path>
+        </svg>
+        Back to gallery
+      </a>
+      <h1 class="mt-4 text-2xl font-bold tracking-tight text-fg sm:text-3xl">
+        Contributors
+      </h1>
+      <p class="mt-2 max-w-2xl text-muted">
+        Everyone who has shipped an industry template to the gallery —
+        <span class="text-fg">{totalTemplates}</span>
+        {totalTemplates === 1 ? "template" : "templates"} across
+        <span class="text-fg">{totalIndustries}</span>
+        {totalIndustries === 1 ? "industry" : "industries"} so far. Want your name
+        here?{" "}
+        <a
+          href={CONTRIBUTING_URL}
+          target="_blank"
+          rel="noopener"
+          class="text-accent-text underline hover:opacity-80 transition-opacity"
+          >Contribute a template</a
+        >.
+      </p>
+    </div>
+  </section>
+
+  <section class="mx-auto max-w-8xl px-4 py-8 sm:px-6 sm:py-10">
+    <div
+      class="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(17rem,1fr))]"
+    >
+      {
+        contributors.map((c) => (
+          <a
+            href={withBase(`/?author=${encodeURIComponent(c.key)}`)}
+            class="group flex h-full flex-col rounded-xl border border-border bg-surface p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md"
+          >
+            <div class="flex items-center gap-3">
+              <span
+                class="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full text-sm font-bold text-white ring-1 ring-border"
+                style={`background-image:${coverGradient(c.name)}`}
+                aria-hidden="true"
+              >
+                {initials(c.name)}
+                {c.login && (
+                  <img
+                    src={`https://github.com/${c.login}.png?size=96`}
+                    alt=""
+                    loading="lazy"
+                    onerror="this.remove()"
+                    class="absolute inset-0 h-full w-full object-cover"
+                  />
+                )}
+              </span>
+              <div class="min-w-0">
+                <h2 class="truncate font-semibold text-fg transition-colors group-hover:text-accent-text">
+                  {c.name}
+                </h2>
+                <p class="truncate text-xs text-subtle">
+                  {c.login ? `@${c.login}` : "Contributor"}
+                </p>
+              </div>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-1.5">
+              {[...c.industries].map((industry) => (
+                <span class="flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-muted">
+                  <span
+                    class="h-1.5 w-1.5 rounded-full"
+                    style={`background:${INDUSTRY_COLORS[industry]}`}
+                  />
+                  {industry}
+                </span>
+              ))}
+            </div>
+
+            <div class="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-subtle">
+              <span>
+                <span class="font-semibold text-fg">{c.count}</span>{" "}
+                {c.count === 1 ? "template" : "templates"}
+              </span>
+              <span class="inline-flex items-center gap-1 text-accent-text">
+                View all
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="h-3 w-3 transition-transform group-hover:translate-x-0.5"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </span>
+            </div>
+          </a>
+        ))
+      }
+    </div>
+
+    {
+      contributors.length === 0 && (
+        <p class="py-16 text-center text-muted">
+          No contributors yet — be the first.
+        </p>
+      )
+    }
+  </section>
+</Layout>

@@ -1,0 +1,9 @@
+From: J. Okafor (Incoming Inspection)   Sent: 2026-07-16 07:42
+To: Quality Engineering
+Subject: LOT-2026-0715-04 - BRK-2047-A brackets, CMM run complete
+
+CMM run on the 12-piece sample finished overnight, results attached
+(CMM-20260715-04.csv). Most dims look fine but the 12 mm bore is reading big on at
+least two parts - my 12.05 no-go pin drops into SN-004 and SN-009. Drawing note 6 says
+no re-boring on this feature, so flagging before we do anything. Lot of 250 is sitting
+in receiving. Can you take it from here?

@@ -1,0 +1,5 @@
+From: Mfg Engineering  2026-07-28  RE: ECR-2026-0091 - quick one
+This is a nothing change - opening the bore tolerance on BRK-2047-A char 14 to +/-0.10.
+Purchasing already has the savings in next quarter's number ($40k/yr scrap+cycle). Part
+drops into PUMP-AX200 and the fit is generous there, checked it myself. Can we push the
+ECN through as a minor change this week? Change board is backed up a month.

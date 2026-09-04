@@ -1,0 +1,8 @@
+FAULT NOTE — 2024-06-17  07:40
+Asset: P-104  Cooling Water Pump B  (Utilities / Cooling Loop 2)
+Reported by: J. Okafor (Operator, A-shift)
+
+Pump is running rough. Loud grinding / rumbling noise from the drive end, getting worse
+over the last two shifts. Panel is showing a high-vibration alarm and the bearing is running
+hot to the touch. Flow still looks OK. Standby pump P-103 was started to hold the loop.
+Please triage.

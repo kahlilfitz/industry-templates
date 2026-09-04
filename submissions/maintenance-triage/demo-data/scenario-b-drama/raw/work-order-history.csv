@@ -1,0 +1,5 @@
+wo_id,date,asset_id,failure_mode,action,downtime_hr
+WO-30112,2024-04-01,P-201,motor_overload_electrical,Reset overload relay; ran OK,1
+WO-30455,2024-05-08,P-201,motor_overload_electrical,Reset overload relay; checked voltage,1
+WO-30890,2024-06-02,P-201,motor_overload_electrical,Reset overload relay; cleaned contacts,2
+WO-25003,2021-11-19,P-201,preventive_maintenance,"Annual PM, alignment check",4

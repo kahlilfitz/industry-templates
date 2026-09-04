@@ -1,0 +1,5 @@
+part_no,description,on_hand,min_stock,superseded_by,lead_time_days,criticality
+OS-45,Output-shaft oil seal (GBX-40),6,2,,10,standard
+GO-220,Gear oil ISO VG220 (litre),40,10,,5,standard
+GK-12,Gearbox housing gasket,8,2,,10,standard
+BRG-30,Gearbox bearing set,2,1,,14,standard

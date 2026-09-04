@@ -1,0 +1,6 @@
+[
+  {"child": "CVR-3300", "parent": "PUMP-AX200", "qty_per": 1, "interface_critical": false},
+  {"child": "BRK-2047-A", "parent": "PUMP-AX200", "qty_per": 2, "interface_critical": false},
+  {"child": "BRK-2047-A", "parent": "ASM-LEGACY-9", "qty_per": 4, "interface_critical": true},
+  {"child": "PUMP-AX200", "parent": "SKID-700", "qty_per": 1, "interface_critical": false}
+]

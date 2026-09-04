@@ -1,0 +1,10 @@
+From: sales@precisiondrive.example
+To: Buyer - Drives & Controls (procurement@ourplant.example)
+Sent: 2024-06-20 16:05
+Subject: PO-55090 SRV-2201 - minor scheduling update
+
+Hi there - just a minor update on PO-55090 for the SRV-2201 servo drives. We've had a small
+scheduling adjustment at the factory, so this batch will be a touch later than planned - think about
+a week or so. Nothing major, we'll firm up the exact date shortly. No need to worry, these things
+happen. Appreciate your patience.
+Best, PrecisionDrive GmbH - Sales

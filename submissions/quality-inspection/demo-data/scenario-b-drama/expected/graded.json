@@ -1,0 +1,210 @@
+{
+  "contract_version": "mfg.quality-inspection.v1",
+  "part_number": "BRK-2047-A",
+  "part_revision": "C",
+  "lot_id": "LOT-2026-0722-01",
+  "lot_quantity": 250,
+  "sample_size": 12,
+  "coc": {
+    "doc_id": "MPC-26-1245",
+    "supplier": "Meridian Precision Components",
+    "claims": [
+      {
+        "characteristics": [
+          "surface_finish_ra_um"
+        ],
+        "claim": "surface finish process qualified and in statistical control (Ra <= 1.6 um, mating face)",
+        "citation": "CoC MPC-26-1245"
+      },
+      {
+        "characteristics": [
+          "anodize_thickness_um"
+        ],
+        "claim": "surface treatment per drawing note 7",
+        "citation": "CoC MPC-26-1245"
+      }
+    ]
+  },
+  "characteristics": [
+    {
+      "name": "overall_length_mm",
+      "unit": "mm",
+      "nominal": 88.0,
+      "lower_tolerance": 87.9,
+      "upper_tolerance": 88.1,
+      "criticality": "minor",
+      "criticality_source": "drawing BRK-2047-A rev C, characteristic 3",
+      "rework_permitted": true,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, characteristic 3",
+      "actual": 88.0592,
+      "stats": {
+        "n": 12,
+        "mean": 88.0136,
+        "min": 87.9748,
+        "max": 88.0592,
+        "band_consumed_pct": 59.2
+      },
+      "n_out_of_tolerance": 0,
+      "incidence_pct": 0.0,
+      "status": "in_tolerance",
+      "confidence": 0.99
+    },
+    {
+      "name": "thickness_mm",
+      "unit": "mm",
+      "nominal": 6.35,
+      "lower_tolerance": 6.3,
+      "upper_tolerance": 6.4,
+      "criticality": "minor",
+      "criticality_source": "drawing BRK-2047-A rev C, characteristic 5",
+      "rework_permitted": true,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, characteristic 5",
+      "actual": 6.3885,
+      "stats": {
+        "n": 12,
+        "mean": 6.3606,
+        "min": 6.3302,
+        "max": 6.3885,
+        "band_consumed_pct": 77.0
+      },
+      "n_out_of_tolerance": 0,
+      "incidence_pct": 0.0,
+      "status": "in_tolerance",
+      "confidence": 0.99
+    },
+    {
+      "name": "hole_diameter_mm",
+      "unit": "mm",
+      "nominal": 12.0,
+      "lower_tolerance": 11.95,
+      "upper_tolerance": 12.05,
+      "criticality": "major",
+      "criticality_source": "mating interface; note 6 prohibits re-boring",
+      "rework_permitted": false,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, characteristic 14 (note 6)",
+      "actual": 12.0284,
+      "stats": {
+        "n": 12,
+        "mean": 12.0082,
+        "min": 11.9769,
+        "max": 12.0284,
+        "band_consumed_pct": 56.8
+      },
+      "n_out_of_tolerance": 0,
+      "incidence_pct": 0.0,
+      "status": "in_tolerance",
+      "confidence": 0.99
+    },
+    {
+      "name": "hole_position_tp_mm",
+      "unit": "mm",
+      "nominal": 0.0,
+      "lower_tolerance": 0.0,
+      "upper_tolerance": 0.1,
+      "criticality": "major",
+      "criticality_source": "drawing BRK-2047-A rev C, characteristic 15",
+      "rework_permitted": false,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, characteristic 15",
+      "actual": 0.078,
+      "stats": {
+        "n": 12,
+        "mean": 0.0539,
+        "min": 0.0342,
+        "max": 0.078,
+        "band_consumed_pct": 78.0
+      },
+      "n_out_of_tolerance": 0,
+      "incidence_pct": 0.0,
+      "status": "in_tolerance",
+      "confidence": 0.99
+    },
+    {
+      "name": "flatness_mm",
+      "unit": "mm",
+      "nominal": 0.0,
+      "lower_tolerance": 0.0,
+      "upper_tolerance": 0.1,
+      "criticality": "minor",
+      "criticality_source": "drawing BRK-2047-A rev C, characteristic 8",
+      "rework_permitted": false,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, characteristic 8",
+      "actual": 0.096,
+      "stats": {
+        "n": 12,
+        "mean": 0.0669,
+        "min": 0.0409,
+        "max": 0.096,
+        "band_consumed_pct": 96.0
+      },
+      "n_out_of_tolerance": 0,
+      "incidence_pct": 0.0,
+      "status": "in_tolerance_marginal",
+      "confidence": 0.99
+    },
+    {
+      "name": "surface_finish_ra_um",
+      "unit": "um",
+      "nominal": 0.8,
+      "lower_tolerance": 0.0,
+      "upper_tolerance": 1.6,
+      "criticality": "critical",
+      "criticality_source": "drawing note 9 (fatigue-critical mating face, ref SA-2047-11)",
+      "rework_permitted": false,
+      "doc_conflict": true,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, note 4 + NOTE 9",
+      "actual": 1.72,
+      "stats": {
+        "n": 12,
+        "mean": 1.3032,
+        "min": 0.9143,
+        "max": 1.72,
+        "band_consumed_pct": 115.0
+      },
+      "n_out_of_tolerance": 2,
+      "incidence_pct": 16.67,
+      "status": "out_of_tolerance",
+      "confidence": 0.99
+    }
+  ],
+  "escalations": [
+    "surface_finish_ra_um: CoC MPC-26-1245 claims 'surface finish process qualified and in statistical control (Ra <= 1.6 um, mating face)' but 2/12 measurements are out of tolerance - measurements govern; supplier-quality review / SCAR candidate (disposition-rules.md #4.3; ISO 9001 8.4.3)"
+  ],
+  "provenance": {
+    "engines": [
+      "tolerance_check/2.0",
+      "defect_grade/2.0"
+    ],
+    "generated_at": "2026-08-04T23:16:20+00:00"
+  },
+  "graded_defects": [
+    {
+      "characteristic": "surface_finish_ra_um",
+      "severity": "critical",
+      "disposition": "hold_for_review",
+      "rationale": "out-of-tolerance on a critical characteristic (drawing note 9 (fatigue-critical mating face, ref SA-2047-11)); MRB with design authority required",
+      "requires_deviation_authorization": false,
+      "confidence": 0.92,
+      "source": "engine:defect_grade",
+      "citation": "disposition-rules.md #1.1,#3.1"
+    }
+  ],
+  "watch_list": [
+    {
+      "characteristic": "flatness_mm",
+      "note": "worst 0.096 consumes 96.0% of band - supplier next-lot watch list (disposition-rules.md #1.4)",
+      "citation": "drawing BRK-2047-A rev C, characteristic 8"
+    }
+  ],
+  "recommended_disposition": "hold_for_review"
+}

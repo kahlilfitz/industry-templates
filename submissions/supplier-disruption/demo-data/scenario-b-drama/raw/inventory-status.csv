@@ -1,0 +1,2 @@
+part_no,description,on_hand,on_order,safety_stock,lead_time_days,single_source
+SRV-2201,Precision servo drive 3kW,2,30,4,42,yes

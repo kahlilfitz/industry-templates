@@ -1,0 +1,5 @@
+incident_id,date,area,asset_or_area,type,body_part,outcome,recordable
+INC-2089,2024-02-15,Fabrication / Press bay,M-14,near_miss,hand,none,no
+INC-2137,2024-04-09,Fabrication / Press bay,M-14,near_miss,hand,none,no
+INC-2190,2024-05-30,Fabrication / Press bay,M-14,injury,finger,first_aid,no
+INC-2205,2024-06-10,Fabrication / Press bay,M-12,near_miss,arm,none,no

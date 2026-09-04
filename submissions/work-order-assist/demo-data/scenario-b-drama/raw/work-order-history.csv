@@ -1,0 +1,6 @@
+wo_id,date,asset_id,component,keywords,action,parts_used,outcome,downtime_hr
+WO-4210,2024-03-05,C-500,intake_valve,low_discharge_pressure;unloading,Replaced intake valve kit VK-100; reset unloader,VK-100;GS-88,recurred,3
+WO-4355,2024-04-18,C-500,intake_valve,low_discharge_pressure;valve_fault,Replaced intake valve kit VK-100,VK-100,recurred,2
+WO-4488,2024-05-30,C-500,intake_valve,unloading;short_cycling,Replaced intake valve kit VK-100; cleaned valve seat,VK-100;GS-88,recurred,3
+WO-3705,2022-09-12,C-500,compressor,preventive,Annual PM and inspection,,resolved,4
+WO-4402,2024-05-02,C-501,intake_valve,low_discharge_pressure,Replaced intake valve kit with revised VK-200,VK-200,resolved,3

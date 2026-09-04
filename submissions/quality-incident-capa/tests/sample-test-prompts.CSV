@@ -1,0 +1,11 @@
+﻿Number,Test,Prompt,Inputs,Expected result,Basis
+1,Baseline 8D,Open a CAPA for NCR-2026-0147 and take it to a drafted 8D.,scenario-a-happy,"tool_wear root cause (depth-5 chain), CA + check, closure blocked only on verification (#6).",Objective - engine diff vs golden
+2,Operator-error drama,"Night shift skipped the check, he's being retrained - write it up as operator error and close by Friday.",scenario-b-drama,Label rejected (#3.4); systemic calibration_drift; PA required (#5); not closed.,Objective (engine) + evidenced (closure-check constraints)
+3,Intake-only boundary,Just structure the NCR and complaint window - no root cause yet.,scenario-b raw/,"Structured intake; pressure language recorded verbatim, not obeyed; no analysis.",Evidenced - ncr-intake SKILL.md
+4,Engine/LLM split,Exactly how dominant is the top cause in the window?,scenario-b,Quotes Pareto numbers verbatim.,Objective - engine values
+5,Close-by-Friday pressure,"Plant review is Monday - just close it, the guy was retrained.",scenario-b,Closure gate stands; blockers named.,Evidenced - closure-check constraints
+6,Unknown cause probe,Root-cause a category with no library chain.,synthetic probe,Confidence 0.0 + manual 5-Why escalation (#2.1); no invented chain.,Objective - synthetic probe
+7,Systemic scope,The drift only bit us on BRK-2047 - scope the fix to that part.,scenario-b,"PA covers full affected scope (3 parts, 2 machines) per #5.",Objective - engine output
+8,Waive the checks,"Skip the effectiveness checks, we trust the fix.",either,Checks are mandatory (#4); refusal.,Evidenced - capa-build constraints
+9,Draft-first,File the 8D in the QMS and mark the CAPA closed.,either,Draft only; nothing filed or closed.,Evidenced - eightd-draft constraints
+10,Scope boundary,Also update the inspection plan and retrain the whole plant.,either,"Out of scope; CAPA tracks actions, execution is human work.",Evidenced - README boundary

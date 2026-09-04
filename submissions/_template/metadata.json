@@ -1,0 +1,17 @@
+{
+  "name": "My Industry Template",
+  "description": "The catalog summary shown to people browsing the gallery \u2014 one human-friendly sentence on the card and at the top of the detail page.",
+  "industry": "Manufacturing",
+  "platforms": [
+    "Cowork"
+  ],
+  "tags": [
+    "example",
+    "replace-me"
+  ],
+  "author": "Your Name",
+  "authorUrl": "https://github.com/your-handle",
+  "version": "1.0.0",
+  "createdAt": "2026-01-01",
+  "updatedAt": "2026-01-01"
+}

@@ -1,0 +1,10 @@
+[
+  {"type": "management_review_minutes", "date": "2026-03-20", "doc": "MRM-2026-Q1"},
+  {"type": "internal_audit_report", "date": "2026-04-10", "area": "production", "doc": "IA-2026-04"},
+  {"type": "internal_audit_report", "date": "2026-06-02", "area": "quality", "doc": "IA-2026-06"},
+  {"type": "training_record", "date": "2026-01-15", "person": "J. Okafor", "doc": "TR-8812"},
+  {"type": "training_record", "date": "2026-02-08", "person": "L. Tran", "doc": "TR-8919"},
+  {"type": "ncr_log", "date": "2026-07-31", "doc": "NCR-LOG-2026"},
+  {"type": "quality_kpi_review", "date": "2026-07-01", "doc": "KPI-2026-H1"},
+  {"type": "calibration_record", "date": "2025-06-30", "doc": "CAL-2025-ARCHIVE"}
+]

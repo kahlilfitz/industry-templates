@@ -1,0 +1,7 @@
+{
+  "name": "quality-incident-capa",
+  "version": "1.0.0",
+  "description": "Manufacturing Wave 2 Cowork plugin: NCR to closed CAPA. Picks up where Quality Inspection & Nonconformance (01) leaves off - reads the open NCR, complaint and inspection data; establishes root cause with a structured method (pareto + rca_tree engines); builds corrective and preventive actions with mandatory effectiveness checks (capa_logic engine); validates closure readiness (explicit Govern step); drafts the 8D / CAPA report cited to the clause. Draft-first; document-grounded.",
+  "author": { "name": "Microsoft Manufacturing Skills" },
+  "keywords": ["manufacturing", "quality", "CAPA", "8D", "root-cause", "NCR", "ISO-9001", "IATF-16949"]
+}

@@ -1,0 +1,5 @@
+{ "contract_version": "mfg.quality-incident-capa.v1", "capa_id": "CAPA-2026-0034",
+  "ncr_ref": {"ncr_id": "NCR-2026-0203", "part_number": "BRK-2047-A", "lot_id": "LOT-2026-0729-02",
+              "defect": "bore trending oversize; final-check step skipped per line note",
+              "disposition": "hold_for_review", "citation": "NCR-2026-0203"},
+  "complaint_window_days": 180, "escalations": [] }

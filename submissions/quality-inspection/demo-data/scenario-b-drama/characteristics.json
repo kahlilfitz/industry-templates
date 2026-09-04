@@ -1,0 +1,11 @@
+{
+  "part_number": "BRK-2047-A", "part_revision": "C", "lot_id": "LOT-2026-0722-01", "lot_quantity": 250,
+  "characteristics": [
+    {"name": "overall_length_mm",   "unit": "mm", "nominal": 88.0,  "lsl": 87.90, "usl": 88.10, "criticality": "minor", "rework_permitted": true,  "citation": "drawing BRK-2047-A rev C, characteristic 3"},
+    {"name": "thickness_mm",        "unit": "mm", "nominal": 6.35,  "lsl": 6.30,  "usl": 6.40,  "criticality": "minor", "rework_permitted": true,  "citation": "drawing BRK-2047-A rev C, characteristic 5"},
+    {"name": "hole_diameter_mm",    "unit": "mm", "nominal": 12.0,  "lsl": 11.95, "usl": 12.05, "criticality": "major", "criticality_source": "mating interface; note 6 prohibits re-boring", "rework_permitted": false, "citation": "drawing BRK-2047-A rev C, characteristic 14 (note 6)"},
+    {"name": "hole_position_tp_mm", "unit": "mm", "nominal": 0.0,   "lsl": 0.0,   "usl": 0.10,  "criticality": "major", "rework_permitted": false, "citation": "drawing BRK-2047-A rev C, characteristic 15"},
+    {"name": "flatness_mm",         "unit": "mm", "nominal": 0.0,   "lsl": 0.0,   "usl": 0.10,  "criticality": "minor", "rework_permitted": false, "citation": "drawing BRK-2047-A rev C, characteristic 8"},
+    {"name": "surface_finish_ra_um","unit": "um", "nominal": 0.8,   "lsl": 0.0,   "usl": 1.6,   "criticality": "critical", "criticality_source": "drawing note 9 (fatigue-critical mating face, ref SA-2047-11)", "rework_permitted": false, "citation": "drawing BRK-2047-A rev C, note 4 + NOTE 9"}
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "contract_version": "mfg.maintenance-triage.v1",
+  "asset_id": "P-104",
+  "asset_name": "Cooling Water Pump B",
+  "location": "Utilities / Cooling Loop 2",
+  "asset_criticality": "B",
+  "downtime_cost_per_hr": 3500,
+  "redundancy": "standby",
+  "reported_by": "J. Okafor (Operator, A-shift)",
+  "reported_at": "2024-06-17T07:40:00",
+  "symptoms": [
+    {
+      "name": "grinding_noise",
+      "confidence": 0.85,
+      "source": "skill:fault-intake",
+      "citation": "fault-note.txt line 6"
+    },
+    {
+      "name": "high_vibration",
+      "confidence": 0.95,
+      "source": "skill:fault-intake",
+      "citation": "alarm-event-log.csv VIB-HH"
+    },
+    {
+      "name": "bearing_temp_high",
+      "confidence": 0.95,
+      "source": "skill:fault-intake",
+      "citation": "alarm-event-log.csv TEMP-BRG-H"
+    }
+  ],
+  "alarm_codes": [
+    {
+      "code": "VIB-HH",
+      "citation": "alarm-event-log.csv 05:12"
+    },
+    {
+      "code": "TEMP-BRG-H",
+      "citation": "alarm-event-log.csv 06:03"
+    }
+  ],
+  "history": {
+    "window_days": 365,
+    "prior_work_orders": [],
+    "repeat_promotion": false
+  },
+  "escalations": [],
+  "ranked_causes": [
+    {
+      "rank": 1,
+      "failure_mode": "bearing_degradation",
+      "match_score": 0.583,
+      "evidence": [
+        "symptom:high_vibration",
+        "symptom:bearing_temp_high",
+        "symptom:grinding_noise",
+        "alarm:VIB-HH",
+        "alarm:TEMP-BRG-H"
+      ],
+      "recommended_fix": "Replace pump bearings; verify lubrication and shaft alignment.",
+      "confidence": 0.88,
+      "source": "engine:fault_rank",
+      "citation": "failure-mode-library.md #2.1; OEM Pump Manual CP-200 \u00a76.3"
+    },
+    {
+      "rank": 2,
+      "failure_mode": "coupling_misalignment",
+      "match_score": 0.292,
+      "evidence": [
+        "symptom:high_vibration",
+        "symptom:bearing_temp_high",
+        "symptom:grinding_noise",
+        "alarm:VIB-HH"
+      ],
+      "recommended_fix": "Laser-align pump/motor coupling; inspect coupling element.",
+      "confidence": 0.79,
+      "source": "engine:fault_rank",
+      "citation": "failure-mode-library.md #2.2; OEM Pump Manual CP-200 \u00a75.2"
+    },
+    {
+      "rank": 3,
+      "failure_mode": "impeller_cavitation",
+      "match_score": 0.125,
+      "evidence": [
+        "symptom:grinding_noise",
+        "symptom:high_vibration"
+      ],
+      "recommended_fix": "Correct suction/NPSH condition; inspect impeller for cavitation erosion.",
+      "confidence": 0.62,
+      "source": "engine:fault_rank",
+      "citation": "failure-mode-library.md #2.5; OEM Pump Manual CP-200 \u00a76.4"
+    }
+  ],
+  "recommended_action": "Replace pump bearings; verify lubrication and shaft alignment.",
+  "provenance": {
+    "engines": [
+      "fault_rank/1.0"
+    ],
+    "generated_at": "2026-07-21T19:24:09+00:00"
+  }
+}

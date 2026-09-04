@@ -1,0 +1,36 @@
+name: Issue or feedback
+description: Report a problem with a template or the gallery, or share feedback.
+title: "[feedback] "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. If this is a security issue, please use
+        [private vulnerability reporting](https://github.com/SravaniSeethi/industry-templates/security/advisories/new)
+        instead.
+  - type: input
+    id: template
+    attributes:
+      label: Which template?
+      description: The slug from the URL, e.g. `quality-inspection`. Leave blank for the gallery itself.
+      placeholder: quality-inspection
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of issue is this?
+      options:
+        - The template produced a wrong or unexpected result
+        - The package would not install
+        - Documentation is wrong or unclear
+        - A suggestion or feature request
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: detail
+    attributes:
+      label: What happened?
+      description: What you expected, what you got, and which demo scenario you were running.
+    validations:
+      required: true

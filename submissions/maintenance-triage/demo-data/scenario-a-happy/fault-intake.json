@@ -1,0 +1,46 @@
+{
+  "contract_version": "mfg.maintenance-triage.v1",
+  "asset_id": "P-104",
+  "asset_name": "Cooling Water Pump B",
+  "location": "Utilities / Cooling Loop 2",
+  "asset_criticality": "B",
+  "downtime_cost_per_hr": 3500,
+  "redundancy": "standby",
+  "reported_by": "J. Okafor (Operator, A-shift)",
+  "reported_at": "2024-06-17T07:40:00",
+  "symptoms": [
+    {
+      "name": "grinding_noise",
+      "confidence": 0.85,
+      "source": "skill:fault-intake",
+      "citation": "fault-note.txt line 6"
+    },
+    {
+      "name": "high_vibration",
+      "confidence": 0.95,
+      "source": "skill:fault-intake",
+      "citation": "alarm-event-log.csv VIB-HH"
+    },
+    {
+      "name": "bearing_temp_high",
+      "confidence": 0.95,
+      "source": "skill:fault-intake",
+      "citation": "alarm-event-log.csv TEMP-BRG-H"
+    }
+  ],
+  "alarm_codes": [
+    {
+      "code": "VIB-HH",
+      "citation": "alarm-event-log.csv 05:12"
+    },
+    {
+      "code": "TEMP-BRG-H",
+      "citation": "alarm-event-log.csv 06:03"
+    }
+  ],
+  "history": {
+    "window_days": 365,
+    "prior_work_orders": []
+  },
+  "escalations": []
+}

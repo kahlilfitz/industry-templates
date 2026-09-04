@@ -1,0 +1,7 @@
+{
+  "name": "supplier-disruption-assist",
+  "version": "1.0.0",
+  "description": "Manufacturing Wave 1 Cowork plugin: get ahead of a supply problem. Picks up a late PO, shipment delay, shortage or supplier notice, maps the shortage through BOM/where-used to the affected products, production lines, open orders and at-risk dates/quantities (deterministic shortage_impact_map), recommends a mitigation (expedite / substitute / reschedule) and computes an escalation tier (deterministic mitigation_recommend), then drafts the supplier follow-up and the internal escalation brief. Draft-first; nothing is auto-sent and no PO/ERP record is written. Starts from PO and email data; graduates to live monitoring when portal and ERP alerts are connected. Grounded in ERP/MRP (D365 SCM, SAP), PO & shipment data, supplier master and BOM/where-used.",
+  "author": { "name": "Microsoft Manufacturing Skills" },
+  "keywords": ["manufacturing", "supply-chain", "procurement", "shortage", "PO", "ERP", "MRP", "BOM", "where-used", "expedite", "supplier", "mitigation", "escalation"]
+}

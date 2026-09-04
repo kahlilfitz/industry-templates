@@ -1,0 +1,41 @@
+{
+  "contract_version": "mfg.engineering-change-bom.v1",
+  "ecr_id": "ECR-2026-091",
+  "part_number": "BRK-2047-A",
+  "change_type": "tolerance_relax",
+  "affected_characteristic": "hole_diameter_mm",
+  "escalations": [],
+  "change_description": "Relax char 14 bore tolerance from +/-0.050 to +/-0.100 - cuts boring cycle 18% and scrap cost ~$40k/yr. Minor change, no form/fit impact expected.",
+  "where_used": [
+    {
+      "parent": "PUMP-AX200",
+      "level": 1,
+      "qty_per": 2,
+      "interface_critical": false,
+      "source": "engine:where_used",
+      "citation": "BOM link BRK-2047-A -> PUMP-AX200"
+    },
+    {
+      "parent": "SKID-700",
+      "level": 2,
+      "qty_per": 1,
+      "interface_critical": false,
+      "source": "engine:where_used",
+      "citation": "BOM link PUMP-AX200 -> SKID-700"
+    },
+    {
+      "parent": "ASM-LEGACY-9",
+      "level": 1,
+      "qty_per": 4,
+      "interface_critical": true,
+      "source": "engine:where_used",
+      "citation": "BOM link BRK-2047-A -> ASM-LEGACY-9"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "where_used/1.0"
+    ],
+    "generated_at": "2026-08-05T00:19:43+00:00"
+  }
+}

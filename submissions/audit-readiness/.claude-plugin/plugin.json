@@ -1,0 +1,4 @@
+{ "name": "audit-readiness", "version": "1.0.0",
+  "description": "Manufacturing Wave 2 Cowork plugin: walk into the audit prepared. Maps the audit scope to the standard's clauses (clause_map engine); gathers the evidence register and checks completeness; validates evidence against clause requirements and flags gaps with severity - the Govern category is the core work here (gap_check engine); drafts the readiness pack with gaps, owners and actions. Draft-first; document-grounded.",
+  "author": { "name": "Microsoft Manufacturing Skills" },
+  "keywords": ["manufacturing", "quality", "audit", "compliance", "ISO-9001", "IATF-16949", "readiness"] }

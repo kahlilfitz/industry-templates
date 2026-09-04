@@ -1,0 +1,7 @@
+{
+  "name": "work-order-assist",
+  "version": "1.0.0",
+  "description": "Manufacturing Wave 1 Cowork plugin: everything for a work order in one place. Pulls the current work order and asset context, retrieves the relevant SOPs, OEM manuals, prior fixes and parts history, ranks the most similar past work (deterministic similar_work) and checks parts readiness against the storeroom and supersession table (deterministic parts_readiness), then drafts clean technician notes or a planner summary with the next-best action. Draft-first; document-grounded. NOT auto-scheduling or CMMS write-back (that is Wave 3).",
+  "author": { "name": "Microsoft Manufacturing Skills" },
+  "keywords": ["manufacturing", "maintenance", "work-order", "CMMS", "SOP", "parts", "storeroom", "reliability", "planner", "technician"]
+}

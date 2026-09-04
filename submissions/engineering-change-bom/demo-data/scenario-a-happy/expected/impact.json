@@ -1,0 +1,74 @@
+{
+  "contract_version": "mfg.engineering-change-bom.v1",
+  "ecr_id": "ECR-2026-088",
+  "part_number": "CVR-3300",
+  "change_type": "finish_change",
+  "affected_characteristic": "powder_coat_color",
+  "escalations": [],
+  "change_description": "Change cover coating from RAL 7035 to RAL 7016 for brand alignment; no dimensional change.",
+  "where_used": [
+    {
+      "parent": "PUMP-AX200",
+      "level": 1,
+      "qty_per": 1,
+      "interface_critical": false,
+      "source": "engine:where_used",
+      "citation": "BOM link CVR-3300 -> PUMP-AX200"
+    },
+    {
+      "parent": "SKID-700",
+      "level": 2,
+      "qty_per": 1,
+      "interface_critical": false,
+      "source": "engine:where_used",
+      "citation": "BOM link PUMP-AX200 -> SKID-700"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "where_used/1.0",
+      "bom_impact/1.0"
+    ],
+    "generated_at": "2026-08-05T00:19:43+00:00"
+  },
+  "impact": {
+    "impact_class": "form",
+    "interface_violation": false,
+    "affected_items": [
+      {
+        "item": "PUMP-AX200",
+        "level": 1,
+        "reason": "where-used parent",
+        "source": "engine:bom_impact",
+        "citation": "BOM link CVR-3300 -> PUMP-AX200"
+      },
+      {
+        "item": "SKID-700",
+        "level": 2,
+        "reason": "where-used parent",
+        "source": "engine:bom_impact",
+        "citation": "BOM link PUMP-AX200 -> SKID-700"
+      }
+    ],
+    "documents_to_update": [
+      {
+        "doc": "drawing CVR-3300",
+        "revision": "B",
+        "current_revision": "B",
+        "obsolete": false,
+        "source": "engine:bom_impact",
+        "citation": "drawing CVR-3300 references powder_coat_color (change-rules.md #3)"
+      }
+    ],
+    "inventory_disposition": {
+      "policy": "use-up permitted",
+      "on_hand": 340,
+      "wip": 60,
+      "citation": "change-rules.md #4"
+    },
+    "release_blocked": false,
+    "confidence": 0.95,
+    "source": "engine:bom_impact",
+    "citation": "change-rules.md #1-#4"
+  }
+}

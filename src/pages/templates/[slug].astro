@@ -1,0 +1,479 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import TemplateCover from "../../components/TemplateCover.astro";
+import { getCollection, render } from "astro:content";
+import {
+  formatDate,
+  INDUSTRY_COLORS,
+  PLATFORM_COLORS,
+  initials,
+  coverGradient,
+} from "../../lib/templates";
+import { withBase } from "../../lib/url";
+import { authorKey, normalizeLogin } from "../../lib/authors";
+import { SUPPORT_URL } from "../../lib/issues";
+import { ANALYTICS_ENABLED } from "../../lib/analytics-config";
+
+export async function getStaticPaths() {
+  const templates = await getCollection("templates");
+  // Count each author's submissions once so the byline can offer a "see all
+  // their templates" link (and hide it for one-off authors) without re-scanning
+  // the whole collection on every page.
+  const countByKey = new Map<string, number>();
+  for (const t of templates) {
+    const k = authorKey(t.data.authorGithub, t.data.author);
+    countByKey.set(k, (countByKey.get(k) ?? 0) + 1);
+  }
+  return templates.map((template) => ({
+    params: { slug: template.id },
+    props: {
+      template,
+      authorTemplateCount:
+        countByKey.get(
+          authorKey(template.data.authorGithub, template.data.author),
+        ) ?? 1,
+    },
+  }));
+}
+
+const { template, authorTemplateCount } = Astro.props;
+const d = template.data;
+const isPlugin = d.type === "plugin";
+const isAutomation = d.type === "automation";
+const noun = isPlugin ? "plugin" : isAutomation ? "automation" : "skill";
+const { Content } = await render(template);
+
+// Optional human-facing overview (generated from a submission's README.md,
+// keyed by the same slug). When present it replaces the default body as the
+// detail page's main content.
+const guides = await getCollection("guides");
+const guide = guides.find((g) => g.id === template.id);
+const GuideContent = guide ? (await render(guide)).Content : null;
+
+const updated = formatDate(d.updatedAt ?? d.createdAt);
+const created = formatDate(d.createdAt);
+const isSample = d.tags.includes("sample");
+
+const meta: Array<[string, string, string?]> = [];
+if (d.version) meta.push(["Version", d.version]);
+if (d.skills?.length) meta.push(["Skills", String(d.skills.length)]);
+if (created) meta.push(["Added", created]);
+if (updated && updated !== created) meta.push(["Updated", updated]);
+
+// Author byline: avatar + name + a link to the rest of their gallery. Prefer the
+// GitHub avatar/profile when we know the login; fall back to a brand monogram
+// and whatever profile URL the submission provided.
+const authorLogin = normalizeLogin(d.authorGithub);
+const authorSlug = authorKey(d.authorGithub, d.author);
+const authorProfileUrl =
+  d.authorUrl ?? (authorLogin ? `https://github.com/${authorLogin}` : undefined);
+
+const downloadGate = `(function(){var ack=document.getElementById('trust-ack');var actions=document.getElementById('download-actions');if(!ack||!actions)return;var links=actions.querySelectorAll('[data-download-gated]');var locked=['pointer-events-none','opacity-50','cursor-not-allowed'];function sync(){var on=ack.checked;links.forEach(function(l){if(on){locked.forEach(function(c){l.classList.remove(c);});l.removeAttribute('aria-disabled');}else{locked.forEach(function(c){l.classList.add(c);});l.setAttribute('aria-disabled','true');}});}actions.addEventListener('click',function(e){if(!ack.checked){var l=e.target.closest('[data-download-gated]');if(l){e.preventDefault();ack.focus();}}});ack.addEventListener('change',sync);sync();})();`;
+
+const viewEvent = `(function(){function fire(){if(typeof window.clarity!=="function"){return setTimeout(fire,300);}window.clarity("set","template",${JSON.stringify(template.id)});window.clarity("set","industry",${JSON.stringify(d.industry)});window.clarity("event","template_view");}fire();})();`;
+---
+
+<Layout title={d.name} description={d.description}>
+  <div class="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <a
+      href={withBase("/")}
+      class="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg transition-colors"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        class="h-4 w-4"
+      >
+        <path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"
+        ></path>
+      </svg>
+      Back to gallery
+    </a>
+
+    <div class="mt-5 overflow-hidden rounded-2xl border border-border">
+      <TemplateCover
+        slug={template.id}
+        name={d.name}
+        industry={d.industry}
+        platforms={d.platforms}
+        tags={d.tags}
+        coverColor={d.coverColor}
+        hasBundle={Boolean(d.bundle)}
+        type={d.type}
+        variant="hero"
+      />
+    </div>
+
+    {
+      isSample && (
+        <div class="mt-5 flex items-start gap-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-4">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            class="mt-0.5 h-5 w-5 shrink-0 text-amber-500"
+          >
+            <path d="M12 2 3 7v10l9 5 9-5V7l-9-5zm0 2.3L18 8v.02l-6 3.33-6-3.33V8l6-3.7zM5 9.7l6 3.33v6.64l-6-3.33V9.7zm14 0v6.64l-6 3.33v-6.64l6-3.33z" />
+          </svg>
+          <p class="text-sm text-fg/80">
+            <span class="font-semibold text-fg">Sample {noun}.</span> This is
+            placeholder / demo content included to show how the gallery works —
+            not a real, production-ready submission.
+          </p>
+        </div>
+      )
+    }
+
+    <div class="mt-8 grid gap-8 lg:grid-cols-[1fr_18rem]">
+      <!-- Main content -->
+      <div class="order-last min-w-0 lg:order-none">
+        <p class="text-lg text-muted">{d.description}</p>
+
+        {
+          d.author && (
+            <div class="mt-5 flex items-center gap-3">
+              <a
+                href={
+                  authorProfileUrl ??
+                  withBase(`/?author=${encodeURIComponent(authorSlug)}`)
+                }
+                target={authorProfileUrl ? "_blank" : undefined}
+                rel={authorProfileUrl ? "noopener" : undefined}
+                class="shrink-0"
+                aria-label={
+                  authorProfileUrl
+                    ? `${d.author} on GitHub`
+                    : `Browse ${d.author}'s templates`
+                }
+              >
+                <span
+                  class="relative grid h-10 w-10 place-items-center overflow-hidden rounded-full text-[11px] font-bold text-white ring-1 ring-border"
+                  style={`background-image:${coverGradient(d.author)}`}
+                >
+                  {initials(d.author)}
+                  {authorLogin && (
+                    <img
+                      src={`https://github.com/${authorLogin}.png?size=80`}
+                      alt=""
+                      loading="lazy"
+                      onerror="this.remove()"
+                      class="absolute inset-0 h-full w-full object-cover"
+                    />
+                  )}
+                </span>
+              </a>
+              <div class="min-w-0 leading-snug">
+                <div class="truncate text-sm">
+                  <span class="text-muted">by </span>
+                  {authorProfileUrl ? (
+                    <a
+                      href={authorProfileUrl}
+                      target="_blank"
+                      rel="noopener"
+                      class="font-semibold text-fg hover:text-accent-text transition-colors"
+                    >
+                      {d.author}
+                    </a>
+                  ) : (
+                    <span class="font-semibold text-fg">{d.author}</span>
+                  )}
+                </div>
+                {authorTemplateCount > 1 && (
+                  <a
+                    href={withBase(`/?author=${encodeURIComponent(authorSlug)}`)}
+                    class="group mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-accent-text transition-colors"
+                  >
+                    View all {authorTemplateCount} templates
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="h-3 w-3 transition-transform group-hover:translate-x-0.5"
+                      aria-hidden="true"
+                    >
+                      <path d="M5 12h14M13 6l6 6-6 6" />
+                    </svg>
+                  </a>
+                )}
+              </div>
+            </div>
+          )
+        }
+
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+          <a
+            href={withBase(`/?industry=${encodeURIComponent(d.industry)}`)}
+            class="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-sm font-medium text-fg transition-colors hover:border-accent/50"
+          >
+            <span
+              class="h-2 w-2 rounded-full"
+              style={`background:${INDUSTRY_COLORS[d.industry]}`}></span>
+            {d.industry}
+            <span class="text-muted">industry</span>
+          </a>
+        </div>
+
+        {
+          d.tags.length > 0 && (
+            <div class="mt-4 flex flex-wrap gap-2">
+              {d.tags.map((tag) => (
+                <a
+                  href={withBase(`/tags/${encodeURIComponent(tag)}`)}
+                  class="rounded-full border border-border bg-surface-2 px-3 py-1 text-sm text-muted hover:border-accent/50 hover:text-fg transition-colors"
+                >
+                  {tag}
+                </a>
+              ))}
+            </div>
+          )
+        }
+
+        <hr class="my-7 border-border" />
+
+        {
+          GuideContent ? (
+            <article class="prose max-w-none dark:prose-invert prose-headings:text-fg prose-a:text-accent-text prose-strong:text-fg prose-code:text-accent-text prose-code:before:content-[''] prose-code:after:content-[''] prose-table:text-muted prose-th:text-fg">
+              <GuideContent />
+            </article>
+          ) : (
+            <>
+              {d.agentDescription && (
+                <div class="mb-6">
+                  <h2 class="mb-2 text-sm font-semibold uppercase tracking-wider text-accent-text">
+                    Description
+                  </h2>
+                  <p class="text-muted">{d.agentDescription}</p>
+                </div>
+              )}
+
+              <h2 class="mb-3 text-sm font-semibold uppercase tracking-wider text-accent-text">
+                What's inside
+              </h2>
+              <article class="prose max-w-none dark:prose-invert prose-headings:text-fg prose-a:text-accent-text prose-strong:text-fg prose-code:text-accent-text prose-code:before:content-[''] prose-code:after:content-[''] prose-table:text-muted prose-th:text-fg">
+                <Content />
+              </article>
+            </>
+          )
+        }
+      </div>
+
+      <!-- Sidebar -->
+      <aside class="order-first lg:order-none lg:sticky lg:top-20 lg:self-start">
+        <div class="rounded-2xl border border-border bg-surface p-5">
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-subtle">
+            Built for
+          </h3>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <span
+              class="flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-sm font-medium text-fg"
+            >
+              <span
+                class="h-2 w-2 rounded-full"
+                style={`background:${INDUSTRY_COLORS[d.industry]}`}></span>
+              {d.industry}
+            </span>
+          </div>
+
+          <h3
+            class="mt-5 text-xs font-semibold uppercase tracking-wider text-subtle"
+          >
+            Works with
+          </h3>
+          <div class="mt-2 flex flex-wrap gap-2">
+            {
+              d.platforms.map((platform) => (
+                <span class="flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-sm font-medium text-fg">
+                  <span
+                    class="h-2 w-2 rounded-full"
+                    style={`background:${PLATFORM_COLORS[platform]}`}
+                  />
+                  {platform}
+                </span>
+              ))
+            }
+          </div>
+
+          <hr class="my-5 border-border" />
+
+          <h3 class="text-sm font-semibold text-fg">
+            {
+              isPlugin
+                ? "Add this plugin"
+                : isAutomation
+                  ? "Add this automation"
+                  : "Add this skill"
+            }
+          </h3>
+          <p class="mt-1 text-xs text-muted">
+            {
+              isPlugin
+                ? "Download the plugin package and install it in Microsoft 365 Copilot Cowork."
+                : isAutomation
+                  ? "Download the automation and import it into Microsoft Scout (Automations › Import)."
+                  : "Download the bundle and add it to your agent platform."
+            }
+          </p>
+
+          <div class="mt-4 rounded-lg border border-border bg-surface-2 p-3.5">
+            <div class="flex items-start gap-2.5">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="mt-0.5 h-4 w-4 shrink-0 text-amber-500"
+                aria-hidden="true"
+              >
+                <path d="M12 3 4 6v5c0 4.5 3.2 7.9 8 9 4.8-1.1 8-4.5 8-9V6l-8-3z"
+                ></path>
+                <path d="M12 8v4"></path>
+                <path d="M12 16h.01"></path>
+              </svg>
+              <div>
+                <p class="text-xs font-semibold text-fg">
+                  Add only what you trust
+                </p>
+                <label
+                  for="trust-ack"
+                  class="mt-2 flex cursor-pointer items-start gap-2 text-xs leading-relaxed text-muted"
+                >
+                  <input
+                    type="checkbox"
+                    id="trust-ack"
+                    class="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-border accent-accent"
+                  />
+                  <span>
+                    I understand that this {noun} runs with my agent's permissions,
+                    that its demo data is synthetic, and that I should review it
+                    and adapt it to my own systems before using it on real work.
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div id="download-actions" class="mt-3 flex flex-col gap-2">
+            {
+              d.bundle && (
+                <a
+                  href={withBase(`/${d.bundle}`)}
+                  download
+                  data-clarity-event="template_download"
+                  data-clarity-template={template.id}
+                  data-clarity-industry={d.industry}
+                  data-download-gated
+                  aria-disabled="true"
+                  class="flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-fg hover:opacity-90 transition-opacity pointer-events-none opacity-50 cursor-not-allowed"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    class="h-4 w-4"
+                  >
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                  </svg>
+                  Download {noun} package (.zip)
+                </a>
+              )
+            }
+            <a
+              href={withBase(`/templates/${template.id}.md`)}
+              download={`${template.id}.md`}
+              data-clarity-event="template_download"
+              data-clarity-template={template.id}
+              data-clarity-download-type="markdown"
+              data-download-gated
+              aria-disabled="true"
+              class="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2.5 text-sm font-semibold text-fg hover:border-accent/50 transition-colors pointer-events-none opacity-50 cursor-not-allowed"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                class="h-4 w-4"
+              >
+                <path
+                  d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"></path>
+              </svg>
+              Download README (.md)
+            </a>
+          </div>
+
+          {
+            d.skills && d.skills.length > 0 && (
+              <div class="mt-5 border-t border-border pt-4">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-subtle">
+                  Skills in this package
+                </h3>
+                <ol class="mt-2 space-y-1.5 text-sm">
+                  {d.skills.map((s, i) => (
+                    <li class="flex items-start gap-2">
+                      <span class="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-surface-2 text-[10px] font-bold text-muted">
+                        {i + 1}
+                      </span>
+                      <span class="min-w-0 font-medium text-fg">{s.name}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )
+          }
+
+          {
+            meta.length > 0 && (
+              <dl class="mt-5 space-y-2 border-t border-border pt-4 text-sm">
+                {meta.map(([k, v, href]) => (
+                  <div class="flex justify-between gap-3">
+                    <dt class="text-muted">{k}</dt>
+                    <dd class="text-right font-medium text-fg">
+                      {href ? (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener"
+                          class="text-accent-text underline hover:opacity-80 transition-opacity"
+                        >
+                          {v}
+                        </a>
+                      ) : (
+                        v
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )
+          }
+
+          <p class="mt-5 border-t border-border pt-4 text-xs text-subtle">
+            This {noun} is an example implementation provided as-is. See{" "}
+            <a
+              href={SUPPORT_URL}
+              target="_blank"
+              rel="noopener"
+              class="underline hover:text-fg transition-colors">Support</a
+            >{" "}for how to get help.
+          </p>
+        </div>
+      </aside>
+    </div>
+  </div>
+  {/* Gate downloads behind the trust acknowledgement checkbox. */}
+  <script is:inline set:html={downloadGate} />
+  {ANALYTICS_ENABLED && <script is:inline set:html={viewEvent} />}
+</Layout>

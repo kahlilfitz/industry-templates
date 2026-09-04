@@ -1,0 +1,72 @@
+{
+  "contract_version": "mfg.supplier-qualification.v1",
+  "as_of_date": "2026-08-01",
+  "supplier": {
+    "name": "Vantage Global Machining"
+  },
+  "category": "machined-components",
+  "category_region_concentration_pct": 68,
+  "candidate_region_matches_concentration": true,
+  "ppap_required": [
+    "PSW",
+    "control_plan",
+    "process_FMEA",
+    "MSA"
+  ],
+  "dossier": {
+    "cert": {
+      "standard": "IATF 16949",
+      "doc_id": "BV-55107",
+      "expiry": "2026-05-31"
+    },
+    "audit_score": 84,
+    "region": "APAC-South",
+    "ppap_elements": [
+      "PSW",
+      "process_FMEA",
+      "MSA"
+    ],
+    "financials": {
+      "quick_ratio": 0.72,
+      "trend": "declining"
+    }
+  },
+  "escalations": [
+    "certificate BV-55107 expired 2026-05-31 - a cert on file is not a cert in force (qualification-rules.md #1.1)",
+    "PPAP incomplete - missing control_plan (qualification-rules.md #4.1)",
+    "qualification would deepen APAC-South concentration (68%) - dual-source plan required (qualification-rules.md #3.1)"
+  ],
+  "risk": {
+    "quality": {
+      "band": "high",
+      "notes": [
+        "cert IATF 16949 EXPIRED 2026-05-31 (#1.1)",
+        "PPAP missing: control_plan (#4.1)"
+      ]
+    },
+    "financial": {
+      "band": "high",
+      "notes": [
+        "quick ratio 0.72 < 1.0 (#2.1)",
+        "declining trend (#2.2)",
+        "quick ratio 0.72 < 0.8 with decline (#2.3)"
+      ]
+    },
+    "geographic": {
+      "band": "moderate",
+      "notes": [
+        "category already 68% in APAC-South (#3.1)"
+      ]
+    },
+    "overall_band": "high",
+    "confidence": 0.93,
+    "source": "engine:risk_score",
+    "citation": "qualification-rules.md #1-#4"
+  },
+  "provenance": {
+    "engines": [
+      "risk_score/1.0"
+    ],
+    "generated_at": "2026-08-05T00:21:24+00:00"
+  }
+}

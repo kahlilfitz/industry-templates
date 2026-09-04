@@ -1,0 +1,80 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import TemplateCard from "../../components/TemplateCard.astro";
+import { getCollection } from "astro:content";
+import { withBase } from "../../lib/url";
+
+export async function getStaticPaths() {
+  const templates = await getCollection("templates");
+  const tags = new Set<string>();
+  for (const t of templates) for (const tag of t.data.tags) tags.add(tag);
+
+  return [...tags].map((tag) => ({
+    params: { tag },
+    props: {
+      tag,
+      templates: templates
+        .filter((t) => t.data.tags.includes(tag))
+        .sort((a, b) => a.data.name.localeCompare(b.data.name)),
+    },
+  }));
+}
+
+const { tag, templates } = Astro.props;
+---
+
+<Layout
+  title={`#${tag} templates`}
+  description={`Industry templates tagged "${tag}".`}
+>
+  <div class="mx-auto max-w-8xl px-4 py-8 sm:px-6 sm:py-10">
+    <a
+      href={withBase("/")}
+      class="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg transition-colors"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        class="h-4 w-4"
+      >
+        <path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"
+        ></path>
+      </svg>
+      All templates
+    </a>
+
+    <h1 class="mt-4 text-3xl font-extrabold tracking-tight text-fg">
+      <span class="text-accent-text">#</span>{tag}
+    </h1>
+    <p class="mt-1 text-muted">
+      {templates.length}
+      {templates.length === 1 ? "template" : "templates"} tagged “{tag}”.
+    </p>
+
+    <div
+      class="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(17rem,1fr))]"
+    >
+      {
+        templates.map((t) => (
+          <TemplateCard
+            slug={t.id}
+            name={t.data.name}
+            description={t.data.description}
+            industry={t.data.industry}
+            platforms={t.data.platforms}
+            type={t.data.type}
+            tags={t.data.tags}
+            author={t.data.author}
+            coverColor={t.data.coverColor}
+            hasBundle={Boolean(t.data.bundle)}
+            skillCount={t.data.skills?.length ?? 0}
+            featured={t.data.featured}
+          />
+        ))
+      }
+    </div>
+  </div>
+</Layout>

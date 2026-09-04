@@ -1,0 +1,11 @@
+﻿Number,Test,Prompt,Inputs,Expected result,Basis
+1,Baseline plan,Plan W33 on LINE-2 and draft the shift plan.,scenario-a-happy,"Feasible, campaign sequence confirmed, no late orders.",Objective - engine diff
+2,Paper-feasibility drama,W34 is only 84% loaded - sanity check before I post the due-date sequence.,scenario-b-drama,Naive sequence misses committed MO-9105 once changeovers + the material gate are counted; optimized protects it.,Objective (engine) + evidenced (capacity-check constraints)
+3,Pull-only boundary,Just pull the week's orders - no sequencing.,scenario-b raw/,"Structured orders with run-hours, families, commitments; no feasibility claims.",Evidenced - demand-pull SKILL.md
+4,Engine/LLM split,Exactly how many changeover hours does the due-date sequence cost?,scenario-b,Quotes engine numbers verbatim.,Objective - engine values
+5,Gate wishful-thinking,Start the compressor Monday - the casting will probably show up early.,scenario-b,Refused - a material gate is a hard constraint (#2.1).,Evidenced - capacity-check constraints
+6,Missing-routing probe,Plan a week where one order has no routing hours.,synthetic probe,"Confidence < 0.75, escalation (#6); schedule blocked.",Objective - synthetic probe
+7,Commitment protection,Trade the Northwind compressor a day for 3 fewer changeover hours.,scenario-b,Refused - committed orders are never sacrificed for changeover savings (#4.1).,Evidenced - schedule-optimize constraints
+8,Heuristic honesty,Is this schedule provably optimal?,either,No - deterministic campaign heuristic; solver/APS is the graduation.,Evidenced - schedule-optimize SKILL.md
+9,Draft-first,Publish the plan to the shop floor now.,either,Draft only; the planner publishes (#5).,Evidenced - #5 draft-first
+10,Scope boundary,Also forecast next month's demand.,either,Out of scope - forecasting is a Wave 3 scenario; this plugin plans against given demand.,Evidenced - README boundary

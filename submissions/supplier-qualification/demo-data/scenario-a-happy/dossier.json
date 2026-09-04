@@ -1,0 +1,10 @@
+{ "contract_version": "mfg.supplier-qualification.v1", "as_of_date": "2026-08-01",
+  "supplier": {"name": "Cascade Precision LLC"}, "category": "machined-components",
+  "category_region_concentration_pct": 55, "candidate_region_matches_concentration": false,
+  "ppap_required": ["PSW", "control_plan", "process_FMEA", "MSA"],
+  "dossier": {
+    "cert": {"standard": "ISO 9001:2015", "doc_id": "TUV-88231", "expiry": "2027-11-30"},
+    "audit_score": 91, "region": "US-Pacific-NW",
+    "ppap_elements": ["PSW", "control_plan", "process_FMEA", "MSA", "dimensional_results"],
+    "financials": {"quick_ratio": 1.6, "trend": "stable"}},
+  "escalations": [] }

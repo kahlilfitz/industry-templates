@@ -1,0 +1,2 @@
+part_no,description,on_hand,on_order,safety_stock,lead_time_days,single_source
+FST-8842,Hex bolt M8x30 zinc,5200,5000,800,10,no

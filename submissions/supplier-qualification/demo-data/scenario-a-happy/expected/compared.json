@@ -1,0 +1,80 @@
+{
+  "contract_version": "mfg.supplier-qualification.v1",
+  "as_of_date": "2026-08-01",
+  "supplier": {
+    "name": "Cascade Precision LLC"
+  },
+  "category": "machined-components",
+  "category_region_concentration_pct": 55,
+  "candidate_region_matches_concentration": false,
+  "ppap_required": [
+    "PSW",
+    "control_plan",
+    "process_FMEA",
+    "MSA"
+  ],
+  "dossier": {
+    "cert": {
+      "standard": "ISO 9001:2015",
+      "doc_id": "TUV-88231",
+      "expiry": "2027-11-30"
+    },
+    "audit_score": 91,
+    "region": "US-Pacific-NW",
+    "ppap_elements": [
+      "PSW",
+      "control_plan",
+      "process_FMEA",
+      "MSA",
+      "dimensional_results"
+    ],
+    "financials": {
+      "quick_ratio": 1.6,
+      "trend": "stable"
+    }
+  },
+  "escalations": [],
+  "risk": {
+    "quality": {
+      "band": "low",
+      "notes": []
+    },
+    "financial": {
+      "band": "low",
+      "notes": []
+    },
+    "geographic": {
+      "band": "low",
+      "notes": []
+    },
+    "overall_band": "low",
+    "confidence": 0.93,
+    "source": "engine:risk_score",
+    "citation": "qualification-rules.md #1-#4"
+  },
+  "provenance": {
+    "engines": [
+      "risk_score/1.0",
+      "avl_match/1.0"
+    ],
+    "generated_at": "2026-08-05T00:21:24+00:00"
+  },
+  "avl": {
+    "incumbents": [
+      "Meridian Precision Components",
+      "Kestrel Machining"
+    ],
+    "same_region_incumbents": [],
+    "adds_regional_diversity": true,
+    "dual_source_after_add": true,
+    "source": "engine:avl_match",
+    "citation": "approved vendor list, category 'machined-components'"
+  },
+  "recommendation": {
+    "outcome": "qualify",
+    "conditions": [],
+    "confidence": 0.92,
+    "source": "engine:avl_match",
+    "citation": "qualification-rules.md #5"
+  }
+}

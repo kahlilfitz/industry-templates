@@ -1,0 +1,6 @@
+timestamp,asset_id,alarm_code,description,value
+2024-04-01 14:22,P-201,OL-TRIP,Motor overload trip,112% FLA
+2024-05-08 09:47,P-201,OL-TRIP,Motor overload trip,115% FLA
+2024-06-02 21:10,P-201,OL-TRIP,Motor overload trip,118% FLA
+2024-06-17 01:52,P-201,VIB-HH,Vibration high-high,8.9 mm/s
+2024-06-17 02:04,P-201,OL-TRIP,Motor overload trip,121% FLA

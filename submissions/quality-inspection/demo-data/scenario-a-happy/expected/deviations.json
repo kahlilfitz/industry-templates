@@ -1,0 +1,180 @@
+{
+  "contract_version": "mfg.quality-inspection.v1",
+  "part_number": "BRK-2047-A",
+  "part_revision": "C",
+  "lot_id": "LOT-2026-0715-04",
+  "lot_quantity": 250,
+  "sample_size": 12,
+  "coc": {
+    "doc_id": "MPC-26-1188",
+    "supplier": "Meridian Precision Components",
+    "claims": [
+      {
+        "characteristics": [
+          "anodize_thickness_um"
+        ],
+        "claim": "surface treatment per drawing note 7",
+        "citation": "CoC MPC-26-1188"
+      }
+    ]
+  },
+  "characteristics": [
+    {
+      "name": "overall_length_mm",
+      "unit": "mm",
+      "nominal": 88.0,
+      "lower_tolerance": 87.9,
+      "upper_tolerance": 88.1,
+      "criticality": "minor",
+      "criticality_source": "drawing BRK-2047-A rev C, characteristic 3",
+      "rework_permitted": true,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, characteristic 3",
+      "actual": 88.0493,
+      "stats": {
+        "n": 12,
+        "mean": 88.0082,
+        "min": 87.9824,
+        "max": 88.0493,
+        "band_consumed_pct": 49.3
+      },
+      "n_out_of_tolerance": 0,
+      "incidence_pct": 0.0,
+      "status": "in_tolerance",
+      "confidence": 0.99
+    },
+    {
+      "name": "thickness_mm",
+      "unit": "mm",
+      "nominal": 6.35,
+      "lower_tolerance": 6.3,
+      "upper_tolerance": 6.4,
+      "criticality": "minor",
+      "criticality_source": "drawing BRK-2047-A rev C, characteristic 5",
+      "rework_permitted": true,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, characteristic 5",
+      "actual": 6.3794,
+      "stats": {
+        "n": 12,
+        "mean": 6.357,
+        "min": 6.3407,
+        "max": 6.3794,
+        "band_consumed_pct": 58.8
+      },
+      "n_out_of_tolerance": 0,
+      "incidence_pct": 0.0,
+      "status": "in_tolerance",
+      "confidence": 0.99
+    },
+    {
+      "name": "hole_diameter_mm",
+      "unit": "mm",
+      "nominal": 12.0,
+      "lower_tolerance": 11.95,
+      "upper_tolerance": 12.05,
+      "criticality": "major",
+      "criticality_source": "mating interface; note 6 prohibits re-boring",
+      "rework_permitted": false,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, characteristic 14 (note 6)",
+      "actual": 12.11,
+      "stats": {
+        "n": 12,
+        "mean": 12.0204,
+        "min": 11.9738,
+        "max": 12.11,
+        "band_consumed_pct": 220.0
+      },
+      "n_out_of_tolerance": 2,
+      "incidence_pct": 16.67,
+      "status": "out_of_tolerance",
+      "confidence": 0.99
+    },
+    {
+      "name": "hole_position_tp_mm",
+      "unit": "mm",
+      "nominal": 0.0,
+      "lower_tolerance": 0.0,
+      "upper_tolerance": 0.1,
+      "criticality": "major",
+      "criticality_source": "drawing BRK-2047-A rev C, characteristic 15",
+      "rework_permitted": false,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, characteristic 15",
+      "actual": 0.0779,
+      "stats": {
+        "n": 12,
+        "mean": 0.0476,
+        "min": 0.0238,
+        "max": 0.0779,
+        "band_consumed_pct": 77.9
+      },
+      "n_out_of_tolerance": 0,
+      "incidence_pct": 0.0,
+      "status": "in_tolerance",
+      "confidence": 0.99
+    },
+    {
+      "name": "flatness_mm",
+      "unit": "mm",
+      "nominal": 0.0,
+      "lower_tolerance": 0.0,
+      "upper_tolerance": 0.1,
+      "criticality": "minor",
+      "criticality_source": "drawing BRK-2047-A rev C, characteristic 8",
+      "rework_permitted": false,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, characteristic 8",
+      "actual": 0.0793,
+      "stats": {
+        "n": 12,
+        "mean": 0.0619,
+        "min": 0.0472,
+        "max": 0.0793,
+        "band_consumed_pct": 79.3
+      },
+      "n_out_of_tolerance": 0,
+      "incidence_pct": 0.0,
+      "status": "in_tolerance",
+      "confidence": 0.99
+    },
+    {
+      "name": "surface_finish_ra_um",
+      "unit": "um",
+      "nominal": 0.8,
+      "lower_tolerance": 0.0,
+      "upper_tolerance": 1.6,
+      "criticality": "critical",
+      "criticality_source": "drawing note 9 (fatigue-critical mating face, ref SA-2047-11)",
+      "rework_permitted": false,
+      "doc_conflict": false,
+      "source": "engine:tolerance_check",
+      "citation": "drawing BRK-2047-A rev C, note 4 + NOTE 9",
+      "actual": 1.3425,
+      "stats": {
+        "n": 12,
+        "mean": 1.096,
+        "min": 0.9135,
+        "max": 1.3425,
+        "band_consumed_pct": 67.8
+      },
+      "n_out_of_tolerance": 0,
+      "incidence_pct": 0.0,
+      "status": "in_tolerance",
+      "confidence": 0.99
+    }
+  ],
+  "escalations": [],
+  "provenance": {
+    "engines": [
+      "tolerance_check/2.0"
+    ],
+    "generated_at": "2026-08-04T23:16:19+00:00"
+  }
+}

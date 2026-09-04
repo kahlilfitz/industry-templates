@@ -1,0 +1,4 @@
+wo_id,date,asset_id,component,keywords,action,parts_used,outcome,downtime_hr
+WO-4120,2023-11-08,CV-210,gearbox,oil_leak;seal_weep,Replaced output oil seal and housing gasket; renewed gear oil,OS-45;GK-12;GO-220,resolved,3
+WO-3980,2023-05-20,CV-210,gearbox,high_temp,"Topped up gear oil, cleaned breather",GO-220,resolved,1
+WO-4300,2024-02-02,CV-220,gearbox,oil_leak,Replaced output oil seal,OS-45,resolved,2

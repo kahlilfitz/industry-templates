@@ -1,0 +1,3 @@
+wo_id,date,asset_id,failure_mode,action,downtime_hr
+WO-20410,2022-08-14,P-104,mechanical_seal_failure,Replaced mechanical seal,5
+WO-21877,2023-05-02,P-104,preventive_maintenance,"Annual PM, lube + inspection",3

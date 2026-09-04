@@ -1,0 +1,5 @@
+{ "doc_id": "MPC-26-1245", "supplier": "Meridian Precision Components",
+  "claims": [
+    {"characteristics": ["surface_finish_ra_um"], "claim": "surface finish process qualified and in statistical control (Ra <= 1.6 um, mating face)", "citation": "CoC MPC-26-1245"},
+    {"characteristics": ["anodize_thickness_um"], "claim": "surface treatment per drawing note 7", "citation": "CoC MPC-26-1245"}
+  ] }

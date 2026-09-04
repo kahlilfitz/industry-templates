@@ -1,0 +1,99 @@
+{
+  "contract_version": "mfg.audit-readiness.v1",
+  "audit_id": "AUD-2026-S3",
+  "standard": "ISO9001:2015",
+  "audit_date": "2026-08-20",
+  "scope": [
+    "production",
+    "quality",
+    "maintenance"
+  ],
+  "active_roles": [
+    "J. Okafor",
+    "L. Tran",
+    "M. Reyes"
+  ],
+  "owners": {
+    "9.3": "Plant manager",
+    "9.2": "Quality director",
+    "7.2": "HR / Quality",
+    "8.7": "Quality manager",
+    "9.1.3": "Quality manager",
+    "7.1.5": "Metrology lead"
+  },
+  "escalations": [],
+  "clause_map": [
+    {
+      "clause": "7.2",
+      "title": "Competence",
+      "required_evidence": [
+        "training_record"
+      ],
+      "max_age_days": 3650,
+      "criticality": "major",
+      "source": "engine:clause_map",
+      "citation": "clause-table[ISO9001:2015] 7.2"
+    },
+    {
+      "clause": "8.7",
+      "title": "Control of nonconforming outputs",
+      "required_evidence": [
+        "ncr_log"
+      ],
+      "max_age_days": 365,
+      "criticality": "major",
+      "source": "engine:clause_map",
+      "citation": "clause-table[ISO9001:2015] 8.7"
+    },
+    {
+      "clause": "9.1.3",
+      "title": "Analysis and evaluation",
+      "required_evidence": [
+        "quality_kpi_review"
+      ],
+      "max_age_days": 365,
+      "criticality": "minor",
+      "source": "engine:clause_map",
+      "citation": "clause-table[ISO9001:2015] 9.1.3"
+    },
+    {
+      "clause": "9.2",
+      "title": "Internal audit",
+      "required_evidence": [
+        "internal_audit_report"
+      ],
+      "max_age_days": 365,
+      "criticality": "major",
+      "source": "engine:clause_map",
+      "citation": "clause-table[ISO9001:2015] 9.2"
+    },
+    {
+      "clause": "9.3",
+      "title": "Management review",
+      "required_evidence": [
+        "management_review_minutes"
+      ],
+      "max_age_days": 365,
+      "criticality": "major",
+      "source": "engine:clause_map",
+      "citation": "clause-table[ISO9001:2015] 9.3"
+    },
+    {
+      "clause": "7.1.5",
+      "title": "Monitoring and measuring resources",
+      "required_evidence": [
+        "calibration_record"
+      ],
+      "max_age_days": 365,
+      "criticality": "minor",
+      "source": "engine:clause_map",
+      "citation": "clause-table[ISO9001:2015] 7.1.5"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "clause_map/1.0"
+    ],
+    "generated_at": "2026-08-05T00:23:11+00:00"
+  }
+}

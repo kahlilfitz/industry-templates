@@ -1,0 +1,3 @@
+{ "PUMP": {"VALVE": 3.5, "COMP": 2.5, "PUMP": 0},
+  "VALVE": {"PUMP": 3.0, "COMP": 4.0, "VALVE": 0},
+  "COMP": {"PUMP": 2.0, "VALVE": 3.5, "COMP": 0} }

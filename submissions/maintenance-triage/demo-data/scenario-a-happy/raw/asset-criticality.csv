@@ -1,0 +1,2 @@
+asset_id,criticality_class,downtime_cost_per_hr,redundancy,process
+P-104,B,3500,standby P-103 available,Cooling water supply

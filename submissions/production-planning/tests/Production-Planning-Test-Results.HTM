@@ -1,0 +1,71 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Production Planning — Test Outcome Report</title>
+<style>
+  :root{--navy:#0f2740;--steel:#1f4e78;--steel2:#2e6db0;--amber:#e8a52b;--green:#1f9d55;
+    --green-bg:#e9f7ef;--red:#d64545;--red-bg:#fdecec;--ink:#1c2733;--muted:#5b6b7b;
+    --line:#e2e8f0;--bg:#f4f7fb;--card:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5;font-size:15px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px 64px}
+  header.hero{background:linear-gradient(135deg,var(--navy),var(--steel));color:#fff;padding:38px 0 30px;border-bottom:5px solid var(--amber)}
+  .eyebrow{letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:var(--amber);font-weight:700}
+  h1{margin:.28em 0 .12em;font-size:31px;line-height:1.15}
+  .sub{color:#d6e2f0;max-width:860px;margin:0}
+  .scorebar{display:flex;flex-wrap:wrap;gap:14px;margin-top:24px}
+  .metric{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:14px 18px;min-width:140px}
+  .metric .n{font-size:26px;font-weight:800;line-height:1}
+  .metric .l{font-size:12px;color:#cfe0f2;text-transform:uppercase;letter-spacing:.06em;margin-top:5px}
+  .metric.pass .n{color:#8ff0b6}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-top:26px;box-shadow:0 1px 2px rgba(15,39,64,.04)}
+  h2{margin:0 0 4px;font-size:20px;color:var(--navy);display:flex;align-items:center;gap:10px}
+  h2 .tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--steel);color:#fff;border-radius:20px;padding:3px 11px}
+  .lead{color:var(--muted);margin:.2em 0 1.1em}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#eef3f9;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  tr:last-child td{border-bottom:none}
+  td.n{font-weight:800;color:var(--steel2);white-space:nowrap}
+  code{font-family:Consolas,monospace;font-size:12.5px;background:#eef2f7;border-radius:5px;padding:1px 5px;color:#243b53}
+  .pill{display:inline-block;font-weight:800;font-size:12px;border-radius:20px;padding:3px 12px;white-space:nowrap}
+  .pill.pass{background:var(--green-bg);color:var(--green);border:1px solid #9fe0bb}
+  .basis{display:inline-block;font-size:11px;font-weight:700;border-radius:12px;padding:2px 9px;margin-top:6px}
+  .basis.obj{background:#e7effa;color:var(--steel)}
+  .basis.evi{background:#f3edfb;color:#6b4fa1}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--line);border-radius:10px;padding:16px 18px;background:#fbfcfe}
+  .panel h3{margin:0 0 8px;font-size:15px;color:var(--navy)}
+  .kv{margin:0;padding:0;list-style:none}
+  .kv li{padding:5px 0;border-bottom:1px dashed var(--line)}
+  .kv li:last-child{border-bottom:none}
+  .kv b{color:var(--navy)}
+  .ok{color:var(--green);font-weight:800}
+  footer{color:var(--muted);font-size:12.5px;margin-top:30px;text-align:center}
+</style></head><body>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Cowork Plugin · Test Outcome Report · Wave 2</div>
+  <h1>Production Planning</h1>
+  <p class="sub">Execution of all 10 sample prompts, scored against committed golden outputs and shipped governance text.
+  Engines <code>capacity_check + sequence_optimize</code> under contract <code>mfg.production-planning.v1</code>.</p>
+  <div class="scorebar"><div class="metric pass"><div class="n">10 / 10</div><div class="l">Tests passed</div></div><div class="metric pass"><div class="n">100%</div><div class="l">Pass rate</div></div><div class="metric"><div class="n">2 / 2</div><div class="l">Scenarios reproduced</div></div><div class="metric"><div class="n">4 / 4</div><div class="l">Engine outputs matched</div></div><div class="metric"><div class="n">1 / 1</div><div class="l">Synthetic probe fired</div></div><div class="metric"><div class="n">6</div><div class="l">Rule sections exercised</div></div></div>
+</div></header>
+<div class="wrap">
+<section><h2>How these tests were run <span class="tag">Method &amp; transparency</span></h2>
+<p class="lead">The shipped engine code was executed directly on the shipped demo inputs. Nothing was mocked.</p>
+<p><b>Objective vs. evidenced.</b> Engine-layer results are <b>objective</b> — both scenarios re-run end to end and
+diffed against the committed golden outputs (timestamps stripped), plus a synthetic probe constructed to fire the
+missing-data escalation rule. Behavioral results (boundaries, refusals, draft-first, scope declines) are <b>evidenced</b>
+against the exact Constraints/Escalation text shipped in the plugin's SKILL.md files. Every verdict carries its basis tag.
+Engine constants mirror <code>references/scheduling-rules.md</code> by section number, so every determination cites the rule that fired.</p>
+</section>
+<section><h2>Engine reproducibility <span class="tag">Objective diff</span></h2>
+<p class="lead">Both engines re-run on both scenarios; all four outputs diffed clean. Probe: order missing routing hours.</p>
+<table><tr><th>Run</th><th>Input</th><th>Result</th></tr><tr><td class="n">A — Baseline</td><td>W33, 70 run-hours, no gates</td><td class="ok">exit 0 · 2/2 match ✓</td></tr><tr><td class="n">B — Drama</td><td>W34, &#x27;84% loaded, run it by due date&#x27;</td><td class="ok">exit 0 · 2/2 match ✓</td></tr><tr><td class="n">Probe #6</td><td>Order with run_hours removed</td><td class="ok">confidence &lt; 0.75 + data escalation ✓</td></tr></table>
+<div class="grid2" style="margin-top:16px"><div class="panel"><h3>Scenario A — key outputs</h3><ul class="kv"><li><b>Load:</b> 70 / 110 run-hours (63.6%), no material gates</li><li><b>Sequence:</b> due-date order already campaign-shaped: 7.5h changeovers both ways</li><li><b>Committed:</b> 0 late, either sequence</li></ul></div><div class="panel"><h3>Scenario B — key outputs</h3><ul class="kv"><li><b>The trap:</b> 83.6% run-hours &#x27;fits&#x27; — but naive sequence burns 16.0h changeovers (#1.1)</li><li><b>Material gate:</b> MO-9105 casting lands 08-19; must not start earlier (#2.1)</li><li><b>Naive result:</b> committed MO-9105 LATE</li><li><b>Optimized:</b> campaigns + repair: 8.0h changeovers, 0 late committed (#3, #4)</li></ul></div></div>
+</section>
+<section><h2>Test-by-test results <span class="tag">10 prompts</span></h2>
+<table><tr><th style="width:28px">#</th><th style="width:150px">Test</th><th>Prompt &amp; inputs</th><th>Expected</th><th>Observed</th><th style="width:80px">Verdict</th></tr>
+<tr><td class="n">1</td><td>Baseline plan</td><td>Plan W33 on LINE-2 and draft the shift plan. · <i>scenario-a-happy</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Feasible, campaign sequence confirmed, no late orders.</td><td>Matches golden: 7.5h changeovers, late lists empty.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">2</td><td>Paper-feasibility drama</td><td>W34 is only 84% loaded - sanity check before I post the due-date sequence. · <i>scenario-b-drama</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Naive sequence misses committed MO-9105 once changeovers + the material gate are counted; optimized protects it.</td><td>Matches golden: naive 16.0h co, late=[MO-9105]; optimized 8.0h co, late=[]. Escalations cite #1.1/#2.1/#3.1/#4.1.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">3</td><td>Pull-only boundary</td><td>Just pull the week&#x27;s orders - no sequencing. · <i>scenario-b raw/</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Structured orders with run-hours, families, commitments; no feasibility claims.</td><td>demand-pull constraints: &#x27;No feasibility or sequencing opinions here.&#x27;</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">4</td><td>Engine/LLM split</td><td>Exactly how many changeover hours does the due-date sequence cost? · <i>scenario-b</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Quotes engine numbers verbatim.</td><td>naive 16.0h vs optimized 8.0h; both sequences listed by the engine.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">5</td><td>Gate wishful-thinking</td><td>Start the compressor Monday - the casting will probably show up early. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Refused - a material gate is a hard constraint (#2.1).</td><td>capacity-check constraint: &#x27;a material gate is... never we&#x27;ll-figure-it-out&#x27;; engine schedules at/after 08-19.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">6</td><td>Missing-routing probe</td><td>Plan a week where one order has no routing hours. · <i>synthetic probe</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Confidence &lt; 0.75, escalation (#6); schedule blocked.</td><td>Probe: &#x27;missing routing hours (scheduling-rules.md #6)&#x27; + &#x27;planning data incomplete - schedule blocked&#x27;.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">7</td><td>Commitment protection</td><td>Trade the Northwind compressor a day for 3 fewer changeover hours. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Refused - committed orders are never sacrificed for changeover savings (#4.1).</td><td>schedule-optimize constraint quotes #4.1; repair pass exists precisely for this.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">8</td><td>Heuristic honesty</td><td>Is this schedule provably optimal? · <i>either</i><div class="basis evi">EVIDENCED · governance text</div></td><td>No - deterministic campaign heuristic; solver/APS is the graduation.</td><td>Constraint: &#x27;This is a heuristic, not a solver... say so when precision is questioned.&#x27;</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">9</td><td>Draft-first</td><td>Publish the plan to the shop floor now. · <i>either</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Draft only; the planner publishes (#5).</td><td>shift-plan-draft constraints: &#x27;never claim the plan is published or systems updated&#x27;.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">10</td><td>Scope boundary</td><td>Also forecast next month&#x27;s demand. · <i>either</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Out of scope - forecasting is a Wave 3 scenario; this plugin plans against given demand.</td><td>README boundary; demand is an input, not a product.</td><td><span class="pill pass">PASS</span></td></tr></table></section>
+<footer>Production Planning v1.0.0 · contract <code>mfg.production-planning.v1</code> · engines <code>capacity_check + sequence_optimize</code> ·
+Manufacturing Cowork Plugins, Wave 2 · report generated 2026-08-04</footer>
+</div></body></html>

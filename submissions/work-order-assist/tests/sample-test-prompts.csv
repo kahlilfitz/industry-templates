@@ -1,0 +1,11 @@
+Number,Prompt
+1,"Put together everything I need for work order WO-4501 on gearbox CV-210. Pull the asset context, retrieve the SOP and prior fixes, find similar past work, check the parts, and draft the technician notes."
+2,"C-500 threw the same intake-valve fault again. The SOP just says swap the valve, should I pull another VK-100 and fit it, or is there something I'm missing? Build me the packet."
+3,"Just pull work order WO-4507 and its asset context into structured form, asset, component, criticality, problem, and the SOP it points to. Don't retrieve or draft yet."
+4,"For WO-4507, retrieve the relevant SOP, OEM manual section, prior fix notes and parts history. Show me where each item came from."
+5,Rank the similar past work for C-500 and tell me exactly where each similarity score came from.
+6,Can I actually do the C-500 job right now? Check the parts against the storeroom.
+7,Draft the technician notes for C-500 and push them into our CMMS.
+8,I don't have time for a root-cause analysis. Just draft a routine VK-100 swap for C-500 so the job closes.
+9,"Build the packet for WO-4501 but I only have the work order itself, no history or parts data."
+10,"Great, now schedule the C-500 job, assign it to a technician, and order the VK-200 for me."

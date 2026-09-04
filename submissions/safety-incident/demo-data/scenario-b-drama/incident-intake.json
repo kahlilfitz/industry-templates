@@ -1,0 +1,98 @@
+{
+  "contract_version": "mfg.safety-incident-assist.v1",
+  "incident_id": "INC-2208",
+  "incident_type": "injury",
+  "asset_or_area": "Fabrication / Press bay - Machine M-14 (stamping press)",
+  "location": "Fabrication / Press bay",
+  "occurred_at": "2024-06-18T22:10:00",
+  "reported_at": "2024-06-18T22:35:00",
+  "reported_by": "T. Boyd (night-shift lead)",
+  "report_channel": "voice",
+  "description": "Operator reached into the M-14 stamping-press feed to clear a jam with the guard bypassed; the machine cycled and crushed/lacerated his right hand (index + middle finger). Initially reported by voice note as 'minor, sent him home'; day-shift correction confirms he was admitted to hospital overnight with surgery to two fingers and is off work.",
+  "injury": {
+    "employee": "D. Alvarez-Cole (press operator)",
+    "body_part": "right hand (index + middle finger)",
+    "nature": "crush / laceration",
+    "treatment_given": "hospitalization",
+    "outcome": "in_patient_hospitalization",
+    "days_away": 5
+  },
+  "witnesses": [
+    {
+      "name": "R. Silva",
+      "role": "operator",
+      "citation": "witness-statement.txt"
+    }
+  ],
+  "immediate_actions": "E-stop hit; bleeding controlled and splinted; operator transported and admitted overnight; M-14 tagged out pending investigation.",
+  "downgrade_request": {
+    "present": true,
+    "detail": "Night-shift voice note asked to 'log it as first aid'.",
+    "citation": "voice-note-transcript.txt"
+  },
+  "retrieved": {
+    "osha_criteria": [
+      {
+        "ref": "OSHA 1904.39",
+        "note": "In-patient hospitalization reportable within 24h",
+        "citation": "osha-recordability-excerpt.pdf"
+      },
+      {
+        "ref": "OSHA 1904.7",
+        "note": "Days away / medical treatment is recordable",
+        "citation": "osha-recordability-excerpt.pdf"
+      }
+    ],
+    "jha": [
+      {
+        "doc": "JHA-FAB-07",
+        "note": "Feed nip-point; guard/LOTO control not followed",
+        "citation": "jha-excerpt.pdf"
+      }
+    ],
+    "policy": [
+      {
+        "doc": "EHS-POL-02",
+        "note": "No-downgrade rule; EHS classifies",
+        "citation": "ehs-policy-excerpt.pdf"
+      }
+    ],
+    "source": "skill:ehs-knowledge-retrieve",
+    "citation": "prior-incident-log.csv; osha-recordability-excerpt.pdf"
+  },
+  "history": {
+    "window_days": 130,
+    "repeat_count": 3,
+    "repeat_pattern": true,
+    "prior_incidents": [
+      {
+        "incident_id": "INC-2089",
+        "date": "2024-02-15",
+        "asset_or_area": "M-14",
+        "type": "near_miss",
+        "outcome": "none",
+        "recordable": false,
+        "citation": "INC-2089"
+      },
+      {
+        "incident_id": "INC-2137",
+        "date": "2024-04-09",
+        "asset_or_area": "M-14",
+        "type": "near_miss",
+        "outcome": "none",
+        "recordable": false,
+        "citation": "INC-2137"
+      },
+      {
+        "incident_id": "INC-2190",
+        "date": "2024-05-30",
+        "asset_or_area": "M-14",
+        "type": "injury",
+        "outcome": "first_aid",
+        "recordable": false,
+        "citation": "INC-2190"
+      }
+    ]
+  },
+  "escalations": []
+}

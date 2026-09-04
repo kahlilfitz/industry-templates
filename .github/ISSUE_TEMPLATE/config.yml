@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contribute a template
+    url: https://github.com/SravaniSeethi/industry-templates/blob/main/CONTRIBUTING.md
+    about: Adding a new industry template? Start with the contribution guide.
+  - name: Microsoft 365 Copilot Cowork docs
+    url: https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/cowork-plugin-development
+    about: Questions about Cowork plugins themselves, rather than a template here.

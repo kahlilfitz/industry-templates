@@ -1,0 +1,126 @@
+{
+  "contract_version": "mfg.quality-incident-capa.v1",
+  "capa_id": "CAPA-2026-0034",
+  "ncr_ref": {
+    "ncr_id": "NCR-2026-0203",
+    "part_number": "BRK-2047-A",
+    "lot_id": "LOT-2026-0729-02",
+    "defect": "bore trending oversize; final-check step skipped per line note",
+    "disposition": "hold_for_review",
+    "citation": "NCR-2026-0203"
+  },
+  "complaint_window_days": 180,
+  "escalations": [
+    "'operator_error' label present with recurrence 4 - rejected as terminal root cause; systemic analysis applied instead (capa-rules.md #3.4)"
+  ],
+  "pareto": [
+    {
+      "cause_category": "calibration_drift",
+      "count": 6,
+      "share_pct": 60.0,
+      "cumulative_pct": 60.0,
+      "parts_affected": [
+        "BRK-2047-A",
+        "CVR-3300",
+        "PLT-1101"
+      ],
+      "machines_affected": [
+        "HMC-3",
+        "HMC-4"
+      ],
+      "source": "engine:pareto",
+      "citation": "complaint log, 10 rows / 180d window"
+    },
+    {
+      "cause_category": "operator_error",
+      "count": 4,
+      "share_pct": 40.0,
+      "cumulative_pct": 100.0,
+      "parts_affected": [
+        "BRK-2047-A"
+      ],
+      "machines_affected": [
+        "HMC-3"
+      ],
+      "source": "engine:pareto",
+      "citation": "complaint log, 10 rows / 180d window"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "pareto/1.0",
+      "rca_tree/1.0",
+      "capa_logic/1.0"
+    ],
+    "generated_at": "2026-08-05T00:17:27+00:00"
+  },
+  "root_cause": {
+    "method": "pareto+5why",
+    "category": "calibration_drift",
+    "why_chain": [
+      "dimensions drift toward limits across shifts",
+      "in-process gauge reads low vs CMM",
+      "gauge calibration interval exceeded",
+      "calibration recall list not enforced at the cell",
+      "no automated recall gate at setup"
+    ],
+    "systemic": true,
+    "confidence": 0.86,
+    "source": "engine:rca_tree",
+    "citation": "rca-methods.md; cause-links[calibration_drift]; complaint log, 10 rows / 180d window"
+  },
+  "capa": {
+    "containment": [
+      {
+        "action": "quarantine lots measured on the suspect gauge since last calibration",
+        "source": "engine:capa_logic",
+        "citation": "action library[calibration_drift] \u00b7 capa-rules.md #2"
+      }
+    ],
+    "corrective": [
+      {
+        "action": "recalibrate cell gauges; re-verify held lots on CMM",
+        "metric": "gauge R&R within limits",
+        "window_days": 30,
+        "source": "engine:capa_logic",
+        "citation": "action library[calibration_drift] \u00b7 capa-rules.md #2"
+      }
+    ],
+    "preventive": [
+      {
+        "action": "enforce calibration recall gate at setup across all cells running affected parts",
+        "metric": "zero out-of-cal gauges in monthly recall audit x3",
+        "window_days": 90,
+        "source": "engine:capa_logic",
+        "citation": "action library[calibration_drift] \u00b7 capa-rules.md #5"
+      }
+    ],
+    "effectiveness_checks": [
+      {
+        "action": "recalibrate cell gauges; re-verify held lots on CMM",
+        "metric": "gauge R&R within limits",
+        "owner": "quality engineer",
+        "window_days": 30,
+        "source": "engine:capa_logic",
+        "citation": "capa-rules.md #4"
+      },
+      {
+        "action": "enforce calibration recall gate at setup across all cells running affected parts",
+        "metric": "zero out-of-cal gauges in monthly recall audit x3",
+        "owner": "quality engineer",
+        "window_days": 90,
+        "source": "engine:capa_logic",
+        "citation": "capa-rules.md #4"
+      }
+    ]
+  },
+  "closure": {
+    "ready": false,
+    "blockers": [
+      "effectiveness verification evidence pending - checks defined, verification not yet run (capa-rules.md #6)"
+    ],
+    "confidence": 0.9,
+    "source": "engine:capa_logic",
+    "citation": "capa-rules.md #6"
+  }
+}

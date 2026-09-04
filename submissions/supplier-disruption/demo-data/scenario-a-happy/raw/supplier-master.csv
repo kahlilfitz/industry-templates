@@ -1,0 +1,2 @@
+part_no,supplier,single_source,alternate_supplier,alt_lead_time_days,alt_qualified,substitute_part,substitute_approved,substitute_on_hand
+FST-8842,Bolt & Fastener Co,no,FastenAlt Supply,7,yes,FST-8843,yes,3000

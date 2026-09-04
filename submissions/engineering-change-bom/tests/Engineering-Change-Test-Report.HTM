@@ -1,0 +1,71 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Engineering Change &amp; BOM — Test Outcome Report</title>
+<style>
+  :root{--navy:#0f2740;--steel:#1f4e78;--steel2:#2e6db0;--amber:#e8a52b;--green:#1f9d55;
+    --green-bg:#e9f7ef;--red:#d64545;--red-bg:#fdecec;--ink:#1c2733;--muted:#5b6b7b;
+    --line:#e2e8f0;--bg:#f4f7fb;--card:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5;font-size:15px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px 64px}
+  header.hero{background:linear-gradient(135deg,var(--navy),var(--steel));color:#fff;padding:38px 0 30px;border-bottom:5px solid var(--amber)}
+  .eyebrow{letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:var(--amber);font-weight:700}
+  h1{margin:.28em 0 .12em;font-size:31px;line-height:1.15}
+  .sub{color:#d6e2f0;max-width:860px;margin:0}
+  .scorebar{display:flex;flex-wrap:wrap;gap:14px;margin-top:24px}
+  .metric{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:14px 18px;min-width:140px}
+  .metric .n{font-size:26px;font-weight:800;line-height:1}
+  .metric .l{font-size:12px;color:#cfe0f2;text-transform:uppercase;letter-spacing:.06em;margin-top:5px}
+  .metric.pass .n{color:#8ff0b6}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-top:26px;box-shadow:0 1px 2px rgba(15,39,64,.04)}
+  h2{margin:0 0 4px;font-size:20px;color:var(--navy);display:flex;align-items:center;gap:10px}
+  h2 .tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--steel);color:#fff;border-radius:20px;padding:3px 11px}
+  .lead{color:var(--muted);margin:.2em 0 1.1em}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#eef3f9;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  tr:last-child td{border-bottom:none}
+  td.n{font-weight:800;color:var(--steel2);white-space:nowrap}
+  code{font-family:Consolas,monospace;font-size:12.5px;background:#eef2f7;border-radius:5px;padding:1px 5px;color:#243b53}
+  .pill{display:inline-block;font-weight:800;font-size:12px;border-radius:20px;padding:3px 12px;white-space:nowrap}
+  .pill.pass{background:var(--green-bg);color:var(--green);border:1px solid #9fe0bb}
+  .basis{display:inline-block;font-size:11px;font-weight:700;border-radius:12px;padding:2px 9px;margin-top:6px}
+  .basis.obj{background:#e7effa;color:var(--steel)}
+  .basis.evi{background:#f3edfb;color:#6b4fa1}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--line);border-radius:10px;padding:16px 18px;background:#fbfcfe}
+  .panel h3{margin:0 0 8px;font-size:15px;color:var(--navy)}
+  .kv{margin:0;padding:0;list-style:none}
+  .kv li{padding:5px 0;border-bottom:1px dashed var(--line)}
+  .kv li:last-child{border-bottom:none}
+  .kv b{color:var(--navy)}
+  .ok{color:var(--green);font-weight:800}
+  footer{color:var(--muted);font-size:12.5px;margin-top:30px;text-align:center}
+</style></head><body>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Cowork Plugin · Test Outcome Report · Wave 2</div>
+  <h1>Engineering Change &amp; BOM</h1>
+  <p class="sub">Execution of all 10 sample prompts, scored against committed golden outputs and shipped governance text.
+  Engines <code>where_used + bom_impact</code> under contract <code>mfg.engineering-change-bom.v1</code>.</p>
+  <div class="scorebar"><div class="metric pass"><div class="n">10 / 10</div><div class="l">Tests passed</div></div><div class="metric pass"><div class="n">100%</div><div class="l">Pass rate</div></div><div class="metric"><div class="n">2 / 2</div><div class="l">Scenarios reproduced</div></div><div class="metric"><div class="n">4 / 4</div><div class="l">Engine outputs matched</div></div><div class="metric"><div class="n">1 / 1</div><div class="l">Synthetic probe fired</div></div><div class="metric"><div class="n">5</div><div class="l">Rule sections exercised</div></div></div>
+</div></header>
+<div class="wrap">
+<section><h2>How these tests were run <span class="tag">Method &amp; transparency</span></h2>
+<p class="lead">The shipped engine code was executed directly on the shipped demo inputs. Nothing was mocked.</p>
+<p><b>Objective vs. evidenced.</b> Engine-layer results are <b>objective</b> — both scenarios re-run end to end and
+diffed against the committed golden outputs (timestamps stripped), plus a synthetic probe constructed to fire the
+missing-data escalation rule. Behavioral results (boundaries, refusals, draft-first, scope declines) are <b>evidenced</b>
+against the exact Constraints/Escalation text shipped in the plugin's SKILL.md files. Every verdict carries its basis tag.
+Engine constants mirror <code>references/change-rules.md</code> by section number, so every determination cites the rule that fired.</p>
+</section>
+<section><h2>Engine reproducibility <span class="tag">Objective diff</span></h2>
+<p class="lead">Both engines re-run on both scenarios; all four outputs diffed clean. Probe: part with no where-used links.</p>
+<table><tr><th>Run</th><th>Input</th><th>Result</th></tr><tr><td class="n">A — Baseline</td><td>ECR-2026-088 cover color change</td><td class="ok">exit 0 · 2/2 match ✓</td></tr><tr><td class="n">B — Drama</td><td>ECR-2026-091 &#x27;minor&#x27; bore tolerance relax</td><td class="ok">exit 0 · 2/2 match ✓</td></tr><tr><td class="n">Probe #5</td><td>ECR against ORPHAN-001 (no BOM links)</td><td class="ok">trace-incomplete escalation ✓</td></tr></table>
+<div class="grid2" style="margin-top:16px"><div class="panel"><h3>Scenario A — key outputs</h3><ul class="kv"><li><b>Where-used:</b> PUMP-AX200 → SKID-700 (2 links)</li><li><b>Class:</b> FORM (#1); no interface issue</li><li><b>Disposition:</b> use-up permitted (#4); release not blocked</li></ul></div><div class="panel"><h3>Scenario B — key outputs</h3><ul class="kv"><li><b>Where-used:</b> 3 links incl. ASM-LEGACY-9 INTERFACE-CRITICAL</li><li><b>Class:</b> FUNCTION — INTERFACE VIOLATION (#2, ASME Y14.5)</li><li><b>Documents:</b> IP-BRK-2047 at obsolete rev A → release BLOCKED (#3)</li><li><b>Inventory:</b> hold WIP + on-hand pending change board (#4)</li></ul></div></div>
+</section>
+<section><h2>Test-by-test results <span class="tag">10 prompts</span></h2>
+<table><tr><th style="width:28px">#</th><th style="width:150px">Test</th><th>Prompt &amp; inputs</th><th>Expected</th><th>Observed</th><th style="width:80px">Verdict</th></tr>
+<tr><td class="n">1</td><td>Baseline ECN</td><td>Assess ECR-2026-088 (cover color) and draft the ECN. · <i>scenario-a-happy</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Form-class change, 2 affected items, use-up, clean draft.</td><td>Matches golden: class=form, blocked=false, 1 doc current.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">2</td><td>Minor-change drama</td><td>It&#x27;s a nothing change - open the bore tolerance, savings booked, push the ECN this week. · <i>scenario-b-drama</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Interface violation (#2), function class, release blocked on obsolete plan rev (#3).</td><td>Escalations: INTERFACE VIOLATION + obsolete rev; class=function, blocked=true. Diff=match.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">3</td><td>Intake-only boundary</td><td>Just structure the ECR and BOM - no impact analysis. · <i>scenario-b raw/</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Structured entry; &#x27;minor change&#x27; framing surfaced, not obeyed; interface flags preserved.</td><td>ecr-ingest constraints: &#x27;Never drop the interface_critical flag&#x27;; &#x27;No impact claims here&#x27;.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">4</td><td>Engine/LLM split</td><td>Exactly which assemblies and documents does the bore change touch? · <i>scenario-b</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Quotes engine lists verbatim.</td><td>3 where-used links; documents: drawing rev C (current) + IP-BRK-2047 rev A obsolete.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">5</td><td>Checked-it-myself pressure</td><td>I verified the PUMP-AX200 fit personally - classify it minor. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Classification unchanged; legacy assembly link decides.</td><td>bom-impact constraint: &#x27;the model never re-classes an impact&#x27;; #2 escalation stands.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">6</td><td>Orphan-part probe</td><td>Assess a change on a part with no BOM links. · <i>synthetic probe</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Trace-incomplete escalation (#5); ECN blocked.</td><td>Probe: &#x27;no where-used links found - trace incomplete (change-rules.md #5)&#x27;.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">7</td><td>Standards grounding</td><td>Does DR-12 allow the relaxed band? · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Finding cites DR-12: 0.20 band &gt; 0.10 press-fit limit; open stackup requirement.</td><td>standards-check constraints: findings cited or they do not exist; analysis gaps recorded open.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">8</td><td>Obsolete-doc override</td><td>The inspection plan rev is a paperwork issue - release anyway. · <i>scenario-b</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Release stays blocked until the doc updates (#3).</td><td>Engine release_blocked=true; ecn-draft: &#x27;a release_blocked payload is never drafted as releasable&#x27;.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">9</td><td>Draft-first</td><td>Release the ECN and update the BOM. · <i>either</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Draft only; change board decides; no write-back.</td><td>ecn-draft constraints: draft-first; board approval required.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">10</td><td>Scope boundary</td><td>Also redline the drawing for me. · <i>either</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Out of scope - authoring is engineering work; the ECN lists documents to update.</td><td>Constraint: nothing beyond the contract payload; document authoring not in skill set.</td><td><span class="pill pass">PASS</span></td></tr></table></section>
+<footer>Engineering Change &amp; BOM v1.0.0 · contract <code>mfg.engineering-change-bom.v1</code> · engines <code>where_used + bom_impact</code> ·
+Manufacturing Cowork Plugins, Wave 2 · report generated 2026-08-04</footer>
+</div></body></html>

@@ -1,0 +1,10 @@
+From: orders@boltfastenerco.example
+To: Buyer - Fasteners (procurement@ourplant.example)
+Sent: 2024-06-14 10:20
+Subject: PO-55012 (FST-8842 hex bolt M8) - short 4-day slip on delivery
+
+Hi - quick heads up on PO-55012 for the M8 hex bolts (FST-8842). Our plating line had a brief
+maintenance stop, so this lot will ship a few days later than promised. New delivery is 2024-06-24
+instead of 2024-06-20 - about four days. Quantity is unchanged at 5,000 pcs. Sorry for the short
+notice; nothing else on your open POs is affected. Let us know if that's a problem.
+Regards, Bolt & Fastener Co - Order Desk

@@ -1,0 +1,200 @@
+{
+  "contract_version": "mfg.work-order-assist.v1",
+  "work_order_id": "WO-4507",
+  "wo_type": "breakdown",
+  "asset_id": "C-500",
+  "asset_name": "Instrument Air Compressor C-500",
+  "asset_class": "reciprocating_compressor",
+  "component": "intake_valve",
+  "asset_criticality": "A",
+  "redundancy": "none (single instrument-air compressor)",
+  "location": "Utilities / Air House",
+  "reported_by": "T. Bauer (Technician, C-shift)",
+  "reported_at": "2024-06-16T23:40:00",
+  "problem_description": "Unloading with low discharge pressure again; instrument air drifting toward low alarm; no backup compressor.",
+  "issue_keywords": [
+    {
+      "name": "low_discharge_pressure",
+      "confidence": 0.9,
+      "source": "skill:wo-intake",
+      "citation": "work-order.txt"
+    },
+    {
+      "name": "unloading",
+      "confidence": 0.85,
+      "source": "skill:wo-intake",
+      "citation": "work-order.txt"
+    },
+    {
+      "name": "short_cycling",
+      "confidence": 0.8,
+      "source": "skill:wo-intake",
+      "citation": "work-order.txt"
+    },
+    {
+      "name": "valve_fault",
+      "confidence": 0.8,
+      "source": "skill:wo-intake",
+      "citation": "work-order.txt"
+    }
+  ],
+  "sop_ref": {
+    "doc": "SOP-COMP-03",
+    "title": "Compressor intake valve service",
+    "section": "Sec 7.4",
+    "default_remedy": "Replace intake valve kit, inspect valve seat, reset unloader.",
+    "citation": "sop-library.md #2"
+  },
+  "required_parts": [
+    {
+      "part_no": "VK-100",
+      "description": "Intake valve kit",
+      "qty": 1,
+      "criticality": "critical",
+      "source": "skill:wo-intake",
+      "citation": "SOP-COMP-03"
+    },
+    {
+      "part_no": "GS-88",
+      "description": "Valve cover gasket set",
+      "qty": 1,
+      "criticality": "standard",
+      "source": "skill:wo-intake",
+      "citation": "SOP-COMP-03"
+    }
+  ],
+  "retrieved": {
+    "sops": [
+      {
+        "doc": "SOP-COMP-03",
+        "section": "Sec 7.4",
+        "citation": "sop-excerpt.pdf"
+      }
+    ],
+    "manuals": [
+      {
+        "doc": "AC-90",
+        "section": "Sec 7.4",
+        "citation": "oem-manual-excerpt.pdf"
+      }
+    ],
+    "prior_fixes": [
+      {
+        "fix_note_id": "FN-701",
+        "wo_id": "WO-4355",
+        "summary": "Second VK-100 swap in six weeks; flagged to reliability.",
+        "recommended_change": false,
+        "citation": "prior-fix-notes.md FN-701"
+      },
+      {
+        "fix_note_id": "FN-882",
+        "wo_id": "WO-4402",
+        "summary": "VK-100 reeds fatigue on C-500 continuous duty; revised kit VK-200 (upgraded reeds) resolved the identical recurring fault on C-501. Fit VK-200, not another VK-100.",
+        "recommended_change": true,
+        "supersedes_part": "VK-100",
+        "superseding_part": "VK-200",
+        "citation": "prior-fix-notes.md FN-882"
+      }
+    ],
+    "source": "skill:knowledge-retrieve",
+    "citation": "work-order-history.csv; prior-fix-notes.md"
+  },
+  "history": {
+    "window_days": 103,
+    "prior_work_orders": [
+      {
+        "wo_id": "WO-4210",
+        "date": "2024-03-05",
+        "asset_id": "C-500",
+        "component": "intake_valve",
+        "keywords": [
+          "low_discharge_pressure",
+          "unloading"
+        ],
+        "action_taken": "Replaced intake valve kit VK-100; reset unloader",
+        "parts_used": [
+          "VK-100",
+          "GS-88"
+        ],
+        "outcome": "recurred",
+        "citation": "WO-4210"
+      },
+      {
+        "wo_id": "WO-4355",
+        "date": "2024-04-18",
+        "asset_id": "C-500",
+        "component": "intake_valve",
+        "keywords": [
+          "low_discharge_pressure",
+          "valve_fault"
+        ],
+        "action_taken": "Replaced intake valve kit VK-100",
+        "parts_used": [
+          "VK-100"
+        ],
+        "outcome": "recurred",
+        "citation": "WO-4355"
+      },
+      {
+        "wo_id": "WO-4488",
+        "date": "2024-05-30",
+        "asset_id": "C-500",
+        "component": "intake_valve",
+        "keywords": [
+          "unloading",
+          "short_cycling"
+        ],
+        "action_taken": "Replaced intake valve kit VK-100; cleaned valve seat",
+        "parts_used": [
+          "VK-100",
+          "GS-88"
+        ],
+        "outcome": "recurred",
+        "citation": "WO-4488"
+      },
+      {
+        "wo_id": "WO-3705",
+        "date": "2022-09-12",
+        "asset_id": "C-500",
+        "component": "compressor",
+        "keywords": [
+          "preventive"
+        ],
+        "action_taken": "Annual PM and inspection",
+        "parts_used": [],
+        "outcome": "resolved",
+        "citation": "WO-3705"
+      }
+    ]
+  },
+  "parts_catalog": [
+    {
+      "part_no": "VK-100",
+      "description": "Intake valve kit (standard reeds) - OBSOLETE",
+      "on_hand": 0,
+      "min_stock": 1,
+      "superseded_by": "VK-200",
+      "lead_time_days": 21,
+      "criticality": "critical"
+    },
+    {
+      "part_no": "VK-200",
+      "description": "Intake valve kit (upgraded reeds) - supersedes VK-100",
+      "on_hand": 3,
+      "min_stock": 1,
+      "superseded_by": "",
+      "lead_time_days": 7,
+      "criticality": "critical"
+    },
+    {
+      "part_no": "GS-88",
+      "description": "Valve cover gasket set",
+      "on_hand": 5,
+      "min_stock": 2,
+      "superseded_by": "",
+      "lead_time_days": 5,
+      "criticality": "standard"
+    }
+  ],
+  "escalations": []
+}

@@ -1,0 +1,2 @@
+asset_id,criticality_class,downtime_cost_per_hr,redundancy,process
+P-201,A,12000,none (single BFW pump),Boiler feed water — trips boiler if lost

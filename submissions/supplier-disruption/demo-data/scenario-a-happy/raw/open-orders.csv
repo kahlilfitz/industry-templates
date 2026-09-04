@@ -1,0 +1,5 @@
+order_id,order_type,product,line,finished_qty,per_unit,need_by,customer,high_runner
+WO-4401,production,Bracket Assembly A,Line 1,200,8,2024-06-18,,no
+WO-4402,production,Bracket Assembly A,Line 1,250,8,2024-06-22,,no
+WO-4405,production,Panel Frame B,Line 3,150,6,2024-06-27,,no
+WO-4409,production,Panel Frame B,Line 3,200,6,2024-06-28,,no

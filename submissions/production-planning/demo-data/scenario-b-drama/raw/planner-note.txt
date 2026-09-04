@@ -1,0 +1,6 @@
+Planning note - W34, LINE-2  (2026-08-14)
+Week looks fine on paper: 92 run-hours against 110 available = 84%, so I was going to
+run it straight by due date like always. Heads up that the casting for the CK4 compressor
+order (MO-9105, committed to Northwind) does not land until Wednesday the 19th. Also
+sales says the AX200 pumps (MO-9101) absolutely cannot slip - contract penalty. Can you
+sanity check the sequence before I post it?

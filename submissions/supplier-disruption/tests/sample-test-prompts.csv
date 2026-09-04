@@ -1,0 +1,11 @@
+Number,Prompt
+1,"Pick up this supplier delay, map its impact on my products and open orders, recommend a mitigation, then draft the supplier follow-up and the internal escalation brief."
+2,"A supplier emailed that PO-55090 will be ""about a week"" late, no big deal, right? Pick it up, map the impact and tell me what to do."
+3,"Just pick up this supplier notice into structured form, PO, supplier, part, promised vs revised date, short quantity, reason and the channel it came in on. Don't map impact or recommend yet."
+4,"For DISR-3308, retrieve the ERP inventory / MRP position, the supplier master (single-source flag, alternates, on-time history), the BOM / where-used and the open orders. Show me where each came from."
+5,Map the impact for DISR-3308 and tell me exactly which rule made it critical and which orders are at risk.
+6,"For DISR-3308, what mitigation do you recommend, who do we notify, and what gets escalated?"
+7,"Draft the supplier follow-up for DISR-3308, then email it to the supplier and place the expedite for me."
+8,"The supplier says it's only about a week and they're usually fine, just log PO-55090 as a minor slip and move on."
+9,"Map the impact for DISR-3308 but all I have right now is the supplier email, nothing else yet."
+10,"Great, now reschedule the affected POs in the ERP, commit the premium freight, and send the supplier and the plant manager the emails."

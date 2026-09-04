@@ -1,0 +1,4 @@
+{ "contract_version": "mfg.engineering-change-bom.v1", "ecr_id": "ECR-2026-091",
+  "part_number": "BRK-2047-A", "change_type": "tolerance_relax",
+  "affected_characteristic": "hole_diameter_mm", "escalations": [],
+  "change_description": "Relax char 14 bore tolerance from +/-0.050 to +/-0.100 - cuts boring cycle 18% and scrap cost ~$40k/yr. Minor change, no form/fit impact expected." }

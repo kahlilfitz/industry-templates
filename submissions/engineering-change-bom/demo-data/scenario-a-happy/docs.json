@@ -1,0 +1,5 @@
+[
+  {"doc": "drawing BRK-2047-A", "revision": "C", "current_revision": "C", "references": ["hole_diameter_mm", "flatness_mm"]},
+  {"doc": "inspection plan IP-BRK-2047", "revision": "A", "current_revision": "B", "references": ["hole_diameter_mm"]},
+  {"doc": "drawing CVR-3300", "revision": "B", "current_revision": "B", "references": ["powder_coat_color"]}
+]

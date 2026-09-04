@@ -1,0 +1,2 @@
+po_number,supplier,part_no,description,uom,order_qty,promised_date,revised_date,status
+PO-55090,PrecisionDrive GmbH,SRV-2201,Precision servo drive 3kW,ea,30,2024-06-21,2024-07-05,confirmed-late

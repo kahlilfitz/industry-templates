@@ -1,0 +1,4 @@
+{ "contract_version": "mfg.engineering-change-bom.v1", "ecr_id": "ECR-2026-088",
+  "part_number": "CVR-3300", "change_type": "finish_change",
+  "affected_characteristic": "powder_coat_color", "escalations": [],
+  "change_description": "Change cover coating from RAL 7035 to RAL 7016 for brand alignment; no dimensional change." }

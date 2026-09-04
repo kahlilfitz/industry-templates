@@ -1,0 +1,7 @@
+{
+  "name": "safety-incident-assist",
+  "version": "1.0.0",
+  "description": "Manufacturing Wave 1 Cowork plugin: handle an EHS incident consistently. Receives the report from a form, email or voice note, classifies severity, near-miss and OSHA recordability plus reportability (deterministic recordability_classify), routes to the right investigator and builds the owner-notification list with regulatory clocks (deterministic routing_notify), then drafts the incident summary and root-cause (RCA) template. Draft-first; keeps the reporting checklist and audit trail intact. NOT auto-filing OSHA reports or auto-notifying (a human signs off). Grounded in OSHA 300/300A, ISO 45001, JHA/HIRA and internal EHS policy.",
+  "author": { "name": "Microsoft Manufacturing Skills" },
+  "keywords": ["manufacturing", "EHS", "safety", "incident", "OSHA", "recordable", "ISO-45001", "RCA", "near-miss", "investigation"]
+}

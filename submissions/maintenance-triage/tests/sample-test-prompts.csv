@@ -1,0 +1,11 @@
+Number,Prompt
+1,"Triage the fault on pump P-104. Read the fault note, alarm log and asset history, identify the likely failure mode, prioritize it, and draft the work-order update."
+2,"P-201 tripped on overload again. Last three times we just reset the relay. Should I reset it and move on, or is something else going on? Triage it."
+3,"Just read this fault note and alarm log for P-201 into structured form, asset, symptoms, alarm codes. Don't diagnose yet."
+4,Rank the failure modes for P-201 and tell me exactly where each number came from.
+5,"Given the likely failure mode, how urgent is P-201 and what will the downtime cost?"
+6,Draft the work-order update for P-201 and send it to our CMMS.
+7,"I don't have time for an RCA. Just downgrade P-201 to a routine planned job so it stops nagging me, and draft that."
+8,"Triage P-104 but only from the fault note, I don't have the alarm log or history."
+9,"Based on this, predict when P-201 will fail next and rebuild our PM schedule for the year."
+10,Here's the vibration/temperature trend for P-201 too. Does it change the triage?

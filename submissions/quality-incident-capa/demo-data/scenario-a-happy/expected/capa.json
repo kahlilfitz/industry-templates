@@ -1,0 +1,107 @@
+{
+  "contract_version": "mfg.quality-incident-capa.v1",
+  "capa_id": "CAPA-2026-0031",
+  "ncr_ref": {
+    "ncr_id": "NCR-2026-0147",
+    "part_number": "BRK-2047-A",
+    "lot_id": "LOT-2026-0715-04",
+    "defect": "hole_diameter_mm out of tolerance (worst 12.110 vs USL 12.050)",
+    "disposition": "hold_for_review",
+    "citation": "NCR-2026-0147 / mfg.quality-inspection.v1"
+  },
+  "complaint_window_days": 180,
+  "escalations": [
+    "'operator_error' label present with recurrence 3 - rejected as terminal root cause; systemic analysis applied instead (capa-rules.md #3.4)"
+  ],
+  "pareto": [
+    {
+      "cause_category": "tool_wear",
+      "count": 10,
+      "share_pct": 76.9,
+      "cumulative_pct": 76.9,
+      "parts_affected": [
+        "BRK-2047-A"
+      ],
+      "machines_affected": [
+        "HMC-3"
+      ],
+      "source": "engine:pareto",
+      "citation": "complaint log, 13 rows / 180d window"
+    },
+    {
+      "cause_category": "operator_error",
+      "count": 3,
+      "share_pct": 23.1,
+      "cumulative_pct": 100.0,
+      "parts_affected": [
+        "BRK-2047-A"
+      ],
+      "machines_affected": [
+        "HMC-3"
+      ],
+      "source": "engine:pareto",
+      "citation": "complaint log, 13 rows / 180d window"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "pareto/1.0",
+      "rca_tree/1.0",
+      "capa_logic/1.0"
+    ],
+    "generated_at": "2026-08-05T00:17:27+00:00"
+  },
+  "root_cause": {
+    "method": "pareto+5why",
+    "category": "tool_wear",
+    "why_chain": [
+      "bore oversize on final op",
+      "boring insert worn beyond limit",
+      "insert life not tracked against cuts",
+      "no tool-life counter in the routing",
+      "tool management relies on operator judgment"
+    ],
+    "systemic": false,
+    "confidence": 0.88,
+    "source": "engine:rca_tree",
+    "citation": "rca-methods.md; cause-links[tool_wear]; complaint log, 13 rows / 180d window"
+  },
+  "capa": {
+    "containment": [
+      {
+        "action": "100% sort of on-hand lot; quarantine suspect WIP",
+        "source": "engine:capa_logic",
+        "citation": "action library[tool_wear] \u00b7 capa-rules.md #2"
+      }
+    ],
+    "corrective": [
+      {
+        "action": "replace boring insert; first-article verify next lot",
+        "metric": "bore Cpk >= 1.33 next 3 lots",
+        "window_days": 45,
+        "source": "engine:capa_logic",
+        "citation": "action library[tool_wear] \u00b7 capa-rules.md #2"
+      }
+    ],
+    "preventive": [],
+    "effectiveness_checks": [
+      {
+        "action": "replace boring insert; first-article verify next lot",
+        "metric": "bore Cpk >= 1.33 next 3 lots",
+        "owner": "quality engineer",
+        "window_days": 45,
+        "source": "engine:capa_logic",
+        "citation": "capa-rules.md #4"
+      }
+    ]
+  },
+  "closure": {
+    "ready": false,
+    "blockers": [
+      "effectiveness verification evidence pending - checks defined, verification not yet run (capa-rules.md #6)"
+    ],
+    "confidence": 0.9,
+    "source": "engine:capa_logic",
+    "citation": "capa-rules.md #6"
+  }
+}

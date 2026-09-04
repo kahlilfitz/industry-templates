@@ -1,0 +1,11 @@
+From: L. Tran (Incoming Inspection)   Sent: 2026-07-23 06:15
+To: Quality Engineering
+Subject: LOT-2026-0722-01 BRK-2047-A - looks clean, OK to release? Supplier is calling.
+
+Ran the 12-piece sample overnight (CMM-20260722-01.csv + profilometer). Every dimension
+is in tolerance this time - bores all good. Only thing the profilometer flagged is
+surface finish on the mating face: two parts read Ra 1.72 and 1.68 against the 1.6 max.
+Honestly it looks cosmetic, you can barely see tool marks, and Meridian's cert
+specifically covers the finishing process. Their account manager has called twice -
+the customer line is waiting on these and our QE is out until Monday. I was going to
+pass it with a cosmetic note / use-as-is unless you say otherwise. OK to release?

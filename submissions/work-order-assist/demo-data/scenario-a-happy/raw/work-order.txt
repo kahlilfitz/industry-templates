@@ -1,0 +1,8 @@
+WORK ORDER  WO-4501   (corrective)   opened 2024-06-14 08:20
+Asset: CV-210  Line 2 Case Conveyor Gearbox GB-12  (Packaging / Line 2)
+Reported by: R. Deng (Planner)
+
+Operators report an oil weep at the gearbox output shaft and the housing is running warm.
+Flow/throughput unaffected; parallel Line 3 is available if we take Line 2 down. Please
+assemble the packet: SOP, what we did last time, and whether the parts are on the shelf so
+we can schedule it this week.

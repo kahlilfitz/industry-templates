@@ -1,0 +1,9 @@
+WORK ORDER  WO-4507   (breakdown)   opened 2024-06-16 23:40
+Asset: C-500  Instrument Air Compressor  (Utilities / Air House)
+Reported by: T. Bauer (Technician, C-shift)
+
+C-500 is unloading and discharge pressure is low again - instrument air is drifting toward the
+low alarm. This is the same thing we keep getting; last few times we swapped the VK-100 intake
+valve kit per SOP-COMP-03 and it came good for a few weeks. There is no backup instrument-air
+compressor, so if this drops we lose instrument air to the whole plant. Pull the packet: SOP,
+what we did before, and whether the valve kit is on the shelf. Do I just swap the VK-100 again?

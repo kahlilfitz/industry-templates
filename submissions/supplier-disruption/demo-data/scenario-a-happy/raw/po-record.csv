@@ -1,0 +1,2 @@
+po_number,supplier,part_no,description,uom,order_qty,promised_date,revised_date,status
+PO-55012,Bolt & Fastener Co,FST-8842,Hex bolt M8x30 zinc,pcs,5000,2024-06-20,2024-06-24,confirmed-late

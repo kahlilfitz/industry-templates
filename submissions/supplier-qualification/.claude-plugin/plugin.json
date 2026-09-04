@@ -1,0 +1,4 @@
+{ "name": "supplier-qualification", "version": "1.0.0",
+  "description": "Manufacturing Wave 2 Cowork plugin: qualify a new supplier. Gathers the supplier dossier (certs, financials, audits, PPAP elements); scores risk across quality, financial and geographic dimensions (risk_score engine); compares against the approved vendor list and category requirements (avl_match engine); drafts the qualification memo with conditions. Draft-first; document-grounded.",
+  "author": { "name": "Microsoft Manufacturing Skills" },
+  "keywords": ["manufacturing", "supply-chain", "sourcing", "supplier-qualification", "PPAP", "APQP", "risk"] }

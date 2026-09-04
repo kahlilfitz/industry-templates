@@ -1,0 +1,4 @@
+timestamp,asset_id,alarm_code,description,value
+2024-06-17 05:12,P-104,VIB-HH,Vibration high-high,9.8 mm/s
+2024-06-17 06:03,P-104,TEMP-BRG-H,Bearing temp high,88 C
+2024-06-17 07:31,P-104,VIB-HH,Vibration high-high,11.2 mm/s

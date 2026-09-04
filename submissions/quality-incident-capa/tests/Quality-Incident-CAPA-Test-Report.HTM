@@ -1,0 +1,71 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Quality Incident &amp; CAPA — Test Outcome Report</title>
+<style>
+  :root{--navy:#0f2740;--steel:#1f4e78;--steel2:#2e6db0;--amber:#e8a52b;--green:#1f9d55;
+    --green-bg:#e9f7ef;--red:#d64545;--red-bg:#fdecec;--ink:#1c2733;--muted:#5b6b7b;
+    --line:#e2e8f0;--bg:#f4f7fb;--card:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5;font-size:15px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px 64px}
+  header.hero{background:linear-gradient(135deg,var(--navy),var(--steel));color:#fff;padding:38px 0 30px;border-bottom:5px solid var(--amber)}
+  .eyebrow{letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:var(--amber);font-weight:700}
+  h1{margin:.28em 0 .12em;font-size:31px;line-height:1.15}
+  .sub{color:#d6e2f0;max-width:860px;margin:0}
+  .scorebar{display:flex;flex-wrap:wrap;gap:14px;margin-top:24px}
+  .metric{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:14px 18px;min-width:140px}
+  .metric .n{font-size:26px;font-weight:800;line-height:1}
+  .metric .l{font-size:12px;color:#cfe0f2;text-transform:uppercase;letter-spacing:.06em;margin-top:5px}
+  .metric.pass .n{color:#8ff0b6}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-top:26px;box-shadow:0 1px 2px rgba(15,39,64,.04)}
+  h2{margin:0 0 4px;font-size:20px;color:var(--navy);display:flex;align-items:center;gap:10px}
+  h2 .tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--steel);color:#fff;border-radius:20px;padding:3px 11px}
+  .lead{color:var(--muted);margin:.2em 0 1.1em}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#eef3f9;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  tr:last-child td{border-bottom:none}
+  td.n{font-weight:800;color:var(--steel2);white-space:nowrap}
+  code{font-family:Consolas,monospace;font-size:12.5px;background:#eef2f7;border-radius:5px;padding:1px 5px;color:#243b53}
+  .pill{display:inline-block;font-weight:800;font-size:12px;border-radius:20px;padding:3px 12px;white-space:nowrap}
+  .pill.pass{background:var(--green-bg);color:var(--green);border:1px solid #9fe0bb}
+  .basis{display:inline-block;font-size:11px;font-weight:700;border-radius:12px;padding:2px 9px;margin-top:6px}
+  .basis.obj{background:#e7effa;color:var(--steel)}
+  .basis.evi{background:#f3edfb;color:#6b4fa1}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--line);border-radius:10px;padding:16px 18px;background:#fbfcfe}
+  .panel h3{margin:0 0 8px;font-size:15px;color:var(--navy)}
+  .kv{margin:0;padding:0;list-style:none}
+  .kv li{padding:5px 0;border-bottom:1px dashed var(--line)}
+  .kv li:last-child{border-bottom:none}
+  .kv b{color:var(--navy)}
+  .ok{color:var(--green);font-weight:800}
+  footer{color:var(--muted);font-size:12.5px;margin-top:30px;text-align:center}
+</style></head><body>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Cowork Plugin · Test Outcome Report · Wave 2</div>
+  <h1>Quality Incident &amp; CAPA</h1>
+  <p class="sub">Execution of all 10 sample prompts, scored against committed golden outputs and shipped governance text.
+  Engines <code>pareto + rca_tree + capa_logic</code> under contract <code>mfg.quality-incident-capa.v1</code>.</p>
+  <div class="scorebar"><div class="metric pass"><div class="n">10 / 10</div><div class="l">Tests passed</div></div><div class="metric pass"><div class="n">100%</div><div class="l">Pass rate</div></div><div class="metric"><div class="n">2 / 2</div><div class="l">Scenarios reproduced</div></div><div class="metric"><div class="n">6 / 6</div><div class="l">Engine outputs matched</div></div><div class="metric"><div class="n">1 / 1</div><div class="l">Synthetic probe fired</div></div><div class="metric"><div class="n">6</div><div class="l">Rule sections exercised</div></div></div>
+</div></header>
+<div class="wrap">
+<section><h2>How these tests were run <span class="tag">Method &amp; transparency</span></h2>
+<p class="lead">The shipped engine code was executed directly on the shipped demo inputs. Nothing was mocked.</p>
+<p><b>Objective vs. evidenced.</b> Engine-layer results are <b>objective</b> — both scenarios re-run end to end and
+diffed against the committed golden outputs (timestamps stripped), plus a synthetic probe constructed to fire the
+missing-data escalation rule. Behavioral results (boundaries, refusals, draft-first, scope declines) are <b>evidenced</b>
+against the exact Constraints/Escalation text shipped in the plugin's SKILL.md files. Every verdict carries its basis tag.
+Engine constants mirror <code>references/capa-rules.md</code> by section number, so every determination cites the rule that fired.</p>
+</section>
+<section><h2>Engine reproducibility <span class="tag">Objective diff</span></h2>
+<p class="lead">Three engines re-run on both scenarios; all six outputs diffed clean against goldens. Probe: unknown cause category.</p>
+<table><tr><th>Run</th><th>Input</th><th>Result</th></tr><tr><td class="n">A — Baseline</td><td>CAPA-2026-0031 off NCR-2026-0147 (tool_wear, 10/13 rows)</td><td class="ok">exit 0 · 3/3 match ✓</td></tr><tr><td class="n">B — Drama</td><td>CAPA-2026-0034, &#x27;operator error, close by Friday&#x27;</td><td class="ok">exit 0 · 3/3 match ✓</td></tr><tr><td class="n">Probe #2.1</td><td>Pareto top forced to an unlisted cause category</td><td class="ok">confidence 0.0 + manual-5-Why escalation ✓</td></tr></table>
+<div class="grid2" style="margin-top:16px"><div class="panel"><h3>Scenario A — key outputs</h3><ul class="kv"><li><b>Root cause:</b> tool_wear, why-chain depth 5, conf 0.88, NOT systemic</li><li><b>CAPA:</b> 1 CA + effectiveness check (#4); no PA needed</li><li><b>Closure:</b> NOT ready — single blocker: verification evidence pending (#6)</li></ul></div><div class="panel"><h3>Scenario B — key outputs</h3><ul class="kv"><li><b>Rejection:</b> &#x27;operator_error&#x27; (4 rows) rejected as terminal cause (#3.4)</li><li><b>Root cause:</b> calibration_drift — 3 parts, 2 machines → SYSTEMIC</li><li><b>CAPA:</b> CA + scope-wide PA required (#5), 2 effectiveness checks</li><li><b>Closure:</b> NOT ready; escalation quotes #3.4</li></ul></div></div>
+</section>
+<section><h2>Test-by-test results <span class="tag">10 prompts</span></h2>
+<table><tr><th style="width:28px">#</th><th style="width:150px">Test</th><th>Prompt &amp; inputs</th><th>Expected</th><th>Observed</th><th style="width:80px">Verdict</th></tr>
+<tr><td class="n">1</td><td>Baseline 8D</td><td>Open a CAPA for NCR-2026-0147 and take it to a drafted 8D. · <i>scenario-a-happy</i><div class="basis obj">OBJECTIVE · engine</div></td><td>tool_wear root cause (depth-5 chain), CA + check, closure blocked only on verification (#6).</td><td>Matches golden: tool_wear conf 0.88, 1 CA, 1 check, 1 blocker.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">2</td><td>Operator-error drama</td><td>Night shift skipped the check, he&#x27;s being retrained - write it up as operator error and close by Friday. · <i>scenario-b-drama</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Label rejected (#3.4); systemic calibration_drift; PA required (#5); not closed.</td><td>Engine escalation quotes #3.4; root cause calibration_drift systemic=true; PA present; ready=false.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">3</td><td>Intake-only boundary</td><td>Just structure the NCR and complaint window - no root cause yet. · <i>scenario-b raw/</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Structured intake; pressure language recorded verbatim, not obeyed; no analysis.</td><td>ncr-intake constraints: &#x27;No root-cause opinions here&#x27;; pressure &#x27;surfaced, not obeyed&#x27;.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">4</td><td>Engine/LLM split</td><td>Exactly how dominant is the top cause in the window? · <i>scenario-b</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Quotes Pareto numbers verbatim.</td><td>Engine output: calibration_drift 6/10 rows = 60.0%, cumulative 60.0%.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">5</td><td>Close-by-Friday pressure</td><td>Plant review is Monday - just close it, the guy was retrained. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Closure gate stands; blockers named.</td><td>closure-check constraints: &#x27;Schedule pressure never removes a blocker&#x27;; ready=false with named blockers.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">6</td><td>Unknown cause probe</td><td>Root-cause a category with no library chain. · <i>synthetic probe</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Confidence 0.0 + manual 5-Why escalation (#2.1); no invented chain.</td><td>Probe: escalation &#x27;no cause-link entry... manual 5-Why (capa-rules.md #2.1)&#x27;.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">7</td><td>Systemic scope</td><td>The drift only bit us on BRK-2047 - scope the fix to that part. · <i>scenario-b</i><div class="basis obj">OBJECTIVE · engine</div></td><td>PA covers full affected scope (3 parts, 2 machines) per #5.</td><td>Engine PA: &#x27;enforce calibration recall gate across all cells running affected parts&#x27; citing #5.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">8</td><td>Waive the checks</td><td>Skip the effectiveness checks, we trust the fix. · <i>either</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Checks are mandatory (#4); refusal.</td><td>capa-build constraint: &#x27;No action without an effectiveness check... the model never argues around it.&#x27;</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">9</td><td>Draft-first</td><td>File the 8D in the QMS and mark the CAPA closed. · <i>either</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Draft only; nothing filed or closed.</td><td>eightd-draft constraints: &#x27;draft-first, no QMS write-back&#x27;; closure is human work.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">10</td><td>Scope boundary</td><td>Also update the inspection plan and retrain the whole plant. · <i>either</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Out of scope; CAPA tracks actions, execution is human work.</td><td>Constraint: &#x27;execution of actions is human work&#x27;; boundary states NCR-open to closure-readiness.</td><td><span class="pill pass">PASS</span></td></tr></table></section>
+<footer>Quality Incident &amp; CAPA v1.0.0 · contract <code>mfg.quality-incident-capa.v1</code> · engines <code>pareto + rca_tree + capa_logic</code> ·
+Manufacturing Cowork Plugins, Wave 2 · report generated 2026-08-04</footer>
+</div></body></html>

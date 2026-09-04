@@ -1,0 +1,4 @@
+incident_id,date,area,asset_or_area,type,body_part,outcome,recordable
+INC-2044,2024-01-12,Packaging / Line 2,wash-down bay,near_miss,,none,no
+INC-2101,2024-03-03,Packaging / Line 2,palletizer,injury,hand,none,no
+INC-2150,2024-04-21,Packaging / Line 1,wash-down bay,near_miss,,none,no

@@ -1,0 +1,229 @@
+{
+  "contract_version": "mfg.supplier-disruption.v1",
+  "disruption_id": "DISR-3301",
+  "trigger_channel": "supplier_email",
+  "disruption_type": "late_po",
+  "supplier_or_po": "Bolt & Fastener Co / PO-55012",
+  "supplier": "Bolt & Fastener Co",
+  "po_number": "PO-55012",
+  "reported_at": "2024-06-14",
+  "promised_date": "2024-06-20",
+  "revised_date": "2024-06-24",
+  "short_qty": 5000,
+  "reason": "Supplier plating-line maintenance stop; ~4-day delivery slip.",
+  "description": "Bolt & Fastener Co notified a ~4-day slip on PO-55012 (FST-8842 M8 hex bolts, 5,000 pcs): delivery moves 2024-06-20 -> 2024-06-24. Quantity unchanged.",
+  "part": {
+    "part_no": "FST-8842",
+    "description": "Hex bolt M8x30 zinc",
+    "uom": "pcs",
+    "citation": "po-record.csv"
+  },
+  "supply": {
+    "on_hand": 5200,
+    "on_order": 5000,
+    "safety_stock": 800,
+    "lead_time_days": 10,
+    "single_source": false,
+    "substitutes": [
+      {
+        "part_no": "FST-8843",
+        "description": "Hex bolt M8x30 (alt plating)",
+        "approved": true,
+        "available_qty": 3000,
+        "citation": "supplier-master.csv"
+      }
+    ],
+    "alternates": [
+      {
+        "supplier": "FastenAlt Supply",
+        "lead_time_days": 7,
+        "qualified": true,
+        "citation": "supplier-master.csv"
+      }
+    ],
+    "source": "skill:supply-knowledge-retrieve",
+    "citation": "inventory-status.csv; supplier-master.csv"
+  },
+  "retrieved": {
+    "open_orders": [
+      {
+        "order_id": "WO-4401",
+        "order_type": "production",
+        "product": "Bracket Assembly A",
+        "line": "Line 1",
+        "finished_qty": 200,
+        "per_unit": 8,
+        "need_by": "2024-06-18",
+        "customer": "",
+        "high_runner": false,
+        "citation": "open-orders.csv"
+      },
+      {
+        "order_id": "WO-4402",
+        "order_type": "production",
+        "product": "Bracket Assembly A",
+        "line": "Line 1",
+        "finished_qty": 250,
+        "per_unit": 8,
+        "need_by": "2024-06-22",
+        "customer": "",
+        "high_runner": false,
+        "citation": "open-orders.csv"
+      },
+      {
+        "order_id": "WO-4405",
+        "order_type": "production",
+        "product": "Panel Frame B",
+        "line": "Line 3",
+        "finished_qty": 150,
+        "per_unit": 6,
+        "need_by": "2024-06-27",
+        "customer": "",
+        "high_runner": false,
+        "citation": "open-orders.csv"
+      },
+      {
+        "order_id": "WO-4409",
+        "order_type": "production",
+        "product": "Panel Frame B",
+        "line": "Line 3",
+        "finished_qty": 200,
+        "per_unit": 6,
+        "need_by": "2024-06-28",
+        "customer": "",
+        "high_runner": false,
+        "citation": "open-orders.csv"
+      }
+    ],
+    "supplier_master": [
+      {
+        "part_no": "FST-8842",
+        "single_source": false,
+        "citation": "supplier-master.csv"
+      }
+    ],
+    "standards": [
+      {
+        "doc": "Sourcing & MRP",
+        "note": "Netting; approved substitute rule",
+        "citation": "sourcing-standards-excerpt.pdf"
+      }
+    ],
+    "source": "skill:supply-knowledge-retrieve",
+    "citation": "bom-where-used.csv; open-orders.csv"
+  },
+  "history": {
+    "window_days": 130,
+    "late_count": 1,
+    "on_time_pct": 0.95,
+    "chronic_pattern": false,
+    "prior_shipments": [
+      {
+        "po_number": "PO-54480",
+        "date": "2024-03-27",
+        "part_no": "FST-8842",
+        "promised_date": "2024-03-27",
+        "actual_date": "2024-03-28",
+        "days_late": 1,
+        "citation": "supplier-ontime-history.csv"
+      }
+    ]
+  },
+  "escalations": [],
+  "impact_map": [
+    {
+      "order_id": "WO-4401",
+      "order_type": "production",
+      "product": "Bracket Assembly A",
+      "line": "Line 1",
+      "customer": "",
+      "need_by": "2024-06-18",
+      "qty_at_risk": 0.0,
+      "status": "covered",
+      "severity": "none",
+      "source": "engine:shortage_impact_map",
+      "citation": "impact-mapping-rules.md #3, #4"
+    },
+    {
+      "order_id": "WO-4402",
+      "order_type": "production",
+      "product": "Bracket Assembly A",
+      "line": "Line 1",
+      "customer": "",
+      "need_by": "2024-06-22",
+      "qty_at_risk": 0.0,
+      "status": "covered",
+      "severity": "none",
+      "source": "engine:shortage_impact_map",
+      "citation": "impact-mapping-rules.md #3, #4"
+    },
+    {
+      "order_id": "WO-4405",
+      "order_type": "production",
+      "product": "Panel Frame B",
+      "line": "Line 3",
+      "customer": "",
+      "need_by": "2024-06-27",
+      "qty_at_risk": 0.0,
+      "status": "covered",
+      "severity": "none",
+      "source": "engine:shortage_impact_map",
+      "citation": "impact-mapping-rules.md #3, #4"
+    },
+    {
+      "order_id": "WO-4409",
+      "order_type": "production",
+      "product": "Panel Frame B",
+      "line": "Line 3",
+      "customer": "",
+      "need_by": "2024-06-28",
+      "qty_at_risk": 0.0,
+      "status": "covered_by_incoming",
+      "severity": "low",
+      "source": "engine:shortage_impact_map",
+      "citation": "impact-mapping-rules.md #3, #4"
+    }
+  ],
+  "impact_summary": {
+    "worst_severity": "low",
+    "first_impact_date": null,
+    "affected_products": 1,
+    "affected_orders": 0,
+    "affected_sales_orders": 0,
+    "total_qty_at_risk": 0.0,
+    "below_safety_stock": false,
+    "confidence": 0.92,
+    "source": "engine:shortage_impact_map",
+    "citation": "impact-mapping-rules.md #5, #6, #7"
+  },
+  "next_best_action": "Buffer / incoming PO covers demand through the revised date. Align the schedule and monitor; no expedite required.",
+  "provenance": {
+    "engines": [
+      "shortage_impact_map/1.0",
+      "mitigation_recommend/1.0"
+    ],
+    "generated_at": "2026-07-21T21:29:52+00:00"
+  },
+  "mitigation": {
+    "option": "reschedule",
+    "urgency": "routine",
+    "rationale": "Buffer / incoming PO covers demand through the revised date (mitigation-escalation-rules.md #1.1).",
+    "actions": [
+      "Align the affected production/sales orders to the revised delivery date.",
+      "Monitor the PO; ask the supplier to confirm the revised date in writing."
+    ],
+    "substitute_part": {},
+    "alternate_supplier": {},
+    "confidence": 0.9,
+    "source": "engine:mitigation_recommend",
+    "citation": "mitigation-escalation-rules.md #1, #2"
+  },
+  "notifications": [
+    {
+      "role": "Buyer",
+      "name": "(owner)",
+      "reason": "Owns the PO",
+      "citation": "mitigation-escalation-rules.md #4.1"
+    }
+  ]
+}

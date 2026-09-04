@@ -1,0 +1,5 @@
+order_id,order_type,product,line,finished_qty,per_unit,need_by,customer,high_runner
+SO-7788,sales,CNC Router X9,Assembly 2,12,1,2024-06-27,Northwind Robotics,yes
+WO-6602,production,CNC Router X9,Assembly 2,20,1,2024-06-30,,yes
+WO-6610,production,Lathe L5,Assembly 1,8,1,2024-07-02,,no
+WO-6620,production,CNC Router X9,Assembly 2,15,1,2024-07-08,,yes

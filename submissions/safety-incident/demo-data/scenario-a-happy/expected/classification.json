@@ -1,0 +1,106 @@
+{
+  "contract_version": "mfg.safety-incident-assist.v1",
+  "incident_id": "INC-2201",
+  "incident_type": "injury",
+  "asset_or_area": "Packaging / Line 2 - wash-down bay",
+  "location": "Packaging / Line 2",
+  "occurred_at": "2024-06-17T09:35:00",
+  "reported_at": "2024-06-17T09:52:00",
+  "reported_by": "M. Alvarez (Line 2 supervisor)",
+  "report_channel": "form",
+  "description": "Operator slipped on a wet patch near the wash-down bay just after hose-down, caught herself on the rail and slightly twisted her left ankle. Wet-floor sign not yet placed. First aid (ice pack) only; returned to light duties, no lost time.",
+  "injury": {
+    "employee": "J. Ruiz (packaging operator)",
+    "body_part": "left ankle",
+    "nature": "minor twist / slip",
+    "treatment_given": "first_aid",
+    "outcome": "none",
+    "days_away": 0
+  },
+  "witnesses": [
+    {
+      "name": "L. Park",
+      "role": "operator",
+      "citation": "witness-statement.txt"
+    }
+  ],
+  "immediate_actions": "Floor dried; 'wet floor' signage placed; station reminded on wash-down sequence.",
+  "retrieved": {
+    "osha_criteria": [
+      {
+        "ref": "OSHA 1904.7",
+        "note": "First-aid-only is not recordable",
+        "citation": "ehs-policy-excerpt.pdf"
+      }
+    ],
+    "jha": [
+      {
+        "doc": "JHA-PKG-11",
+        "note": "Wet-floor slip residual risk; signage control",
+        "citation": "jha-excerpt.pdf"
+      }
+    ],
+    "policy": [
+      {
+        "doc": "EHS-POL-02",
+        "note": "Same-day reporting; EHS classifies",
+        "citation": "ehs-policy-excerpt.pdf"
+      }
+    ],
+    "source": "skill:ehs-knowledge-retrieve",
+    "citation": "prior-incident-log.csv; jha-excerpt.pdf"
+  },
+  "history": {
+    "window_days": 160,
+    "repeat_count": 1,
+    "repeat_pattern": false,
+    "prior_incidents": [
+      {
+        "incident_id": "INC-2044",
+        "date": "2024-01-12",
+        "asset_or_area": "wash-down bay",
+        "type": "near_miss",
+        "outcome": "none",
+        "recordable": false,
+        "citation": "INC-2044"
+      },
+      {
+        "incident_id": "INC-2150",
+        "date": "2024-04-21",
+        "asset_or_area": "wash-down bay",
+        "type": "near_miss",
+        "outcome": "none",
+        "recordable": false,
+        "citation": "INC-2150"
+      }
+    ]
+  },
+  "escalations": [],
+  "classification": {
+    "severity": "low",
+    "near_miss": false,
+    "recordable": {
+      "value": false,
+      "reason": "First-aid only, no days away/restriction (osha-recordability-rules.md #2.1, #3.5).",
+      "osha_300_column": "",
+      "citation": "osha-recordability-rules.md #3"
+    },
+    "reportable": {
+      "value": false,
+      "type": "none",
+      "deadline_hours": null,
+      "authority": "",
+      "citation": "osha-recordability-rules.md #4.5"
+    },
+    "confidence": 0.92,
+    "source": "engine:recordability_classify",
+    "citation": "osha-recordability-rules.md #3, #4, #5"
+  },
+  "next_best_action": "Log as first-aid/near-miss (not OSHA recordable); investigate as a leading indicator and feed any control back into the JHA.",
+  "provenance": {
+    "engines": [
+      "recordability_classify/1.0"
+    ],
+    "generated_at": "2026-07-21T20:58:56+00:00"
+  }
+}

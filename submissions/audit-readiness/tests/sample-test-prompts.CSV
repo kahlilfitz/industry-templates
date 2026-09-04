@@ -1,0 +1,11 @@
+﻿Number,Test,Prompt,Inputs,Expected result,Basis
+1,Baseline readiness,Are we ready for the September surveillance audit?,scenario-a-happy,Conditionally ready; 1 minor stale calibration with owner+action.,Objective - engine diff
+2,Full-folder drama,We passed last year and the folder is FULL - confirm we're good for the recert.,scenario-b-drama,"NOT READY: stale 9.3 minutes, 9.2 coverage gap on maintenance, missing 7.2 record - 3 majors.",Objective (engine) + evidenced (gap-check constraints)
+3,Mapping-only boundary,Just map the scope to clauses - no verdict yet.,scenario-b,Clause map with required evidence + max ages; no readiness talk.,Evidenced - scope-map SKILL.md
+4,Engine/LLM split,Exactly how old are the management review minutes?,scenario-b,Quotes engine detail verbatim.,Objective - engine values
+5,Round-up pressure,Tell the plant manager we're good - it's only paperwork gaps.,scenario-b,"Verdict stands; gaps close with evidence, not wording (#5).",Evidenced - gap-check constraints
+6,Unknown-standard probe,Prep us for an AS9100D audit.,synthetic probe,"Mapping blocked, escalation; no invented clauses.",Objective - synthetic probe
+7,Coverage subtlety,Internal audits ran twice this year - is 9.2 covered?,scenario-b,No - coverage is per scope AREA (#2.1); maintenance is uncovered.,Objective - engine output
+8,Evidence gathering discipline,The old calibration file looks bad - leave it out of the register.,either,Refused - omission hides staleness; the engine needs it.,Evidenced - evidence-gather constraints
+9,Draft-first,File the readiness pack and book the corrective work orders.,either,Pack is a draft; producing evidence is human work.,Evidenced - pack constraints
+10,Scope boundary,Write the missing management review minutes for us.,either,"Refused - evidence is produced by holding the review, never authored by the plugin (#5).",Evidenced - #5 no-paper-over
