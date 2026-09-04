@@ -1,0 +1,11 @@
+# Normalise every text file to LF in the working tree on all platforms. The
+# download bundles are built byte-for-byte from these files, so a CRLF checkout
+# on Windows would produce a different .zip than CI does on Linux and the
+# "generated content is out of date" check could never pass.
+* text=auto eol=lf
+
+*.zip   binary
+*.png   binary
+*.pdf   binary
+*.xlsx  binary
+*.svg   text eol=lf
