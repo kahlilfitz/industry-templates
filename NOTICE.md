@@ -17,6 +17,14 @@ cover components, the gallery filter island, and the "contributors only touch `s
 CI generates the rest" build model. What is new here: the industry facet that organises the
 gallery, the plugin-package submission format, the importer, and all template content.
 
+## Logo
+
+`public/paw.png` and `public/favicon.png` are the paw mark from that same repository
+(`public/paw.png`), reused under its MIT License and resized. The MIT License grants the right
+to use and modify the file; it does not grant trademark rights, so if this gallery ever needs a
+mark that is unambiguously its own, replace these two files — nothing else references the
+artwork.
+
 ## Template content
 
 The manufacturing templates in `submissions/` ship **synthetic demo data only**. Part numbers,

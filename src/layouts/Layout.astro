@@ -37,7 +37,7 @@ const clarityEvents = `document.addEventListener("click",function(e){var el=e.ta
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    <link rel="icon" type="image/svg+xml" href={withBase("/favicon.svg")} />
+    <link rel="icon" type="image/png" href={withBase("/favicon.png")} />
     {/* Set the theme before paint to avoid a flash of the wrong theme. */}
     <script is:inline set:html={themeBoot} />
     {ANALYTICS_ENABLED && <script is:inline set:html={clarityBoot} />}
@@ -54,7 +54,7 @@ const clarityEvents = `document.addEventListener("click",function(e){var el=e.ta
           class="flex shrink-0 items-center gap-2.5 font-semibold tracking-tight"
         >
           <img
-            src={withBase("/paw.svg")}
+            src={withBase("/paw.png")}
             alt=""
             width="32"
             height="32"
