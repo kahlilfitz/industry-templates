@@ -36,5 +36,11 @@ jobs:
             exit 1
           fi
 
+      # Exercise the catalog export too, so a bad skill layout or a duplicate
+      # skill name fails here rather than at deploy time. The output is thrown
+      # away — only the deploy job publishes the branch.
+      - name: Check catalog export
+        run: npm run import:submissions -- --catalog-output "$RUNNER_TEMP/catalog"
+
       - name: Build site
         run: npm run build

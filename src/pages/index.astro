@@ -74,6 +74,16 @@ for (const t of templates) {
 const allContributors = [...contributorMap.entries()]
   .map(([key, v]) => ({ key, ...v }))
   .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+// The generated `catalog` branch: every template's skills, flattened one per
+// folder, so Copilot Studio's "Add skill › From GitHub" can take the whole
+// library from a single URL. Rebuilt by CI on each deploy.
+const catalogUrl =
+  "https://github.com/SravaniSeethi/industry-templates/tree/catalog";
+const catalogSkillCount = templates.reduce(
+  (n, t) => n + (t.data.skills?.length ?? 0),
+  0,
+);
 ---
 
 <Layout>
@@ -193,6 +203,98 @@ const allContributors = [...contributorMap.entries()]
           ))
         }
       </div>
+
+      <div id="catalog-menu" class="relative ml-0 w-full sm:ml-auto sm:w-auto">
+        <button
+          id="catalog-menu-trigger"
+          type="button"
+          aria-expanded="false"
+          aria-haspopup="true"
+          class="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm font-semibold text-fg transition hover:border-accent/50 hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-4 w-4 text-accent-text"
+            aria-hidden="true"
+          >
+            <path d="M12 3v12"></path>
+            <path d="m8 11 4 4 4-4"></path>
+            <path d="M5 21h14"></path>
+          </svg>
+          Catalog URL
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-3.5 w-3.5 text-subtle transition"
+            id="catalog-menu-chevron"
+            aria-hidden="true"
+          >
+            <path d="m6 9 6 6 6-6"></path>
+          </svg>
+        </button>
+        <div
+          id="catalog-menu-panel"
+          class="absolute right-0 top-full z-20 mt-2 hidden w-full min-w-72 rounded-xl border border-border bg-surface p-2 shadow-lg sm:w-80"
+        >
+          <button
+            id="copy-catalog-url"
+            type="button"
+            data-url={catalogUrl}
+            data-clarity-event="copy_catalog_url"
+            class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+          >
+            <span
+              class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#0078d4]/12 text-[#0067b8] dark:text-[#69b7f0]"
+              aria-hidden="true"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="h-4 w-4"
+              >
+                <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+                <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"
+                ></path>
+              </svg>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-semibold text-fg"
+                >Copilot Studio</span
+              >
+              <span id="copy-catalog-label" class="block text-xs text-muted">
+                Copy GitHub import URL
+              </span>
+            </span>
+          </button>
+          <p class="px-2 pb-1 pt-2 text-[11px] leading-relaxed text-subtle">
+            In Copilot Studio choose <span class="text-muted"
+              >Add skill › From GitHub</span
+            > and paste this URL to add all {catalogSkillCount} skills from every
+            template at once.
+          </p>
+        </div>
+      </div>
+      <span
+        id="copy-catalog-status"
+        class="sr-only"
+        role="status"
+        aria-live="polite"></span>
     </div>
   </section>
 
@@ -560,6 +662,17 @@ const allContributors = [...contributorMap.entries()]
   const contributorChips = document.getElementById("contributor-chips")!;
   const sentinel = document.getElementById("scroll-sentinel")!;
   const sortSelect = document.getElementById("sort-select") as HTMLSelectElement;
+  const catalogMenu = document.getElementById("catalog-menu");
+  const catalogTrigger = document.getElementById(
+    "catalog-menu-trigger",
+  ) as HTMLButtonElement | null;
+  const catalogPanel = document.getElementById("catalog-menu-panel");
+  const catalogChevron = document.getElementById("catalog-menu-chevron");
+  const copyCatalogUrl = document.getElementById(
+    "copy-catalog-url",
+  ) as HTMLButtonElement | null;
+  const copyCatalogLabel = document.getElementById("copy-catalog-label");
+  const copyCatalogStatus = document.getElementById("copy-catalog-status");
 
   const SORTS = ["featured", "name", "newest"] as const;
   type SortMode = (typeof SORTS)[number];
@@ -573,6 +686,52 @@ const allContributors = [...contributorMap.entries()]
   let sortMode: SortMode = "featured";
   let shown = BATCH;
   let matched: HTMLElement[] = items;
+
+  // Catalog URL menu: the one place the generated `catalog` branch is handed out.
+  function setCatalogMenu(open: boolean) {
+    catalogPanel?.classList.toggle("hidden", !open);
+    catalogChevron?.classList.toggle("rotate-180", open);
+    catalogTrigger?.setAttribute("aria-expanded", String(open));
+  }
+
+  catalogTrigger?.addEventListener("click", () => {
+    setCatalogMenu(catalogPanel?.classList.contains("hidden") ?? false);
+  });
+  document.addEventListener("click", (event) => {
+    if (!catalogMenu || catalogMenu.contains(event.target as Node)) return;
+    setCatalogMenu(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    // Only reclaim focus when this menu is the thing that was open.
+    if (
+      event.key !== "Escape" ||
+      catalogTrigger?.getAttribute("aria-expanded") !== "true"
+    )
+      return;
+    setCatalogMenu(false);
+    catalogTrigger.focus();
+  });
+
+  copyCatalogUrl?.addEventListener("click", async () => {
+    const url = copyCatalogUrl.dataset.url;
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      if (copyCatalogLabel) copyCatalogLabel.textContent = "Copied to clipboard";
+      if (copyCatalogStatus) {
+        copyCatalogStatus.textContent = "Catalog URL copied to clipboard.";
+      }
+      window.setTimeout(() => {
+        if (copyCatalogLabel) {
+          copyCatalogLabel.textContent = "Copy GitHub import URL";
+        }
+      }, 2200);
+    } catch {
+      // Clipboard access can be blocked (insecure context, permissions policy) —
+      // fall back to a prompt the visitor can copy out of by hand.
+      window.prompt("Copy this URL into Copilot Studio:", url);
+    }
+  });
 
   const num = (el: HTMLElement, key: string) =>
     Number(el.dataset[key] ?? "0") || 0;

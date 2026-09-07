@@ -6,7 +6,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # `contents: write` is needed to push the generated `catalog` branch; the site
+  # itself only reads the repo.
+  contents: write
   pages: write
   id-token: write
 
@@ -27,8 +29,42 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: npm run import:submissions
+      - run: npm run import:submissions -- --catalog-output "$RUNNER_TEMP/catalog"
       - run: npm run build
+
+      # Publish the flattened skills on their own orphan branch. That branch is
+      # the "Catalog URL" the gallery hands out, so people can point Copilot
+      # Studio at one folder and get every skill. It is generated, never merged
+      # into main, and rewritten in place on each deploy.
+      - name: Publish catalog branch
+        env:
+          FEED_BRANCH: catalog
+          FEED_DIR: ${{ runner.temp }}/catalog
+        run: |
+          set -euo pipefail
+          publish_dir="$RUNNER_TEMP/catalog-publish"
+
+          if git ls-remote --exit-code --heads origin "$FEED_BRANCH" >/dev/null; then
+            git fetch origin "refs/heads/$FEED_BRANCH:refs/remotes/origin/$FEED_BRANCH"
+            git worktree add --detach "$publish_dir" "origin/$FEED_BRANCH"
+          else
+            git worktree add --detach "$publish_dir" HEAD
+            git -C "$publish_dir" switch --orphan "$FEED_BRANCH"
+          fi
+
+          # --delete so a skill removed from a template disappears from the feed.
+          rsync -a --delete --exclude=".git" "$FEED_DIR/" "$publish_dir/"
+          git -C "$publish_dir" add -A
+
+          if git -C "$publish_dir" diff --cached --quiet; then
+            echo "Catalog branch is already current."
+            exit 0
+          fi
+
+          git -C "$publish_dir" config user.name "github-actions[bot]"
+          git -C "$publish_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$publish_dir" commit -m "chore: refresh catalog feed"
+          git -C "$publish_dir" push origin "HEAD:refs/heads/$FEED_BRANCH"
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

@@ -85,6 +85,19 @@ the template earns its place, what the user has to bring, and where the boundari
 - **Draft-first.** No write-back to a system of record, nothing auto-sent, nothing auto-filed.
 - **Synthetic demo data only.** No customer data, no real supplier names, no real people.
 
+## Your skills also land in the catalog feed
+
+Each `skills/<name>/` folder in your package is a canonical Agent Skill, so CI
+also copies it — unpacked, one folder per skill — onto the generated `catalog`
+branch that people paste into Copilot Studio. Two consequences worth knowing:
+
+- **Skill folder names share one namespace across the whole gallery.** A name
+  already used by another template fails the build rather than silently
+  overwriting it, so prefer specific names (`tolerance-check`, not `check`).
+- **Each skill should stand on its own.** Keep the `references/`, `scripts/` and
+  `contracts/` a skill needs inside that skill's folder, not only at the package
+  root, or it will arrive in the feed missing its resources.
+
 ## Validate locally
 
 ```bash

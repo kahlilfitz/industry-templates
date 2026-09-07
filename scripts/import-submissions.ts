@@ -14,9 +14,14 @@
  *
  * Run `npm run check:submissions` to validate without writing anything, or
  * `npm run import:submissions` to regenerate. CI runs both.
+ *
+ * With `--catalog-output <dir>`, each plugin's inner skills are additionally
+ * exported unpacked to that directory, flattened one per folder. CI publishes
+ * the result on the orphan `catalog` branch, which is the URL people paste
+ * into Copilot Studio's "Add skill › From GitHub".
  */
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
-import { join, relative, sep, posix } from "node:path";
+import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import AdmZip from "adm-zip";
 import { templateSchema } from "../src/lib/template-schema";
 
@@ -173,6 +178,63 @@ function standardSections(
   return lines.join("\n");
 }
 
+/**
+ * Export a plugin's skills as standalone canonical Agent Skills.
+ *
+ * A template ships as a Cowork plugin package, but each `skills/<name>/` inside
+ * it is already a canonical skill — a root `SKILL.md` plus its own `scripts/`,
+ * `references/`, `contracts/` and `templates/`. Copying those out one level up
+ * gives the flat `<skill>/SKILL.md` layout that Copilot Studio's "Add skill ›
+ * From GitHub" importer reads, so one catalog URL installs the whole library.
+ *
+ * The result is written to a directory outside the repo and published by CI on
+ * the orphan `catalog` branch, rather than duplicated on `main`.
+ */
+function exportCatalogSkills(dir: string, outputDir: string): string[] {
+  const skillsDir = join(dir, "skills");
+  if (!existsSync(skillsDir)) return [];
+
+  const exported: string[] = [];
+  for (const name of readdirSync(skillsDir).sort()) {
+    const from = join(skillsDir, name);
+    if (!statSync(from).isDirectory()) continue;
+    if (!existsSync(join(from, "SKILL.md"))) continue;
+
+    const to = join(outputDir, name);
+    for (const rel of walk(from)) {
+      // Reject anything that could escape the output directory before writing.
+      const segments = rel.split(posix.sep);
+      if (segments.some((s) => !s || s === "." || s === "..")) {
+        throw new Error(`Refusing to export unsafe skill path: ${name}/${rel}`);
+      }
+      const target = join(to, ...segments);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, readFileSync(join(from, segments.join(sep))));
+    }
+    exported.push(name);
+  }
+  return exported;
+}
+
+/** Resolve `--catalog-output <dir>`, refusing a path inside the repo. */
+function catalogOutputDir(): string | undefined {
+  const i = process.argv.indexOf("--catalog-output");
+  if (i < 0) return undefined;
+  const value = process.argv[i + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error("`--catalog-output` requires a directory path");
+  }
+  const outputDir = resolve(value);
+  const fromRoot = relative(ROOT, outputDir);
+  if (fromRoot && !fromRoot.startsWith("..") && !isAbsolute(fromRoot)) {
+    throw new Error(
+      `--catalog-output must point outside the repository (got ${outputDir}); ` +
+        "the catalog is published on its own branch, never committed to main",
+    );
+  }
+  return outputDir;
+}
+
 /** The generated page body: catalog summary, package callout, then boilerplate. */
 function buildBody(
   slug: string,
@@ -201,6 +263,8 @@ function main() {
     .filter((name) => statSync(join(SUBMISSIONS, name)).isDirectory())
     .sort();
 
+  const catalogDir = CHECK_ONLY ? undefined : catalogOutputDir();
+
   if (!CHECK_ONLY) {
     // Regenerate from scratch so a removed submission does not leave a stale
     // page or bundle behind.
@@ -208,7 +272,13 @@ function main() {
       rmSync(dir, { recursive: true, force: true });
       mkdirSync(dir, { recursive: true });
     }
+    if (catalogDir) {
+      rmSync(catalogDir, { recursive: true, force: true });
+      mkdirSync(catalogDir, { recursive: true });
+    }
   }
+
+  const catalogSkills: string[] = [];
 
   for (const slug of slugs) {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
@@ -354,6 +424,24 @@ function main() {
         .trimEnd();
       const guide = `${readme}\n\n${standardSections(slug, skills, hasDemoData, hasTests)}`;
       writeFileSync(join(OUT_GUIDES, `${slug}.md`), guide, "utf8");
+    }
+
+    // --- catalog branch (this plugin's skills, flattened) -----------------
+    if (catalogDir) catalogSkills.push(...exportCatalogSkills(dir, catalogDir));
+  }
+
+  if (catalogSkills.length) {
+    // Flattening puts every skill in one namespace, so a name reused by two
+    // templates would silently overwrite the first. Fail loudly instead.
+    const dupes = [
+      ...new Set(catalogSkills.filter((n, i) => catalogSkills.indexOf(n) !== i)),
+    ];
+    if (dupes.length) {
+      errors.push(
+        `  catalog: skill name(s) used by more than one template: ${dupes.join(", ")}`,
+      );
+    } else {
+      console.log(`\nCatalog: exported ${catalogSkills.length} skill(s).`);
     }
   }
 
