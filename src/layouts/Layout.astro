@@ -53,14 +53,18 @@ const clarityEvents = `document.addEventListener("click",function(e){var el=e.ta
           href={withBase("/")}
           class="flex shrink-0 items-center gap-2.5 font-semibold tracking-tight"
         >
+          {/* "Industry Templates" is 63% wider than the reference gallery's
+              wordmark, so at the reference's 32/16 the lockup reads thin against
+              the paw. Scaling both to 36/19 restores the presence that the
+              shorter name gets for free. */}
           <img
             src={withBase("/paw.png")}
             alt=""
-            width="32"
-            height="32"
-            class="h-8 w-8"
+            width="36"
+            height="36"
+            class="h-9 w-9"
           />
-          <span class="brand-wordmark whitespace-nowrap"
+          <span class="brand-wordmark whitespace-nowrap text-[19px]"
             >Industry Templates</span
           >
         </a>
