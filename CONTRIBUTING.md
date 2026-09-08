@@ -89,7 +89,8 @@ the template earns its place, what the user has to bring, and where the boundari
 
 Each `skills/<name>/` folder in your package is a canonical Agent Skill, so CI
 also copies it — unpacked, one folder per skill — onto the generated `catalog`
-branch that people paste into Copilot Studio. Two consequences worth knowing:
+branch, which any agent platform that adds skills from a public GitHub folder can
+read from a single URL. Two consequences worth knowing:
 
 - **Skill folder names share one namespace across the whole gallery.** A name
   already used by another template fails the build rather than silently

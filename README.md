@@ -45,21 +45,25 @@ does not write back to a system of record.
 | [Supplier Qualification](submissions/supplier-qualification) | Score risk; compare to AVL; draft the memo |
 | [Audit Readiness](submissions/audit-readiness) | Clause mapping, evidence gaps, readiness pack |
 
-## Add these skills to Copilot Studio
+## The skill catalog
 
-Every template's skills are also published, flattened one per folder, on a
+Every template's skills are also published, flattened one folder per skill, on a
 generated [`catalog`](https://github.com/SravaniSeethi/industry-templates/tree/catalog)
-branch. In Copilot Studio choose **Add skill › From GitHub** and paste:
+branch:
 
 `https://github.com/SravaniSeethi/industry-templates/tree/catalog`
 
-That adds every skill from every template in one go. The gallery's **Catalog URL**
-button copies the same link.
+Any agent platform that adds skills from a public GitHub folder can take the
+whole library from that one URL, and the gallery's **Catalog URL** button copies
+it. The branch holds only unpacked canonical skills — a root `SKILL.md` plus that
+skill's own `scripts/`, `references/`, `contracts/` and `templates/`. Gallery
+metadata, human-facing READMEs, demo data and test evidence are excluded.
 
-The branch is generated from `main` on each deploy and holds only unpacked
-canonical skills — a root `SKILL.md` plus that skill's `scripts/`, `references/`,
-`contracts/` and `templates/`. Gallery metadata, human-facing READMEs, demo data
-and test evidence are excluded. Never edit it by hand; it is rewritten in place.
+> These skills are authored for **Cowork** and chain through their package's
+> contract. They have not been verified running standalone on another platform,
+> so treat the catalog as the skill sources rather than a compatibility promise.
+
+The branch is regenerated from `main` on each deploy. Never edit it by hand.
 
 ## Repository layout
 
