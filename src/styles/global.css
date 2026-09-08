@@ -79,6 +79,20 @@
   --glow: rgba(58, 160, 255, 0.24);
 }
 
+/* Industry chip on a template card.
+   Each industry carries its own hue via the inline `--chip` variable, but the
+   raw hue is too dark to read on the dark surface and too light on the white
+   one. Derive both the tint and the ink from that one value per theme, so a new
+   industry only ever needs a single colour in INDUSTRY_COLORS. */
+.industry-badge {
+  background: color-mix(in srgb, var(--chip) 14%, transparent);
+  color: color-mix(in srgb, var(--chip) 88%, #000 12%);
+}
+[data-theme="dark"] .industry-badge {
+  background: color-mix(in srgb, var(--chip) 22%, transparent);
+  color: color-mix(in srgb, var(--chip) 58%, #fff 42%);
+}
+
 /* Wordmark painted with the brand gradient. */
 .brand-wordmark {
   background: var(--brand-gradient);

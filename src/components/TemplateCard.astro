@@ -121,12 +121,18 @@ const wrapperProps = isInteractive
           )
         }
       </div>
-      <div class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-        <span class="flex items-center gap-1 text-xs font-medium text-muted">
+      {/* Industry and platform used to render identically here, so neither read
+          as a category. Industry now carries a filled chip — it is the facet the
+          whole gallery is organised by — while platforms stay quiet text. That
+          ranks them without costing the card another line. */}
+      <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span
+          class="industry-badge inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+          style={`--chip:${INDUSTRY_COLORS[industry]}`}
+        >
           <span
             class="h-1.5 w-1.5 rounded-full"
-            style={`background:${INDUSTRY_COLORS[industry]}`}
-          ></span>
+            style={`background:${INDUSTRY_COLORS[industry]}`}></span>
           {industry}
         </span>
         {
