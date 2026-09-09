@@ -1,0 +1,9 @@
+[ {"type": "short_ship", "lane": "DC-East", "record_id": "GR-2201"},
+  {"type": "short_ship", "lane": "DC-East", "record_id": "GR-2260"},
+  {"type": "short_ship", "lane": "DC-East", "record_id": "GR-2287"},
+  {"type": "short_ship", "lane": "DC-East", "record_id": "GR-2310"},
+  {"type": "short_ship", "lane": "DC-East", "record_id": "GR-2333"},
+  {"type": "late_delivery", "lane": "DC-East", "record_id": "GR-2350"},
+  {"type": "late_delivery", "lane": "DC-East", "record_id": "GR-2366"},
+  {"type": "late_delivery", "lane": "DC-East", "record_id": "GR-2371"},
+  {"type": "label_error", "lane": "DC-West", "record_id": "GR-2402"} ]

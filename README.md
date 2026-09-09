@@ -6,9 +6,12 @@ reference documents and demo data that make the work reliable.
 
 **→ [Browse the gallery](https://sravaniseethi.github.io/industry-templates)**
 
-The first industry is **manufacturing**, with ten Microsoft 365 Copilot **Cowork** plugins
-covering quality, maintenance, EHS, supply chain, planning and engineering change. Retail is
-next.
+Two industries so far, twenty Microsoft 365 Copilot **Cowork** plugins:
+
+- **Manufacturing** — quality, maintenance, EHS, supply chain, planning and engineering change.
+- **Retail & CPG** — store operations, customer operations, merchandising, and the brand-side
+  field sales, trade investment and insights workflows. Retail and CPG ship as one portfolio
+  rather than two, split by a `retailer` / `cpg` tag: seven retailer-side, three brand-side.
 
 ## What a template is
 
@@ -32,6 +35,8 @@ does not write back to a system of record.
 
 ## The gallery
 
+### Manufacturing
+
 | Template | What it does |
 |----------|--------------|
 | [Quality Inspection & Nonconformance](submissions/quality-inspection) | Clear an inspection lot; draft the NCR |
@@ -44,6 +49,21 @@ does not write back to a system of record.
 | [Engineering Change & BOM](submissions/engineering-change-bom) | Where-used impact; interface violations; draft the ECN |
 | [Supplier Qualification](submissions/supplier-qualification) | Score risk; compare to AVL; draft the memo |
 | [Audit Readiness](submissions/audit-readiness) | Clause mapping, evidence gaps, readiness pack |
+
+### Retail & CPG
+
+| Template | Side | What it does |
+|----------|------|--------------|
+| [Store Associate Assist](submissions/store-associate-assist) | Retailer | The associate's cited answer on the shop floor |
+| [Store Task & Promotion Execution](submissions/store-task-promotion-execution) | Retailer | Campaign pack → store-specific readiness plan before launch |
+| [Returns & Refund Case](submissions/returns-refund-case) | Retailer | Policy-cited eligibility; fraud signals surfaced, not adjudicated |
+| [Product Content & Catalog Enrichment](submissions/product-content-catalog-enrichment) | Retailer | Normalise attributes, score completeness, check regulated claims |
+| [Customer Service & Order Support](submissions/customer-service-order-support) | Retailer | Classify intent, assemble context, draft or escalate |
+| [Supplier & Vendor Performance Review](submissions/supplier-vendor-performance) | Retailer | OTIF scorecard, issue clusters, corrective action request |
+| [Order Intake & O2C Exception](submissions/order-intake-o2c-exception) | Retailer | Validate unstructured orders; route exceptions with corrections |
+| [Retail Execution & Perfect Store](submissions/retail-execution-perfect-store) | CPG | Pre-call plan; gaps ranked by revenue, not count |
+| [Trade Promotion & Deduction Recovery](submissions/trade-promotion-deduction-recovery) | CPG | Match claims to terms; quantify the disputable amount |
+| [Consumer & Market Insight Synthesis](submissions/consumer-market-insight-synthesis) | CPG | Reuse prior research; flag contradictions; check usage rights |
 
 ## The skill catalog
 
@@ -58,6 +78,12 @@ whole library from that one URL, and the gallery's **Catalog URL** button copies
 it. The branch holds only unpacked canonical skills — a root `SKILL.md` plus that
 skill's own `scripts/`, `references/`, `contracts/` and `templates/`. Gallery
 metadata, human-facing READMEs, demo data and test evidence are excluded.
+
+Each folder is named `<template-slug>-<skill-name>`. The importer's format wants
+one flat level, so bare skill names would collide across the gallery — and they
+do: `policy-retrieve` belongs to two Retail templates, `knowledge-retrieve` to
+one Retail and one Manufacturing template. The prefix keeps every folder unique
+and says which template a skill came from.
 
 > These skills are authored for **Cowork** and chain through their package's
 > contract. They have not been verified running standalone on another platform,

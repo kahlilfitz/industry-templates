@@ -27,7 +27,8 @@ submissions/<slug>/
     │   └── templates/              # output document templates
     ├── contracts/*.json            # the package-level versioned contract
     ├── references/                 # shared rules, thresholds, standards excerpts
-    └── demo-data/                  # scenario-a-happy/ and scenario-b-drama/
+    └── demo-data/                  # two scenarios: a clean one, and one where
+                                    # the obvious answer is wrong
 ```
 
 Copy [`submissions/_template/`](submissions/_template) to get started. The `<slug>` is the
@@ -45,7 +46,7 @@ folder name — lowercase and hyphenated, e.g. `quality-inspection` → `/templa
 |---------------|----------|-------|
 | `name`        | yes      | Display name shown in the gallery. |
 | `description` | yes      | The catalog summary on the card and at the top of the page. One human-friendly sentence. |
-| `industry`    | yes      | One of `Manufacturing`, `Retail`, `Financial Services`, `Healthcare`, `Energy`, `Public Sector`, `Cross-industry`. This is the gallery's primary facet. |
+| `industry`    | yes      | One of `Manufacturing`, `Retail & CPG`, `Financial Services`, `Healthcare`, `Energy`, `Public Sector`, `Cross-industry`. This is the gallery's primary facet. |
 | `platforms`   | yes      | One or more of `Cowork`, `Copilot Studio`, `Scout`. |
 | `tags`        | yes      | Lowercase tags for search and filtering. Don't repeat the industry here — it has its own filter. |
 | `author`      | yes      | Person or team who wrote the template. |
@@ -92,9 +93,10 @@ also copies it — unpacked, one folder per skill — onto the generated `catalo
 branch, which any agent platform that adds skills from a public GitHub folder can
 read from a single URL. Two consequences worth knowing:
 
-- **Skill folder names share one namespace across the whole gallery.** A name
-  already used by another template fails the build rather than silently
-  overwriting it, so prefer specific names (`tolerance-check`, not `check`).
+- **Folders on that branch are named `<template-slug>-<skill-name>`**, so your
+  skill names only have to be unique inside your own package. Reusing a name
+  another template already uses is fine; reusing one twice in your own is not,
+  and fails the build.
 - **Each skill should stand on its own.** Keep the `references/`, `scripts/` and
   `contracts/` a skill needs inside that skill's folder, not only at the package
   root, or it will arrive in the feed missing its resources.

@@ -1,0 +1,10 @@
+{ "contract_version": "rtl.store-task-promotion-execution.v1", "campaign_id": "CMP-2026-BTS",
+  "launch_date": "2026-08-17", "as_of_date": "2026-08-15",
+  "requirements": [
+    {"req_id": "R1-signage-front", "formats": ["standard", "small"], "clusters": ["suburban-standard", "urban-large"], "assets": ["SIGN-KIT-B"], "tasks": ["hang-front-banner"], "skus": ["GTIN-2001"], "citation": "pack p.2"},
+    {"req_id": "R2-endcap-hero", "formats": ["standard", "small"], "clusters": ["suburban-standard"], "fixture_required": "endcap-4ft", "assets": ["POG-EC-19"], "tasks": ["build-endcap"], "skus": ["GTIN-2002"], "citation": "pack p.3"},
+    {"req_id": "R3-aisle-flags", "formats": ["standard", "small"], "clusters": ["suburban-standard"], "assets": ["FLAG-SET-4"], "tasks": ["hang-flags"], "skus": ["GTIN-2003"], "citation": "pack p.5"},
+    {"req_id": "R4-checkout-clip", "formats": ["standard", "small"], "clusters": ["suburban-standard"], "assets": ["CLIP-STRIP-2"], "tasks": ["clip-strip"], "skus": ["GTIN-2004"], "citation": "pack p.6"}
+  ],
+  "promo_prices": {"GTIN-2001": 12.99, "GTIN-2002": 8.99, "GTIN-2003": 1.99, "GTIN-2004": 3.49},
+  "escalations": [] }

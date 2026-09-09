@@ -1,0 +1,4 @@
+{ "quarters": [
+  {"quarter": "FY26Q1", "lines": 500, "on_time_in_full_lines": 470, "defect_rate_pct": 0.9, "dispute_rate_pct": 0.6},
+  {"quarter": "FY26Q2", "lines": 520, "on_time_in_full_lines": 452, "defect_rate_pct": 1.4, "dispute_rate_pct": 1.1},
+  {"quarter": "FY26Q3", "lines": 510, "on_time_in_full_lines": 413, "defect_rate_pct": 1.6, "dispute_rate_pct": 2.2} ] }

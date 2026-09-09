@@ -1,0 +1,4 @@
+{ "store_id": "ST-0214", "format": "standard", "cluster": "suburban-standard",
+  "fixtures": ["endcap-4ft", "front-window"],
+  "received_assets": ["SIGN-KIT-A", "POG-EC-12"],
+  "completed_tasks": ["hang-front-banner", "build-endcap"] }

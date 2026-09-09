@@ -1,0 +1,9 @@
+{ "contract_version": "rtl.store-task-promotion-execution.v1", "campaign_id": "CMP-2026-SUMMER-END",
+  "launch_date": "2026-08-17", "as_of_date": "2026-08-10",
+  "requirements": [
+    {"req_id": "R1-signage-front", "formats": ["standard", "small"], "clusters": ["suburban-standard", "urban-large"], "assets": ["SIGN-KIT-A"], "tasks": ["hang-front-banner"], "skus": ["GTIN-1001"], "citation": "pack p.2"},
+    {"req_id": "R2-endcap-beverage", "formats": ["standard"], "clusters": ["suburban-standard", "urban-large"], "fixture_required": "endcap-4ft", "assets": ["POG-EC-12"], "tasks": ["build-endcap"], "skus": ["GTIN-1002"], "citation": "pack p.4"},
+    {"req_id": "R3-shelf-strips", "formats": ["standard", "small"], "clusters": ["suburban-standard"], "assets": ["STRIP-SET-9"], "tasks": ["apply-strips"], "skus": ["GTIN-1003"], "citation": "pack p.5"}
+  ],
+  "promo_prices": {"GTIN-1001": 4.99, "GTIN-1002": 7.49, "GTIN-1003": 2.99},
+  "escalations": [] }

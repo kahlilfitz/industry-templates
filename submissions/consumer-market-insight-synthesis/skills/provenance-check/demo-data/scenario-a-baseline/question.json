@@ -1,0 +1,4 @@
+{ "contract_version": "rtl.consumer-insight-synthesis.v1",
+  "question": {"text": "What do we know about Gen-Z snacking frequency in the UK?", "market": "UK",
+    "topics": ["gen-z", "snacking"], "recency_floor": "2024", "use_case": "internal", "as_of_date": "2026-08-12"},
+  "escalations": [] }

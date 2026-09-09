@@ -1,0 +1,67 @@
+{
+  "contract_version": "rtl.product-content-enrichment.v1",
+  "batch_id": "ENR-2026-0157",
+  "supplier": "Vantage Consumer Brands",
+  "channel": "marketplace",
+  "skus": [
+    {
+      "gtin": "00055577788813",
+      "row": 2,
+      "supplier_fields": {
+        "Item Name": "PureShield Cutting Board",
+        "Colour": "white",
+        "Material": "HDPE",
+        "Country": "VN",
+        "Net Wt": 950,
+        "Description": "Antibacterial surface kills 99.9% of germs! Biodegradable and eco-friendly."
+      }
+    },
+    {
+      "gtin": "00055577788812",
+      "row": 3,
+      "supplier_fields": {
+        "Item Name": "PureShield Sponge 3-pack",
+        "Colour": "green",
+        "Description": "Compostable scrubbing power."
+      }
+    }
+  ],
+  "escalations": [
+    "GTIN 00055577788812: GS1 check digit INVALID - record blocked (enrichment-rules.md #1.1)"
+  ],
+  "normalized": [
+    {
+      "gtin": "00055577788813",
+      "gtin_valid": true,
+      "attributes": {
+        "name": "PureShield Cutting Board",
+        "color": "white",
+        "material": "HDPE",
+        "country_of_origin": "VN",
+        "net_weight_g": 950,
+        "supplier_copy": "Antibacterial surface kills 99.9% of germs! Biodegradable and eco-friendly."
+      },
+      "unmapped": [],
+      "source": "engine:attribute_normalize",
+      "citation": "supplier sheet row 2; taxonomy map"
+    },
+    {
+      "gtin": "00055577788812",
+      "gtin_valid": false,
+      "attributes": {
+        "name": "PureShield Sponge 3-pack",
+        "color": "green",
+        "supplier_copy": "Compostable scrubbing power."
+      },
+      "unmapped": [],
+      "source": "engine:attribute_normalize",
+      "citation": "supplier sheet row 3; taxonomy map"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "attribute_normalize/1.0"
+    ],
+    "generated_at": "2026-09-06T23:25:54+00:00"
+  }
+}

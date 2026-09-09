@@ -1,0 +1,4 @@
+{ "name": "product-content-catalog-enrichment", "version": "1.0.0",
+  "description": "Retail Wave 1 Cowork plugin (retailer-side, CPG-enabled): turn incomplete supplier data into channel-ready, claim-safe product records. Ingests supplier sheets and specs; normalises attributes against the taxonomy with GTIN validation (attribute_normalize); scores completeness per channel (completeness_score); validates claims and regulated terms against the approved claim library - the explicit Govern step (claim_check); drafts descriptions and the review packet. Ends at an approval-ready draft record: it does not publish to channel, approve a regulated claim or change the taxonomy.",
+  "author": { "name": "Microsoft Retail & CPG Skills" },
+  "keywords": ["retail", "cpg", "merchandising", "PIM", "GDSN", "GTIN", "catalog", "claims", "enrichment"] }

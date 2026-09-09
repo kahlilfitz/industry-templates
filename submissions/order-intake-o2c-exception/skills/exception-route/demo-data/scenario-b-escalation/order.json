@@ -1,0 +1,4 @@
+{ "contract_version": "rtl.order-intake-o2c.v1", "order_ref": "PO-NW-88160",
+  "customer": {"id": "CUST-NW-01", "name": "Northwind Foods"},
+  "lines": [ {"line_no": 1, "customer_sku": "CHOCV", "qty": 500, "uom": "EA", "unit_price": 54.9, "promo_ref": null} ],
+  "escalations": [] }

@@ -1,0 +1,16 @@
+{
+  "name": "customer-service-order-support",
+  "version": "1.0.1",
+  "description": "Retail Wave 1 Cowork plugin: a grounded first response, and a clean escalation packet when it cannot resolve. Classifies intent against the taxonomy (intent_classify); assembles customer, order, loyalty and delivery context and detects contradictions (context_assemble); retrieves the approved answer; drafts the resolution in channel and tone or builds the structured handoff packet. Reliability beats reach: it does not issue goodwill credit, change payment details or grant unsupported policy exceptions.",
+  "author": {
+    "name": "Microsoft Retail & CPG Skills"
+  },
+  "keywords": [
+    "retail",
+    "customer-service",
+    "contact-centre",
+    "WISMO",
+    "intent",
+    "escalation"
+  ]
+}

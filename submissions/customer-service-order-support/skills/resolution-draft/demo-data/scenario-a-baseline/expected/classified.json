@@ -1,0 +1,22 @@
+{
+  "contract_version": "rtl.customer-service-order-support.v1",
+  "inquiry": {
+    "text": "Hi - where is my order 77812? The tracking hasn't updated since Tuesday.",
+    "channel": "chat",
+    "customer_id": "CUST-3321",
+    "requests_goodwill": false
+  },
+  "escalations": [],
+  "intent": {
+    "category": "wismo",
+    "confidence": 0.9,
+    "source": "engine:intent_classify",
+    "citation": "intent taxonomy (config/service-config.json)"
+  },
+  "provenance": {
+    "engines": [
+      "intent_classify/1.0"
+    ],
+    "generated_at": "2026-09-06T23:27:28+00:00"
+  }
+}

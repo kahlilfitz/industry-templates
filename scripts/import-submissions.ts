@@ -189,8 +189,16 @@ function standardSections(
  *
  * The result is written to a directory outside the repo and published by CI on
  * the orphan `catalog` branch, rather than duplicated on `main`.
+ *
+ * Every folder is named `<template-slug>-<skill-name>`. The importer's format
+ * wants one flat level, so bare skill names would share a single namespace
+ * across the whole gallery — and they collide in practice: `policy-retrieve`
+ * belongs to two Retail templates, and `knowledge-retrieve` to one Retail and
+ * one Manufacturing template. The prefix makes every folder unique by
+ * construction and says which template a skill came from, which matters once
+ * the list runs to a hundred folders.
  */
-function exportCatalogSkills(dir: string, outputDir: string): string[] {
+function exportCatalogSkills(dir: string, slug: string, outputDir: string): string[] {
   const skillsDir = join(dir, "skills");
   if (!existsSync(skillsDir)) return [];
 
@@ -200,7 +208,8 @@ function exportCatalogSkills(dir: string, outputDir: string): string[] {
     if (!statSync(from).isDirectory()) continue;
     if (!existsSync(join(from, "SKILL.md"))) continue;
 
-    const to = join(outputDir, name);
+    const folder = `${slug}-${name}`;
+    const to = join(outputDir, folder);
     for (const rel of walk(from)) {
       // Reject anything that could escape the output directory before writing.
       const segments = rel.split(posix.sep);
@@ -211,7 +220,7 @@ function exportCatalogSkills(dir: string, outputDir: string): string[] {
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, readFileSync(join(from, segments.join(sep))));
     }
-    exported.push(name);
+    exported.push(folder);
   }
   return exported;
 }
@@ -427,18 +436,19 @@ function main() {
     }
 
     // --- catalog branch (this plugin's skills, flattened) -----------------
-    if (catalogDir) catalogSkills.push(...exportCatalogSkills(dir, catalogDir));
+    if (catalogDir) catalogSkills.push(...exportCatalogSkills(dir, slug, catalogDir));
   }
 
   if (catalogSkills.length) {
-    // Flattening puts every skill in one namespace, so a name reused by two
-    // templates would silently overwrite the first. Fail loudly instead.
+    // The `<template-slug>-<skill-name>` folder name should make a clash
+    // impossible, but two templates whose slugs and skill names happen to
+    // concatenate the same way would still overwrite each other. Cheap to check.
     const dupes = [
       ...new Set(catalogSkills.filter((n, i) => catalogSkills.indexOf(n) !== i)),
     ];
     if (dupes.length) {
       errors.push(
-        `  catalog: skill name(s) used by more than one template: ${dupes.join(", ")}`,
+        `  catalog: folder name(s) produced by more than one template: ${dupes.join(", ")}`,
       );
     } else {
       console.log(`\nCatalog: exported ${catalogSkills.length} skill(s).`);

@@ -1,0 +1,4 @@
+{ "name": "supplier-vendor-performance", "version": "1.0.0",
+  "description": "Retail Wave 2 Cowork plugin: a defensible supplier review pack assembled from records instead of a week of spreadsheet work. Pulls PO, receipt, invoice, return and quality records; rolls up the OTIF / defect / dispute scorecard with trends (scorecard_roll); clusters recurring issues with evidence (issue_cluster); retrieves the governing trading term; drafts the review agenda, corrective action request and commitment tracker. Read-only: it does not change a PO, place a payment hold, amend a contract or deselect a supplier.",
+  "author": { "name": "Microsoft Retail & CPG Skills" },
+  "keywords": ["retail", "merchandising", "supplier", "vendor", "OTIF", "scorecard", "trading-terms"] }

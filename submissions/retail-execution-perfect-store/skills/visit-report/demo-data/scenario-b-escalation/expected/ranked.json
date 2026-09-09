@@ -1,0 +1,178 @@
+{
+  "contract_version": "rtl.retail-execution-perfect-store.v1",
+  "outlet": {
+    "id": "OUT-4488",
+    "name": "QuickMart Riverside",
+    "channel": "convenience",
+    "cluster": "urban"
+  },
+  "visit": {
+    "date": "2026-08-11",
+    "active_promo_skus": [
+      "CB-CLASSIC"
+    ],
+    "audit_answers": {
+      "MS-01": {
+        "pass": false,
+        "photo": "IMG-201.jpg",
+        "note": "classic bar shelf empty"
+      },
+      "MS-02": {
+        "pass": true,
+        "photo": "IMG-202.jpg"
+      },
+      "MS-03": {
+        "pass": true,
+        "photo": "IMG-203.jpg"
+      },
+      "SH-01": {
+        "pass": true,
+        "facings": 8
+      },
+      "PR-01": {
+        "pass": false,
+        "photo": "IMG-204.jpg",
+        "note": "promo display flat-packed in back room"
+      },
+      "PP-01": {
+        "pass": true
+      }
+    }
+  },
+  "escalations": [
+    "top gap MS-01 is on an ACTIVE promo SKU - most expensive kind of empty (#2.2)"
+  ],
+  "compliance": {
+    "criteria": [
+      {
+        "id": "MS-01",
+        "type": "must_stock",
+        "sku": "CB-CLASSIC",
+        "desc": "Classic bar on shelf",
+        "pass": false,
+        "answer": {
+          "pass": false,
+          "photo": "IMG-201.jpg",
+          "note": "classic bar shelf empty"
+        },
+        "photo_ref": "IMG-201.jpg",
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 MS-01; audit answer (photos evidence-only, #3.1)"
+      },
+      {
+        "id": "MS-02",
+        "type": "must_stock",
+        "sku": "CB-DARK",
+        "desc": "Dark bar on shelf",
+        "pass": true,
+        "answer": {
+          "pass": true,
+          "photo": "IMG-202.jpg"
+        },
+        "photo_ref": "IMG-202.jpg",
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 MS-02; audit answer (photos evidence-only, #3.1)"
+      },
+      {
+        "id": "MS-03",
+        "type": "must_stock",
+        "sku": "CB-MINIS",
+        "desc": "Minis bag on shelf",
+        "pass": true,
+        "answer": {
+          "pass": true,
+          "photo": "IMG-203.jpg"
+        },
+        "photo_ref": "IMG-203.jpg",
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 MS-03; audit answer (photos evidence-only, #3.1)"
+      },
+      {
+        "id": "SH-01",
+        "type": "share_of_shelf",
+        "sku": null,
+        "desc": ">= 6 facings across range",
+        "pass": true,
+        "answer": {
+          "pass": true,
+          "facings": 8
+        },
+        "photo_ref": null,
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 SH-01; audit answer (photos evidence-only, #3.1)"
+      },
+      {
+        "id": "PR-01",
+        "type": "promo_display",
+        "sku": "CB-CLASSIC",
+        "desc": "Promo display up during active promo",
+        "pass": false,
+        "answer": {
+          "pass": false,
+          "photo": "IMG-204.jpg",
+          "note": "promo display flat-packed in back room"
+        },
+        "photo_ref": "IMG-204.jpg",
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 PR-01; audit answer (photos evidence-only, #3.1)"
+      },
+      {
+        "id": "PP-01",
+        "type": "price_tag",
+        "sku": null,
+        "desc": "Shelf tags present and current",
+        "pass": true,
+        "answer": {
+          "pass": true
+        },
+        "photo_ref": null,
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 PP-01; audit answer (photos evidence-only, #3.1)"
+      }
+    ],
+    "compliance_pct": 66.7,
+    "confidence": 0.95,
+    "source": "engine:visit_score",
+    "citation": "picture-of-success convenience:urban v4"
+  },
+  "provenance": {
+    "engines": [
+      "visit_score/1.0",
+      "gap_rank/1.0"
+    ],
+    "generated_at": "2026-09-06T23:33:35+00:00"
+  },
+  "ranked_gaps": [
+    {
+      "id": "MS-01",
+      "desc": "Classic bar on shelf",
+      "sku": "CB-CLASSIC",
+      "weekly_value_at_stake": 522.9,
+      "promo_multiplier": 2.0,
+      "rank_score": 1045.8,
+      "photo_ref": "IMG-201.jpg",
+      "source": "engine:gap_rank",
+      "citation": "scan extract CB-CLASSIC; execution-standards.md #2.1 #2.2"
+    },
+    {
+      "id": "PR-01",
+      "desc": "Promo display up during active promo",
+      "sku": "CB-CLASSIC",
+      "weekly_value_at_stake": 522.9,
+      "promo_multiplier": 2.0,
+      "rank_score": 1045.8,
+      "photo_ref": "IMG-204.jpg",
+      "source": "engine:gap_rank",
+      "citation": "scan extract CB-CLASSIC; execution-standards.md #2.1 #2.2"
+    }
+  ],
+  "suggested_order": [
+    {
+      "sku": "CB-CLASSIC",
+      "qty": 24,
+      "reason": "OOS must-stock MS-01",
+      "source": "engine:gap_rank",
+      "citation": "par from standard (#4.1 - rep confirms; plugin never transmits)"
+    }
+  ]
+}

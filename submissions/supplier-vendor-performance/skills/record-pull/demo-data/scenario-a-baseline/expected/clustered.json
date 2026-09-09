@@ -1,0 +1,56 @@
+{
+  "contract_version": "rtl.supplier-vendor-performance.v1",
+  "vendor": {
+    "name": "Cascade Home Textiles"
+  },
+  "review_period": "FY26 H1",
+  "escalations": [],
+  "scorecard": {
+    "quarters": [
+      {
+        "quarter": "FY26Q1",
+        "otif_pct": 94.0,
+        "defect_rate_pct": 0.8,
+        "dispute_rate_pct": 0.5,
+        "lines": 400,
+        "source": "engine:scorecard_roll",
+        "citation": "receipts vs PO dates, FY26Q1 (400 lines) (#1.1)"
+      },
+      {
+        "quarter": "FY26Q2",
+        "otif_pct": 95.0,
+        "defect_rate_pct": 0.7,
+        "dispute_rate_pct": 0.4,
+        "lines": 420,
+        "source": "engine:scorecard_roll",
+        "citation": "receipts vs PO dates, FY26Q2 (420 lines) (#1.1)"
+      }
+    ],
+    "trend_flags": [],
+    "confidence": 0.95,
+    "source": "engine:scorecard_roll",
+    "citation": "ERP PO/receipt/return/dispute extracts"
+  },
+  "provenance": {
+    "engines": [
+      "scorecard_roll/1.0",
+      "issue_cluster/1.0"
+    ],
+    "generated_at": "2026-09-06T23:29:11+00:00"
+  },
+  "issue_clusters": [
+    {
+      "type": "late_delivery",
+      "lane": "DC-North",
+      "count": 3,
+      "evidence": [
+        "GR-1001",
+        "GR-1044",
+        "GR-1092"
+      ],
+      "source": "engine:issue_cluster",
+      "citation": "3 records (#2.1)"
+    }
+  ],
+  "governing_terms": []
+}

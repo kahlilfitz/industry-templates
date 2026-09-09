@@ -1,0 +1,4 @@
+{ "name": "order-intake-o2c-exception", "version": "1.0.0",
+  "description": "Retail Wave 2 Cowork plugin (heavy CPG usage): orders arriving by email, PDF and portal validated and exceptions routed instead of rekeyed. Extracts and normalises order lines; validates against customer, pricing, product and credit master data (order_validate); queues exceptions with reason codes and a recommended correction per exception (exception_route); drafts the customer response. Ships at action level L0-L2: order creation and release stay human-approved until the customer promotes the action level in config/.",
+  "author": { "name": "Microsoft Retail & CPG Skills" },
+  "keywords": ["retail", "cpg", "order-management", "O2C", "exception", "validation", "EDI"] }

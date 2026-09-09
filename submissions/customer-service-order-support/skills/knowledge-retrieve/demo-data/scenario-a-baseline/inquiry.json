@@ -1,0 +1,4 @@
+{ "contract_version": "rtl.customer-service-order-support.v1",
+  "inquiry": {"text": "Hi - where is my order 77812? The tracking hasn't updated since Tuesday.", "channel": "chat",
+              "customer_id": "CUST-3321", "requests_goodwill": false},
+  "escalations": [] }

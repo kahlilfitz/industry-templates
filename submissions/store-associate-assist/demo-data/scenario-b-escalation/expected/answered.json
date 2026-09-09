@@ -1,0 +1,52 @@
+{
+  "contract_version": "rtl.store-associate-assist.v1",
+  "question": {
+    "text": "Customer shows the PulseBeat ANC headphones $40 cheaper from an Amazon Marketplace seller and wants a price match, plus the headphone bundle promo - can I just match it? My old manager always did.",
+    "topic": "price match + promo",
+    "asked_on": "2026-08-03",
+    "sku": "GTIN-00055577788812",
+    "compare_skus": []
+  },
+  "store_context": {
+    "store_id": "ST-0214",
+    "cluster": "suburban-standard",
+    "department": "electronics"
+  },
+  "escalations": [],
+  "policy_resolution": {
+    "topic": "price_match.marketplace_excluded",
+    "applicable_clause": "PM-1.4",
+    "determination": "excluded",
+    "conditions": [
+      "Marketplace and third-party sellers (including Amazon Marketplace, eBay) are EXCLUDED from price match"
+    ],
+    "in_scope": true,
+    "confidence": 0.9,
+    "source": "engine:policy_resolve",
+    "citation": "policy clause PM-1.4"
+  },
+  "promo_check": {
+    "checked": true,
+    "eligible": false,
+    "reasons": [
+      "P-3388: outside window 2026-07-20..2026-08-02 (today 2026-08-03)",
+      "P-3388: store cluster 'suburban-standard' not in ['urban-large']"
+    ],
+    "source": "engine:policy_resolve",
+    "citation": "promo pack P-3388"
+  },
+  "provenance": {
+    "engines": [
+      "policy_resolve/1.0",
+      "product_compare/1.0"
+    ],
+    "generated_at": "2026-09-06T23:19:59+00:00"
+  },
+  "product_comparison": {
+    "skus": [],
+    "rows": [],
+    "differences": 0,
+    "source": "engine:product_compare",
+    "citation": "no comparison requested or SKU missing from PIM"
+  }
+}

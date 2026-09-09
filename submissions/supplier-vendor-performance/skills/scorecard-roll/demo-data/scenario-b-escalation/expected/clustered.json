@@ -1,0 +1,106 @@
+{
+  "contract_version": "rtl.supplier-vendor-performance.v1",
+  "vendor": {
+    "name": "Meridian Home Goods"
+  },
+  "review_period": "FY26 Q1-Q3",
+  "escalations": [
+    "TREND FLAG: OTIF [94.0, 86.9, 81.0] across last 3 quarters (vendor-review-rules.md #1.2)",
+    "term TT trigger: OTIF 81.0% < 90% - remedies stated per TT-14.2; invoking them is the buyer's decision (#3.2)"
+  ],
+  "scorecard": {
+    "quarters": [
+      {
+        "quarter": "FY26Q1",
+        "otif_pct": 94.0,
+        "defect_rate_pct": 0.9,
+        "dispute_rate_pct": 0.6,
+        "lines": 500,
+        "source": "engine:scorecard_roll",
+        "citation": "receipts vs PO dates, FY26Q1 (500 lines) (#1.1)"
+      },
+      {
+        "quarter": "FY26Q2",
+        "otif_pct": 86.9,
+        "defect_rate_pct": 1.4,
+        "dispute_rate_pct": 1.1,
+        "lines": 520,
+        "source": "engine:scorecard_roll",
+        "citation": "receipts vs PO dates, FY26Q2 (520 lines) (#1.1)"
+      },
+      {
+        "quarter": "FY26Q3",
+        "otif_pct": 81.0,
+        "defect_rate_pct": 1.6,
+        "dispute_rate_pct": 2.2,
+        "lines": 510,
+        "source": "engine:scorecard_roll",
+        "citation": "receipts vs PO dates, FY26Q3 (510 lines) (#1.1)"
+      }
+    ],
+    "trend_flags": [
+      "OTIF declining 3 consecutive quarters: [94.0, 86.9, 81.0] (#1.2)"
+    ],
+    "confidence": 0.95,
+    "source": "engine:scorecard_roll",
+    "citation": "ERP PO/receipt/return/dispute extracts"
+  },
+  "provenance": {
+    "engines": [
+      "scorecard_roll/1.0",
+      "issue_cluster/1.0"
+    ],
+    "generated_at": "2026-09-06T23:29:11+00:00"
+  },
+  "issue_clusters": [
+    {
+      "type": "short_ship",
+      "lane": "DC-East",
+      "count": 5,
+      "evidence": [
+        "GR-2201",
+        "GR-2260",
+        "GR-2287",
+        "GR-2310",
+        "GR-2333"
+      ],
+      "source": "engine:issue_cluster",
+      "citation": "5 records (#2.1)"
+    },
+    {
+      "type": "late_delivery",
+      "lane": "DC-East",
+      "count": 3,
+      "evidence": [
+        "GR-2350",
+        "GR-2366",
+        "GR-2371"
+      ],
+      "source": "engine:issue_cluster",
+      "citation": "3 records (#2.1)"
+    }
+  ],
+  "governing_terms": [
+    {
+      "term_id": "TT-14.2",
+      "text": "Supplier shall maintain OTIF >= 90% per quarter; below 90% Buyer may issue a corrective action request and a 2% quarterly rebate applies",
+      "trigger": "OTIF 81.0% < 90%",
+      "remedies": [
+        "corrective action request",
+        "2% quarterly rebate"
+      ],
+      "source": "engine:issue_cluster",
+      "citation": "trading agreement TT-14.2 (#3.1/#3.2)"
+    },
+    {
+      "term_id": "TT-9.1",
+      "text": "Short shipments are credited within 14 days of substantiated claim",
+      "trigger": "short-ship cluster",
+      "remedies": [
+        "substantiated credit within 14 days"
+      ],
+      "source": "engine:issue_cluster",
+      "citation": "trading agreement TT-9.1"
+    }
+  ]
+}

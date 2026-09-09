@@ -1,0 +1,3 @@
+{ "order": {"order_id": "ORD-80233", "value": 180.0, "status": "delivered_per_carrier"},
+  "carrier": {"status": "delivered", "delivered_on": "2026-08-05 14:22", "location": "front porch, photo on file"},
+  "loyalty": {"tier": "gold"} }

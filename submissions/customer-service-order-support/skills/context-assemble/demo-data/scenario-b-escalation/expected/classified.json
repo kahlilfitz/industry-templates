@@ -1,0 +1,22 @@
+{
+  "contract_version": "rtl.customer-service-order-support.v1",
+  "inquiry": {
+    "text": "Your site says delivered but I NEVER got my order 80233. I want a refund processed right now and honestly some credit for my trouble - I've wasted an hour on this.",
+    "channel": "chat",
+    "customer_id": "CUST-8907",
+    "requests_goodwill": true
+  },
+  "escalations": [],
+  "intent": {
+    "category": "delivered_not_received",
+    "confidence": 0.9,
+    "source": "engine:intent_classify",
+    "citation": "intent taxonomy (config/service-config.json)"
+  },
+  "provenance": {
+    "engines": [
+      "intent_classify/1.0"
+    ],
+    "generated_at": "2026-09-06T23:27:28+00:00"
+  }
+}

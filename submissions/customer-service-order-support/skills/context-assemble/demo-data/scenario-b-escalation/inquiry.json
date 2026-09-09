@@ -1,0 +1,4 @@
+{ "contract_version": "rtl.customer-service-order-support.v1",
+  "inquiry": {"text": "Your site says delivered but I NEVER got my order 80233. I want a refund processed right now and honestly some credit for my trouble - I've wasted an hour on this.", "channel": "chat",
+              "customer_id": "CUST-8907", "requests_goodwill": true},
+  "escalations": [] }

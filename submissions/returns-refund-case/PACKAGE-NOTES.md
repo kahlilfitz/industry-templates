@@ -1,0 +1,5 @@
+# Returns & Refund Case - Cowork Plugin (Retail Wave 1)
+Intake & Triage with explicit Govern (Connect -> Analyze -> Govern -> Create) · attended, draft-first. Retail counterpart of Manufacturing's Safety Incident: deterministic classification, defensible refusal, human authorisation.
+Skills: return-intake -> policy-retrieve -> reason-classify -> eligibility-check (Govern) -> case-packet.
+Contract: rtl.returns-refund-case.v1. Engines: reason_classify, eligibility_check + fraud_signal (#1 windows, #2 determination discipline, #3 signals surfaced not adjudicated, #4 human gate, #5 exceptions are manager decisions). Constants mirror references/returns-rules.md; windows and thresholds live in config/ (grocery vs fashion vs electronics).
+Demos: scenario-a-baseline (in-window receipted return -> eligible, refund rec), scenario-b-escalation ("loyal customer, gift, no receipt, just make an exception" - out of window, serial mismatch, 4th receiptless return in 90 days -> ineligible + 3 signals surfaced + hold_for_review; exception drafted for the manager, never granted).

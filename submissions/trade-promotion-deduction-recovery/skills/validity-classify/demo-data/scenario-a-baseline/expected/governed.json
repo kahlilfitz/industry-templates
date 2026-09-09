@@ -1,0 +1,61 @@
+{
+  "contract_version": "rtl.trade-deduction-recovery.v1",
+  "deduction_id": "DED-2026-3301",
+  "customer": "Summit Grocers",
+  "claims": [
+    {
+      "claim_id": "CL-1",
+      "type": "promo_allowance",
+      "period": "2026-06",
+      "claimed_amount": 14600.0,
+      "actual_volume_value": 182500.0,
+      "backup_doc": "SG-BKP-8871.pdf"
+    }
+  ],
+  "escalations": [
+    "promo_lift SKIPPED by scoping rule - account P&L foundation absent; deduction validity unaffected (#3.1)"
+  ],
+  "matches": [
+    {
+      "claim_id": "CL-1",
+      "term_id": "TT-PROMO-88",
+      "term": {
+        "term_id": "TT-PROMO-88",
+        "customer": "Summit Grocers",
+        "type": "promo_allowance",
+        "rate_pct": 8.0,
+        "period": "2026-06",
+        "signed": true,
+        "citation": "signed agreement TT-PROMO-88 (Jun 2026)"
+      },
+      "backup_present": true,
+      "source": "engine:claim_match",
+      "citation": "signed agreement TT-PROMO-88 (Jun 2026)"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "claim_match/1.0",
+      "deduction_classify/1.0",
+      "promo_lift/1.0"
+    ],
+    "generated_at": "2026-09-06T23:35:19+00:00"
+  },
+  "promo_lift": {
+    "skipped": true,
+    "reason": "Deployment scoped to deduction validity only until the account-level P&L System of Record exists (deduction-rules.md #3.1). Promotion lift stays out of configuration.",
+    "source": "engine:promo_lift",
+    "citation": "config/rgm-scoping.json; deduction-rules.md #3.1"
+  },
+  "validity": [
+    {
+      "claim_id": "CL-1",
+      "verdict": "valid",
+      "disputable_amount": 0.0,
+      "calculation": "claimed 14600.0 <= entitled 14600.0 (8.0% x 182500.0)",
+      "confidence": 0.93,
+      "source": "engine:deduction_classify",
+      "citation": "signed agreement TT-PROMO-88 (Jun 2026); deduction-rules.md #2.1"
+    }
+  ]
+}

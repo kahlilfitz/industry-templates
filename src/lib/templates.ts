@@ -7,9 +7,12 @@
 /** The industries a template can belong to. Manufacturing shipped first. */
 export const INDUSTRIES = [
   "Manufacturing",
+  // Retail and CPG ship as one portfolio rather than two: the retailer-side and
+  // brand-side scenarios share systems, artifacts and buyers, so they are filed
+  // under one industry and split by a `retailer` / `cpg` tag.
+  "Retail & CPG",
   "Financial Services",
   "Healthcare",
-  "Retail",
   "Energy",
   "Public Sector",
   "Cross-industry",
@@ -30,9 +33,9 @@ export type TemplateType = "plugin" | "skill" | "automation";
 /** Accent color used for each industry's badge. */
 export const INDUSTRY_COLORS: Record<Industry, string> = {
   Manufacturing: "#0078d4",
+  "Retail & CPG": "#e06c00",
   "Financial Services": "#0d9488",
   Healthcare: "#d83b73",
-  Retail: "#ff8c00",
   Energy: "#7f39fb",
   "Public Sector": "#5b8def",
   "Cross-industry": "#9aa0a6",

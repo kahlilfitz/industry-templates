@@ -1,0 +1,40 @@
+{
+  "contract_version": "rtl.trade-deduction-recovery.v1",
+  "deduction_id": "DED-2026-3301",
+  "customer": "Summit Grocers",
+  "claims": [
+    {
+      "claim_id": "CL-1",
+      "type": "promo_allowance",
+      "period": "2026-06",
+      "claimed_amount": 14600.0,
+      "actual_volume_value": 182500.0,
+      "backup_doc": "SG-BKP-8871.pdf"
+    }
+  ],
+  "escalations": [],
+  "matches": [
+    {
+      "claim_id": "CL-1",
+      "term_id": "TT-PROMO-88",
+      "term": {
+        "term_id": "TT-PROMO-88",
+        "customer": "Summit Grocers",
+        "type": "promo_allowance",
+        "rate_pct": 8.0,
+        "period": "2026-06",
+        "signed": true,
+        "citation": "signed agreement TT-PROMO-88 (Jun 2026)"
+      },
+      "backup_present": true,
+      "source": "engine:claim_match",
+      "citation": "signed agreement TT-PROMO-88 (Jun 2026)"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "claim_match/1.0"
+    ],
+    "generated_at": "2026-09-06T23:35:19+00:00"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "contract_version": "rtl.order-intake-o2c.v1",
+  "order_ref": "PO-NW-88121",
+  "customer": {
+    "id": "CUST-NW-01",
+    "name": "Northwind Foods"
+  },
+  "lines": [
+    {
+      "line_no": 1,
+      "customer_sku": "CHOC500",
+      "qty": 40,
+      "uom": "CS24",
+      "unit_price": 62.4,
+      "promo_ref": null
+    },
+    {
+      "line_no": 2,
+      "customer_sku": "OATB12",
+      "qty": 20,
+      "uom": "CS12",
+      "unit_price": 28.8,
+      "promo_ref": null
+    }
+  ],
+  "escalations": [],
+  "validation": {
+    "line_results": [
+      {
+        "line": 1,
+        "customer_sku": "CHOC500",
+        "resolved_sku": "SKU-CH-500",
+        "issues": [],
+        "source": "engine:order_validate",
+        "citation": "masters + config/o2c-config.json (customer-promoted action level; L2 = exceptions routed, creation human-approved)"
+      },
+      {
+        "line": 2,
+        "customer_sku": "OATB12",
+        "resolved_sku": "SKU-OB-012",
+        "issues": [],
+        "source": "engine:order_validate",
+        "citation": "masters + config/o2c-config.json (customer-promoted action level; L2 = exceptions routed, creation human-approved)"
+      }
+    ],
+    "order_status": "clean",
+    "credit_check": {
+      "exposure_after": 85072.0,
+      "limit": 100000,
+      "within_limit": true,
+      "source": "engine:order_validate",
+      "citation": "credit master (#4.1)"
+    },
+    "confidence": 0.95,
+    "source": "engine:order_validate",
+    "citation": "config/o2c-config.json (customer-promoted action level; L2 = exceptions routed, creation human-approved)"
+  },
+  "provenance": {
+    "engines": [
+      "order_validate/1.0"
+    ],
+    "generated_at": "2026-09-06T23:31:31+00:00"
+  }
+}

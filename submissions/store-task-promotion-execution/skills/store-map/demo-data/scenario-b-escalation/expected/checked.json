@@ -1,0 +1,167 @@
+{
+  "contract_version": "rtl.store-task-promotion-execution.v1",
+  "campaign_id": "CMP-2026-BTS",
+  "launch_date": "2026-08-17",
+  "as_of_date": "2026-08-15",
+  "requirements": [
+    {
+      "req_id": "R1-signage-front",
+      "formats": [
+        "standard",
+        "small"
+      ],
+      "clusters": [
+        "suburban-standard",
+        "urban-large"
+      ],
+      "assets": [
+        "SIGN-KIT-B"
+      ],
+      "tasks": [
+        "hang-front-banner"
+      ],
+      "skus": [
+        "GTIN-2001"
+      ],
+      "citation": "pack p.2"
+    },
+    {
+      "req_id": "R2-endcap-hero",
+      "formats": [
+        "standard",
+        "small"
+      ],
+      "clusters": [
+        "suburban-standard"
+      ],
+      "fixture_required": "endcap-4ft",
+      "assets": [
+        "POG-EC-19"
+      ],
+      "tasks": [
+        "build-endcap"
+      ],
+      "skus": [
+        "GTIN-2002"
+      ],
+      "citation": "pack p.3"
+    },
+    {
+      "req_id": "R3-aisle-flags",
+      "formats": [
+        "standard",
+        "small"
+      ],
+      "clusters": [
+        "suburban-standard"
+      ],
+      "assets": [
+        "FLAG-SET-4"
+      ],
+      "tasks": [
+        "hang-flags"
+      ],
+      "skus": [
+        "GTIN-2003"
+      ],
+      "citation": "pack p.5"
+    },
+    {
+      "req_id": "R4-checkout-clip",
+      "formats": [
+        "standard",
+        "small"
+      ],
+      "clusters": [
+        "suburban-standard"
+      ],
+      "assets": [
+        "CLIP-STRIP-2"
+      ],
+      "tasks": [
+        "clip-strip"
+      ],
+      "skus": [
+        "GTIN-2004"
+      ],
+      "citation": "pack p.6"
+    }
+  ],
+  "promo_prices": {
+    "GTIN-2001": 12.99,
+    "GTIN-2002": 8.99,
+    "GTIN-2003": 1.99,
+    "GTIN-2004": 3.49
+  },
+  "escalations": [
+    "R2-endcap-hero: fixture conflict - store cannot resolve locally (#4.1)",
+    "PRICE CONFLICT GTIN-2002: promo 8.99 >= shelf 7.99 (#3.1)"
+  ],
+  "store": {
+    "store_id": "ST-0781",
+    "format": "small",
+    "cluster": "suburban-standard",
+    "fixtures": [
+      "front-window"
+    ],
+    "received_assets": [
+      "SIGN-KIT-B",
+      "POG-EC-19"
+    ],
+    "completed_tasks": [
+      "hang-front-banner"
+    ]
+  },
+  "readiness": {
+    "items": [
+      {
+        "req_id": "R1-signage-front",
+        "status": "ready",
+        "detail": "all assets/tasks confirmed",
+        "source": "engine:readiness_check",
+        "citation": "pack p.2"
+      },
+      {
+        "req_id": "R2-endcap-hero",
+        "status": "conflict",
+        "detail": "requires fixture 'endcap-4ft' not in store format (execution-rules.md #4.1)",
+        "source": "engine:readiness_check",
+        "citation": "pack p.3"
+      },
+      {
+        "req_id": "R3-aisle-flags",
+        "status": "missing",
+        "detail": "outstanding: FLAG-SET-4, hang-flags (execution-rules.md #2.1)",
+        "source": "engine:readiness_check",
+        "citation": "pack p.5"
+      },
+      {
+        "req_id": "R4-checkout-clip",
+        "status": "missing",
+        "detail": "outstanding: CLIP-STRIP-2, clip-strip (execution-rules.md #2.1)",
+        "source": "engine:readiness_check",
+        "citation": "pack p.6"
+      }
+    ],
+    "completeness_pct": 25.0,
+    "price_conflicts": [
+      {
+        "sku": "GTIN-2002",
+        "promo_price": 8.99,
+        "shelf_price": 7.99,
+        "detail": "promo 8.99 >= shelf 7.99 - MISPRICING, block shelf change (execution-rules.md #3.1)",
+        "source": "engine:readiness_check",
+        "citation": "price file GTIN-2002"
+      }
+    ],
+    "confidence": 0.95,
+    "source": "engine:readiness_check",
+    "citation": "campaign CMP-2026-BTS pack vs store ST-0781 profile"
+  },
+  "provenance": {
+    "engines": [
+      "readiness_check/1.0"
+    ],
+    "generated_at": "2026-09-06T23:21:51+00:00"
+  }
+}

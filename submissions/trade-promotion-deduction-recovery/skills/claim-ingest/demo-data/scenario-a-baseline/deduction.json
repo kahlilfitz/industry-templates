@@ -1,0 +1,5 @@
+{ "contract_version": "rtl.trade-deduction-recovery.v1", "deduction_id": "DED-2026-3301",
+  "customer": "Summit Grocers",
+  "claims": [ {"claim_id": "CL-1", "type": "promo_allowance", "period": "2026-06",
+               "claimed_amount": 14600.0, "actual_volume_value": 182500.0, "backup_doc": "SG-BKP-8871.pdf"} ],
+  "escalations": [] }

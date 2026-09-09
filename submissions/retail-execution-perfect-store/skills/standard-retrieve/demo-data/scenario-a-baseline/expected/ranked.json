@@ -1,0 +1,174 @@
+{
+  "contract_version": "rtl.retail-execution-perfect-store.v1",
+  "outlet": {
+    "id": "OUT-4471",
+    "name": "QuickMart Central",
+    "channel": "convenience",
+    "cluster": "urban"
+  },
+  "visit": {
+    "date": "2026-08-11",
+    "active_promo_skus": [],
+    "audit_answers": {
+      "MS-01": {
+        "pass": true,
+        "photo": "IMG-101.jpg"
+      },
+      "MS-02": {
+        "pass": true,
+        "photo": "IMG-102.jpg"
+      },
+      "MS-03": {
+        "pass": false,
+        "photo": "IMG-103.jpg",
+        "note": "minis shelf empty"
+      },
+      "SH-01": {
+        "pass": true,
+        "facings": 7
+      },
+      "PR-01": {
+        "pass": true,
+        "photo": "IMG-104.jpg"
+      },
+      "PP-01": {
+        "pass": false,
+        "note": "two tags outdated"
+      }
+    }
+  },
+  "escalations": [],
+  "compliance": {
+    "criteria": [
+      {
+        "id": "MS-01",
+        "type": "must_stock",
+        "sku": "CB-CLASSIC",
+        "desc": "Classic bar on shelf",
+        "pass": true,
+        "answer": {
+          "pass": true,
+          "photo": "IMG-101.jpg"
+        },
+        "photo_ref": "IMG-101.jpg",
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 MS-01; audit answer (photos evidence-only, #3.1)"
+      },
+      {
+        "id": "MS-02",
+        "type": "must_stock",
+        "sku": "CB-DARK",
+        "desc": "Dark bar on shelf",
+        "pass": true,
+        "answer": {
+          "pass": true,
+          "photo": "IMG-102.jpg"
+        },
+        "photo_ref": "IMG-102.jpg",
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 MS-02; audit answer (photos evidence-only, #3.1)"
+      },
+      {
+        "id": "MS-03",
+        "type": "must_stock",
+        "sku": "CB-MINIS",
+        "desc": "Minis bag on shelf",
+        "pass": false,
+        "answer": {
+          "pass": false,
+          "photo": "IMG-103.jpg",
+          "note": "minis shelf empty"
+        },
+        "photo_ref": "IMG-103.jpg",
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 MS-03; audit answer (photos evidence-only, #3.1)"
+      },
+      {
+        "id": "SH-01",
+        "type": "share_of_shelf",
+        "sku": null,
+        "desc": ">= 6 facings across range",
+        "pass": true,
+        "answer": {
+          "pass": true,
+          "facings": 7
+        },
+        "photo_ref": null,
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 SH-01; audit answer (photos evidence-only, #3.1)"
+      },
+      {
+        "id": "PR-01",
+        "type": "promo_display",
+        "sku": "CB-CLASSIC",
+        "desc": "Promo display up during active promo",
+        "pass": true,
+        "answer": {
+          "pass": true,
+          "photo": "IMG-104.jpg"
+        },
+        "photo_ref": "IMG-104.jpg",
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 PR-01; audit answer (photos evidence-only, #3.1)"
+      },
+      {
+        "id": "PP-01",
+        "type": "price_tag",
+        "sku": null,
+        "desc": "Shelf tags present and current",
+        "pass": false,
+        "answer": {
+          "pass": false,
+          "note": "two tags outdated"
+        },
+        "photo_ref": null,
+        "source": "engine:visit_score",
+        "citation": "picture-of-success convenience:urban v4 PP-01; audit answer (photos evidence-only, #3.1)"
+      }
+    ],
+    "compliance_pct": 66.7,
+    "confidence": 0.95,
+    "source": "engine:visit_score",
+    "citation": "picture-of-success convenience:urban v4"
+  },
+  "provenance": {
+    "engines": [
+      "visit_score/1.0",
+      "gap_rank/1.0"
+    ],
+    "generated_at": "2026-09-06T23:33:35+00:00"
+  },
+  "ranked_gaps": [
+    {
+      "id": "MS-03",
+      "desc": "Minis bag on shelf",
+      "sku": "CB-MINIS",
+      "weekly_value_at_stake": 139.65,
+      "promo_multiplier": 1.0,
+      "rank_score": 139.65,
+      "photo_ref": "IMG-103.jpg",
+      "source": "engine:gap_rank",
+      "citation": "scan extract CB-MINIS; execution-standards.md #2.1"
+    },
+    {
+      "id": "PP-01",
+      "desc": "Shelf tags present and current",
+      "sku": null,
+      "weekly_value_at_stake": 0,
+      "promo_multiplier": 1.0,
+      "rank_score": 0.0,
+      "photo_ref": null,
+      "source": "engine:gap_rank",
+      "citation": "scan extract -; execution-standards.md #2.1"
+    }
+  ],
+  "suggested_order": [
+    {
+      "sku": "CB-MINIS",
+      "qty": 12,
+      "reason": "OOS must-stock MS-03",
+      "source": "engine:gap_rank",
+      "citation": "par from standard (#4.1 - rep confirms; plugin never transmits)"
+    }
+  ]
+}

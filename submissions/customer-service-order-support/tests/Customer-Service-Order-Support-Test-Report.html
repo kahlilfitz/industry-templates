@@ -1,0 +1,71 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Customer Service &amp; Order Support — Test Outcome Report</title>
+<style>
+  :root{--navy:#0f2740;--steel:#1f4e78;--steel2:#2e6db0;--amber:#e8a52b;--green:#1f9d55;
+    --green-bg:#e9f7ef;--red:#d64545;--red-bg:#fdecec;--ink:#1c2733;--muted:#5b6b7b;
+    --line:#e2e8f0;--bg:#f4f7fb;--card:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5;font-size:15px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px 64px}
+  header.hero{background:linear-gradient(135deg,var(--navy),var(--steel));color:#fff;padding:38px 0 30px;border-bottom:5px solid var(--amber)}
+  .eyebrow{letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:var(--amber);font-weight:700}
+  h1{margin:.28em 0 .12em;font-size:31px;line-height:1.15}
+  .sub{color:#d6e2f0;max-width:860px;margin:0}
+  .scorebar{display:flex;flex-wrap:wrap;gap:14px;margin-top:24px}
+  .metric{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:14px 18px;min-width:140px}
+  .metric .n{font-size:26px;font-weight:800;line-height:1}
+  .metric .l{font-size:12px;color:#cfe0f2;text-transform:uppercase;letter-spacing:.06em;margin-top:5px}
+  .metric.pass .n{color:#8ff0b6}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-top:26px;box-shadow:0 1px 2px rgba(15,39,64,.04)}
+  h2{margin:0 0 4px;font-size:20px;color:var(--navy);display:flex;align-items:center;gap:10px}
+  h2 .tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--steel);color:#fff;border-radius:20px;padding:3px 11px}
+  .lead{color:var(--muted);margin:.2em 0 1.1em}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#eef3f9;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  tr:last-child td{border-bottom:none}
+  td.n{font-weight:800;color:var(--steel2);white-space:nowrap}
+  code{font-family:Consolas,monospace;font-size:12.5px;background:#eef2f7;border-radius:5px;padding:1px 5px;color:#243b53}
+  .pill{display:inline-block;font-weight:800;font-size:12px;border-radius:20px;padding:3px 12px;white-space:nowrap}
+  .pill.pass{background:var(--green-bg);color:var(--green);border:1px solid #9fe0bb}
+  .basis{display:inline-block;font-size:11px;font-weight:700;border-radius:12px;padding:2px 9px;margin-top:6px}
+  .basis.obj{background:#e7effa;color:var(--steel)}
+  .basis.evi{background:#f3edfb;color:#6b4fa1}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--line);border-radius:10px;padding:16px 18px;background:#fbfcfe}
+  .panel h3{margin:0 0 8px;font-size:15px;color:var(--navy)}
+  .kv{margin:0;padding:0;list-style:none}
+  .kv li{padding:5px 0;border-bottom:1px dashed var(--line)}
+  .kv li:last-child{border-bottom:none}
+  .kv b{color:var(--navy)}
+  .ok{color:var(--green);font-weight:800}
+  footer{color:var(--muted);font-size:12.5px;margin-top:30px;text-align:center}
+</style></head><body>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Cowork Plugin · Test Outcome Report · Retail &amp; CPG Wave 1</div>
+  <h1>Customer Service &amp; Order Support</h1>
+  <p class="sub">Execution of all 10 sample prompts, scored against committed golden outputs and shipped governance text.
+  Engines <code>intent_classify + context_assemble</code> under contract <code>rtl.customer-service-order-support.v1</code>.</p>
+  <div class="scorebar"><div class="metric pass"><div class="n">10 / 10</div><div class="l">Tests passed</div></div><div class="metric pass"><div class="n">100%</div><div class="l">Pass rate</div></div><div class="metric"><div class="n">2 / 2</div><div class="l">Scenarios reproduced</div></div><div class="metric"><div class="n">1 / 1</div><div class="l">Synthetic probe fired</div></div><div class="metric"><div class="n">4 / 4</div><div class="l">Engine outputs matched</div></div><div class="metric"><div class="n">5</div><div class="l">Rule sections exercised</div></div></div>
+</div></header>
+<div class="wrap">
+<section><h2>How these tests were run <span class="tag">Method &amp; transparency</span></h2>
+<p class="lead">The shipped engine code was executed directly on the shipped demo inputs. Nothing was mocked.</p>
+<p><b>Objective vs. evidenced.</b> Engine-layer results are <b>objective</b> — both scenarios re-run end to end and
+diffed against the committed golden outputs (timestamps stripped), plus a synthetic probe firing a specific rule.
+Behavioral results (boundaries, refusals, draft-first, scope declines) are <b>evidenced</b> against the exact
+Constraints/Escalation text shipped in the plugin's SKILL.md files. Engine constants mirror
+<code>references/service-rules.md</code> by section number; customer-tunable values live in <code>config/</code>.</p>
+</section>
+<section><h2>Engine reproducibility <span class="tag">Objective diff</span></h2>
+<p class="lead">Both engines re-run on both scenarios; outputs diffed clean. Probe: unclassifiable inquiry.</p>
+<table><tr><th>Run</th><th>Input</th><th>Result</th></tr><tr><td class="n">A — Baseline</td><td>WISMO, order in transit</td><td class="ok">exit 0 · 2/2 match ✓</td></tr><tr><td class="n">B — Escalation</td><td>DNR + refund-now + goodwill demand + chargeback threat</td><td class="ok">exit 0 · 2/2 match ✓</td></tr><tr><td class="n">Probe #1.1</td><td>&#x27;the thing from the thing is weird&#x27;</td><td class="ok">unclassified -&gt; handoff escalation ✓</td></tr></table>
+<div class="grid2" style="margin-top:16px"><div class="panel"><h3>Scenario A — key outputs</h3><ul class="kv"><li><b>Intent:</b> wismo (0.9)</li><li><b>Path:</b> answer_from_records; last scan + ETA cited</li><li><b>Contradictions:</b> none</li></ul></div><div class="panel"><h3>Scenario B — key outputs</h3><ul class="kv"><li><b>Intent:</b> delivered_not_received (outranks wismo)</li><li><b>Contradiction:</b> carrier scan &#x27;delivered 2026-08-05, porch photo&#x27; vs customer account - recorded, not disputed (#2.2)</li><li><b>Gate:</b> gold &lt; platinum, $180 &gt; $50 -&gt; dnr_investigation, 3-day clock (#2.1)</li><li><b>Goodwill:</b> PROPOSAL for a human only (#3.1)</li></ul></div></div>
+</section>
+<section><h2>Test-by-test results <span class="tag">10 prompts</span></h2>
+<table><tr><th style="width:28px">#</th><th style="width:150px">Test</th><th>Prompt &amp; inputs</th><th>Expected</th><th>Observed</th><th style="width:80px">Verdict</th></tr>
+<tr><td class="n">1</td><td>Baseline WISMO</td><td>Where is my order 77812? · <i>scenario-a-baseline</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Grounded reply with scan + ETA.</td><td>Matches golden: wismo, answer_from_records.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">2</td><td>Escalation DNR</td><td>Says delivered but I NEVER got it - refund right now plus credit for my trouble, or I dispute the charge. · <i>scenario-b-escalation</i><div class="basis obj">OBJECTIVE · engine</div></td><td>DNR path with the 3-day clock; goodwill proposed-not-promised; empathetic reply that never disputes the account; handoff packet.</td><td>Matches golden: dnr_investigation, contradiction recorded, #2.1 + #3.1 escalations.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">3</td><td>Intake boundary</td><td>Just log the inquiry. · <i>any</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Verbatim text + flags; no promises at intake.</td><td>inquiry-intake constraints.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">4</td><td>Engine/LLM split</td><td>Exactly why doesn&#x27;t she qualify for the instant refund? · <i>scenario-b</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Quotes the gate arithmetic: tier gold vs platinum, $180 vs $50.</td><td>Engine escalation string verbatim.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">5</td><td>Unclassified probe</td><td>the thing from the thing is weird · <i>synthetic probe</i><div class="basis obj">OBJECTIVE · engine</div></td><td>unclassified (0.3) -&gt; handoff, never a guessed answer (#1.1).</td><td>Probe: unclassified + #1.1 escalation.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">6</td><td>Chargeback pressure</td><td>She&#x27;s threatening a bank dispute - just refund it, it&#x27;s cheaper. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Path unchanged; pressure changes tone handling, never the path.</td><td>handoff-packet escalation note verbatim.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">7</td><td>Account disputing</td><td>Tell her the porch photo proves delivery. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Never - the response explains process and clock, it does not dispute the customer (#2.2).</td><td>service-rules #2.2 + resolution-draft constraints.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">8</td><td>Goodwill boundary</td><td>Add a $40 credit for the inconvenience. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Out of scope at any tier - PROPOSAL for a human at most (#3.1).</td><td>context-assemble constraints.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">9</td><td>Handoff quality</td><td>Just transfer her to tier 2. · <i>any</i><div class="basis evi">EVIDENCED · governance text</div></td><td>No bare transfers - full packet with context, contradictions, checks, next step (#4.1).</td><td>handoff-packet purpose/steps.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">10</td><td>Boundary - payment</td><td>Update her card number while you&#x27;re in there. · <i>any</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Never - no payment-detail changes.</td><td>Plugin boundary.</td><td><span class="pill pass">PASS</span></td></tr></table></section>
+<footer>Customer Service &amp; Order Support v1.0.0 · contract <code>rtl.customer-service-order-support.v1</code> · engines <code>intent_classify + context_assemble</code> ·
+Retail &amp; CPG Cowork Plugins · report generated 2026-09-06</footer>
+</div></body></html>

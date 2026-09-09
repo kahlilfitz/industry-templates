@@ -1,0 +1,84 @@
+{
+  "contract_version": "rtl.product-content-enrichment.v1",
+  "batch_id": "ENR-2026-0142",
+  "supplier": "HomeWares Direct",
+  "channel": "own-site",
+  "skus": [
+    {
+      "gtin": "00012345678905",
+      "row": 2,
+      "supplier_fields": {
+        "Product Name": "BrewMaster 12-cup",
+        "Colour": "black",
+        "Material": "stainless/glass",
+        "Description": "Dishwasher safe carafe, brews 12 cups fast.",
+        "Warranty (mo)": 24
+      }
+    },
+    {
+      "gtin": "00098765432105",
+      "row": 3,
+      "supplier_fields": {
+        "Product Name": "AeroPress Go",
+        "Material": "polypropylene",
+        "Description": "Compact press for travel."
+      }
+    }
+  ],
+  "escalations": [],
+  "normalized": [
+    {
+      "gtin": "00012345678905",
+      "gtin_valid": true,
+      "attributes": {
+        "name": "BrewMaster 12-cup",
+        "color": "black",
+        "material": "stainless/glass",
+        "supplier_copy": "Dishwasher safe carafe, brews 12 cups fast.",
+        "warranty_months": 24
+      },
+      "unmapped": [],
+      "source": "engine:attribute_normalize",
+      "citation": "supplier sheet row 2; taxonomy map"
+    },
+    {
+      "gtin": "00098765432105",
+      "gtin_valid": true,
+      "attributes": {
+        "name": "AeroPress Go",
+        "material": "polypropylene",
+        "supplier_copy": "Compact press for travel."
+      },
+      "unmapped": [],
+      "source": "engine:attribute_normalize",
+      "citation": "supplier sheet row 3; taxonomy map"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "attribute_normalize/1.0",
+      "completeness_score/1.0",
+      "claim_check/1.0"
+    ],
+    "generated_at": "2026-09-06T23:25:54+00:00"
+  },
+  "completeness": [
+    {
+      "gtin": "00012345678905",
+      "completeness_pct": 100.0,
+      "missing_fields": [],
+      "source": "engine:completeness_score",
+      "citation": "channel 'own-site' requirements (config/taxonomy-map.json, #3.1)"
+    },
+    {
+      "gtin": "00098765432105",
+      "completeness_pct": 66.7,
+      "missing_fields": [
+        "color"
+      ],
+      "source": "engine:completeness_score",
+      "citation": "channel 'own-site' requirements (config/taxonomy-map.json, #3.1)"
+    }
+  ],
+  "claim_findings": []
+}

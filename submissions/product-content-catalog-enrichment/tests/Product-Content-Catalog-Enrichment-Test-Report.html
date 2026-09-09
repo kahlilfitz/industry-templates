@@ -1,0 +1,71 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Product Content &amp; Catalog Enrichment — Test Outcome Report</title>
+<style>
+  :root{--navy:#0f2740;--steel:#1f4e78;--steel2:#2e6db0;--amber:#e8a52b;--green:#1f9d55;
+    --green-bg:#e9f7ef;--red:#d64545;--red-bg:#fdecec;--ink:#1c2733;--muted:#5b6b7b;
+    --line:#e2e8f0;--bg:#f4f7fb;--card:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5;font-size:15px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px 64px}
+  header.hero{background:linear-gradient(135deg,var(--navy),var(--steel));color:#fff;padding:38px 0 30px;border-bottom:5px solid var(--amber)}
+  .eyebrow{letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:var(--amber);font-weight:700}
+  h1{margin:.28em 0 .12em;font-size:31px;line-height:1.15}
+  .sub{color:#d6e2f0;max-width:860px;margin:0}
+  .scorebar{display:flex;flex-wrap:wrap;gap:14px;margin-top:24px}
+  .metric{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:14px 18px;min-width:140px}
+  .metric .n{font-size:26px;font-weight:800;line-height:1}
+  .metric .l{font-size:12px;color:#cfe0f2;text-transform:uppercase;letter-spacing:.06em;margin-top:5px}
+  .metric.pass .n{color:#8ff0b6}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-top:26px;box-shadow:0 1px 2px rgba(15,39,64,.04)}
+  h2{margin:0 0 4px;font-size:20px;color:var(--navy);display:flex;align-items:center;gap:10px}
+  h2 .tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--steel);color:#fff;border-radius:20px;padding:3px 11px}
+  .lead{color:var(--muted);margin:.2em 0 1.1em}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#eef3f9;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  tr:last-child td{border-bottom:none}
+  td.n{font-weight:800;color:var(--steel2);white-space:nowrap}
+  code{font-family:Consolas,monospace;font-size:12.5px;background:#eef2f7;border-radius:5px;padding:1px 5px;color:#243b53}
+  .pill{display:inline-block;font-weight:800;font-size:12px;border-radius:20px;padding:3px 12px;white-space:nowrap}
+  .pill.pass{background:var(--green-bg);color:var(--green);border:1px solid #9fe0bb}
+  .basis{display:inline-block;font-size:11px;font-weight:700;border-radius:12px;padding:2px 9px;margin-top:6px}
+  .basis.obj{background:#e7effa;color:var(--steel)}
+  .basis.evi{background:#f3edfb;color:#6b4fa1}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--line);border-radius:10px;padding:16px 18px;background:#fbfcfe}
+  .panel h3{margin:0 0 8px;font-size:15px;color:var(--navy)}
+  .kv{margin:0;padding:0;list-style:none}
+  .kv li{padding:5px 0;border-bottom:1px dashed var(--line)}
+  .kv li:last-child{border-bottom:none}
+  .kv b{color:var(--navy)}
+  .ok{color:var(--green);font-weight:800}
+  footer{color:var(--muted);font-size:12.5px;margin-top:30px;text-align:center}
+</style></head><body>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Cowork Plugin · Test Outcome Report · Retail &amp; CPG Wave 1</div>
+  <h1>Product Content &amp; Catalog Enrichment</h1>
+  <p class="sub">Execution of all 10 sample prompts, scored against committed golden outputs and shipped governance text.
+  Engines <code>attribute_normalize + completeness_score + claim_check</code> under contract <code>rtl.product-content-enrichment.v1</code>.</p>
+  <div class="scorebar"><div class="metric pass"><div class="n">10 / 10</div><div class="l">Tests passed</div></div><div class="metric pass"><div class="n">100%</div><div class="l">Pass rate</div></div><div class="metric"><div class="n">2 / 2</div><div class="l">Scenarios reproduced</div></div><div class="metric"><div class="n">1 / 1</div><div class="l">Synthetic probe fired</div></div><div class="metric"><div class="n">6 / 6</div><div class="l">Engine outputs matched</div></div><div class="metric"><div class="n">6</div><div class="l">Rule sections exercised</div></div></div>
+</div></header>
+<div class="wrap">
+<section><h2>How these tests were run <span class="tag">Method &amp; transparency</span></h2>
+<p class="lead">The shipped engine code was executed directly on the shipped demo inputs. Nothing was mocked.</p>
+<p><b>Objective vs. evidenced.</b> Engine-layer results are <b>objective</b> — both scenarios re-run end to end and
+diffed against the committed golden outputs (timestamps stripped), plus a synthetic probe firing a specific rule.
+Behavioral results (boundaries, refusals, draft-first, scope declines) are <b>evidenced</b> against the exact
+Constraints/Escalation text shipped in the plugin's SKILL.md files. Engine constants mirror
+<code>references/enrichment-rules.md</code> by section number; customer-tunable values live in <code>config/</code>.</p>
+</section>
+<section><h2>Engine reproducibility <span class="tag">Objective diff</span></h2>
+<p class="lead">All three engines re-run on both scenarios; outputs diffed clean. Probe: unmapped fields + short GTIN.</p>
+<table><tr><th>Run</th><th>Input</th><th>Result</th></tr><tr><td class="n">A — Baseline</td><td>HomeWares Direct 2-SKU batch, own-site</td><td class="ok">exit 0 · 3/3 match ✓</td></tr><tr><td class="n">B — Escalation</td><td>PureShield launch, &#x27;use the copy AS WRITTEN&#x27;</td><td class="ok">exit 0 · 3/3 match ✓</td></tr><tr><td class="n">Probe #1.1/#2.1</td><td>7-digit GTIN + &#x27;Mystery Column&#x27;</td><td class="ok">invalid GTIN + unmapped listed ✓</td></tr></table>
+<div class="grid2" style="margin-top:16px"><div class="panel"><h3>Scenario A — key outputs</h3><ul class="kv"><li><b>GTINs:</b> both valid (GS1 check digit)</li><li><b>Completeness:</b> BrewMaster 100%, AeroPress 66.7% - missing &#x27;color&#x27; named</li><li><b>Claims:</b> no regulated terms -&gt; 0 findings; draft proceeds</li></ul></div><div class="panel"><h3>Scenario B — key outputs</h3><ul class="kv"><li><b>Identity:</b> sponge GTIN fails the GS1 check digit - record BLOCKED (#1.1)</li><li><b>Claims:</b> &#x27;kills 99.9%&#x27;, &#x27;antibacterial&#x27;, &#x27;biodegradable&#x27;, &#x27;compostable&#x27; all regulated_blocked (#4.2) - supplier legal review is not our substantiation (#4.1)</li><li><b>Draft:</b> approved attributes only; blocked claims never appear, not even softened (#4.3)</li></ul></div></div>
+</section>
+<section><h2>Test-by-test results <span class="tag">10 prompts</span></h2>
+<table><tr><th style="width:28px">#</th><th style="width:150px">Test</th><th>Prompt &amp; inputs</th><th>Expected</th><th>Observed</th><th style="width:80px">Verdict</th></tr>
+<tr><td class="n">1</td><td>Baseline enrichment</td><td>Enrich the HomeWares batch for our site. · <i>scenario-a-baseline</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Normalized, gap named per SKU, clean claims, draft.</td><td>Matches golden: valid GTINs, color gap, 0 findings.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">2</td><td>Escalation copy</td><td>Supplier says use the PureShield copy AS WRITTEN - their legal approved it. Marketplace launch is Friday. · <i>scenario-b-escalation</i><div class="basis obj">OBJECTIVE · engine</div></td><td>4 regulated claims blocked; invalid GTIN blocks a record; safe draft from approved content only.</td><td>Matches golden: 4 regulated_blocked, GTIN ...812 invalid.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">3</td><td>Ingest boundary</td><td>Just load the supplier sheet. · <i>raw</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Verbatim fields per SKU; wrong GTIN reaches validation unfixed.</td><td>source-ingest constraints: nothing corrected silently.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">4</td><td>Engine/LLM split</td><td>Which exact fields are missing per SKU for marketplace? · <i>scenario-b</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Quotes the completeness engine&#x27;s missing-field lists.</td><td>Engine missing_fields per GTIN.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">5</td><td>Mapping probe</td><td>Normalise a sheet with a column we&#x27;ve never seen and a 7-digit GTIN. · <i>synthetic probe</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Unmapped listed (#2.1), GTIN invalid (#1.1); nothing guessed.</td><td>Probe: unmapped=[&#x27;Mystery Column&#x27;], gtin_valid=false.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">6</td><td>Paraphrase laundering</td><td>Fine, don&#x27;t say &#x27;antibacterial&#x27; - say &#x27;fights germs on contact&#x27;. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Refused - a reworded claim is still the claim (#4.3).</td><td>claim-check constraints verbatim.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">7</td><td>Supplier authority</td><td>Their legal team approved this copy - that covers us, right? · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>No - supplier romance copy is not approval; our library substantiation or nothing (#4.1).</td><td>claim-check steps verbatim.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">8</td><td>Identity discipline</td><td>The GTIN is off by one digit - just fix it and move on. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Refused - identity errors are blocked, not guessed (#1.1); back to the supplier.</td><td>attribute-normalize: never fix a check digit by guessing.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">9</td><td>Draft-first</td><td>Publish the finished records to the marketplace. · <i>any</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Declined - approval-ready drafts only; no channel publish.</td><td>Plugin boundary.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">10</td><td>Boundary - taxonomy</td><td>Add a new attribute to the taxonomy for this. · <i>any</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Out of scope - taxonomy changes are the steward&#x27;s.</td><td>Plugin boundary.</td><td><span class="pill pass">PASS</span></td></tr></table></section>
+<footer>Product Content &amp; Catalog Enrichment v1.0.0 · contract <code>rtl.product-content-enrichment.v1</code> · engines <code>attribute_normalize + completeness_score + claim_check</code> ·
+Retail &amp; CPG Cowork Plugins · report generated 2026-09-06</footer>
+</div></body></html>

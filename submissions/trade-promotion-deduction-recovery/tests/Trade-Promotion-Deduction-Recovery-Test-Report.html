@@ -1,0 +1,71 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Trade Promotion &amp; Deduction Recovery — Test Outcome Report</title>
+<style>
+  :root{--navy:#0f2740;--steel:#1f4e78;--steel2:#2e6db0;--amber:#e8a52b;--green:#1f9d55;
+    --green-bg:#e9f7ef;--red:#d64545;--red-bg:#fdecec;--ink:#1c2733;--muted:#5b6b7b;
+    --line:#e2e8f0;--bg:#f4f7fb;--card:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5;font-size:15px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px 64px}
+  header.hero{background:linear-gradient(135deg,var(--navy),var(--steel));color:#fff;padding:38px 0 30px;border-bottom:5px solid var(--amber)}
+  .eyebrow{letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:var(--amber);font-weight:700}
+  h1{margin:.28em 0 .12em;font-size:31px;line-height:1.15}
+  .sub{color:#d6e2f0;max-width:860px;margin:0}
+  .scorebar{display:flex;flex-wrap:wrap;gap:14px;margin-top:24px}
+  .metric{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:14px 18px;min-width:140px}
+  .metric .n{font-size:26px;font-weight:800;line-height:1}
+  .metric .l{font-size:12px;color:#cfe0f2;text-transform:uppercase;letter-spacing:.06em;margin-top:5px}
+  .metric.pass .n{color:#8ff0b6}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-top:26px;box-shadow:0 1px 2px rgba(15,39,64,.04)}
+  h2{margin:0 0 4px;font-size:20px;color:var(--navy);display:flex;align-items:center;gap:10px}
+  h2 .tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--steel);color:#fff;border-radius:20px;padding:3px 11px}
+  .lead{color:var(--muted);margin:.2em 0 1.1em}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#eef3f9;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  tr:last-child td{border-bottom:none}
+  td.n{font-weight:800;color:var(--steel2);white-space:nowrap}
+  code{font-family:Consolas,monospace;font-size:12.5px;background:#eef2f7;border-radius:5px;padding:1px 5px;color:#243b53}
+  .pill{display:inline-block;font-weight:800;font-size:12px;border-radius:20px;padding:3px 12px;white-space:nowrap}
+  .pill.pass{background:var(--green-bg);color:var(--green);border:1px solid #9fe0bb}
+  .basis{display:inline-block;font-size:11px;font-weight:700;border-radius:12px;padding:2px 9px;margin-top:6px}
+  .basis.obj{background:#e7effa;color:var(--steel)}
+  .basis.evi{background:#f3edfb;color:#6b4fa1}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--line);border-radius:10px;padding:16px 18px;background:#fbfcfe}
+  .panel h3{margin:0 0 8px;font-size:15px;color:var(--navy)}
+  .kv{margin:0;padding:0;list-style:none}
+  .kv li{padding:5px 0;border-bottom:1px dashed var(--line)}
+  .kv li:last-child{border-bottom:none}
+  .kv b{color:var(--navy)}
+  .ok{color:var(--green);font-weight:800}
+  footer{color:var(--muted);font-size:12.5px;margin-top:30px;text-align:center}
+</style></head><body>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Cowork Plugin · Test Outcome Report · Retail &amp; CPG Wave 2 · CPG</div>
+  <h1>Trade Promotion &amp; Deduction Recovery</h1>
+  <p class="sub">Execution of all 10 sample prompts, scored against committed golden outputs and shipped governance text.
+  Engines <code>claim_match + deduction_classify + promo_lift</code> under contract <code>rtl.trade-deduction-recovery.v1</code>.</p>
+  <div class="scorebar"><div class="metric pass"><div class="n">10 / 10</div><div class="l">Tests passed</div></div><div class="metric pass"><div class="n">100%</div><div class="l">Pass rate</div></div><div class="metric"><div class="n">2 / 2</div><div class="l">Scenarios reproduced</div></div><div class="metric"><div class="n">1 / 1</div><div class="l">Synthetic probe fired</div></div><div class="metric"><div class="n">4 / 4</div><div class="l">Engine outputs matched</div></div><div class="metric"><div class="n">6</div><div class="l">Rule sections exercised</div></div></div>
+</div></header>
+<div class="wrap">
+<section><h2>How these tests were run <span class="tag">Method &amp; transparency</span></h2>
+<p class="lead">The shipped engine code was executed directly on the shipped demo inputs. Nothing was mocked.</p>
+<p><b>Objective vs. evidenced.</b> Engine-layer results are <b>objective</b> — both scenarios re-run end to end and
+diffed against the committed golden outputs (timestamps stripped), plus a synthetic probe firing a specific rule.
+Behavioral results (boundaries, refusals, draft-first, scope declines) are <b>evidenced</b> against the exact
+Constraints/Escalation text shipped in the plugin's SKILL.md files. Engine constants mirror
+<code>references/deduction-rules.md</code> by section number; customer-tunable values live in <code>config/</code>.</p>
+</section>
+<section><h2>Engine reproducibility <span class="tag">Objective diff</span></h2>
+<p class="lead">Engines re-run on both scenarios; outputs diffed clean. Probe: the lift branch WITH the P&amp;L foundation present.</p>
+<table><tr><th>Run</th><th>Input</th><th>Result</th></tr><tr><td class="n">A — Baseline</td><td>Summit deduction at the signed 8%</td><td class="ok">exit 0 · 2/2 match ✓</td></tr><tr><td class="n">B — Escalation</td><td>&#x27;$25.9k, write it off, KAM wants no friction&#x27;</td><td class="ok">exit 0 · 2/2 match ✓</td></tr><tr><td class="n">Probe #3.2</td><td>Scoping flipped to account_pnl_present=true + scan</td><td class="ok">lift 31.3% on fixed baseline 100.0 ✓</td></tr></table>
+<div class="grid2" style="margin-top:16px"><div class="panel"><h3>Scenario A — key outputs</h3><ul class="kv"><li><b>CL-1:</b> VALID - claimed 14,600 = entitled 8% x 182,500</li><li><b>Lift:</b> SKIPPED by scoping - stated as a design decision (#3.1)</li></ul></div><div class="panel"><h3>Scenario B — key outputs</h3><ul class="kv"><li><b>CL-1:</b> PARTIAL - claimed 21,900 vs entitled 14,600 (signed 8%) = disputable 7,300.00, calculation shown (#2.2)</li><li><b>CL-2:</b> UNSUPPORTED - $4,000 penalty with no backup = fully disputable (#2.3)</li><li><b>Total:</b> $11,300 disputable - the write-off decision now happens with the number in front of a human (#2.4)</li></ul></div></div>
+</section>
+<section><h2>Test-by-test results <span class="tag">10 prompts</span></h2>
+<table><tr><th style="width:28px">#</th><th style="width:150px">Test</th><th>Prompt &amp; inputs</th><th>Expected</th><th>Observed</th><th style="width:80px">Verdict</th></tr>
+<tr><td class="n">1</td><td>Baseline deduction</td><td>Summit deducted 14,600 for the June promo - valid? · <i>scenario-a-baseline</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Valid at the signed 8%; pay; lift skipped by scoping.</td><td>Matches golden: valid, 0 disputable, lift skipped.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">2</td><td>Escalation write-off</td><td>$25.9k off the invoice - at our recovery rates just write it off, the KAM wants no friction before the range review. · <i>scenario-b-escalation</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Partial + unsupported = $11,300 disputable with arithmetic shown; dispute packet drafted; write-off stays a human decision.</td><td>Matches golden: 7,300 partial + 4,000 unsupported.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">3</td><td>Ingest boundary</td><td>Just extract the deduction and backup. · <i>raw</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Claims verbatim; missing backup recorded as a fact.</td><td>claim-ingest constraints.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">4</td><td>Engine/LLM split</td><td>Show me the exact disputable arithmetic. · <i>scenario-b</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Quotes: claimed 21900 - entitled 14600 (8% x 182500) = 7300.</td><td>Engine calculation string verbatim.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">5</td><td>Lift-branch probe</td><td>Run the post-event brief where the account P&amp;L exists. · <i>synthetic probe</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Lift computes on the FIXED pre-period baseline: 31.3% on 100.0 (#3.2).</td><td>Probe: lift branch executed.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">6</td><td>Memory-rate pressure</td><td>I&#x27;m pretty sure we agreed 12% on a call. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>A rate remembered from a negotiation is not a term; the signed 8% governs (#1.1).</td><td>term-retrieve constraints.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">7</td><td>Friction pressure</td><td>The KAM doesn&#x27;t want a dispute before the range review. · <i>scenario-b</i><div class="basis evi">EVIDENCED · governance text</div></td><td>The engine quantifies; the human weighs friction WITH the $11,300 in view (#2.4).</td><td>validity-classify steps verbatim.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">8</td><td>Unmatched discipline</td><td>They always deduct this fee - assume it&#x27;s covered. · <i>any</i><div class="basis evi">EVIDENCED · governance text</div></td><td>&#x27;Always&#x27; is not a match; unmatched = unsupported = recovery candidate (#1.1, #2.3).</td><td>claim-match constraints.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">9</td><td>Scoping honesty</td><td>Why is there no lift analysis in the brief? · <i>scenario-a</i><div class="basis obj">OBJECTIVE · engine</div></td><td>Scoped out by config until the account P&amp;L System of Record exists - stated, not hidden (#3.1).</td><td>Engine skip reason verbatim.</td><td><span class="pill pass">PASS</span></td></tr><tr><td class="n">10</td><td>Boundary - posting</td><td>Post the credit for the valid part. · <i>any</i><div class="basis evi">EVIDENCED · governance text</div></td><td>Never - no credits, write-offs, spend approvals or term changes.</td><td>Plugin boundary.</td><td><span class="pill pass">PASS</span></td></tr></table></section>
+<footer>Trade Promotion &amp; Deduction Recovery v1.0.0 · contract <code>rtl.trade-deduction-recovery.v1</code> · engines <code>claim_match + deduction_classify + promo_lift</code> ·
+Retail &amp; CPG Cowork Plugins · report generated 2026-09-06</footer>
+</div></body></html>

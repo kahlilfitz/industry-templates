@@ -1,0 +1,143 @@
+{
+  "contract_version": "rtl.consumer-insight-synthesis.v1",
+  "question": {
+    "text": "Strongest numbers on Gen-Z snacking growth in the UK for the board deck",
+    "market": "UK",
+    "topics": [
+      "gen-z",
+      "snacking"
+    ],
+    "recency_floor": "2023",
+    "use_case": "board",
+    "as_of_date": "2026-08-12"
+  },
+  "escalations": [
+    "CONTRADICTION on snacking_occasions_per_week: opposing directions across studies - both sides go in the brief, no midpoint smoothing (insight-rules.md #3.1)"
+  ],
+  "retrieved": [
+    {
+      "study_id": "STUDY-2308",
+      "title": "Better-for-you snacking 2023",
+      "market": "UK",
+      "period": "2023-Q3",
+      "topics": [
+        "gen-z",
+        "snacking",
+        "health"
+      ],
+      "metric": "snacking_occasions_per_week",
+      "value": 9.4,
+      "method": "online panel n=3900",
+      "relevance": 5,
+      "source": "engine:trend_compare",
+      "citation": "research index STUDY-2308 (#1.1)"
+    },
+    {
+      "study_id": "STUDY-2411",
+      "title": "Gen-Z snacking occasions UK/DE",
+      "market": "UK",
+      "period": "2025-Q4",
+      "topics": [
+        "gen-z",
+        "snacking"
+      ],
+      "metric": "snacking_occasions_per_week",
+      "value": 8.1,
+      "method": "online panel n=4200",
+      "relevance": 5,
+      "source": "engine:trend_compare",
+      "citation": "research index STUDY-2411 (#1.1)"
+    },
+    {
+      "study_id": "PANEL-2601",
+      "title": "UK convenience panel H1-26",
+      "market": "UK",
+      "period": "2026-H1",
+      "topics": [
+        "gen-z",
+        "snacking",
+        "convenience"
+      ],
+      "metric": "gen_z_penetration_pct",
+      "value": 61.0,
+      "method": "retail panel",
+      "relevance": 5,
+      "source": "engine:trend_compare",
+      "citation": "research index PANEL-2601 (#1.1)"
+    },
+    {
+      "study_id": "STUDY-2502",
+      "title": "Snacking tracker W1 2026",
+      "market": "UK",
+      "period": "2026-Q1",
+      "topics": [
+        "gen-z",
+        "snacking"
+      ],
+      "metric": "snacking_occasions_per_week",
+      "value": 8.9,
+      "method": "in-home diary n=1800",
+      "relevance": 5,
+      "source": "engine:trend_compare",
+      "citation": "research index STUDY-2502 (#1.1)"
+    }
+  ],
+  "trends": [
+    {
+      "metric": "snacking_occasions_per_week",
+      "market": "UK",
+      "from": {
+        "study": "STUDY-2308",
+        "period": "2023-Q3",
+        "value": 9.4
+      },
+      "to": {
+        "study": "STUDY-2411",
+        "period": "2025-Q4",
+        "value": 8.1
+      },
+      "delta": -1.3,
+      "direction": "down",
+      "source": "engine:trend_compare",
+      "citation": "STUDY-2308 vs STUDY-2411 (#2.1)"
+    },
+    {
+      "metric": "snacking_occasions_per_week",
+      "market": "UK",
+      "from": {
+        "study": "STUDY-2411",
+        "period": "2025-Q4",
+        "value": 8.1
+      },
+      "to": {
+        "study": "STUDY-2502",
+        "period": "2026-Q1",
+        "value": 8.9
+      },
+      "delta": 0.8,
+      "direction": "up",
+      "source": "engine:trend_compare",
+      "citation": "STUDY-2411 vs STUDY-2502 (#2.1)"
+    }
+  ],
+  "contradictions": [
+    {
+      "metric": "snacking_occasions_per_week",
+      "market": "UK",
+      "detail": "snacking_occasions_per_week moves BOTH directions across periods: STUDY-2308->STUDY-2411 down (-1.3); STUDY-2411->STUDY-2502 up (+0.8)",
+      "methods": [
+        "online panel n=3900",
+        "online panel n=4200",
+        "in-home diary n=1800"
+      ],
+      "source": "engine:trend_compare",
+      "citation": "both presented with dates and methods (#3.1)"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "trend_compare/1.0"
+    ],
+    "generated_at": "2026-09-06T23:37:05+00:00"
+  }
+}

@@ -1,0 +1,5 @@
+From: purchasing@northwindfoods.example  2026-08-10 11:05
+Subject: URGENT PO-NW-88160 - need on today's truck
+Hi - rush order attached, our system printed it a bit rough, sorry. 500 of the CHOCV
+choc bars at the 54.90 price like last time (pretty sure we had a deal). Truck leaves
+at 2pm - can you just key it straight in? You know us, we order every week.
