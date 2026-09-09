@@ -46,7 +46,7 @@ See [Build plugins for Copilot Cowork](https://learn.microsoft.com/en-us/microso
 
 ## Test evidence
 
-A test report and sample prompt set are kept with the source, in [`submissions/trade-promotion-deduction-recovery/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/trade-promotion-deduction-recovery/tests).
+A test report and sample prompt set are kept with the source, in [`submissions/retail-and-cpg/trade-promotion-deduction-recovery/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/retail-and-cpg/trade-promotion-deduction-recovery/tests).
 
 ## Before you use it on real work
 

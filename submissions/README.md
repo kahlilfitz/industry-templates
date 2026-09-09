@@ -4,12 +4,12 @@ This folder is the **only** place a contributor edits. Everything the site publi
 `src/content/templates/`, `src/content/guides/` and `public/bundles/` — is generated from here
 by [`scripts/import-submissions.ts`](../scripts/import-submissions.ts).
 
-Start by copying [`_template/`](_template) to `submissions/<your-slug>/`.
+Start by copying [`_template/`](_template) to `submissions/<industry>/<your-slug>/`. The industry folder must match `metadata.json`'s `industry` — the importer checks.
 
 ## Anatomy of a submission
 
 ```
-submissions/<slug>/
+submissions/<industry>/<slug>/
 ├── metadata.json                  # catalog details — NEVER bundled
 ├── README.md                      # the detail page's main content — NEVER bundled
 ├── tests/                         # test report, sample prompts — NEVER bundled

@@ -46,7 +46,7 @@ See [Build plugins for Copilot Cowork](https://learn.microsoft.com/en-us/microso
 
 ## Test evidence
 
-A test report and sample prompt set are kept with the source, in [`submissions/safety-incident/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/safety-incident/tests).
+A test report and sample prompt set are kept with the source, in [`submissions/manufacturing/safety-incident/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/manufacturing/safety-incident/tests).
 
 ## Before you use it on real work
 

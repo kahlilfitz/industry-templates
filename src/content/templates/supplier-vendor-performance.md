@@ -46,7 +46,7 @@ See [Build plugins for Copilot Cowork](https://learn.microsoft.com/en-us/microso
 
 ## Test evidence
 
-A test report and sample prompt set are kept with the source, in [`submissions/supplier-vendor-performance/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/supplier-vendor-performance/tests).
+A test report and sample prompt set are kept with the source, in [`submissions/retail-and-cpg/supplier-vendor-performance/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/retail-and-cpg/supplier-vendor-performance/tests).
 
 ## Before you use it on real work
 

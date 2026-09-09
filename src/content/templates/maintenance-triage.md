@@ -47,7 +47,7 @@ See [Build plugins for Copilot Cowork](https://learn.microsoft.com/en-us/microso
 
 ## Test evidence
 
-A test report and sample prompt set are kept with the source, in [`submissions/maintenance-triage/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/maintenance-triage/tests).
+A test report and sample prompt set are kept with the source, in [`submissions/manufacturing/maintenance-triage/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/manufacturing/maintenance-triage/tests).
 
 ## Before you use it on real work
 

@@ -4,17 +4,17 @@ Thanks for helping grow the **Industry Templates** gallery. A *template* is a re
 that teaches an AI agent to do a specific job in a specific industry — targeting one or more of
 **Cowork**, **Copilot Studio** and **Scout**.
 
-You contribute by adding **one submission to the [`submissions/`](submissions/) folder** and
+You contribute by adding **one submission under [`submissions/<industry>/`](submissions/)** and
 opening a pull request. You never edit `src/content/` or `public/bundles/` directly — CI
 validates your metadata and generates the published page and the download package for you.
 
 ## The submission shape
 
-Every submission is a `submissions/<slug>/` folder: a `metadata.json` sidecar, an optional
+Every submission is a `submissions/<industry>/<slug>/` folder: a `metadata.json` sidecar, an optional
 `README.md`, optional `tests/`, and the **unpacked package** itself.
 
 ```
-submissions/<slug>/
+submissions/<industry>/<slug>/
 ├── metadata.json            # catalog details (sidecar — never bundled)
 ├── README.md                # optional — becomes the page's main content (never bundled)
 ├── tests/                   # optional — test report, sample prompts (never bundled)
@@ -32,7 +32,7 @@ submissions/<slug>/
 ```
 
 Copy [`submissions/_template/`](submissions/_template) to get started. The `<slug>` is the
-folder name — lowercase and hyphenated, e.g. `quality-inspection` → `/templates/quality-inspection`.
+leaf folder name — lowercase and hyphenated, e.g. `quality-inspection` → `/templates/quality-inspection`. The industry folder above it must match `metadata.json`'s `industry` (`Retail & CPG` → `retail-and-cpg`); the importer fails the build if they disagree.
 
 > **A submission holds two kinds of file.** Everything **agent-facing** is bundled into the
 > download verbatim — the bundle *is* the package the agent loads. The **human-facing** files

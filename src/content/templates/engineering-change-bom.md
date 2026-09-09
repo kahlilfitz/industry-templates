@@ -44,7 +44,7 @@ See [Build plugins for Copilot Cowork](https://learn.microsoft.com/en-us/microso
 
 ## Test evidence
 
-A test report and sample prompt set are kept with the source, in [`submissions/engineering-change-bom/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/engineering-change-bom/tests).
+A test report and sample prompt set are kept with the source, in [`submissions/manufacturing/engineering-change-bom/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/manufacturing/engineering-change-bom/tests).
 
 ## Before you use it on real work
 

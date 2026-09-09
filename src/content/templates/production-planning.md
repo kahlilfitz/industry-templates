@@ -44,7 +44,7 @@ See [Build plugins for Copilot Cowork](https://learn.microsoft.com/en-us/microso
 
 ## Test evidence
 
-A test report and sample prompt set are kept with the source, in [`submissions/production-planning/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/production-planning/tests).
+A test report and sample prompt set are kept with the source, in [`submissions/manufacturing/production-planning/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/manufacturing/production-planning/tests).
 
 ## Before you use it on real work
 

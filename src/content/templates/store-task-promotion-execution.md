@@ -46,7 +46,7 @@ See [Build plugins for Copilot Cowork](https://learn.microsoft.com/en-us/microso
 
 ## Test evidence
 
-A test report and sample prompt set are kept with the source, in [`submissions/store-task-promotion-execution/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/store-task-promotion-execution/tests).
+A test report and sample prompt set are kept with the source, in [`submissions/retail-and-cpg/store-task-promotion-execution/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/retail-and-cpg/store-task-promotion-execution/tests).
 
 ## Before you use it on real work
 

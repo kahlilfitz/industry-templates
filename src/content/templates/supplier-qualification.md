@@ -44,7 +44,7 @@ See [Build plugins for Copilot Cowork](https://learn.microsoft.com/en-us/microso
 
 ## Test evidence
 
-A test report and sample prompt set are kept with the source, in [`submissions/supplier-qualification/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/supplier-qualification/tests).
+A test report and sample prompt set are kept with the source, in [`submissions/manufacturing/supplier-qualification/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/manufacturing/supplier-qualification/tests).
 
 ## Before you use it on real work
 

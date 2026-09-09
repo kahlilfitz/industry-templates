@@ -39,31 +39,31 @@ does not write back to a system of record.
 
 | Template | What it does |
 |----------|--------------|
-| [Quality Inspection & Nonconformance](submissions/quality-inspection) | Clear an inspection lot; draft the NCR |
-| [Maintenance Triage](submissions/maintenance-triage) | Rank failure modes; prioritise by criticality |
-| [Work Order Assistant](submissions/work-order-assist) | Similar past work + parts readiness in one place |
-| [Safety Incident Assist](submissions/safety-incident) | Classify recordability; route with the clocks attached |
-| [Supplier Disruption Assist](submissions/supplier-disruption) | Map a shortage through BOM where-used; recommend mitigation |
-| [Quality Incident & CAPA](submissions/quality-incident-capa) | NCR → root cause → CAPA → closure readiness |
-| [Production Planning](submissions/production-planning) | Capacity, materials, changeover-optimised sequence |
-| [Engineering Change & BOM](submissions/engineering-change-bom) | Where-used impact; interface violations; draft the ECN |
-| [Supplier Qualification](submissions/supplier-qualification) | Score risk; compare to AVL; draft the memo |
-| [Audit Readiness](submissions/audit-readiness) | Clause mapping, evidence gaps, readiness pack |
+| [Quality Inspection & Nonconformance](submissions/manufacturing/quality-inspection) | Clear an inspection lot; draft the NCR |
+| [Maintenance Triage](submissions/manufacturing/maintenance-triage) | Rank failure modes; prioritise by criticality |
+| [Work Order Assistant](submissions/manufacturing/work-order-assist) | Similar past work + parts readiness in one place |
+| [Safety Incident Assist](submissions/manufacturing/safety-incident) | Classify recordability; route with the clocks attached |
+| [Supplier Disruption Assist](submissions/manufacturing/supplier-disruption) | Map a shortage through BOM where-used; recommend mitigation |
+| [Quality Incident & CAPA](submissions/manufacturing/quality-incident-capa) | NCR → root cause → CAPA → closure readiness |
+| [Production Planning](submissions/manufacturing/production-planning) | Capacity, materials, changeover-optimised sequence |
+| [Engineering Change & BOM](submissions/manufacturing/engineering-change-bom) | Where-used impact; interface violations; draft the ECN |
+| [Supplier Qualification](submissions/manufacturing/supplier-qualification) | Score risk; compare to AVL; draft the memo |
+| [Audit Readiness](submissions/manufacturing/audit-readiness) | Clause mapping, evidence gaps, readiness pack |
 
 ### Retail & CPG
 
 | Template | Side | What it does |
 |----------|------|--------------|
-| [Store Associate Assist](submissions/store-associate-assist) | Retailer | The associate's cited answer on the shop floor |
-| [Store Task & Promotion Execution](submissions/store-task-promotion-execution) | Retailer | Campaign pack → store-specific readiness plan before launch |
-| [Returns & Refund Case](submissions/returns-refund-case) | Retailer | Policy-cited eligibility; fraud signals surfaced, not adjudicated |
-| [Product Content & Catalog Enrichment](submissions/product-content-catalog-enrichment) | Retailer | Normalise attributes, score completeness, check regulated claims |
-| [Customer Service & Order Support](submissions/customer-service-order-support) | Retailer | Classify intent, assemble context, draft or escalate |
-| [Supplier & Vendor Performance Review](submissions/supplier-vendor-performance) | Retailer | OTIF scorecard, issue clusters, corrective action request |
-| [Order Intake & O2C Exception](submissions/order-intake-o2c-exception) | Retailer | Validate unstructured orders; route exceptions with corrections |
-| [Retail Execution & Perfect Store](submissions/retail-execution-perfect-store) | CPG | Pre-call plan; gaps ranked by revenue, not count |
-| [Trade Promotion & Deduction Recovery](submissions/trade-promotion-deduction-recovery) | CPG | Match claims to terms; quantify the disputable amount |
-| [Consumer & Market Insight Synthesis](submissions/consumer-market-insight-synthesis) | CPG | Reuse prior research; flag contradictions; check usage rights |
+| [Store Associate Assist](submissions/retail-and-cpg/store-associate-assist) | Retailer | The associate's cited answer on the shop floor |
+| [Store Task & Promotion Execution](submissions/retail-and-cpg/store-task-promotion-execution) | Retailer | Campaign pack → store-specific readiness plan before launch |
+| [Returns & Refund Case](submissions/retail-and-cpg/returns-refund-case) | Retailer | Policy-cited eligibility; fraud signals surfaced, not adjudicated |
+| [Product Content & Catalog Enrichment](submissions/retail-and-cpg/product-content-catalog-enrichment) | Retailer | Normalise attributes, score completeness, check regulated claims |
+| [Customer Service & Order Support](submissions/retail-and-cpg/customer-service-order-support) | Retailer | Classify intent, assemble context, draft or escalate |
+| [Supplier & Vendor Performance Review](submissions/retail-and-cpg/supplier-vendor-performance) | Retailer | OTIF scorecard, issue clusters, corrective action request |
+| [Order Intake & O2C Exception](submissions/retail-and-cpg/order-intake-o2c-exception) | Retailer | Validate unstructured orders; route exceptions with corrections |
+| [Retail Execution & Perfect Store](submissions/retail-and-cpg/retail-execution-perfect-store) | CPG | Pre-call plan; gaps ranked by revenue, not count |
+| [Trade Promotion & Deduction Recovery](submissions/retail-and-cpg/trade-promotion-deduction-recovery) | CPG | Match claims to terms; quantify the disputable amount |
+| [Consumer & Market Insight Synthesis](submissions/retail-and-cpg/consumer-market-insight-synthesis) | CPG | Reuse prior research; flag contradictions; check usage rights |
 
 ## The skill catalog
 
@@ -94,7 +94,7 @@ The branch is regenerated from `main` on each deploy. Never edit it by hand.
 ## Repository layout
 
 ```
-submissions/<slug>/          ← the only folder contributors touch
+submissions/<industry>/<slug>/   ← the only folder contributors touch
 ├── metadata.json            ← catalog details (sidecar, never bundled)
 ├── README.md                ← the human-facing page content (never bundled)
 ├── .claude-plugin/plugin.json

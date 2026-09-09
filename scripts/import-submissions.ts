@@ -1,7 +1,7 @@
 /**
  * Import `submissions/` into the published gallery.
  *
- * Contributors only ever touch `submissions/<slug>/`. This script is the single
+ * Contributors only ever touch `submissions/<industry>/<slug>/`. This script is the single
  * place that turns a submission into the two generated artifacts the site is
  * built from:
  *
@@ -75,6 +75,11 @@ function resolveGithub(
   return undefined;
 }
 
+/** The folder an industry's submissions live in: "Retail & CPG" -> "retail-and-cpg". */
+function industryFolder(industry: string): string {
+  return industry.toLowerCase().replace(/ & /g, "-and-").replace(/\s+/g, "-");
+}
+
 function yamlScalar(value: string): string {
   return /^[\w][\w .\-/()&,']*$/.test(value) ? value : JSON.stringify(value);
 }
@@ -124,7 +129,7 @@ function readPluginSkills(dir: string): SkillEntry[] {
  * when it has one, and used on its own when it doesn't.
  */
 function standardSections(
-  slug: string,
+  repoPath: string,
   skills: SkillEntry[],
   hasDemoData: boolean,
   hasTests: boolean,
@@ -163,7 +168,7 @@ function standardSections(
     lines.push(
       "## Test evidence",
       "",
-      `A test report and sample prompt set are kept with the source, in [\`submissions/${slug}/tests/\`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/${slug}/tests).`,
+      `A test report and sample prompt set are kept with the source, in [\`submissions/${repoPath}/tests/\`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/${repoPath}/tests).`,
       "",
     );
   }
@@ -246,7 +251,7 @@ function catalogOutputDir(): string | undefined {
 
 /** The generated page body: catalog summary, package callout, then boilerplate. */
 function buildBody(
-  slug: string,
+  repoPath: string,
   meta: Record<string, unknown>,
   skills: SkillEntry[],
   hasDemoData: boolean,
@@ -257,7 +262,7 @@ function buildBody(
     "",
     `> **${meta.industry} template.** This is a Microsoft 365 Copilot **Cowork** plugin package — a \`.zip\` bundling the skills, rules, and contracts below.`,
     "",
-    standardSections(slug, skills, hasDemoData, hasTests),
+    standardSections(repoPath, skills, hasDemoData, hasTests),
   ].join("\n");
 }
 
@@ -267,10 +272,22 @@ function main() {
     process.exit(1);
   }
 
-  const slugs = readdirSync(SUBMISSIONS)
-    .filter((name) => !name.startsWith("_") && !name.startsWith("."))
+  // Submissions are filed as `submissions/<industry>/<slug>/`. The industry
+  // folder is for humans reading the repo — the published industry still comes
+  // from metadata.json — so discovery walks two levels and everything
+  // downstream keys on the leaf slug exactly as before.
+  const isEntry = (name: string) => !name.startsWith("_") && !name.startsWith(".");
+  const entries = readdirSync(SUBMISSIONS)
+    .filter(isEntry)
     .filter((name) => statSync(join(SUBMISSIONS, name)).isDirectory())
-    .sort();
+    .sort()
+    .flatMap((industryDir) =>
+      readdirSync(join(SUBMISSIONS, industryDir))
+        .filter(isEntry)
+        .filter((slug) => statSync(join(SUBMISSIONS, industryDir, slug)).isDirectory())
+        .sort()
+        .map((slug) => ({ industryDir, slug })),
+    );
 
   const catalogDir = CHECK_ONLY ? undefined : catalogOutputDir();
 
@@ -289,13 +306,13 @@ function main() {
 
   const catalogSkills: string[] = [];
 
-  for (const slug of slugs) {
+  for (const { industryDir, slug } of entries) {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
       fail(slug, "folder name must be lowercase and hyphenated (e.g. quality-inspection)");
       continue;
     }
 
-    const dir = join(SUBMISSIONS, slug);
+    const dir = join(SUBMISSIONS, industryDir, slug);
     const metaPath = join(dir, "metadata.json");
     if (!existsSync(metaPath)) {
       fail(slug, "missing metadata.json");
@@ -369,6 +386,19 @@ function main() {
     }
     const d = parsed.data;
 
+    // The industry now appears twice: as the folder a submission sits in, and as
+    // `metadata.json`'s `industry`, which is what the site actually publishes.
+    // Only the metadata is authoritative — this keeps the folder from drifting
+    // away from it and quietly filing a template under the wrong heading.
+    if (industryFolder(d.industry) !== industryDir) {
+      fail(
+        slug,
+        `filed under submissions/${industryDir}/ but metadata.json says "${d.industry}" ` +
+          `— move it to submissions/${industryFolder(d.industry)}/ or fix the metadata`,
+      );
+      continue;
+    }
+
     const hasDemoData = existsSync(join(dir, "demo-data"));
     const hasTests = existsSync(join(dir, "tests"));
 
@@ -420,7 +450,8 @@ function main() {
     if (d.featured) fm.push("featured: true");
     fm.push("---", "");
 
-    const body = buildBody(slug, meta, skills, hasDemoData, hasTests);
+    const repoPath = `${industryDir}/${slug}`;
+    const body = buildBody(repoPath, meta, skills, hasDemoData, hasTests);
     writeFileSync(join(OUT_TEMPLATES, `${slug}.md`), fm.join("\n") + body, "utf8");
 
     // --- guide (human-facing README becomes the page's main content) ------

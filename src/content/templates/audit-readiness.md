@@ -44,7 +44,7 @@ See [Build plugins for Copilot Cowork](https://learn.microsoft.com/en-us/microso
 
 ## Test evidence
 
-A test report and sample prompt set are kept with the source, in [`submissions/audit-readiness/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/audit-readiness/tests).
+A test report and sample prompt set are kept with the source, in [`submissions/manufacturing/audit-readiness/tests/`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/manufacturing/audit-readiness/tests).
 
 ## Before you use it on real work
 
