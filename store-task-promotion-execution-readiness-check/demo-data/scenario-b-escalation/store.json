@@ -1,0 +1,4 @@
+{ "store_id": "ST-0781", "format": "small", "cluster": "suburban-standard",
+  "fixtures": ["front-window"],
+  "received_assets": ["SIGN-KIT-B", "POG-EC-19"],
+  "completed_tasks": ["hang-front-banner"] }

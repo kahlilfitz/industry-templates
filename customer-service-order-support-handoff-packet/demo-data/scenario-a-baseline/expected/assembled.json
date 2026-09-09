@@ -1,0 +1,45 @@
+{
+  "contract_version": "rtl.customer-service-order-support.v1",
+  "inquiry": {
+    "text": "Hi - where is my order 77812? The tracking hasn't updated since Tuesday.",
+    "channel": "chat",
+    "customer_id": "CUST-3321",
+    "requests_goodwill": false
+  },
+  "escalations": [],
+  "intent": {
+    "category": "wismo",
+    "confidence": 0.9,
+    "source": "engine:intent_classify",
+    "citation": "intent taxonomy (config/service-config.json)"
+  },
+  "provenance": {
+    "engines": [
+      "intent_classify/1.0",
+      "context_assemble/1.0"
+    ],
+    "generated_at": "2026-09-06T23:27:28+00:00"
+  },
+  "context": {
+    "order": {
+      "order_id": "ORD-77812",
+      "value": 64.0,
+      "status": "shipped",
+      "eta": "2026-08-08"
+    },
+    "carrier": {
+      "status": "in_transit",
+      "last_scan": "2026-08-04 lineal hub",
+      "delivered_on": null
+    },
+    "loyalty": {
+      "tier": "silver"
+    },
+    "contradictions": [],
+    "resolution_path": "answer_from_records",
+    "goodwill_eligible": false,
+    "confidence": 0.92,
+    "source": "engine:context_assemble",
+    "citation": "OMS/carrier/loyalty extracts; service policy SVC-DNR-2 (config/service-config.json)"
+  }
+}

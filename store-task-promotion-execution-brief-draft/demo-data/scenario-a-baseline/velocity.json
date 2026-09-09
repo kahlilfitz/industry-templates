@@ -1,0 +1,4 @@
+{ "GTIN-1001": {"weekly_units": 120, "promo_price": 4.99}, "GTIN-1002": {"weekly_units": 260, "promo_price": 7.49},
+  "GTIN-1003": {"weekly_units": 45, "promo_price": 2.99},
+  "GTIN-2001": {"weekly_units": 90, "promo_price": 12.99}, "GTIN-2002": {"weekly_units": 340, "promo_price": 8.99},
+  "GTIN-2003": {"weekly_units": 60, "promo_price": 1.99}, "GTIN-2004": {"weekly_units": 30, "promo_price": 3.49} }

@@ -1,0 +1,84 @@
+{
+  "contract_version": "rtl.order-intake-o2c.v1",
+  "order_ref": "PO-NW-88160",
+  "customer": {
+    "id": "CUST-NW-01",
+    "name": "Northwind Foods"
+  },
+  "lines": [
+    {
+      "line_no": 1,
+      "customer_sku": "CHOCV",
+      "qty": 500,
+      "uom": "EA",
+      "unit_price": 54.9,
+      "promo_ref": null
+    }
+  ],
+  "escalations": [
+    "6 validation issue(s) - order held at action level L2; creation stays human-approved (o2c-rules.md #5.1)"
+  ],
+  "validation": {
+    "line_results": [
+      {
+        "line": 1,
+        "customer_sku": "CHOCV",
+        "resolved_sku": null,
+        "issues": [
+          {
+            "code": "AMBIGUOUS_SKU",
+            "detail": "alias 'CHOCV' resolves to ['SKU-CH-500V', 'SKU-CH-500'] (o2c-rules.md #1.1)"
+          },
+          {
+            "code": "ANOMALY_BASIS",
+            "detail": "anomaly checks below use historical candidate SKU-CH-500 pending product confirmation"
+          },
+          {
+            "code": "UOM_ANOMALY",
+            "detail": "ordered 500 EA; customer always orders CS24 (#2.1)"
+          },
+          {
+            "code": "QTY_ANOMALY",
+            "detail": "qty 500 > 4.0x typical 40 (#2.1)"
+          },
+          {
+            "code": "PRICE_DEVIATION",
+            "detail": "PO price 54.9 vs list 62.4 (12.0% dev > 5.0%) with no promo reference (#3.1)"
+          }
+        ],
+        "source": "engine:order_validate",
+        "citation": "masters + config/o2c-config.json (customer-promoted action level; L2 = exceptions routed, creation human-approved)"
+      },
+      {
+        "line": 0,
+        "customer_sku": "-",
+        "resolved_sku": null,
+        "issues": [
+          {
+            "code": "CREDIT_REVIEW",
+            "detail": "exposure 109450.0 > limit 100000 - queue for credit review (#4.1)"
+          }
+        ],
+        "source": "engine:order_validate",
+        "citation": "credit master"
+      }
+    ],
+    "order_status": "exceptions",
+    "credit_check": {
+      "exposure_after": 109450.0,
+      "limit": 100000,
+      "within_limit": false,
+      "source": "engine:order_validate",
+      "citation": "credit master (#4.1)"
+    },
+    "confidence": 0.95,
+    "source": "engine:order_validate",
+    "citation": "config/o2c-config.json (customer-promoted action level; L2 = exceptions routed, creation human-approved)"
+  },
+  "provenance": {
+    "engines": [
+      "order_validate/1.0"
+    ],
+    "generated_at": "2026-09-06T23:31:31+00:00"
+  }
+}

@@ -1,0 +1,4 @@
+[ {"type": "late_delivery", "lane": "DC-North", "record_id": "GR-1001"},
+  {"type": "late_delivery", "lane": "DC-North", "record_id": "GR-1044"},
+  {"type": "late_delivery", "lane": "DC-North", "record_id": "GR-1092"},
+  {"type": "label_error", "lane": "DC-South", "record_id": "GR-1120"} ]

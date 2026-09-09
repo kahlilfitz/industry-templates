@@ -1,0 +1,5 @@
+{ "contract_version": "rtl.order-intake-o2c.v1", "order_ref": "PO-NW-88121",
+  "customer": {"id": "CUST-NW-01", "name": "Northwind Foods"},
+  "lines": [ {"line_no": 1, "customer_sku": "CHOC500", "qty": 40, "uom": "CS24", "unit_price": 62.4, "promo_ref": null},
+             {"line_no": 2, "customer_sku": "OATB12", "qty": 20, "uom": "CS12", "unit_price": 28.8, "promo_ref": null} ],
+  "escalations": [] }

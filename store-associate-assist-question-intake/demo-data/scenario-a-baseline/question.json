@@ -1,0 +1,6 @@
+{ "contract_version": "rtl.store-associate-assist.v1",
+  "question": {"text": "Customer wants to return an unworn jacket bought 12 days ago with receipt - can she? Also she is comparing the two coffee makers, GTIN-00012345678905 vs GTIN-00098765432102, what's the difference?",
+    "topic": "return + compare", "asked_on": "2026-08-05", "sku": "GTIN-00012345678905",
+    "compare_skus": ["GTIN-00012345678905", "GTIN-00098765432102"]},
+  "store_context": {"store_id": "ST-0214", "cluster": "suburban-standard", "department": "home"},
+  "escalations": [] }

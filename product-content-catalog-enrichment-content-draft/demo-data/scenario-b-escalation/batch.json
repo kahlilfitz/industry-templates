@@ -1,0 +1,6 @@
+{ "contract_version": "rtl.product-content-enrichment.v1", "batch_id": "ENR-2026-0157",
+  "supplier": "Vantage Consumer Brands", "channel": "marketplace",
+  "skus": [
+    {"gtin": "00055577788813", "row": 2, "supplier_fields": {"Item Name": "PureShield Cutting Board", "Colour": "white", "Material": "HDPE", "Country": "VN", "Net Wt": 950, "Description": "Antibacterial surface kills 99.9% of germs! Biodegradable and eco-friendly."}},
+    {"gtin": "00055577788812", "row": 3, "supplier_fields": {"Item Name": "PureShield Sponge 3-pack", "Colour": "green", "Description": "Compostable scrubbing power."}}
+  ], "escalations": [] }

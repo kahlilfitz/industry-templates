@@ -1,0 +1,5 @@
+{ "contract_version": "rtl.store-associate-assist.v1",
+  "question": {"text": "Customer shows the PulseBeat ANC headphones $40 cheaper from an Amazon Marketplace seller and wants a price match, plus the headphone bundle promo - can I just match it? My old manager always did.",
+    "topic": "price match + promo", "asked_on": "2026-08-03", "sku": "GTIN-00055577788812", "compare_skus": []},
+  "store_context": {"store_id": "ST-0214", "cluster": "suburban-standard", "department": "electronics"},
+  "escalations": [] }

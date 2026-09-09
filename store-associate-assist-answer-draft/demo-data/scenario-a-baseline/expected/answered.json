@@ -1,0 +1,91 @@
+{
+  "contract_version": "rtl.store-associate-assist.v1",
+  "question": {
+    "text": "Customer wants to return an unworn jacket bought 12 days ago with receipt - can she? Also she is comparing the two coffee makers, GTIN-00012345678905 vs GTIN-00098765432102, what's the difference?",
+    "topic": "return + compare",
+    "asked_on": "2026-08-05",
+    "sku": "GTIN-00012345678905",
+    "compare_skus": [
+      "GTIN-00012345678905",
+      "GTIN-00098765432102"
+    ]
+  },
+  "store_context": {
+    "store_id": "ST-0214",
+    "cluster": "suburban-standard",
+    "department": "home"
+  },
+  "escalations": [],
+  "policy_resolution": {
+    "topic": "returns.standard",
+    "applicable_clause": "RET-2.1",
+    "determination": "eligible_within_window",
+    "conditions": [
+      "Unworn/unused items with receipt returnable within 30 days (fashion) / 15 days (electronics)"
+    ],
+    "in_scope": true,
+    "confidence": 0.9,
+    "source": "engine:policy_resolve",
+    "citation": "policy clause RET-2.1"
+  },
+  "promo_check": {
+    "checked": true,
+    "eligible": true,
+    "reasons": [
+      "Coffee Week 20% off: window + cluster + SKU all match (#2.1)"
+    ],
+    "source": "engine:policy_resolve",
+    "citation": "promo pack P-3401",
+    "promo_id": "P-3401"
+  },
+  "provenance": {
+    "engines": [
+      "policy_resolve/1.0",
+      "product_compare/1.0"
+    ],
+    "generated_at": "2026-09-06T23:19:59+00:00"
+  },
+  "product_comparison": {
+    "skus": [
+      "GTIN-00012345678905",
+      "GTIN-00098765432102"
+    ],
+    "names": [
+      "BrewMaster 12-cup",
+      "AeroPress Go"
+    ],
+    "prices": [
+      89.99,
+      39.99
+    ],
+    "rows": [
+      {
+        "attribute": "capacity_cups",
+        "GTIN-00012345678905": 12,
+        "GTIN-00098765432102": 3,
+        "differs": true
+      },
+      {
+        "attribute": "carafe",
+        "GTIN-00012345678905": "glass",
+        "GTIN-00098765432102": null,
+        "differs": true
+      },
+      {
+        "attribute": "programmable",
+        "GTIN-00012345678905": true,
+        "GTIN-00098765432102": false,
+        "differs": true
+      },
+      {
+        "attribute": "warranty_months",
+        "GTIN-00012345678905": 24,
+        "GTIN-00098765432102": 12,
+        "differs": true
+      }
+    ],
+    "differences": 4,
+    "source": "engine:product_compare",
+    "citation": "PIM extract GTIN-00012345678905, GTIN-00098765432102 (assist-rules.md #3.1)"
+  }
+}

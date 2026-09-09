@@ -1,0 +1,53 @@
+{
+  "contract_version": "rtl.supplier-vendor-performance.v1",
+  "vendor": {
+    "name": "Meridian Home Goods"
+  },
+  "review_period": "FY26 Q1-Q3",
+  "escalations": [
+    "TREND FLAG: OTIF [94.0, 86.9, 81.0] across last 3 quarters (vendor-review-rules.md #1.2)"
+  ],
+  "scorecard": {
+    "quarters": [
+      {
+        "quarter": "FY26Q1",
+        "otif_pct": 94.0,
+        "defect_rate_pct": 0.9,
+        "dispute_rate_pct": 0.6,
+        "lines": 500,
+        "source": "engine:scorecard_roll",
+        "citation": "receipts vs PO dates, FY26Q1 (500 lines) (#1.1)"
+      },
+      {
+        "quarter": "FY26Q2",
+        "otif_pct": 86.9,
+        "defect_rate_pct": 1.4,
+        "dispute_rate_pct": 1.1,
+        "lines": 520,
+        "source": "engine:scorecard_roll",
+        "citation": "receipts vs PO dates, FY26Q2 (520 lines) (#1.1)"
+      },
+      {
+        "quarter": "FY26Q3",
+        "otif_pct": 81.0,
+        "defect_rate_pct": 1.6,
+        "dispute_rate_pct": 2.2,
+        "lines": 510,
+        "source": "engine:scorecard_roll",
+        "citation": "receipts vs PO dates, FY26Q3 (510 lines) (#1.1)"
+      }
+    ],
+    "trend_flags": [
+      "OTIF declining 3 consecutive quarters: [94.0, 86.9, 81.0] (#1.2)"
+    ],
+    "confidence": 0.95,
+    "source": "engine:scorecard_roll",
+    "citation": "ERP PO/receipt/return/dispute extracts"
+  },
+  "provenance": {
+    "engines": [
+      "scorecard_roll/1.0"
+    ],
+    "generated_at": "2026-09-06T23:29:11+00:00"
+  }
+}

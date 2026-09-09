@@ -1,0 +1,9 @@
+{ "contract_version": "rtl.retail-execution-perfect-store.v1",
+  "outlet": {"id": "OUT-4471", "name": "QuickMart Central", "channel": "convenience", "cluster": "urban"},
+  "visit": {"date": "2026-08-11", "active_promo_skus": [],
+    "audit_answers": {
+      "MS-01": {"pass": true, "photo": "IMG-101.jpg"}, "MS-02": {"pass": true, "photo": "IMG-102.jpg"},
+      "MS-03": {"pass": false, "photo": "IMG-103.jpg", "note": "minis shelf empty"},
+      "SH-01": {"pass": true, "facings": 7}, "PR-01": {"pass": true, "photo": "IMG-104.jpg"},
+      "PP-01": {"pass": false, "note": "two tags outdated"} } },
+  "escalations": [] }

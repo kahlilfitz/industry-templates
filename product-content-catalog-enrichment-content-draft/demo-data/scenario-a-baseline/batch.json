@@ -1,0 +1,6 @@
+{ "contract_version": "rtl.product-content-enrichment.v1", "batch_id": "ENR-2026-0142",
+  "supplier": "HomeWares Direct", "channel": "own-site",
+  "skus": [
+    {"gtin": "00012345678905", "row": 2, "supplier_fields": {"Product Name": "BrewMaster 12-cup", "Colour": "black", "Material": "stainless/glass", "Description": "Dishwasher safe carafe, brews 12 cups fast.", "Warranty (mo)": 24}},
+    {"gtin": "00098765432105", "row": 3, "supplier_fields": {"Product Name": "AeroPress Go", "Material": "polypropylene", "Description": "Compact press for travel."}}
+  ], "escalations": [] }

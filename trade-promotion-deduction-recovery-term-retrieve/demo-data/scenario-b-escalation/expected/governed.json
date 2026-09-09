@@ -1,0 +1,88 @@
+{
+  "contract_version": "rtl.trade-deduction-recovery.v1",
+  "deduction_id": "DED-2026-3358",
+  "customer": "Summit Grocers",
+  "claims": [
+    {
+      "claim_id": "CL-1",
+      "type": "promo_allowance",
+      "period": "2026-06",
+      "claimed_amount": 21900.0,
+      "actual_volume_value": 182500.0,
+      "backup_doc": "SG-BKP-9012.pdf"
+    },
+    {
+      "claim_id": "CL-2",
+      "type": "compliance_penalty",
+      "period": "2026-06",
+      "claimed_amount": 4000.0,
+      "actual_volume_value": 0.0,
+      "backup_doc": null
+    }
+  ],
+  "escalations": [
+    "CL-2: UNMATCHED - no signed term for compliance_penalty 2026-06 (deduction-rules.md #1.1)",
+    "CL-1: claimed rate exceeds signed 8.0% - disputable 7300.0 with calculation shown (#2.2). Write-off is a human decision (#2.4)",
+    "promo_lift SKIPPED by scoping rule - account P&L foundation absent; deduction validity unaffected (#3.1)"
+  ],
+  "matches": [
+    {
+      "claim_id": "CL-1",
+      "term_id": "TT-PROMO-88",
+      "term": {
+        "term_id": "TT-PROMO-88",
+        "customer": "Summit Grocers",
+        "type": "promo_allowance",
+        "rate_pct": 8.0,
+        "period": "2026-06",
+        "signed": true,
+        "citation": "signed agreement TT-PROMO-88 (Jun 2026)"
+      },
+      "backup_present": true,
+      "source": "engine:claim_match",
+      "citation": "signed agreement TT-PROMO-88 (Jun 2026)"
+    },
+    {
+      "claim_id": "CL-2",
+      "term_id": null,
+      "term": null,
+      "backup_present": false,
+      "source": "engine:claim_match",
+      "citation": "no signed term/promotion matches customer+period+type (#1.1)"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "claim_match/1.0",
+      "deduction_classify/1.0",
+      "promo_lift/1.0"
+    ],
+    "generated_at": "2026-09-06T23:35:19+00:00"
+  },
+  "promo_lift": {
+    "skipped": true,
+    "reason": "Deployment scoped to deduction validity only until the account-level P&L System of Record exists (deduction-rules.md #3.1). Promotion lift stays out of configuration.",
+    "source": "engine:promo_lift",
+    "citation": "config/rgm-scoping.json; deduction-rules.md #3.1"
+  },
+  "validity": [
+    {
+      "claim_id": "CL-1",
+      "verdict": "partial",
+      "disputable_amount": 7300.0,
+      "calculation": "claimed 21900.0 - entitled 14600.0 (8.0% x 182500.0) = 7300.0",
+      "confidence": 0.9,
+      "source": "engine:deduction_classify",
+      "citation": "signed agreement TT-PROMO-88 (Jun 2026); deduction-rules.md #2.2"
+    },
+    {
+      "claim_id": "CL-2",
+      "verdict": "unsupported",
+      "disputable_amount": 4000.0,
+      "calculation": "fully disputable pending backup/term: no matching signed term (#2.3); no backup document (#2.3)",
+      "confidence": 0.9,
+      "source": "engine:deduction_classify",
+      "citation": "no signed term/promotion matches customer+period+type (#1.1); deduction-rules.md #2.3"
+    }
+  ]
+}
