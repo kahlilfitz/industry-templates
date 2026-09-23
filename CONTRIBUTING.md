@@ -46,7 +46,7 @@ leaf folder name — lowercase and hyphenated, e.g. `quality-inspection` → `/t
 |---------------|----------|-------|
 | `name`        | yes      | Display name shown in the gallery. |
 | `description` | yes      | The catalog summary on the card and at the top of the page. One human-friendly sentence. |
-| `industry`    | yes      | One of `Manufacturing`, `Retail & CPG`, `Financial Services`, `Healthcare`, `Energy`, `Public Sector`, `Cross-industry`. This is the gallery's primary facet. |
+| `industry`    | yes      | One of `Manufacturing`, `Retail & CPG`, `Financial Services`, `Healthcare`, `Energy`, `Public Sector`, `Professional Services`, `Cross-industry`. This is the gallery's primary facet. |
 | `platforms`   | yes      | One or more of `Cowork`, `Copilot Studio`, `Scout`. |
 | `tags`        | yes      | Lowercase tags for search and filtering. Don't repeat the industry here — it has its own filter. |
 | `author`      | yes      | Person or team who wrote the template. |

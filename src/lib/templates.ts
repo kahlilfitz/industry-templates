@@ -15,6 +15,11 @@ export const INDUSTRIES = [
   "Healthcare",
   "Energy",
   "Public Sector",
+  // Professional Services covers the engagement lifecycle shared by consulting,
+  // legal, accounting, audit and engineering firms: pursuit, mobilisation,
+  // delivery, commercial control and closeout. The portfolio is filed under one
+  // industry and split by lifecycle stage in the tags.
+  "Professional Services",
   "Cross-industry",
 ] as const;
 export type Industry = (typeof INDUSTRIES)[number];
@@ -38,6 +43,7 @@ export const INDUSTRY_COLORS: Record<Industry, string> = {
   Healthcare: "#d83b73",
   Energy: "#7f39fb",
   "Public Sector": "#5b8def",
+  "Professional Services": "#2e7d32",
   "Cross-industry": "#9aa0a6",
 };
 
