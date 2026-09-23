@@ -17,6 +17,17 @@ AFFILIATE_OWNERSHIP_THRESHOLD = 0.50  # conflicts-independence-rules.md #3.1
 NON_WAIVABLE_CATEGORIES = {
     "audit_independence_prohibited_non_audit_service"
 }  # conflicts-independence-rules.md #7.1,#10.2
+# Registers this engine actually reads. The scope attestation is derived from this set,
+# never copied from the input's own claim.  # conflicts-independence-rules.md #12.1
+COVERED_REGISTERS = (
+    "client_register",
+    "matter_register",
+    "adverse_party_register",
+    "independence_register",
+    "prior_clearance_decisions",
+)
+# Input keys that carry scope metadata rather than searchable records.
+METADATA_KEYS = {"registers_searched", "date_range", "as_of", "citation"}
 
 
 def parse_date(value):
@@ -57,6 +68,7 @@ def classify(resolved, registers):
     targets = target_entities(resolved.get("resolved_entities", []))
     hits = []
     escalations = list(resolved.get("escalations", []))
+    direct_adverse_entity_ids = set()
     hit_no = 1
 
     for matter in registers.get("matter_register", []):
@@ -65,6 +77,7 @@ def classify(resolved, registers):
         adverse_ids = set(matter.get("adverse_party_entity_ids", []))
         for entity_id in sorted(adverse_ids & set(targets)):
             target = targets[entity_id]
+            direct_adverse_entity_ids.add(entity_id)
             hits.append({
                 "hit_id": f"H{hit_no:03d}",
                 "register": "matter_register",
@@ -84,6 +97,35 @@ def classify(resolved, registers):
                 "rule": "conflicts-independence-rules.md #2.1,#3.1,#8.2,#10.1"
             })
             hit_no += 1
+
+    for adverse in registers.get("adverse_party_register", []):
+        entity_id = adverse.get("entity_id")
+        if entity_id not in targets or entity_id in direct_adverse_entity_ids:
+            continue
+        target = targets[entity_id]
+        matter_ref = adverse.get("matter_id")
+        hits.append({
+            "hit_id": f"H{hit_no:03d}",
+            "register": "adverse_party_register",
+            "record_id": adverse["adverse_record_id"],
+            "conflict_type": "adverse_party_register_listing",
+            "matched_entity": target["name"],
+            "matched_entity_id": entity_id,
+            "match_score": target["match_score"],
+            "relationship": (
+                f"{target['party_name']} family member {target['name']} is recorded on the adverse-party register"
+                + (f" in connection with matter {matter_ref}" if matter_ref else " with no live matter linked")
+            ),
+            "governing_rule": "adverse-party register listing",
+            "waiver_posture": "qrm_review_required; posture depends on the duty recorded against the listing",
+            "ethical_wall_recommendation": "wall_only_if_qrm_confirms_no_shared_confidential_information",
+            "required_action": "escalate_to_qrm_before_any_pursuit_commitment",
+            "confidence": min(0.92, target["match_score"]),
+            "source": ENGINE,
+            "citation": adverse["citation"],
+            "rule": "conflicts-independence-rules.md #2.1,#3.1,#12.3"
+        })
+        hit_no += 1
 
     for client in registers.get("client_register", []):
         entity_id = client.get("entity_id")
@@ -162,6 +204,23 @@ def classify(resolved, registers):
             })
             hit_no += 1
 
+    # Prior clearance decisions are surfaced as context only and never downgrade a hit.
+    # conflicts-independence-rules.md #12.4
+    prior_context = []
+    target_ids = set(targets)
+    for decision in registers.get("prior_clearance_decisions", []):
+        if decision.get("entity_id") not in target_ids:
+            continue
+        prior_context.append({
+            "decision_id": decision["decision_id"],
+            "entity_id": decision["entity_id"],
+            "summary": decision.get("summary", ""),
+            "effect": "non_controlling_context_only",
+            "source": ENGINE,
+            "citation": decision["citation"],
+            "rule": "conflicts-independence-rules.md #12.4"
+        })
+
     for hit in hits:
         if hit["confidence"] < CONFIDENCE_FLOOR:
             hit["required_action"] = "hold_for_human_review"
@@ -169,16 +228,42 @@ def classify(resolved, registers):
         if hit["conflict_type"] in NON_WAIVABLE_CATEGORIES:
             escalations.append(f"{hit['hit_id']}: non-waivable/prohibited-service category; model cannot downgrade (conflicts-independence-rules.md #10.2)")
 
+    # Scope attestation is derived from what this engine actually read, never from the
+    # input's own claim. An uncovered register forces human review.
+    # conflicts-independence-rules.md #12.1,#12.2
+    supplied = [k for k in registers if k not in METADATA_KEYS and isinstance(registers.get(k), list)]
+    searched = [r for r in COVERED_REGISTERS if r in supplied]
+    not_searched = sorted(r for r in supplied if r not in COVERED_REGISTERS)
+    for register_name in not_searched:
+        escalations.append(
+            f"scope: register '{register_name}' was supplied but is not covered by this engine; "
+            f"treat the search as incomplete (conflicts-independence-rules.md #12.2)"
+        )
+
     if hits:
         min_conf = min(h["confidence"] for h in hits)
         position = {
-            "position": "escalate_to_qrm" if min_conf >= CONFIDENCE_FLOOR else "hold_for_human_review",
+            "position": "escalate_to_qrm" if min_conf >= CONFIDENCE_FLOOR and not not_searched else "hold_for_human_review",
             "human_clearance_required": True,
             "draft_output": "escalation_packet",
             "summary": f"{len(hits)} hit(s) found; prepare escalation packet for human QRM review. This is not a clearance.",
             "confidence": round(min_conf, 4),
             "source": ENGINE,
             "citation": "conflicts-independence-rules.md #1.1,#9.1,#10.2,#11.1"
+        }
+    elif not_searched:
+        position = {
+            "position": "hold_for_human_review",
+            "human_clearance_required": True,
+            "draft_output": "escalation_packet",
+            "summary": (
+                "No hits found in the registers searched, but "
+                f"{len(not_searched)} supplied register(s) were not searched; the search is incomplete "
+                "and must not be read as a clean result."
+            ),
+            "confidence": 0.5,
+            "source": ENGINE,
+            "citation": "conflicts-independence-rules.md #11.2,#12.2"
         }
     else:
         position = {
@@ -192,13 +277,15 @@ def classify(resolved, registers):
         }
 
     scope = resolved.get("search_scope", {})
-    scope["registers_searched"] = registers.get("registers_searched", [])
+    scope["registers_searched"] = searched
+    scope["registers_not_searched"] = not_searched
     scope["date_range"] = registers.get("date_range", scope.get("date_range", {}))
     scope["source"] = ENGINE
     scope["citation"] = registers.get("citation", "register exports")
 
     resolved["search_scope"] = scope
     resolved["conflict_hits"] = hits
+    resolved["prior_clearance_context"] = prior_context
     resolved["precheck_position"] = position
     resolved["escalations"] = escalations
     resolved.setdefault("provenance", {}).setdefault("engines", []).append("conflict_classify/1.0")

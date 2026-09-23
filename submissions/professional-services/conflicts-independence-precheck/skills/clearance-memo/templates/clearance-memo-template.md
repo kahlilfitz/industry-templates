@@ -17,11 +17,14 @@ Produced by `party-intake` -> `entity-resolve` -> `register-search` -> `conflict
 
 Use only the engine language. If there are no hits, state: **"No hits found in the registers searched, subject to review."** Do not state "cleared", "approved", "no conflict" or "OK to proceed".
 
+If `search_scope.registers_not_searched` is non-empty, open this section with: **"Incomplete search - the registers listed below were supplied but not searched. This result must not be read as a clean pre-check."**
+
 ## 3. Search scope actually covered
 
 | Scope item | Value |
 |---|---|
 | Registers searched | {{search_scope.registers_searched}} |
+| Registers supplied but NOT searched | {{search_scope.registers_not_searched}} |
 | Date range | {{search_scope.date_range}} |
 | Entity variants tried | {{search_scope.entity_variants_by_party}} |
 | Corporate-family IDs included | {{search_scope.corporate_family_entity_ids}} |

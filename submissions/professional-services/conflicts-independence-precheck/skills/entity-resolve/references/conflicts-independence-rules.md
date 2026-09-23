@@ -45,3 +45,9 @@ Illustrative summaries for demo grounding only. This file does not reproduce bar
 ## 11. Output language
 11.1 Do not use "cleared", "approved", "no conflict" or "OK to proceed" in generated outputs.
 11.2 State search limits: registers searched, date range, entity variants, corporate-family scope and unresolved parties.
+
+## 12. Search-scope attestation
+12.1 The registers stated as searched must be the registers the engine actually read. The engine derives the attestation from its own coverage and never copies an unverified claim from the input.
+12.2 A register supplied in the input but not covered by the engine must be reported as not searched, and forces hold-for-human-review. A narrower search silently presented as complete is the primary false-negative risk in a pre-check.
+12.3 An adverse-party register listing is a hit in its own right, independent of any live matter, because the firm may hold a duty to a party it has recorded as adverse.
+12.4 Prior clearance decisions are non-controlling context only. They are surfaced for the human reviewer and must never downgrade, suppress or resolve a hit.

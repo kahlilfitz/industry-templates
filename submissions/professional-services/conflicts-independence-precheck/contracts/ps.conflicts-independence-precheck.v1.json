@@ -79,7 +79,8 @@
     "search_scope": {
       "type": "object",
       "properties": {
-        "registers_searched": { "type": "array", "items": { "type": "string" } },
+        "registers_searched": { "type": "array", "items": { "type": "string" }, "description": "Registers the engine actually read. Derived from engine coverage, never copied from the input claim." },
+        "registers_not_searched": { "type": "array", "items": { "type": "string" }, "description": "Registers supplied but not covered by the engine. Non-empty means the search is incomplete and the result must not be read as clean." },
         "date_range": { "type": "object" },
         "entity_variants_by_party": { "type": "object" },
         "corporate_family_entity_ids": { "type": "array", "items": { "type": "string" } },
@@ -107,6 +108,23 @@
           "ethical_wall_recommendation": { "type": "string" },
           "required_action": { "type": "string" },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" },
+          "rule": { "type": "string" }
+        }
+      }
+    },
+    "prior_clearance_context": {
+      "type": "array",
+      "description": "Prior clearance decisions for in-scope entities. Context for the human reviewer only; must never downgrade, suppress or resolve a hit.",
+      "items": {
+        "type": "object",
+        "required": ["decision_id", "entity_id", "effect", "source", "citation"],
+        "properties": {
+          "decision_id": { "type": "string" },
+          "entity_id": { "type": "string" },
+          "summary": { "type": "string" },
+          "effect": { "const": "non_controlling_context_only" },
           "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
           "citation": { "type": "string" },
           "rule": { "type": "string" }
