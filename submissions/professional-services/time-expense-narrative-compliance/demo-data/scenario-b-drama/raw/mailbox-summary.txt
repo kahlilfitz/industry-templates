@@ -1,0 +1,2 @@
+Mailbox content is off by default in config/signal-sources.json.
+Synthetic metadata-only demo note: client implementation questions were identified as a possible activity signal, but production use requires firm approval before mailbox metadata or content is enabled.

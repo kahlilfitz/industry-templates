@@ -1,0 +1,5 @@
+event_id,date,start,end,person,subject,attendees,engagement_id
+MTG-ORION-201,2026-09-14,10:00,11:30,Morgan Lee,billing controls kickoff meeting,Orion team; Morgan Lee; Priya Shah; Jordan Kim,ENG-SYN-042
+MTG-ORION-201,2026-09-14,10:00,11:30,Priya Shah,billing controls kickoff meeting,Orion team; Morgan Lee; Priya Shah; Jordan Kim,ENG-SYN-042
+MTG-ORION-201,2026-09-14,10:00,11:30,Jordan Kim,billing controls kickoff meeting,Orion team; Morgan Lee; Priya Shah; Jordan Kim,ENG-SYN-042
+INT-STAFF-7,2026-09-18,08:30,08:48,Morgan Lee,internal staffing coverage call,Morgan Lee; staffing lead,ENG-SYN-042

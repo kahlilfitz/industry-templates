@@ -1,0 +1,436 @@
+{
+  "contract_version": "ps.sow-drafting-scoping-notes.v1",
+  "generated_at": "2026-09-23T21:27:10+00:00",
+  "engagement": {
+    "pursuit_id": "PS-2026-0918",
+    "client_name": "Riverbend Field Services",
+    "project_name": "Scheduling Modernization SOW",
+    "lifecycle_stage": "Pursuit - Contracting",
+    "source": "connector:crm",
+    "citation": "raw/crm-pursuit-record.txt",
+    "confidence": 0.98
+  },
+  "scope_summary": "First-phase scheduling modernization covering process discovery, scheduling design, pilot backlog and enablement plan.",
+  "evidence": [
+    {
+      "key": "scope.problem",
+      "value": "dispatch scheduling needs improvement before year end",
+      "source": "skill:notes-ingest",
+      "citation": "raw/discovery-call-transcript.txt",
+      "confidence": 0.9
+    },
+    {
+      "key": "scope.processes",
+      "value": [
+        "dispatch scheduling",
+        "supervisor schedule review",
+        "pilot backlog"
+      ],
+      "source": "skill:notes-ingest",
+      "citation": "raw/discovery-call-transcript.txt",
+      "confidence": 0.88
+    },
+    {
+      "key": "scope.systems",
+      "value": [
+        "scheduling platform"
+      ],
+      "source": "skill:notes-ingest",
+      "citation": "raw/discovery-call-transcript.txt",
+      "confidence": 0.78
+    }
+  ],
+  "candidate_deliverables": [
+    {
+      "id": "deliv-discovery",
+      "text": "Process discovery summary for dispatch scheduling pain points and supervisor workflows.",
+      "citation": "raw/discovery-call-transcript.txt",
+      "confidence": 0.88
+    },
+    {
+      "id": "deliv-design",
+      "text": "Scheduling design options and recommended pilot workflow.",
+      "citation": "raw/discovery-call-transcript.txt",
+      "confidence": 0.86
+    },
+    {
+      "id": "deliv-backlog",
+      "text": "Pilot backlog and enablement plan for a later implementation phase.",
+      "citation": "raw/discovery-call-transcript.txt",
+      "confidence": 0.84
+    }
+  ],
+  "candidate_acceptance_criteria": [
+    {
+      "id": "acc-supervisor-says-usable",
+      "text": "Supervisors say the schedule looks usable.",
+      "citation": "raw/discovery-call-transcript.txt",
+      "confidence": 0.41
+    }
+  ],
+  "candidate_milestones": [
+    {
+      "id": "ms-go-live",
+      "name": "Target go-live",
+      "timing": "2026-12-15",
+      "basis_type": "verbal_only",
+      "citation": "raw/discovery-call-transcript.txt",
+      "confidence": 0.55
+    }
+  ],
+  "candidate_assumptions": [
+    {
+      "id": "asm-workshop-access",
+      "text": "Client will provide supervisor availability for discovery workshops.",
+      "citation": "raw/discovery-call-transcript.txt",
+      "confidence": 0.78
+    }
+  ],
+  "candidate_exclusions": [
+    {
+      "id": "exc-production-deployment",
+      "text": "Production deployment and post-go-live support are outside this first-phase drafting scope.",
+      "citation": "raw/discovery-call-transcript.txt",
+      "confidence": 0.76
+    }
+  ],
+  "prior_sow_terms": [
+    {
+      "family": "limitation_of_liability",
+      "summary": "Prior SOW caps provider liability at three times fees, carves data breach and confidentiality breach out of the cap, and permits indirect damages for data breach claims.",
+      "one_off_approval": true,
+      "client_specific": true,
+      "material_difference": "broader liability cap, uncapped carve-outs and indirect-damage exposure compared with approved library clause",
+      "source": "skill:notes-ingest",
+      "citation": "raw/prior-executed-sow-just-copy-this-one.md#Limitation of liability",
+      "confidence": 0.94
+    },
+    {
+      "family": "data_protection",
+      "summary": "Prior SOW provides uncapped indemnity for all data-protection losses, regulatory fines, third-party claims, investigation costs and remediation costs.",
+      "one_off_approval": true,
+      "client_specific": true,
+      "material_difference": "uncapped data-protection indemnity outside approved liability framework",
+      "source": "skill:notes-ingest",
+      "citation": "raw/prior-executed-sow-just-copy-this-one.md#Data protection indemnity",
+      "confidence": 0.95
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "scope_extract/1.0",
+      "clause_select/1.0"
+    ],
+    "demo_scenario": "scenario-b-drama",
+    "generated_at": "2026-09-23T21:27:10+00:00"
+  },
+  "scope": {
+    "summary": "First-phase scheduling modernization covering process discovery, scheduling design, pilot backlog and enablement plan.",
+    "deliverables": [
+      {
+        "id": "deliv-discovery",
+        "text": "Process discovery summary for dispatch scheduling pain points and supervisor workflows.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-transcript.txt",
+        "confidence": 0.88
+      },
+      {
+        "id": "deliv-design",
+        "text": "Scheduling design options and recommended pilot workflow.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-transcript.txt",
+        "confidence": 0.86
+      },
+      {
+        "id": "deliv-backlog",
+        "text": "Pilot backlog and enablement plan for a later implementation phase.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-transcript.txt",
+        "confidence": 0.84
+      }
+    ],
+    "milestones": [
+      {
+        "id": "ms-go-live",
+        "name": "Target go-live",
+        "timing": "2026-12-15",
+        "commitment_status": "planning_target_only",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-transcript.txt",
+        "confidence": 0.55
+      }
+    ],
+    "acceptance_criteria": [],
+    "assumptions": [
+      {
+        "id": "asm-acceptance-criteria",
+        "text": "Acceptance criteria will be confirmed in writing before the related deliverable is baselined.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "qrm-deviation-rules.md #4.2",
+        "confidence": 0.99
+      },
+      {
+        "id": "asm-acceptance-review_period",
+        "text": "The parties will agree the acceptance review period before issuing the SOW.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "qrm-deviation-rules.md #4.2",
+        "confidence": 0.99
+      },
+      {
+        "id": "asm-data-supplier",
+        "text": "The client will name an accountable owner for test data before build or validation activities begin.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "qrm-deviation-rules.md #4.2",
+        "confidence": 0.99
+      },
+      {
+        "id": "asm-data-quality_standard",
+        "text": "The client will provide test data that meets documented quality and privacy requirements.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "qrm-deviation-rules.md #4.2",
+        "confidence": 0.99
+      },
+      {
+        "id": "asm-ms-go-live-planning-target",
+        "text": "Target go-live is a planning target until the parties approve an integrated plan and dependency owners.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "qrm-deviation-rules.md #4.3",
+        "confidence": 0.99
+      },
+      {
+        "id": "asm-workshop-access",
+        "text": "Client will provide supervisor availability for discovery workshops.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-transcript.txt",
+        "confidence": 0.78
+      }
+    ],
+    "exclusions": [
+      {
+        "id": "exc-acceptance-criteria",
+        "text": "The draft does not commit to objective acceptance or deemed acceptance until criteria are documented.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "qrm-deviation-rules.md #4.2",
+        "confidence": 0.99
+      },
+      {
+        "id": "exc-acceptance-review_period",
+        "text": "No deemed acceptance timeline is drafted without an agreed review period.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "qrm-deviation-rules.md #4.2",
+        "confidence": 0.99
+      },
+      {
+        "id": "exc-data-supplier",
+        "text": "The provider does not warrant completeness, accuracy or timeliness of test data not supplied by the client.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "qrm-deviation-rules.md #4.2",
+        "confidence": 0.99
+      },
+      {
+        "id": "exc-data-quality_standard",
+        "text": "Rework caused by incomplete, masked, late or non-compliant test data is excluded from the draft scope.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "qrm-deviation-rules.md #4.2",
+        "confidence": 0.99
+      },
+      {
+        "id": "exc-ms-go-live-committed-date",
+        "text": "The draft does not commit to Target go-live on 2026-12-15 absent approved plan evidence.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "qrm-deviation-rules.md #4.3",
+        "confidence": 0.99
+      },
+      {
+        "id": "exc-production-deployment",
+        "text": "Production deployment and post-go-live support are outside this first-phase drafting scope.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-transcript.txt",
+        "confidence": 0.76
+      }
+    ],
+    "thin_input_report": [
+      {
+        "commitment": "acceptance",
+        "missing_fact": "acceptance criteria",
+        "effect": "Do not draft a acceptance commitment; convert the gap into assumptions and exclusions.",
+        "rule": "qrm-deviation-rules.md #4.1,#4.2",
+        "source": "engine:scope_extract",
+        "citation": "missing from scoping notes",
+        "confidence": 0.0
+      },
+      {
+        "commitment": "acceptance",
+        "missing_fact": "acceptance review period",
+        "effect": "Do not draft a acceptance commitment; convert the gap into assumptions and exclusions.",
+        "rule": "qrm-deviation-rules.md #4.1,#4.2",
+        "source": "engine:scope_extract",
+        "citation": "missing from scoping notes",
+        "confidence": 0.0
+      },
+      {
+        "commitment": "client_test_data",
+        "missing_fact": "client test-data supplier",
+        "effect": "Do not draft a client test data commitment; convert the gap into assumptions and exclusions.",
+        "rule": "qrm-deviation-rules.md #4.1,#4.2",
+        "source": "engine:scope_extract",
+        "citation": "missing from scoping notes",
+        "confidence": 0.0
+      },
+      {
+        "commitment": "client_test_data",
+        "missing_fact": "test-data quality standard",
+        "effect": "Do not draft a client test data commitment; convert the gap into assumptions and exclusions.",
+        "rule": "qrm-deviation-rules.md #4.1,#4.2",
+        "source": "engine:scope_extract",
+        "citation": "missing from scoping notes",
+        "confidence": 0.0
+      },
+      {
+        "commitment": "Target go-live",
+        "missing_fact": "delivery-date basis is verbal or not supported by an integrated plan",
+        "effect": "Treat as a planning target only; do not draft as a committed delivery date.",
+        "rule": "qrm-deviation-rules.md #4.1,#4.3",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-transcript.txt",
+        "confidence": 0.55
+      }
+    ]
+  },
+  "escalations": [
+    "acceptance: acceptance criteria - commitment blocked (qrm-deviation-rules.md #4.1,#4.2)",
+    "acceptance: acceptance review period - commitment blocked (qrm-deviation-rules.md #4.1,#4.2)",
+    "client_test_data: client test-data supplier - commitment blocked (qrm-deviation-rules.md #4.1,#4.2)",
+    "client_test_data: test-data quality standard - commitment blocked (qrm-deviation-rules.md #4.1,#4.2)",
+    "Target go-live: verbal or unsupported date - planning target only (qrm-deviation-rules.md #4.3)"
+  ],
+  "clause_library": {
+    "library_id": "PS-CLAUSE-LIB",
+    "version": "2026.09",
+    "approval_status": "approved",
+    "source": "engine:clause_select",
+    "citation": "raw/approved-clause-library-extract.md",
+    "confidence": 0.99
+  },
+  "selected_clauses": [
+    {
+      "family": "limitation_of_liability",
+      "library_id": "PS-LOL-001",
+      "library_version": "2026.09",
+      "title": "Limitation of liability",
+      "risk_tier": "high",
+      "approved_clause": "Mutual aggregate liability is capped at fees paid or payable under this SOW; indirect, consequential and special damages are excluded except where the MSA expressly says otherwise.",
+      "draft_allowed": true,
+      "deviation_state": "approved_language_selected",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.1",
+      "confidence": 0.99
+    },
+    {
+      "family": "ip_ownership",
+      "library_id": "PS-IP-001",
+      "library_version": "2026.09",
+      "title": "IP ownership",
+      "risk_tier": "medium",
+      "approved_clause": "Pre-existing materials, accelerators and know-how remain provider property; after payment, the client receives a license to use deliverables for internal business purposes.",
+      "draft_allowed": true,
+      "deviation_state": "approved_language_selected",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.3",
+      "confidence": 0.99
+    },
+    {
+      "family": "payment_terms",
+      "library_id": "PS-PAY-001",
+      "library_version": "2026.09",
+      "title": "Payment terms",
+      "risk_tier": "medium",
+      "approved_clause": "Fees are billed by milestone or monthly in arrears as stated in this SOW; undisputed invoices are due net 30; taxes and reimbursable expenses are excluded unless listed.",
+      "draft_allowed": true,
+      "deviation_state": "approved_language_selected",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.4",
+      "confidence": 0.99
+    },
+    {
+      "family": "termination",
+      "library_id": "PS-TERM-001",
+      "library_version": "2026.09",
+      "title": "Termination",
+      "risk_tier": "medium",
+      "approved_clause": "Either party may terminate for uncured material breach after notice and cure period; client pays for services performed and approved non-cancellable commitments through the effective date.",
+      "draft_allowed": true,
+      "deviation_state": "approved_language_selected",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.5",
+      "confidence": 0.99
+    },
+    {
+      "family": "warranty_disclaimer",
+      "library_id": "PS-WAR-001",
+      "library_version": "2026.09",
+      "title": "Warranty and disclaimer",
+      "risk_tier": "medium",
+      "approved_clause": "Services will be performed in a professional and workmanlike manner; except for express SOW warranties, all other warranties are disclaimed to the extent permitted.",
+      "draft_allowed": true,
+      "deviation_state": "approved_language_selected",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.6",
+      "confidence": 0.99
+    },
+    {
+      "family": "change_control",
+      "library_id": "PS-CC-001",
+      "library_version": "2026.09",
+      "title": "Change control",
+      "risk_tier": "low",
+      "approved_clause": "Changes to scope, timing, dependencies, assumptions or fees require a written change order signed by authorized representatives before work proceeds.",
+      "draft_allowed": true,
+      "deviation_state": "approved_language_selected",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.7",
+      "confidence": 0.99
+    },
+    {
+      "family": "acceptance",
+      "library_id": "PS-ACC-001",
+      "library_version": "2026.09",
+      "title": "Acceptance",
+      "risk_tier": "medium",
+      "approved_clause": "Deliverables are accepted against written acceptance criteria; the client has five business days to reject with specific defects; silence after the review period is deemed acceptance only where objective criteria are defined.",
+      "draft_allowed": false,
+      "deviation_state": "thin_input_blocked",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.2",
+      "confidence": 0.99
+    },
+    {
+      "family": "data_protection",
+      "library_id": "PS-DP-001",
+      "library_version": "2026.09",
+      "title": "Data protection",
+      "risk_tier": "high",
+      "approved_clause": "Each party follows the data protection addendum and agreed security schedule; data-related remedies and indemnities remain subject to the MSA/SOW liability framework unless QRM approves otherwise.",
+      "draft_allowed": false,
+      "deviation_state": "thin_input_blocked",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.8",
+      "confidence": 0.99
+    }
+  ]
+}

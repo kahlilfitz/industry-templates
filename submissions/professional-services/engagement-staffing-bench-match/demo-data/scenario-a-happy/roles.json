@@ -1,0 +1,54 @@
+{
+  "contract_version": "ps.engagement-staffing-bench-match.v1",
+  "engagement": {
+    "engagement_id": "ENG-PS-2026-1042",
+    "client_name": "Orchard Ridge Clinics",
+    "practice": "Customer Operations",
+    "stage": "Mobilisation - Resourcing",
+    "source": "skill:role-intake",
+    "confidence": 0.96,
+    "citation": "SOW extract ORC-1042, header and staffing request email"
+  },
+  "roles": [
+    {
+      "role_id": "PSS-001",
+      "title": "Client delivery manager",
+      "seniority": "manager",
+      "start_date": "2026-10-05",
+      "duration_weeks": 16,
+      "allocation_pct": 50,
+      "location": "Chicago",
+      "remote_ok": true,
+      "required_languages": ["English"],
+      "required_skills": ["stakeholder management", "mobilisation planning", "risk management"],
+      "preferred_skills": ["health operations", "Power Platform"],
+      "required_certifications": [],
+      "industry_context": "health operations",
+      "rate_band": { "currency": "USD", "min": 210, "max": 260 },
+      "source": "skill:role-intake",
+      "confidence": 0.96,
+      "citation": "SOW ORC-1042 section 3.2 role 1"
+    },
+    {
+      "role_id": "PSS-002",
+      "title": "Data migration consultant",
+      "seniority": "senior consultant",
+      "start_date": "2026-10-12",
+      "duration_weeks": 12,
+      "allocation_pct": 80,
+      "location": "Chicago",
+      "remote_ok": true,
+      "required_languages": ["English"],
+      "required_skills": ["data migration", "SQL", "data reconciliation"],
+      "preferred_skills": ["Power Platform", "health operations"],
+      "required_certifications": [],
+      "industry_context": "health operations",
+      "rate_band": { "currency": "USD", "min": 165, "max": 215 },
+      "source": "skill:role-intake",
+      "confidence": 0.95,
+      "citation": "SOW ORC-1042 section 3.2 role 2"
+    }
+  ],
+  "escalations": [],
+  "provenance": { "generated_at": "2026-09-23T21:20:34Z", "demo_scenario": "scenario-a-happy" }
+}

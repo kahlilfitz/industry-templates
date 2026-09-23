@@ -1,0 +1,293 @@
+{
+  "contract_version": "ps.time-expense-narrative-compliance.v1",
+  "engagement": {
+    "engagement_id": "ENG-SYN-042",
+    "client_name": "Orion Advisory Cooperative",
+    "matter_name": "Billing Controls Implementation",
+    "billing_guidelines_id": "OCG-SYNTH-2026-09",
+    "source": "connector:engagement-workspace",
+    "confidence": 0.99,
+    "citations": [
+      "engagement-letter-extract.md #billing-terms"
+    ]
+  },
+  "period": {
+    "start": "2026-09-14",
+    "end": "2026-09-18"
+  },
+  "signal_config": {
+    "config_version": "ps.time-expense-narrative-compliance.signal-sources.v1",
+    "default_posture": "narrowest_range_that_still_works",
+    "sources": {
+      "calendar": {
+        "enabled": true,
+        "scope": "engagement_calendar_only"
+      },
+      "document_activity": {
+        "enabled": true,
+        "scope": "engagement_workspace_only"
+      },
+      "mailbox_content": {
+        "enabled": false,
+        "scope": "off_by_default"
+      }
+    },
+    "citation": "client-billing-guidelines.md #10.1"
+  },
+  "guidelines": {
+    "guidelines_id": "OCG-SYNTH-2026-09",
+    "summary": "Synthetic outside-counsel-style billing guideline excerpt for demos.",
+    "source": "connector:sharepoint-guidelines",
+    "confidence": 0.98,
+    "citations": [
+      "client-billing-guidelines.md #1.1",
+      "client-billing-guidelines.md #2.1",
+      "client-billing-guidelines.md #3.1",
+      "client-billing-guidelines.md #8.1"
+    ]
+  },
+  "code_structure": {
+    "code_set_id": "SYNTH-PS-CODES-2026",
+    "source": "connector:billing-code-repository",
+    "confidence": 0.98,
+    "citations": [
+      "task-phase-codes.md #1.1",
+      "task-phase-codes.md #2.1",
+      "task-phase-codes.md #3.1",
+      "task-phase-codes.md #4.1"
+    ]
+  },
+  "activity_signals": [
+    {
+      "activity_id": "B-CAL-001",
+      "person": "Morgan Lee",
+      "date": "2026-09-14",
+      "activity_class": "client_meeting",
+      "duration_hours": 1.5,
+      "subject": "billing controls kickoff meeting",
+      "purpose": "align implementation assumptions and next steps",
+      "meeting_id": "MTG-ORION-201",
+      "billable_signal": true,
+      "source": "connector:m365-calendar",
+      "confidence": 0.96,
+      "citations": [
+        "raw/calendar-export.csv row 2",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-DOC-001",
+      "person": "Morgan Lee",
+      "date": "2026-09-14",
+      "activity_class": "document_analysis",
+      "duration_hours": 1.7,
+      "subject": "integration design memo",
+      "purpose": "identify implementation questions for client decision",
+      "meeting_id": null,
+      "billable_signal": true,
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.93,
+      "citations": [
+        "raw/document-activity-log.csv row 2",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-DOC-002",
+      "person": "Morgan Lee",
+      "date": "2026-09-15",
+      "activity_class": "research",
+      "duration_hours": 1.1,
+      "subject": "security exceptions matrix",
+      "purpose": "prepare options for billing control implementation",
+      "meeting_id": null,
+      "billable_signal": true,
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.92,
+      "citations": [
+        "raw/document-activity-log.csv row 3",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-MAIL-001",
+      "person": "Morgan Lee",
+      "date": "2026-09-15",
+      "activity_class": "client_meeting",
+      "duration_hours": 0.6,
+      "subject": "client implementation questions",
+      "purpose": "respond to project-control questions",
+      "meeting_id": null,
+      "billable_signal": true,
+      "source": "connector:mailbox-metadata-disabled-demo",
+      "confidence": 0.76,
+      "citations": [
+        "raw/mailbox-summary.txt line 3",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-DOC-003",
+      "person": "Morgan Lee",
+      "date": "2026-09-16",
+      "activity_class": "deliverable_drafting",
+      "duration_hours": 2.0,
+      "subject": "API mapping appendix",
+      "purpose": "document billing-system integration decisions",
+      "meeting_id": null,
+      "billable_signal": true,
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.94,
+      "citations": [
+        "raw/document-activity-log.csv row 4",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-DOC-004",
+      "person": "Morgan Lee",
+      "date": "2026-09-17",
+      "activity_class": "document_analysis",
+      "duration_hours": 1.0,
+      "subject": "migration worksheet",
+      "purpose": "validate billing-control assumptions",
+      "meeting_id": null,
+      "billable_signal": true,
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.94,
+      "citations": [
+        "raw/document-activity-log.csv row 5",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-CAL-002",
+      "person": "Priya Shah",
+      "date": "2026-09-14",
+      "activity_class": "client_meeting",
+      "duration_hours": 1.5,
+      "subject": "billing controls kickoff meeting",
+      "purpose": "align implementation assumptions and next steps",
+      "meeting_id": "MTG-ORION-201",
+      "billable_signal": true,
+      "source": "connector:m365-calendar",
+      "confidence": 0.96,
+      "citations": [
+        "raw/calendar-export.csv row 3",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-CAL-003",
+      "person": "Jordan Kim",
+      "date": "2026-09-14",
+      "activity_class": "client_meeting",
+      "duration_hours": 1.5,
+      "subject": "billing controls kickoff meeting",
+      "purpose": "align implementation assumptions and next steps",
+      "meeting_id": "MTG-ORION-201",
+      "billable_signal": true,
+      "source": "connector:m365-calendar",
+      "confidence": 0.96,
+      "citations": [
+        "raw/calendar-export.csv row 4",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-CAL-004",
+      "person": "Morgan Lee",
+      "date": "2026-09-18",
+      "activity_class": "internal_admin",
+      "duration_hours": 0.3,
+      "subject": "internal staffing coverage call",
+      "purpose": "coordinate team availability",
+      "meeting_id": "INT-STAFF-7",
+      "billable_signal": false,
+      "source": "connector:m365-calendar",
+      "confidence": 0.97,
+      "citations": [
+        "raw/calendar-export.csv row 5",
+        "client-billing-guidelines.md #5.1"
+      ]
+    }
+  ],
+  "time_entries": [
+    {
+      "entry_id": "TE-B-001",
+      "person": "Morgan Lee",
+      "date": "2026-09-15",
+      "duration_hours": 7.5,
+      "narrative": "Attention to various matters, including kickoff meeting, review and revise integration memo, follow up on security exceptions, and work on client implementation questions.",
+      "activity_ids": [
+        "B-CAL-001",
+        "B-DOC-001",
+        "B-DOC-002",
+        "B-MAIL-001"
+      ],
+      "submitted_phase_code": "DL",
+      "submitted_task_code": "DL300",
+      "source": "connector:timesheet",
+      "confidence": 0.96,
+      "citations": [
+        "raw/timesheet.csv row 2"
+      ]
+    },
+    {
+      "entry_id": "TE-B-002",
+      "person": "Priya Shah",
+      "date": "2026-09-14",
+      "duration_hours": 1.5,
+      "narrative": "Attended billing controls kickoff meeting with client team to discuss implementation assumptions and next steps.",
+      "activity_ids": [
+        "B-CAL-002"
+      ],
+      "submitted_phase_code": "DL",
+      "submitted_task_code": "DL300",
+      "source": "connector:timesheet",
+      "confidence": 0.96,
+      "citations": [
+        "raw/timesheet.csv row 3"
+      ]
+    },
+    {
+      "entry_id": "TE-B-003",
+      "person": "Jordan Kim",
+      "date": "2026-09-14",
+      "duration_hours": 1.5,
+      "narrative": "Attended billing controls kickoff meeting with client team to discuss implementation assumptions and next steps.",
+      "activity_ids": [
+        "B-CAL-003"
+      ],
+      "submitted_phase_code": "AN",
+      "submitted_task_code": "AN220",
+      "source": "connector:timesheet",
+      "confidence": 0.96,
+      "citations": [
+        "raw/timesheet.csv row 4"
+      ]
+    },
+    {
+      "entry_id": "TE-B-004",
+      "person": "Morgan Lee",
+      "date": "2026-09-18",
+      "duration_hours": 0.3,
+      "narrative": "Coordinated internal staffing coverage for next week.",
+      "activity_ids": [
+        "B-CAL-004"
+      ],
+      "submitted_phase_code": "NB",
+      "submitted_task_code": "NB900",
+      "source": "connector:timesheet",
+      "confidence": 0.96,
+      "citations": [
+        "raw/timesheet.csv row 5"
+      ]
+    }
+  ],
+  "provenance": {
+    "demo_scenario": "scenario-b-drama",
+    "generated_at": "2026-09-23T00:00:00Z",
+    "engines": []
+  }
+}

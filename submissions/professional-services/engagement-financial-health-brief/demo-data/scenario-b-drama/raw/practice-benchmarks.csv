@@ -1,0 +1,6 @@
+metric_definition_set_id,metric,median_value,citation
+ps-utilisation-gross-capacity-v1,realisation_pct,94.0,Transformation Advisory Q3 benchmark pack
+ps-utilisation-gross-capacity-v1,utilisation_pct,82.0,Transformation Advisory Q3 benchmark pack uses gross capacity denominator
+ps-utilisation-gross-capacity-v1,margin_pct,35.0,Transformation Advisory Q3 benchmark pack
+ps-utilisation-gross-capacity-v1,wip_over_90_pct,6.0,Transformation Advisory Q3 benchmark pack
+ps-utilisation-gross-capacity-v1,eac_over_plan_pct,1.5,Transformation Advisory Q3 benchmark pack

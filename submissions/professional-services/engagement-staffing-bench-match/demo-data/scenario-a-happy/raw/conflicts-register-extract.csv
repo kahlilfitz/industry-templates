@@ -1,0 +1,4 @@
+candidate_id,type,client_name,status,material,end_date,citation
+C-101,clear,Orchard Ridge Clinics,,,,conflicts extract CF-ORC-1042 row 4
+C-102,clear,Orchard Ridge Clinics,,,,conflicts extract CF-ORC-1042 row 7
+C-103,adverse_matter,Unrelated Synthetic Client,closed,,2026-09-15,conflicts extract CF-ORC-1042 row 18

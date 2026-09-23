@@ -1,0 +1,37 @@
+{
+  "as_of": "2026-09-23",
+  "citation": "raw/register-export-2026-09-23.zip",
+  "registers_searched": ["client_register", "matter_register", "adverse_party_register", "independence_register", "prior_clearance_decisions"],
+  "date_range": { "from": "2024-09-23", "to": "2026-09-23" },
+  "client_register": [
+    {
+      "client_record_id": "CR-9001",
+      "entity_id": "ENT-ORC-001",
+      "client_name": "Orchid River Analytics Inc",
+      "status": "current",
+      "citation": "client register row 9001"
+    }
+  ],
+  "matter_register": [
+    {
+      "matter_id": "MAT-4410",
+      "client_entity_id": "ENT-ORC-001",
+      "client_name": "Orchid River Analytics Inc",
+      "status": "live",
+      "matter_type": "commercial_contract",
+      "adverse_party_entity_ids": ["ENT-SYN-777"],
+      "adverse_party_names": ["Sable Yard Components LLC"],
+      "citation": "matter register row MAT-4410"
+    }
+  ],
+  "adverse_party_register": [
+    {
+      "adverse_record_id": "ADV-6001",
+      "entity_id": "ENT-SYN-777",
+      "name": "Sable Yard Components LLC",
+      "citation": "adverse-party register row ADV-6001"
+    }
+  ],
+  "independence_register": [],
+  "prior_clearance_decisions": []
+}

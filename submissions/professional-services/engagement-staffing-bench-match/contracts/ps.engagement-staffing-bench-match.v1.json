@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ps.engagement-staffing-bench-match.v1",
+  "title": "Engagement Staffing & Bench Match contract v1",
+  "description": "Chains role-intake -> bench-query -> fit-score -> constraint-check -> slate-draft. Carries data, confidence, provenance and citations so fit scores, ranks, utilisation figures and eligibility refusals are auditable.",
+  "type": "object",
+  "required": ["contract_version", "engagement", "roles"],
+  "properties": {
+    "contract_version": { "const": "ps.engagement-staffing-bench-match.v1" },
+    "engagement": {
+      "type": "object",
+      "required": ["engagement_id", "client_name", "source", "confidence", "citation"],
+      "properties": {
+        "engagement_id": { "type": "string" },
+        "client_name": { "type": "string" },
+        "practice": { "type": "string" },
+        "stage": { "type": "string" },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "citation": { "type": "string" }
+      }
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role_id", "title", "start_date", "allocation_pct", "required_skills", "source", "confidence", "citation"],
+        "properties": {
+          "role_id": { "type": "string" },
+          "title": { "type": "string" },
+          "seniority": { "type": "string" },
+          "start_date": { "type": "string" },
+          "duration_weeks": { "type": "integer", "minimum": 1 },
+          "allocation_pct": { "type": "number", "minimum": 1, "maximum": 100 },
+          "location": { "type": "string" },
+          "remote_ok": { "type": "boolean" },
+          "required_languages": { "type": "array", "items": { "type": "string" } },
+          "required_skills": { "type": "array", "items": { "type": "string" } },
+          "preferred_skills": { "type": "array", "items": { "type": "string" } },
+          "required_certifications": { "type": "array", "items": { "type": "string" } },
+          "rate_band": {
+            "type": "object",
+            "properties": {
+              "currency": { "type": "string" },
+              "min": { "type": "number" },
+              "max": { "type": "number" }
+            }
+          },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "bench_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["candidate_id", "name", "skills", "source", "confidence", "citation"],
+        "properties": {
+          "candidate_id": { "type": "string" },
+          "name": { "type": "string" },
+          "seniority": { "type": "string" },
+          "skills": { "type": "array", "items": { "type": "string" } },
+          "certifications": { "type": "array", "items": { "type": "string" } },
+          "industry_experience": { "type": "array", "items": { "type": "string" } },
+          "location": { "type": "string" },
+          "languages": { "type": "array", "items": { "type": "string" } },
+          "rate": { "type": "number" },
+          "current_allocation_pct": { "type": "number" },
+          "target_utilization_pct": { "type": "number" },
+          "approved_leave": { "type": "array" },
+          "soft_bookings": { "type": "array" },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "scored_roles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role_id": { "type": "string" },
+          "candidate_scores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["candidate_id", "fit_score", "source", "confidence", "citation"],
+              "properties": {
+                "candidate_id": { "type": "string" },
+                "candidate_name": { "type": "string" },
+                "fit_score": { "type": "number" },
+                "component_scores": { "type": "object" },
+                "availability_context": { "type": "object" },
+                "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+                "citation": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ranked_roles": { "type": "array" },
+    "governed_roles": { "type": "array" },
+    "gaps": { "type": "array", "items": { "type": "object" } },
+    "escalations": { "type": "array", "items": { "type": "string" } },
+    "provenance": { "type": "object" }
+  }
+}

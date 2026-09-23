@@ -1,0 +1,12 @@
+{
+  "name": "Engagement Financial Health Brief",
+  "description": "Compute engagement economics on fixed practice definitions, explain the largest financial drivers, and draft a review-ready health brief before unbilled exposure becomes invisible.",
+  "industry": "Professional Services",
+  "platforms": ["Cowork"],
+  "tags": ["delivery", "commercial-control", "engagement-economics", "realisation", "utilisation", "wip"],
+  "author": "Kahlil Fitzgerald",
+  "authorUrl": "https://github.com/kahlilfitz",
+  "version": "1.0.0",
+  "createdAt": "2026-09-23",
+  "updatedAt": "2026-09-23"
+}

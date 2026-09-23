@@ -1,0 +1,31 @@
+{
+  "clauses": [
+    {
+      "clause_id": "VM-19-18.2",
+      "type": "express_prohibition",
+      "applies_to": "name",
+      "scope": "public_marketing",
+      "summary": "The firm may not identify the client by name in marketing material, credential libraries, case studies or press without a later written amendment.",
+      "citation": "Engagement terms VM-19 clause 18.2"
+    },
+    {
+      "clause_id": "VM-19-18.5",
+      "type": "restriction",
+      "applies_to": "outcome_figures",
+      "scope": "public_marketing",
+      "summary": "Only figures verified in final deliverable evidence may be considered for external reference use.",
+      "citation": "Engagement terms VM-19 clause 18.5"
+    },
+    {
+      "clause_id": "VM-19-18.8",
+      "type": "restriction",
+      "applies_to": "client_internal_estimates",
+      "scope": "public_marketing",
+      "summary": "Client-supplied internal estimates are not approved for external use unless separately verified and approved.",
+      "citation": "Engagement terms VM-19 clause 18.8"
+    }
+  ],
+  "source": "connector:contract-repository",
+  "confidence": 0.98,
+  "citations": ["contract repository extract VM-19"]
+}

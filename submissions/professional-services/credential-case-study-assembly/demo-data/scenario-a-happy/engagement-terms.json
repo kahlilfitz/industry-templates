@@ -1,0 +1,24 @@
+{
+  "clauses": [
+    {
+      "clause_id": "NT-14-12.2",
+      "type": "express_written",
+      "applies_to": "name",
+      "scope": "public_marketing",
+      "expires_on": "2027-12-31",
+      "summary": "Client name may be used in credentials and public case-study material after closeout when figures are cited to verified deliverable evidence.",
+      "citation": "Engagement terms NT-14 clause 12.2"
+    },
+    {
+      "clause_id": "NT-14-12.4",
+      "type": "restriction",
+      "applies_to": "logo",
+      "scope": "public_marketing",
+      "summary": "Logo use requires separate written approval.",
+      "citation": "Engagement terms NT-14 clause 12.4"
+    }
+  ],
+  "source": "connector:contract-repository",
+  "confidence": 0.97,
+  "citations": ["contract repository extract NT-14"]
+}

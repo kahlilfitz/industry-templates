@@ -1,0 +1,21 @@
+{
+  "name": "Engagement Closeout & Knowledge Harvest",
+  "description": "Capture reusable value at closeout by assembling deliverables, clustering lessons, ranking reusable assets, and drafting a sanitised knowledge record with confidentiality holds visible.",
+  "industry": "Professional Services",
+  "platforms": [
+    "Cowork"
+  ],
+  "tags": [
+    "closeout",
+    "knowledge-management",
+    "lessons-learned",
+    "sanitisation",
+    "confidentiality",
+    "reuse"
+  ],
+  "author": "Kahlil Fitzgerald",
+  "authorUrl": "https://github.com/kahlilfitz",
+  "version": "1.0.0",
+  "createdAt": "2026-09-23",
+  "updatedAt": "2026-09-23"
+}

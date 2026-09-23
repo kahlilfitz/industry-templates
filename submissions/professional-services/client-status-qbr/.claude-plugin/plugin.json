@@ -1,0 +1,17 @@
+{
+  "name": "client-status-qbr",
+  "version": "1.0.0",
+  "description": "Professional Services Cowork plugin: assemble recurring client status packs and QBR narrative drafts. Retrieves plans, prior status, budget burn, risks, decisions and actions; computes schedule/budget/scope variance (deterministic variance_calc) and item ageing/client-action separation (deterministic item_age); drafts a client-ready pack with every variance and escalation cited. Draft-first; no write-back, no send, no re-baseline.",
+  "author": {
+    "name": "Microsoft Professional Services Skills"
+  },
+  "keywords": [
+    "professional-services",
+    "delivery",
+    "client-reporting",
+    "status-pack",
+    "QBR",
+    "variance",
+    "engagement-management"
+  ]
+}

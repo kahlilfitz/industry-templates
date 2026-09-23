@@ -1,0 +1,19 @@
+{
+  "name": "engagement-financial-health-brief",
+  "version": "1.0.0",
+  "description": "Professional Services Cowork plugin for delivery commercial control. Retrieves engagement financials, WIP, time, expense, plan, budget, rate-card and benchmark records; deterministically computes fixed-definition health indicators with health_calc; deterministically decomposes the largest variances with driver_attribute; refuses misleading benchmark comparisons when metric definition sets differ; and drafts a cited financial health brief for engagement or practice review. Draft-first; no WIP adjustment, write-off, rate change, reforecast or system write-back.",
+  "author": {
+    "name": "Microsoft Professional Services Skills"
+  },
+  "keywords": [
+    "professional-services",
+    "delivery",
+    "commercial-control",
+    "engagement-economics",
+    "realisation",
+    "utilisation",
+    "WIP",
+    "margin",
+    "Cowork"
+  ]
+}

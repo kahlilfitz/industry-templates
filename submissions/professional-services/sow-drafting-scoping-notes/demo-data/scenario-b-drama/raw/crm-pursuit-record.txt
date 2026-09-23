@@ -1,0 +1,8 @@
+CRM pursuit extract
+Pursuit ID: PS-2026-0918
+Client: Riverbend Field Services
+Project: Scheduling Modernization SOW
+Lifecycle stage: Pursuit - Contracting
+Expected start: 2026-10-12
+Commercial note: fixed-fee first phase; price review pending. Do not issue before QRM review.
+Pursuit owner: Evan Kade

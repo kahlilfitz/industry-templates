@@ -1,0 +1,91 @@
+{
+  "contract_version": "ps.engagement-staffing-bench-match.v1",
+  "engagement": {
+    "engagement_id": "ENG-PS-2026-2077",
+    "client_name": "Aster Foods Cooperative",
+    "source": "skill:bench-query",
+    "confidence": 0.96,
+    "citation": "bench export RM-2026-09-23"
+  },
+  "roles": [],
+  "bench_candidates": [
+    {
+      "candidate_id": "C-201",
+      "name": "Mina Patel",
+      "seniority": "manager",
+      "skills": ["finance transformation", "ERP advisory", "stakeholder management", "food distribution", "risk management"],
+      "certifications": ["CPA"],
+      "industry_experience": ["food distribution", "finance transformation"],
+      "location": "Denver",
+      "languages": ["English"],
+      "rate": 260,
+      "current_allocation_pct": 10,
+      "target_utilization_pct": 85,
+      "approved_leave": [],
+      "soft_bookings": [],
+      "source": "connector:resource-management-system",
+      "confidence": 0.98,
+      "citation": "bench export row C-201; profile Mina Patel"
+    },
+    {
+      "candidate_id": "C-202",
+      "name": "Owen Ramos",
+      "seniority": "manager",
+      "skills": ["finance transformation", "ERP advisory", "stakeholder management", "risk management"],
+      "certifications": ["CPA"],
+      "industry_experience": ["finance transformation"],
+      "location": "Denver",
+      "languages": ["English"],
+      "rate": 270,
+      "current_allocation_pct": 30,
+      "target_utilization_pct": 85,
+      "approved_leave": [],
+      "soft_bookings": [],
+      "source": "connector:resource-management-system",
+      "confidence": 0.96,
+      "citation": "bench export row C-202; profile Owen Ramos"
+    },
+    {
+      "candidate_id": "C-203",
+      "name": "Nico Stone",
+      "seniority": "senior consultant",
+      "skills": ["workforce planning", "SQL", "Spanish-language facilitation", "Power BI", "food distribution"],
+      "certifications": [],
+      "industry_experience": ["food distribution"],
+      "location": "Denver",
+      "languages": ["English", "Spanish"],
+      "rate": 185,
+      "current_allocation_pct": 0,
+      "target_utilization_pct": 85,
+      "approved_leave": [
+        { "start": "2026-10-10", "end": "2026-10-24", "allocation_pct": 40, "citation": "leave calendar request LV-7782" }
+      ],
+      "soft_bookings": [
+        { "start": "2026-10-01", "end": "2026-11-15", "allocation_pct": 30, "citation": "pursuit soft-book SB-914" }
+      ],
+      "source": "connector:resource-management-system",
+      "confidence": 0.97,
+      "citation": "bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914"
+    },
+    {
+      "candidate_id": "C-204",
+      "name": "Priya Desai",
+      "seniority": "senior consultant",
+      "skills": ["finance transformation", "ERP advisory", "workforce planning", "SQL"],
+      "certifications": [],
+      "industry_experience": ["food distribution"],
+      "location": "Denver",
+      "languages": ["English", "Spanish"],
+      "rate": 200,
+      "current_allocation_pct": 20,
+      "target_utilization_pct": 80,
+      "approved_leave": [],
+      "soft_bookings": [],
+      "source": "connector:resource-management-system",
+      "confidence": 0.95,
+      "citation": "bench export row C-204; profile Priya Desai"
+    }
+  ],
+  "escalations": [],
+  "provenance": { "generated_at": "2026-09-23T21:20:34Z", "demo_scenario": "scenario-b-drama" }
+}

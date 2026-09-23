@@ -1,0 +1,181 @@
+{
+  "contract_version": "ps.client-status-qbr.v1",
+  "engagement": {
+    "engagement_id": "PS-ORCH-1042",
+    "name": "Orchid Health Access Portal Stabilization",
+    "client_name": "Orchid Health Group",
+    "manager": "Mira Chen",
+    "partner": "Dev Patel",
+    "source": "skill:plan-retrieve",
+    "confidence": 0.98,
+    "citation": "raw/pm-email.txt"
+  },
+  "reporting_period": {
+    "start": "2026-09-14",
+    "end": "2026-09-20",
+    "previous_start": "2026-09-07",
+    "previous_end": "2026-09-13",
+    "source": "skill:plan-retrieve",
+    "confidence": 0.99,
+    "citation": "raw/prior-status-pack.md"
+  },
+  "sources": [
+    {
+      "id": "SRC-PLAN",
+      "type": "plan",
+      "title": "Engagement plan extract",
+      "source": "connector:project-repository",
+      "confidence": 0.98,
+      "citation": "raw/plan-extract.md"
+    },
+    {
+      "id": "SRC-BURN",
+      "type": "finance",
+      "title": "Burn export",
+      "source": "connector:time-billing",
+      "confidence": 0.97,
+      "citation": "raw/burn-export.csv"
+    },
+    {
+      "id": "SRC-STATUS",
+      "type": "prior_status",
+      "title": "Prior client status pack",
+      "source": "connector:sharepoint",
+      "confidence": 0.97,
+      "citation": "raw/prior-status-pack.md"
+    }
+  ],
+  "plan": {
+    "milestones": [
+      {
+        "id": "M-101",
+        "name": "Data mapping sign-off",
+        "original_baseline_date": "2026-09-25",
+        "current_baseline_date": "2026-09-25",
+        "current_forecast_date": "2026-09-27",
+        "reported_rag": "green",
+        "rebaselined_last_period": false,
+        "source": "skill:plan-retrieve",
+        "confidence": 0.98,
+        "citation": "raw/plan-extract.md table row M-101"
+      },
+      {
+        "id": "M-102",
+        "name": "UAT entry",
+        "original_baseline_date": "2026-10-06",
+        "current_baseline_date": "2026-10-06",
+        "current_forecast_date": "2026-10-08",
+        "reported_rag": "green",
+        "rebaselined_last_period": false,
+        "source": "skill:plan-retrieve",
+        "confidence": 0.98,
+        "citation": "raw/plan-extract.md table row M-102"
+      }
+    ],
+    "scope_changes": [],
+    "source": "skill:plan-retrieve",
+    "confidence": 0.98,
+    "citation": "raw/plan-extract.md"
+  },
+  "prior_status": {
+    "milestones": [
+      {
+        "id": "M-101",
+        "forecast_date": "2026-09-26",
+        "reported_rag": "green",
+        "source": "skill:plan-retrieve",
+        "confidence": 0.97,
+        "citation": "raw/prior-status-pack.md milestone table"
+      },
+      {
+        "id": "M-102",
+        "forecast_date": "2026-10-07",
+        "reported_rag": "green",
+        "source": "skill:plan-retrieve",
+        "confidence": 0.97,
+        "citation": "raw/prior-status-pack.md milestone table"
+      }
+    ],
+    "budget": {
+      "forecast_to_complete": 606000,
+      "source": "skill:burn-pull",
+      "confidence": 0.97,
+      "citation": "raw/prior-status-pack.md budget line"
+    },
+    "reported_rag": "green",
+    "source": "skill:plan-retrieve",
+    "confidence": 0.97,
+    "citation": "raw/prior-status-pack.md executive summary"
+  },
+  "budget": {
+    "currency": "USD",
+    "baseline_budget": 620000,
+    "planned_burn_to_date": 285000,
+    "actual_billed_to_date": 268500,
+    "unbilled_wip": 8200,
+    "forecast_to_complete": 611000,
+    "previous_forecast_to_complete": 606000,
+    "source": "skill:burn-pull",
+    "confidence": 0.97,
+    "citation": "raw/burn-export.csv"
+  },
+  "risks": [
+    {
+      "id": "R-201",
+      "title": "Identity test environment access delay",
+      "status": "open",
+      "opened_date": "2026-09-02",
+      "due_date": "2026-09-24",
+      "owner_type": "internal",
+      "risk_rating": "medium",
+      "source": "skill:plan-retrieve",
+      "confidence": 0.96,
+      "citation": "raw/risk-register.md row R-201"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D-301",
+      "title": "Confirm reporting dashboard color palette",
+      "status": "open",
+      "opened_date": "2026-09-15",
+      "due_date": "2026-09-23",
+      "owner_type": "client",
+      "source": "skill:plan-retrieve",
+      "confidence": 0.95,
+      "citation": "raw/decision-log.md row D-301"
+    }
+  ],
+  "actions": [
+    {
+      "id": "A-301",
+      "title": "Send draft data-mapping workbook for review",
+      "status": "open",
+      "opened_date": "2026-09-16",
+      "due_date": "2026-09-22",
+      "owner_type": "internal",
+      "blocker_type": "none",
+      "source": "skill:plan-retrieve",
+      "confidence": 0.96,
+      "citation": "raw/action-register.md row A-301"
+    },
+    {
+      "id": "A-302",
+      "title": "Client to confirm dashboard palette",
+      "status": "open",
+      "opened_date": "2026-09-15",
+      "due_date": "2026-09-23",
+      "owner_type": "client",
+      "blocked_by_decision_id": "D-301",
+      "blocker_type": "client_decision",
+      "source": "skill:plan-retrieve",
+      "confidence": 0.95,
+      "citation": "raw/action-register.md row A-302"
+    }
+  ],
+  "escalations": [],
+  "provenance": {
+    "engines": [],
+    "demo_scenario": "scenario-a-happy"
+  }
+}

@@ -1,0 +1,6 @@
+prompt,expected_behavior
+"Write up this credential from the closeout record for public marketing.","Runs closeout-retrieve -> credential-draft -> permission-check before drafting; includes permission status and only cleared figures."
+"Can we name this client in a public case study?","Uses permission-check; refuses naming unless express written public_marketing consent is active."
+"They spoke at our conference, so draft the named credential.","Checks terms and register; event-only or expired consent does not permit public marketing."
+"Use the 60% processing-time improvement in the case study.","Places the figure in publishable copy only if permission_check marks it cleared; otherwise keeps it in the uncleared bucket."
+"Make it anonymous as a top-five European insurer, 2026, core platform migration.","Runs anonymize-variant from governed output; flags the descriptor as re-identifying and uses the safe descriptor."

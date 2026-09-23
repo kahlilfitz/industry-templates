@@ -1,0 +1,305 @@
+{
+  "contract_version": "ps.conflicts-independence-precheck.v1",
+  "pursuit_id": "PS-CIP-2026-0199",
+  "analysis_as_of": "2026-09-23",
+  "prospective_client": {
+    "party_id": "P001",
+    "given_name": "Aster Health Labs",
+    "role": "prospective_client",
+    "source": "skill:party-intake",
+    "citation": "raw/pursuit-intake-email.txt",
+    "confidence": 0.96
+  },
+  "matter": {
+    "matter_name": "Aster diagnostics network acquisition diligence",
+    "matter_type": "transaction_advisory",
+    "services": [
+      "transaction_diligence",
+      "valuation",
+      "regulatory_strategy"
+    ],
+    "jurisdictions": [
+      "US",
+      "UK"
+    ],
+    "description": "Transaction diligence, valuation support and regulatory strategy for a synthetic diagnostics network acquisition.",
+    "source": "skill:party-intake",
+    "citation": "raw/pursuit-intake-email.txt",
+    "confidence": 0.93
+  },
+  "parties": [
+    {
+      "party_id": "P002",
+      "given_name": "Kelvin Bio Systems",
+      "role": "technology_subcontractor_named_by_partner",
+      "source": "skill:party-intake",
+      "citation": "raw/pursuit-intake-email.txt",
+      "confidence": 0.88
+    },
+    {
+      "party_id": "P003",
+      "given_name": "Blue Orchard Financing Trust",
+      "role": "financing_counterparty",
+      "source": "skill:party-intake",
+      "citation": "raw/pursuit-intake-email.txt",
+      "confidence": 0.9
+    }
+  ],
+  "escalations": [
+    "Kelvin Bio Systems: candidate Kelvar Bio Systems Ltd scored 0.8889 in the forced human-review band; not treated as resolved (entity-resolution-rules.md #4.2)",
+    "H003: non-waivable/prohibited-service category; model cannot downgrade (conflicts-independence-rules.md #10.2)"
+  ],
+  "provenance": {
+    "demo_scenario": "scenario-b-drama",
+    "engines": [
+      "entity_resolve/1.0",
+      "conflict_classify/1.0"
+    ],
+    "generated_at": "2026-09-23"
+  },
+  "resolved_entities": [
+    {
+      "party_id": "P001",
+      "given_name": "Aster Health Labs",
+      "role": "prospective_client",
+      "match_status": "controlled_match",
+      "resolved_entity_id": "ENT-AST-010",
+      "resolved_legal_name": "Aster Diagnostics LLC",
+      "candidate_entity_id": "ENT-AST-010",
+      "candidate_legal_name": "Aster Diagnostics LLC",
+      "family_id": "FAM-VEGA",
+      "ultimate_parent_id": "ENT-VEGA-001",
+      "ultimate_parent_name": "VegaNova Holdings PLC",
+      "entity_variants_tried": [
+        "Aster Diagnostics",
+        "Aster Diagnostics LLC",
+        "Aster Health Labs",
+        "Nordstar Bio Services Ltd",
+        "VegaNova Holdings PLC",
+        "aster diagnostics",
+        "aster health labs",
+        "nordstar bio services",
+        "veganova holdings"
+      ],
+      "corporate_family": [
+        {
+          "entity_id": "ENT-NORD-022",
+          "legal_name": "Nordstar Bio Services Ltd",
+          "relationship": "controlled sibling",
+          "ownership_pct": 0.72,
+          "source": "connector:corporate-structure",
+          "citation": "corporate structure extract row 16",
+          "rule": "entity-resolution-rules.md #5.1"
+        },
+        {
+          "entity_id": "ENT-AST-010",
+          "legal_name": "Aster Diagnostics LLC",
+          "relationship": "controlled subsidiary / trading brand",
+          "ownership_pct": 1.0,
+          "source": "connector:corporate-structure",
+          "citation": "corporate structure extract row 14",
+          "rule": "entity-resolution-rules.md #5.1"
+        },
+        {
+          "entity_id": "ENT-VEGA-001",
+          "legal_name": "VegaNova Holdings PLC",
+          "relationship": "ultimate parent",
+          "ownership_pct": 1.0,
+          "source": "connector:corporate-structure",
+          "citation": "corporate structure extract row 10",
+          "rule": "entity-resolution-rules.md #5.1"
+        }
+      ],
+      "confidence": 1.0,
+      "source": "engine:entity_resolve",
+      "citation": "corporate structure extract row 14 matched 'Aster Health Labs'",
+      "rule": "entity-resolution-rules.md #3.1,#4.1,#5.1"
+    },
+    {
+      "party_id": "P002",
+      "given_name": "Kelvin Bio Systems",
+      "role": "technology_subcontractor_named_by_partner",
+      "match_status": "human_review",
+      "resolved_entity_id": null,
+      "resolved_legal_name": null,
+      "candidate_entity_id": "ENT-KELVAR-077",
+      "candidate_legal_name": "Kelvar Bio Systems Ltd",
+      "family_id": null,
+      "ultimate_parent_id": null,
+      "ultimate_parent_name": null,
+      "entity_variants_tried": [
+        "Kelvin Bio Systems",
+        "kelvin bio systems"
+      ],
+      "corporate_family": [],
+      "confidence": 0.8889,
+      "source": "engine:entity_resolve",
+      "citation": "candidate Kelvar Bio Systems Ltd from corporate structure extract row 31",
+      "rule": "entity-resolution-rules.md #4.2,#7.2"
+    },
+    {
+      "party_id": "P003",
+      "given_name": "Blue Orchard Financing Trust",
+      "role": "financing_counterparty",
+      "match_status": "controlled_match",
+      "resolved_entity_id": "ENT-BOF-008",
+      "resolved_legal_name": "Blue Orchard Financing Trust",
+      "candidate_entity_id": "ENT-BOF-008",
+      "candidate_legal_name": "Blue Orchard Financing Trust",
+      "family_id": "FAM-BOF",
+      "ultimate_parent_id": "ENT-BOF-008",
+      "ultimate_parent_name": "Blue Orchard Financing Trust",
+      "entity_variants_tried": [
+        "Blue Orchard Financing",
+        "Blue Orchard Financing Trust",
+        "blue orchard financing",
+        "blue orchard financing trust"
+      ],
+      "corporate_family": [
+        {
+          "entity_id": "ENT-BOF-008",
+          "legal_name": "Blue Orchard Financing Trust",
+          "relationship": "standalone financing vehicle",
+          "ownership_pct": 1.0,
+          "source": "connector:corporate-structure",
+          "citation": "corporate structure extract row 42",
+          "rule": "entity-resolution-rules.md #5.1"
+        }
+      ],
+      "confidence": 1.0,
+      "source": "engine:entity_resolve",
+      "citation": "corporate structure extract row 42 matched 'Blue Orchard Financing Trust'",
+      "rule": "entity-resolution-rules.md #3.1,#4.1,#5.1"
+    }
+  ],
+  "search_scope": {
+    "registers_searched": [
+      "client_register",
+      "matter_register",
+      "adverse_party_register",
+      "independence_register",
+      "prior_clearance_decisions"
+    ],
+    "date_range": {
+      "from": "2024-09-23",
+      "to": "2026-09-23"
+    },
+    "entity_variants_by_party": {
+      "P001": [
+        "Aster Diagnostics",
+        "Aster Diagnostics LLC",
+        "Aster Health Labs",
+        "Nordstar Bio Services Ltd",
+        "VegaNova Holdings PLC",
+        "aster diagnostics",
+        "aster health labs",
+        "nordstar bio services",
+        "veganova holdings"
+      ],
+      "P002": [
+        "Kelvin Bio Systems",
+        "kelvin bio systems"
+      ],
+      "P003": [
+        "Blue Orchard Financing",
+        "Blue Orchard Financing Trust",
+        "blue orchard financing",
+        "blue orchard financing trust"
+      ]
+    },
+    "corporate_family_entity_ids": [
+      "ENT-AST-010",
+      "ENT-BOF-008",
+      "ENT-NORD-022",
+      "ENT-VEGA-001"
+    ],
+    "unresolved_parties": [
+      "P002"
+    ],
+    "source": "engine:conflict_classify",
+    "citation": "raw/register-export-2026-09-23.zip"
+  },
+  "conflict_hits": [
+    {
+      "hit_id": "H001",
+      "register": "matter_register",
+      "record_id": "MAT-7007",
+      "conflict_type": "direct_adverse_representation",
+      "matched_entity": "VegaNova Holdings PLC",
+      "matched_entity_id": "ENT-VEGA-001",
+      "match_score": 1.0,
+      "relationship": "Aster Health Labs family member VegaNova Holdings PLC is adverse to client Lattice Energy Cooperative in live matter MAT-7007",
+      "governing_rule": "direct adverse live matter",
+      "waiver_posture": "required_consent_or_qrm_refusal_position",
+      "ethical_wall_recommendation": "wall_not_sufficient_for_active_direct_adversity",
+      "required_action": "escalate_to_qrm_before_any_pursuit_commitment",
+      "confidence": 0.97,
+      "source": "engine:conflict_classify",
+      "citation": "matter register row MAT-7007",
+      "rule": "conflicts-independence-rules.md #2.1,#3.1,#8.2,#10.1"
+    },
+    {
+      "hit_id": "H002",
+      "register": "client_register",
+      "record_id": "CR-1200",
+      "conflict_type": "former_client_duty_window",
+      "matched_entity": "Aster Diagnostics LLC",
+      "matched_entity_id": "ENT-AST-010",
+      "match_score": 1.0,
+      "relationship": "former-client matter closed 9 months before analysis date and is marked substantially related",
+      "governing_rule": "former-client duty window",
+      "waiver_posture": "qrm_review_required; consent may be required if policy permits",
+      "ethical_wall_recommendation": "wall_only_if_qrm_confirms_no_shared_confidential_information",
+      "required_action": "hold_for_former_client_review",
+      "confidence": 0.9,
+      "source": "engine:conflict_classify",
+      "citation": "client register row CR-1200",
+      "rule": "conflicts-independence-rules.md #4.1,#4.2,#10.1"
+    },
+    {
+      "hit_id": "H003",
+      "register": "independence_register",
+      "record_id": "IND-3030",
+      "conflict_type": "audit_independence_prohibited_non_audit_service",
+      "matched_entity": "VegaNova Holdings PLC",
+      "matched_entity_id": "ENT-VEGA-001",
+      "match_score": 1.0,
+      "relationship": "proposed service(s) valuation overlap prohibited-service list for audit client family",
+      "governing_rule": "audit independence prohibited non-audit service",
+      "waiver_posture": "non_waivable_in_illustrative_ruleset",
+      "ethical_wall_recommendation": "wall_not_sufficient_for_audit_independence_restriction",
+      "required_action": "escalation_packet_with_refusal_position_for_human_qrm_review",
+      "confidence": 0.96,
+      "source": "engine:conflict_classify",
+      "citation": "independence register row IND-3030",
+      "rule": "conflicts-independence-rules.md #7.1,#7.2,#8.2,#10.2"
+    },
+    {
+      "hit_id": "H004",
+      "register": "entity_resolution",
+      "record_id": "ENT-KELVAR-077",
+      "conflict_type": "ambiguous_entity_identity",
+      "matched_entity": "Kelvar Bio Systems Ltd",
+      "matched_entity_id": "ENT-KELVAR-077",
+      "match_score": 0.8889,
+      "relationship": "Kelvin Bio Systems resembles Kelvar Bio Systems Ltd but is inside the forced human-review band",
+      "governing_rule": "entity identity below automatic threshold",
+      "waiver_posture": "not_classified_until_identity_review",
+      "ethical_wall_recommendation": "not_available_until_identity_review",
+      "required_action": "hold_for_entity_resolution_review",
+      "confidence": 0.8889,
+      "source": "engine:conflict_classify",
+      "citation": "candidate Kelvar Bio Systems Ltd from corporate structure extract row 31",
+      "rule": "entity-resolution-rules.md #4.2; conflicts-independence-rules.md #9.1,#9.2"
+    }
+  ],
+  "precheck_position": {
+    "position": "escalate_to_qrm",
+    "human_clearance_required": true,
+    "draft_output": "escalation_packet",
+    "summary": "4 hit(s) found; prepare escalation packet for human QRM review. This is not a clearance.",
+    "confidence": 0.8889,
+    "source": "engine:conflict_classify",
+    "citation": "conflicts-independence-rules.md #1.1,#9.1,#10.2,#11.1"
+  }
+}

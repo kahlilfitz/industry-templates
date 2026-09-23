@@ -1,0 +1,7 @@
+{
+  "name": "engagement-staffing-bench-match",
+  "version": "1.0.0",
+  "description": "Professional Services Cowork plugin: build a ranked staffing slate for a signed engagement. Reads the SOW role extract, staffing request, bench roster, availability calendar, rate bands and conflicts register; computes deterministic fit scores and provisional ranks (fit_score, slate_rank); applies independence and availability constraints deterministically (constraint_check) with Govern refusal when a candidate is conflicted or unavailable; drafts a partner-ready recommendation with citations and gap statements. Draft-first; no allocation, assignment, rate change or independence override.",
+  "author": { "name": "Microsoft Professional Services Skills" },
+  "keywords": ["professional-services", "staffing", "resourcing", "bench", "independence", "conflicts", "mobilisation"]
+}

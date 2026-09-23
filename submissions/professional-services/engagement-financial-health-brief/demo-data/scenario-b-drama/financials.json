@@ -1,0 +1,16 @@
+{
+  "contract_version": "ps.engagement-financial-health-brief.v1",
+  "financials": {
+    "currency": "USD",
+    "billed_revenue_to_date": 760000,
+    "standard_value_of_billed_work_to_date": 800000,
+    "billed_labour_revenue_to_date": 690000,
+    "recognised_revenue_to_date": 760000,
+    "delivery_cost_to_date": 482000,
+    "eligible_unbilled_time_amount": 35000,
+    "eligible_unbilled_expense_amount": 5000,
+    "source": "connector:finance-system",
+    "citation": "raw/finance-system-export.csv rows 2-8",
+    "confidence": 0.99
+  }
+}

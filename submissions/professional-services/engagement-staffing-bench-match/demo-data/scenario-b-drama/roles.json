@@ -1,0 +1,54 @@
+{
+  "contract_version": "ps.engagement-staffing-bench-match.v1",
+  "engagement": {
+    "engagement_id": "ENG-PS-2026-2077",
+    "client_name": "Aster Foods Cooperative",
+    "practice": "Finance Transformation",
+    "stage": "Mobilisation - Resourcing",
+    "source": "skill:role-intake",
+    "confidence": 0.96,
+    "citation": "SOW extract AFC-2077, header and staffing request email"
+  },
+  "roles": [
+    {
+      "role_id": "PSS-101",
+      "title": "Finance transformation manager",
+      "seniority": "manager",
+      "start_date": "2026-10-12",
+      "duration_weeks": 20,
+      "allocation_pct": 60,
+      "location": "Denver",
+      "remote_ok": false,
+      "required_languages": ["English"],
+      "required_skills": ["finance transformation", "ERP advisory", "stakeholder management"],
+      "preferred_skills": ["food distribution", "risk management"],
+      "required_certifications": ["CPA"],
+      "industry_context": "food distribution",
+      "rate_band": { "currency": "USD", "min": 225, "max": 275 },
+      "source": "skill:role-intake",
+      "confidence": 0.96,
+      "citation": "SOW AFC-2077 section 4.1 role 1"
+    },
+    {
+      "role_id": "PSS-102",
+      "title": "Spanish-speaking workforce planning analyst",
+      "seniority": "senior consultant",
+      "start_date": "2026-10-12",
+      "duration_weeks": 10,
+      "allocation_pct": 80,
+      "location": "Denver",
+      "remote_ok": false,
+      "required_languages": ["English", "Spanish"],
+      "required_skills": ["workforce planning", "SQL", "Spanish-language facilitation"],
+      "preferred_skills": ["food distribution", "Power BI"],
+      "required_certifications": [],
+      "industry_context": "food distribution",
+      "rate_band": { "currency": "USD", "min": 150, "max": 205 },
+      "source": "skill:role-intake",
+      "confidence": 0.94,
+      "citation": "SOW AFC-2077 section 4.1 role 2"
+    }
+  ],
+  "escalations": [],
+  "provenance": { "generated_at": "2026-09-23T21:20:34Z", "demo_scenario": "scenario-b-drama" }
+}

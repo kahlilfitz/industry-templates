@@ -1,0 +1,273 @@
+{
+  "contract_version": "ps.time-expense-narrative-compliance.v1",
+  "engagement": {
+    "engagement_id": "ENG-SYN-042",
+    "client_name": "Orion Advisory Cooperative",
+    "matter_name": "Billing Controls Implementation",
+    "billing_guidelines_id": "OCG-SYNTH-2026-09",
+    "source": "connector:engagement-workspace",
+    "confidence": 0.99,
+    "citations": [
+      "engagement-letter-extract.md #billing-terms"
+    ]
+  },
+  "period": {
+    "start": "2026-09-14",
+    "end": "2026-09-18"
+  },
+  "signal_config": {
+    "config_version": "ps.time-expense-narrative-compliance.signal-sources.v1",
+    "default_posture": "narrowest_range_that_still_works",
+    "sources": {
+      "calendar": {
+        "enabled": true,
+        "scope": "engagement_calendar_only"
+      },
+      "document_activity": {
+        "enabled": true,
+        "scope": "engagement_workspace_only"
+      },
+      "mailbox_content": {
+        "enabled": false,
+        "scope": "off_by_default"
+      }
+    },
+    "citation": "client-billing-guidelines.md #10.1"
+  },
+  "guidelines": {
+    "guidelines_id": "OCG-SYNTH-2026-09",
+    "summary": "Synthetic outside-counsel-style billing guideline excerpt for demos.",
+    "source": "connector:sharepoint-guidelines",
+    "confidence": 0.98,
+    "citations": [
+      "client-billing-guidelines.md #1.1",
+      "client-billing-guidelines.md #2.1",
+      "client-billing-guidelines.md #3.1",
+      "client-billing-guidelines.md #8.1"
+    ]
+  },
+  "code_structure": {
+    "code_set_id": "SYNTH-PS-CODES-2026",
+    "source": "connector:billing-code-repository",
+    "confidence": 0.98,
+    "citations": [
+      "task-phase-codes.md #1.1",
+      "task-phase-codes.md #2.1",
+      "task-phase-codes.md #3.1",
+      "task-phase-codes.md #4.1"
+    ]
+  },
+  "activity_signals": [
+    {
+      "activity_id": "A-CAL-001",
+      "person": "Alex Rivera",
+      "date": "2026-09-14",
+      "activity_class": "client_meeting",
+      "duration_hours": 1.2,
+      "subject": "billing workflow discovery session",
+      "purpose": "confirm implementation requirements",
+      "meeting_id": "MTG-ORION-101",
+      "billable_signal": true,
+      "source": "connector:m365-calendar",
+      "confidence": 0.96,
+      "citations": [
+        "raw/calendar-export.csv row 2",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "A-DOC-001",
+      "person": "Alex Rivera",
+      "date": "2026-09-15",
+      "activity_class": "document_analysis",
+      "duration_hours": 1.4,
+      "subject": "service catalog draft",
+      "purpose": "identify billing workflow requirements",
+      "meeting_id": null,
+      "billable_signal": true,
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.94,
+      "citations": [
+        "raw/document-activity-log.csv row 2",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "A-DOC-002",
+      "person": "Alex Rivera",
+      "date": "2026-09-16",
+      "activity_class": "deliverable_drafting",
+      "duration_hours": 0.8,
+      "subject": "implementation decision log",
+      "purpose": "summarize approved billing workflow assumptions",
+      "meeting_id": null,
+      "billable_signal": true,
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.95,
+      "citations": [
+        "raw/document-activity-log.csv row 3",
+        "client-billing-guidelines.md #10.1"
+      ]
+    }
+  ],
+  "time_entries": [
+    {
+      "entry_id": "TE-A-001",
+      "person": "Alex Rivera",
+      "date": "2026-09-14",
+      "duration_hours": 1.2,
+      "narrative": "",
+      "activity_ids": [
+        "A-CAL-001"
+      ],
+      "submitted_phase_code": null,
+      "submitted_task_code": null,
+      "source": "connector:timesheet",
+      "confidence": 0.97,
+      "citations": [
+        "raw/timesheet.csv row 2"
+      ],
+      "draft": {
+        "narrative": "Led billing workflow discovery session for confirm implementation requirements with cited engagement activity support.",
+        "status": "engine_generated_from_activity",
+        "word_count": 14,
+        "required_elements": {
+          "actor": true,
+          "subject": true,
+          "purpose": true
+        },
+        "linked_activity_ids": [
+          "A-CAL-001"
+        ],
+        "confidence": 0.9,
+        "source": "engine:narrative_draft",
+        "citations": [
+          "client-billing-guidelines.md #10.1",
+          "raw/calendar-export.csv row 2"
+        ]
+      },
+      "code_mapping": {
+        "recommended_phase_code": "DL",
+        "recommended_task_code": "DL300",
+        "recommended_label": "Client meeting or working session",
+        "submitted_phase_code": null,
+        "submitted_task_code": null,
+        "basis": "direct_activity_class",
+        "flags": [],
+        "confidence": 0.92,
+        "source": "engine:code_map",
+        "citations": [
+          "task-phase-codes.md #3.1"
+        ]
+      }
+    },
+    {
+      "entry_id": "TE-A-002",
+      "person": "Alex Rivera",
+      "date": "2026-09-15",
+      "duration_hours": 1.4,
+      "narrative": "",
+      "activity_ids": [
+        "A-DOC-001"
+      ],
+      "submitted_phase_code": null,
+      "submitted_task_code": null,
+      "source": "connector:timesheet",
+      "confidence": 0.97,
+      "citations": [
+        "raw/timesheet.csv row 3"
+      ],
+      "draft": {
+        "narrative": "Analyzed service catalog draft for identify billing workflow requirements with cited engagement activity support.",
+        "status": "engine_generated_from_activity",
+        "word_count": 14,
+        "required_elements": {
+          "actor": true,
+          "subject": true,
+          "purpose": true
+        },
+        "linked_activity_ids": [
+          "A-DOC-001"
+        ],
+        "confidence": 0.9,
+        "source": "engine:narrative_draft",
+        "citations": [
+          "client-billing-guidelines.md #10.1",
+          "raw/document-activity-log.csv row 2"
+        ]
+      },
+      "code_mapping": {
+        "recommended_phase_code": "AN",
+        "recommended_task_code": "AN200",
+        "recommended_label": "Document analysis tied to a client deliverable",
+        "submitted_phase_code": null,
+        "submitted_task_code": null,
+        "basis": "direct_activity_class",
+        "flags": [],
+        "confidence": 0.92,
+        "source": "engine:code_map",
+        "citations": [
+          "task-phase-codes.md #2.1"
+        ]
+      }
+    },
+    {
+      "entry_id": "TE-A-003",
+      "person": "Alex Rivera",
+      "date": "2026-09-16",
+      "duration_hours": 0.8,
+      "narrative": "",
+      "activity_ids": [
+        "A-DOC-002"
+      ],
+      "submitted_phase_code": null,
+      "submitted_task_code": null,
+      "source": "connector:timesheet",
+      "confidence": 0.97,
+      "citations": [
+        "raw/timesheet.csv row 4"
+      ],
+      "draft": {
+        "narrative": "Drafted implementation decision log for summarize approved billing workflow assumptions with cited engagement activity support.",
+        "status": "engine_generated_from_activity",
+        "word_count": 15,
+        "required_elements": {
+          "actor": true,
+          "subject": true,
+          "purpose": true
+        },
+        "linked_activity_ids": [
+          "A-DOC-002"
+        ],
+        "confidence": 0.9,
+        "source": "engine:narrative_draft",
+        "citations": [
+          "client-billing-guidelines.md #10.1",
+          "raw/document-activity-log.csv row 3"
+        ]
+      },
+      "code_mapping": {
+        "recommended_phase_code": "DL",
+        "recommended_task_code": "DL320",
+        "recommended_label": "Drafting or finalizing a client deliverable",
+        "submitted_phase_code": null,
+        "submitted_task_code": null,
+        "basis": "direct_activity_class",
+        "flags": [],
+        "confidence": 0.92,
+        "source": "engine:code_map",
+        "citations": [
+          "task-phase-codes.md #3.2"
+        ]
+      }
+    }
+  ],
+  "provenance": {
+    "demo_scenario": "scenario-a-happy",
+    "generated_at": "2026-09-23T00:00:00Z",
+    "engines": [
+      "narrative_draft/1.0",
+      "code_map/1.0"
+    ]
+  }
+}

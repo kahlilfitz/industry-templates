@@ -1,0 +1,4 @@
+candidate_id,name,seniority,skills,certifications,industry_experience,location,languages,rate,current_allocation_pct,target_utilization_pct,approved_leave,soft_bookings
+C-101,Ava Morgan,manager,"stakeholder management;mobilisation planning;risk management;health operations;Power Platform","", "health operations;customer operations",Chicago,English,240,25,80,,
+C-102,Leo Brooks,senior consultant,"data migration;SQL;data reconciliation;Power Platform;health operations","", "health operations",Milwaukee,English,190,10,85,,
+C-103,Mara Singh,manager,"stakeholder management;risk management;data reconciliation;retail operations","", "retail operations",Chicago,"English;Spanish",230,40,80,,

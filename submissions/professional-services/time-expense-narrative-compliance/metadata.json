@@ -1,0 +1,21 @@
+{
+  "name": "Time & Expense Narrative Compliance",
+  "description": "Draft compliant time-entry narratives from engagement activity, map them to billing codes, and catch rejectable entries before pre-bill review.",
+  "industry": "Professional Services",
+  "platforms": [
+    "Cowork"
+  ],
+  "tags": [
+    "delivery",
+    "billing",
+    "time-entry",
+    "narrative-compliance",
+    "wip",
+    "pre-bill"
+  ],
+  "author": "Kahlil Fitzgerald",
+  "authorUrl": "https://github.com/kahlilfitz",
+  "version": "1.0.0",
+  "createdAt": "2026-09-23",
+  "updatedAt": "2026-09-23"
+}

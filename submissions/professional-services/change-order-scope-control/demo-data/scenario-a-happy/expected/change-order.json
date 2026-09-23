@@ -1,0 +1,210 @@
+{
+  "contract_version": "ps.change-order-scope-control.v1",
+  "engagement": {
+    "engagement_id": "PS-CO-1001",
+    "client_name": "Northstar Labs",
+    "project_name": "Finance Operating Model Mobilization",
+    "contract_value": 420000,
+    "source": "connector:contract-repository",
+    "citation": "SOW NSL-FIN-OM-2026 rev 2",
+    "confidence": 0.99
+  },
+  "sow": {
+    "document_id": "SOW-NSL-FIN-OM-2026",
+    "revision": "2",
+    "clauses": [
+      {
+        "id": "2.1",
+        "title": "Closed deliverable list",
+        "type": "deliverable",
+        "quote": "Supplier will deliver the assessment, target operating model, two working workshops, readiness report and transition plan listed in Exhibit A.",
+        "tags": [
+          "workshop",
+          "readiness_report",
+          "operating_model"
+        ],
+        "citation": "SOW NSL-FIN-OM-2026 rev 2 section 2.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "4.2",
+        "title": "Excluded executive and board presentations",
+        "type": "exclusion",
+        "quote": "Executive board, investor, fundraising or steering-committee presentations beyond the two working workshops are excluded and require change control.",
+        "tags": [
+          "executive_workshop",
+          "board_presentation",
+          "extra_workshop"
+        ],
+        "citation": "SOW NSL-FIN-OM-2026 rev 2 section 4.2",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "6.1",
+        "title": "Change-control route",
+        "type": "change_control",
+        "quote": "Work outside Exhibit A or caused by changed assumptions will be documented in a written change order before performance.",
+        "tags": [
+          "change_control",
+          "extra_workshop",
+          "board_presentation"
+        ],
+        "citation": "SOW NSL-FIN-OM-2026 rev 2 section 6.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      }
+    ]
+  },
+  "requests": [
+    {
+      "request_id": "REQ-A-001",
+      "summary": "Add onsite board-readiness workshop",
+      "request_text": "Can the team add one onsite workshop next Friday to prep our board-readiness narrative and walk the CFO through the investor deck?",
+      "requested_by": "Mira Patel, CFO sponsor",
+      "received_at": "2026-09-09",
+      "tags": [
+        "executive_workshop",
+        "board_presentation",
+        "extra_workshop",
+        "change_control"
+      ],
+      "material_similarity": 0.41,
+      "failed_assumption": false,
+      "estimate_hours": {
+        "partner": 2,
+        "engagement_manager": 6,
+        "consultant": 10
+      },
+      "estimate_basis": "delivery lead estimate for prep, onsite facilitation and follow-up notes",
+      "source": "skill:request-intake",
+      "citation": "mail thread NSL scope asks 2026-09-09 message 3",
+      "confidence": 0.96
+    }
+  ],
+  "matches": [
+    {
+      "request_id": "REQ-A-001",
+      "summary": "Add onsite board-readiness workshop",
+      "request_text": "Can the team add one onsite workshop next Friday to prep our board-readiness narrative and walk the CFO through the investor deck?",
+      "estimate_hours": {
+        "partner": 2,
+        "engagement_manager": 6,
+        "consultant": 10
+      },
+      "estimate_basis": "delivery lead estimate for prep, onsite facilitation and follow-up notes",
+      "material_similarity": 0.41,
+      "failed_assumption": false,
+      "matched_clauses": [
+        {
+          "clause_id": "6.1",
+          "clause_type": "change_control",
+          "quote": "Work outside Exhibit A or caused by changed assumptions will be documented in a written change order before performance.",
+          "citation": "SOW NSL-FIN-OM-2026 rev 2 section 6.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: board_presentation, change_control, extra_workshop",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "4.2",
+          "clause_type": "exclusion",
+          "quote": "Executive board, investor, fundraising or steering-committee presentations beyond the two working workshops are excluded and require change control.",
+          "citation": "SOW NSL-FIN-OM-2026 rev 2 section 4.2",
+          "conflict_group": "",
+          "match_reason": "shared tags: board_presentation, executive_workshop, extra_workshop",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        }
+      ],
+      "confidence": 0.89,
+      "source": "engine:scope_match",
+      "citation": "mail thread NSL scope asks 2026-09-09 message 3"
+    }
+  ],
+  "prior_change_orders": [],
+  "delivered_artifacts": [
+    {
+      "artifact_id": "ART-A-001",
+      "name": "Workshop 1 readout",
+      "delivered_at": "2026-08-28",
+      "sow_clause": "2.1",
+      "source": "connector:engagement-workspace",
+      "citation": "workspace artifact register row 12",
+      "confidence": 0.97
+    },
+    {
+      "artifact_id": "ART-A-002",
+      "name": "Workshop 2 operating model notes",
+      "delivered_at": "2026-09-04",
+      "sow_clause": "2.1",
+      "source": "connector:engagement-workspace",
+      "citation": "workspace artifact register row 18",
+      "confidence": 0.97
+    }
+  ],
+  "escalations": [],
+  "provenance": {
+    "engines": [
+      "scope_match/1.0",
+      "scope_classify/1.0",
+      "delta_calc/1.0"
+    ],
+    "generated_at": "2026-09-23T00:00:00+00:00",
+    "demo_scenario": "scenario-a-happy"
+  },
+  "classifications": [
+    {
+      "request_id": "REQ-A-001",
+      "summary": "Add onsite board-readiness workshop",
+      "classification": "OUT_OF_SCOPE",
+      "rule": "scope-classification-rules.md #2.1",
+      "rationale": "request matches an explicit SOW exclusion; explicit exclusion beats implied inclusion",
+      "governing_clause_quote": "4.2: Executive board, investor, fundraising or steering-committee presentations beyond the two working workshops are excluded and require change control.",
+      "citation": "SOW NSL-FIN-OM-2026 rev 2 section 4.2",
+      "confidence": 0.89,
+      "source": "engine:scope_classify"
+    }
+  ],
+  "ambiguity_list": [],
+  "deltas": [
+    {
+      "request_id": "REQ-A-001",
+      "summary": "Add onsite board-readiness workshop",
+      "classification": "OUT_OF_SCOPE",
+      "base_cost": 4300.0,
+      "contingency": 645.0,
+      "total_cost": 4945.0,
+      "included_in_change_order": true,
+      "calculation": "2h partner x $450 = $900.00; 6h engagement_manager x $275 = $1,650.00; 10h consultant x $175 = $1,750.00; contingency 15% = $645.00",
+      "source": "engine:delta_calc",
+      "citation": "SOW NSL-FIN-OM-2026 rev 2 section 4.2; SOW NSL-FIN-OM-2026 rev 2 Exhibit C rate card; scope-classification-rules.md #2.1; effort-cost-delta-method.md #2.1,#3.1,#3.2",
+      "confidence": 0.89
+    }
+  ],
+  "change_order_draft": {
+    "draft_status": "DRAFT - human review required; not issued to client",
+    "title": "Draft Change Order - Finance Operating Model Mobilization",
+    "included_request_ids": [
+      "REQ-A-001"
+    ],
+    "excluded_ambiguous_request_ids": [],
+    "subtotal_before_contingency": 4300.0,
+    "contingency": 645.0,
+    "total_change_order_amount": 4945.0,
+    "boundary": "Determination and drafting only. Does not accept a change, commit effort, reprice the engagement or issue the change order."
+  },
+  "cumulative_drift": {
+    "prior_no_charge_accommodation": 0.0,
+    "current_out_of_scope_total": 4945.0,
+    "ambiguous_potential_exposure": 0.0,
+    "cumulative_margin_erosion_at_risk": 4945.0,
+    "contract_value": 420000,
+    "drift_threshold_amount": 10000.0,
+    "escalation_required": false,
+    "citation": "effort-cost-delta-method.md #4.1,#4.2,#4.3",
+    "source": "engine:delta_calc",
+    "confidence": 0.89
+  }
+}

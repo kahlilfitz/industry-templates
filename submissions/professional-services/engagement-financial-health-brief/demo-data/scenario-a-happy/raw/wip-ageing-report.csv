@@ -1,0 +1,5 @@
+record_id,age_days,amount,currency,status
+WIP-A-001,12,12000,USD,invoice-eligible
+WIP-A-002,42,8000,USD,invoice-eligible
+WIP-A-003,74,3000,USD,invoice-eligible
+WIP-A-004,96,2000,USD,invoice-eligible

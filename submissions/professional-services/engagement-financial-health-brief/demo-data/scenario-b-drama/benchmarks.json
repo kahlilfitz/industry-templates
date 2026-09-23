@@ -1,0 +1,18 @@
+{
+  "contract_version": "ps.engagement-financial-health-brief.v1",
+  "benchmarks": {
+    "practice": "Transformation Advisory",
+    "period": "2026-Q3",
+    "metric_definition_set_id": "ps-utilisation-gross-capacity-v1",
+    "median_values": {
+      "realisation_pct": 94.0,
+      "utilisation_pct": 82.0,
+      "margin_pct": 35.0,
+      "wip_over_90_pct": 6.0,
+      "eac_over_plan_pct": 1.5
+    },
+    "source": "connector:practice-benchmark",
+    "citation": "raw/practice-benchmarks.csv rows 2-6",
+    "confidence": 0.96
+  }
+}

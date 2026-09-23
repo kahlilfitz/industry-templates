@@ -1,0 +1,4 @@
+Synthetic closeout retrospective - PS-CL-1842
+Lines 8-10: Delivery lead: The twice-weekly governance huddle removed blockers faster than waiting for steering committee.
+Lines 18-24: PMO: The cutover readiness checklist was the most reusable artifact because it separates process, data, support and communications readiness.
+Lines 29-34: Change lead: Role-based training landed better than feature tours; reuse the storyboard for the next operating model rollout.

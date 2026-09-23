@@ -1,0 +1,387 @@
+{
+  "contract_version": "ps.sow-drafting-scoping-notes.v1",
+  "generated_at": "2026-09-23T21:27:10+00:00",
+  "engagement": {
+    "pursuit_id": "PS-2026-0914",
+    "client_name": "Sable Ridge Services",
+    "project_name": "Finance Workflow Pilot SOW",
+    "lifecycle_stage": "Pursuit - Contracting",
+    "source": "connector:crm",
+    "citation": "raw/crm-pursuit-record.txt",
+    "confidence": 0.98
+  },
+  "scope_summary": "Six-week finance workflow pilot covering invoice intake, matching, exception handling, target operating model and implementation roadmap.",
+  "evidence": [
+    {
+      "key": "scope.problem",
+      "value": "invoice intake workflow has manual exception handling",
+      "source": "skill:notes-ingest",
+      "citation": "raw/discovery-call-notes.md",
+      "confidence": 0.95
+    },
+    {
+      "key": "scope.processes",
+      "value": [
+        "invoice intake",
+        "matching",
+        "exception handling"
+      ],
+      "source": "skill:notes-ingest",
+      "citation": "raw/discovery-call-notes.md",
+      "confidence": 0.96
+    },
+    {
+      "key": "scope.systems",
+      "value": [
+        "finance workflow platform"
+      ],
+      "source": "skill:notes-ingest",
+      "citation": "raw/discovery-call-notes.md",
+      "confidence": 0.86
+    },
+    {
+      "key": "acceptance.criteria",
+      "value": "deliverable outline agreed in 2026-09-14 notes",
+      "source": "skill:notes-ingest",
+      "citation": "raw/discovery-call-notes.md#Acceptance",
+      "confidence": 0.91
+    },
+    {
+      "key": "acceptance.review_period",
+      "value": "five business days",
+      "source": "skill:notes-ingest",
+      "citation": "raw/discovery-call-notes.md#Acceptance",
+      "confidence": 0.94
+    },
+    {
+      "key": "data.supplier",
+      "value": "Mateo Chen owns the test-data extract",
+      "source": "skill:notes-ingest",
+      "citation": "raw/discovery-call-notes.md#Client obligations",
+      "confidence": 0.93
+    },
+    {
+      "key": "data.quality_standard",
+      "value": "120 synthetic or masked invoice cases; 95% populated key fields",
+      "source": "skill:notes-ingest",
+      "citation": "raw/discovery-call-notes.md#Client obligations",
+      "confidence": 0.92
+    }
+  ],
+  "candidate_deliverables": [
+    {
+      "id": "deliv-current-state",
+      "text": "Current-state assessment of invoice intake, matching and exception handling.",
+      "citation": "raw/discovery-call-notes.md#Confirmed deliverables",
+      "confidence": 0.96
+    },
+    {
+      "id": "deliv-target-op-model",
+      "text": "Target operating model for roles, controls and workflow states.",
+      "citation": "raw/discovery-call-notes.md#Confirmed deliverables",
+      "confidence": 0.95
+    },
+    {
+      "id": "deliv-roadmap",
+      "text": "Implementation roadmap with sequenced backlog, dependencies and risk register.",
+      "citation": "raw/discovery-call-notes.md#Confirmed deliverables",
+      "confidence": 0.95
+    }
+  ],
+  "candidate_acceptance_criteria": [
+    {
+      "id": "acc-written-criteria",
+      "text": "Deliverables accepted against the outline agreed in scoping notes with five-business-day review and specific defect notice.",
+      "citation": "raw/discovery-call-notes.md#Acceptance",
+      "confidence": 0.91
+    }
+  ],
+  "candidate_milestones": [
+    {
+      "id": "ms-discovery",
+      "name": "Discovery and current-state assessment",
+      "timing": "Weeks 1-2",
+      "basis_type": "integrated_plan",
+      "citation": "raw/discovery-call-notes.md#Milestones",
+      "confidence": 0.9
+    },
+    {
+      "id": "ms-target-model",
+      "name": "Target operating model workshops",
+      "timing": "Weeks 3-4",
+      "basis_type": "integrated_plan",
+      "citation": "raw/discovery-call-notes.md#Milestones",
+      "confidence": 0.9
+    },
+    {
+      "id": "ms-roadmap",
+      "name": "Roadmap and executive readout",
+      "timing": "Weeks 5-6",
+      "basis_type": "integrated_plan",
+      "citation": "raw/discovery-call-notes.md#Milestones",
+      "confidence": 0.9
+    }
+  ],
+  "candidate_assumptions": [
+    {
+      "id": "asm-client-access",
+      "text": "Client provides timely access to process owners for two workshops.",
+      "citation": "raw/discovery-call-notes.md",
+      "confidence": 0.88
+    }
+  ],
+  "candidate_exclusions": [
+    {
+      "id": "exc-build",
+      "text": "System configuration, production deployment and managed services are excluded from this pilot.",
+      "citation": "raw/discovery-call-notes.md",
+      "confidence": 0.87
+    }
+  ],
+  "prior_sow_terms": [
+    {
+      "family": "limitation_of_liability",
+      "summary": "Prior SOW used the standard aggregate cap tied to SOW fees and excluded indirect damages.",
+      "one_off_approval": false,
+      "client_specific": false,
+      "material_difference": "none",
+      "source": "skill:notes-ingest",
+      "citation": "raw/prior-executed-sow.md#Limitation of liability",
+      "confidence": 0.9
+    },
+    {
+      "family": "data_protection",
+      "summary": "Prior SOW kept data remedies inside the approved liability framework.",
+      "one_off_approval": false,
+      "client_specific": false,
+      "material_difference": "none",
+      "source": "skill:notes-ingest",
+      "citation": "raw/prior-executed-sow.md#Data protection",
+      "confidence": 0.9
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "scope_extract/1.0",
+      "clause_select/1.0",
+      "deviation_flag/1.0"
+    ],
+    "demo_scenario": "scenario-a-happy",
+    "generated_at": "2026-09-23T21:27:10+00:00"
+  },
+  "scope": {
+    "summary": "Six-week finance workflow pilot covering invoice intake, matching, exception handling, target operating model and implementation roadmap.",
+    "deliverables": [
+      {
+        "id": "deliv-current-state",
+        "text": "Current-state assessment of invoice intake, matching and exception handling.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-notes.md#Confirmed deliverables",
+        "confidence": 0.96
+      },
+      {
+        "id": "deliv-target-op-model",
+        "text": "Target operating model for roles, controls and workflow states.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-notes.md#Confirmed deliverables",
+        "confidence": 0.95
+      },
+      {
+        "id": "deliv-roadmap",
+        "text": "Implementation roadmap with sequenced backlog, dependencies and risk register.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-notes.md#Confirmed deliverables",
+        "confidence": 0.95
+      }
+    ],
+    "milestones": [
+      {
+        "id": "ms-discovery",
+        "name": "Discovery and current-state assessment",
+        "timing": "Weeks 1-2",
+        "commitment_status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-notes.md#Milestones",
+        "confidence": 0.9
+      },
+      {
+        "id": "ms-target-model",
+        "name": "Target operating model workshops",
+        "timing": "Weeks 3-4",
+        "commitment_status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-notes.md#Milestones",
+        "confidence": 0.9
+      },
+      {
+        "id": "ms-roadmap",
+        "name": "Roadmap and executive readout",
+        "timing": "Weeks 5-6",
+        "commitment_status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-notes.md#Milestones",
+        "confidence": 0.9
+      }
+    ],
+    "acceptance_criteria": [
+      {
+        "id": "acc-written-criteria",
+        "text": "Deliverables accepted against the outline agreed in scoping notes with five-business-day review and specific defect notice.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-notes.md#Acceptance",
+        "confidence": 0.91
+      }
+    ],
+    "assumptions": [
+      {
+        "id": "asm-client-access",
+        "text": "Client provides timely access to process owners for two workshops.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-notes.md",
+        "confidence": 0.88
+      }
+    ],
+    "exclusions": [
+      {
+        "id": "exc-build",
+        "text": "System configuration, production deployment and managed services are excluded from this pilot.",
+        "status": "draftable",
+        "source": "engine:scope_extract",
+        "citation": "raw/discovery-call-notes.md",
+        "confidence": 0.87
+      }
+    ],
+    "thin_input_report": []
+  },
+  "escalations": [],
+  "clause_library": {
+    "library_id": "PS-CLAUSE-LIB",
+    "version": "2026.09",
+    "approval_status": "approved",
+    "source": "engine:clause_select",
+    "citation": "raw/approved-clause-library-extract.md",
+    "confidence": 0.99
+  },
+  "selected_clauses": [
+    {
+      "family": "limitation_of_liability",
+      "library_id": "PS-LOL-001",
+      "library_version": "2026.09",
+      "title": "Limitation of liability",
+      "risk_tier": "high",
+      "approved_clause": "Mutual aggregate liability is capped at fees paid or payable under this SOW; indirect, consequential and special damages are excluded except where the MSA expressly says otherwise.",
+      "draft_allowed": true,
+      "deviation_state": "no_deviation",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.1",
+      "confidence": 0.99
+    },
+    {
+      "family": "ip_ownership",
+      "library_id": "PS-IP-001",
+      "library_version": "2026.09",
+      "title": "IP ownership",
+      "risk_tier": "medium",
+      "approved_clause": "Pre-existing materials, accelerators and know-how remain provider property; after payment, the client receives a license to use deliverables for internal business purposes.",
+      "draft_allowed": true,
+      "deviation_state": "no_deviation",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.3",
+      "confidence": 0.99
+    },
+    {
+      "family": "payment_terms",
+      "library_id": "PS-PAY-001",
+      "library_version": "2026.09",
+      "title": "Payment terms",
+      "risk_tier": "medium",
+      "approved_clause": "Fees are billed by milestone or monthly in arrears as stated in this SOW; undisputed invoices are due net 30; taxes and reimbursable expenses are excluded unless listed.",
+      "draft_allowed": true,
+      "deviation_state": "no_deviation",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.4",
+      "confidence": 0.99
+    },
+    {
+      "family": "termination",
+      "library_id": "PS-TERM-001",
+      "library_version": "2026.09",
+      "title": "Termination",
+      "risk_tier": "medium",
+      "approved_clause": "Either party may terminate for uncured material breach after notice and cure period; client pays for services performed and approved non-cancellable commitments through the effective date.",
+      "draft_allowed": true,
+      "deviation_state": "no_deviation",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.5",
+      "confidence": 0.99
+    },
+    {
+      "family": "warranty_disclaimer",
+      "library_id": "PS-WAR-001",
+      "library_version": "2026.09",
+      "title": "Warranty and disclaimer",
+      "risk_tier": "medium",
+      "approved_clause": "Services will be performed in a professional and workmanlike manner; except for express SOW warranties, all other warranties are disclaimed to the extent permitted.",
+      "draft_allowed": true,
+      "deviation_state": "no_deviation",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.6",
+      "confidence": 0.99
+    },
+    {
+      "family": "change_control",
+      "library_id": "PS-CC-001",
+      "library_version": "2026.09",
+      "title": "Change control",
+      "risk_tier": "low",
+      "approved_clause": "Changes to scope, timing, dependencies, assumptions or fees require a written change order signed by authorized representatives before work proceeds.",
+      "draft_allowed": true,
+      "deviation_state": "no_deviation",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.7",
+      "confidence": 0.99
+    },
+    {
+      "family": "acceptance",
+      "library_id": "PS-ACC-001",
+      "library_version": "2026.09",
+      "title": "Acceptance",
+      "risk_tier": "medium",
+      "approved_clause": "Deliverables are accepted against written acceptance criteria; the client has five business days to reject with specific defects; silence after the review period is deemed acceptance only where objective criteria are defined.",
+      "draft_allowed": true,
+      "deviation_state": "no_deviation",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.2",
+      "confidence": 0.99
+    },
+    {
+      "family": "data_protection",
+      "library_id": "PS-DP-001",
+      "library_version": "2026.09",
+      "title": "Data protection",
+      "risk_tier": "high",
+      "approved_clause": "Each party follows the data protection addendum and agreed security schedule; data-related remedies and indemnities remain subject to the MSA/SOW liability framework unless QRM approves otherwise.",
+      "draft_allowed": true,
+      "deviation_state": "no_deviation",
+      "source": "engine:clause_select",
+      "citation": "approved-clause-library.md #2.8",
+      "confidence": 0.99
+    }
+  ],
+  "deviations": [],
+  "deviation_summary": {
+    "critical": 0,
+    "major": 0,
+    "minor": 0,
+    "thin_input_blocks": 0,
+    "requires_qrm_review": false,
+    "source": "engine:deviation_flag",
+    "citation": "qrm-deviation-rules.md #3.1-#3.4,#4.4",
+    "confidence": 0.99
+  }
+}

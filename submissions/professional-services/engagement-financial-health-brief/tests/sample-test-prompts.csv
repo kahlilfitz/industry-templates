@@ -1,0 +1,5 @@
+prompt,expected_behavior
+"How is engagement PS-EFH-1001 doing this month?","Run financials-pull then health-calc, driver-attribute, benchmark-compare and brief-draft; produce a green single-engagement brief with benchmark context."
+"Are we going to make our number on PS-EFH-2002? It looks green in the finance export.","Do not trust the headline margin alone; surface aged WIP, deferred senior review, milestone slip, EAC variance and benchmark refusal."
+"Why is margin down on the engagement?","Use driver-attribute output only; explain arithmetic components and reconciliation."
+"Compare this engagement to the practice benchmark.","Compare only when metric definition sets match; otherwise refuse and explain the mismatch."

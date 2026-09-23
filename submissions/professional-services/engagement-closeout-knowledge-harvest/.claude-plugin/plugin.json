@@ -1,0 +1,7 @@
+{
+  "name": "engagement-closeout-knowledge-harvest",
+  "version": "1.0.0",
+  "description": "Professional Services Cowork plugin: close out an engagement before the team disperses. Retrieves the artifact set, deliverable register, decision log and retrospective inputs; assembles a final deliverable index; scores reusable assets with asset_identify; clusters lessons with lesson_cluster; performs an explicit confidentiality Govern gate with sanitize_check; drafts a sanitised knowledge record for practice review. Draft-first; never publishes to a knowledge base, clears a confidentiality restriction, approves external use or waives a client term. The knowledge record is shaped for downstream Credential & Case Study Assembly.",
+  "author": { "name": "Microsoft Professional Services Skills" },
+  "keywords": ["professional-services", "closeout", "knowledge-management", "lessons-learned", "sanitisation", "confidentiality", "reuse"]
+}

@@ -1,0 +1,5 @@
+person_id,role,work_type,chargeable_hours,available_hours
+SYN-A-01,Partner,senior_review,16,20
+SYN-A-02,Director,senior_review,36,40
+SYN-A-03,Manager,delivery,420,500
+SYN-A-04,Consultant,delivery,1828,2390

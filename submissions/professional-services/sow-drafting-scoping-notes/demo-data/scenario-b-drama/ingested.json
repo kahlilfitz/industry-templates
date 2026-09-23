@@ -1,0 +1,62 @@
+{
+  "contract_version": "ps.sow-drafting-scoping-notes.v1",
+  "generated_at": "2026-09-23T21:27:10+00:00",
+  "engagement": {
+    "pursuit_id": "PS-2026-0918",
+    "client_name": "Riverbend Field Services",
+    "project_name": "Scheduling Modernization SOW",
+    "lifecycle_stage": "Pursuit - Contracting",
+    "source": "connector:crm",
+    "citation": "raw/crm-pursuit-record.txt",
+    "confidence": 0.98
+  },
+  "scope_summary": "First-phase scheduling modernization covering process discovery, scheduling design, pilot backlog and enablement plan.",
+  "evidence": [
+    { "key": "scope.problem", "value": "dispatch scheduling needs improvement before year end", "source": "skill:notes-ingest", "citation": "raw/discovery-call-transcript.txt", "confidence": 0.9 },
+    { "key": "scope.processes", "value": ["dispatch scheduling", "supervisor schedule review", "pilot backlog"], "source": "skill:notes-ingest", "citation": "raw/discovery-call-transcript.txt", "confidence": 0.88 },
+    { "key": "scope.systems", "value": ["scheduling platform"], "source": "skill:notes-ingest", "citation": "raw/discovery-call-transcript.txt", "confidence": 0.78 }
+  ],
+  "candidate_deliverables": [
+    { "id": "deliv-discovery", "text": "Process discovery summary for dispatch scheduling pain points and supervisor workflows.", "citation": "raw/discovery-call-transcript.txt", "confidence": 0.88 },
+    { "id": "deliv-design", "text": "Scheduling design options and recommended pilot workflow.", "citation": "raw/discovery-call-transcript.txt", "confidence": 0.86 },
+    { "id": "deliv-backlog", "text": "Pilot backlog and enablement plan for a later implementation phase.", "citation": "raw/discovery-call-transcript.txt", "confidence": 0.84 }
+  ],
+  "candidate_acceptance_criteria": [
+    { "id": "acc-supervisor-says-usable", "text": "Supervisors say the schedule looks usable.", "citation": "raw/discovery-call-transcript.txt", "confidence": 0.41 }
+  ],
+  "candidate_milestones": [
+    { "id": "ms-go-live", "name": "Target go-live", "timing": "2026-12-15", "basis_type": "verbal_only", "citation": "raw/discovery-call-transcript.txt", "confidence": 0.55 }
+  ],
+  "candidate_assumptions": [
+    { "id": "asm-workshop-access", "text": "Client will provide supervisor availability for discovery workshops.", "citation": "raw/discovery-call-transcript.txt", "confidence": 0.78 }
+  ],
+  "candidate_exclusions": [
+    { "id": "exc-production-deployment", "text": "Production deployment and post-go-live support are outside this first-phase drafting scope.", "citation": "raw/discovery-call-transcript.txt", "confidence": 0.76 }
+  ],
+  "prior_sow_terms": [
+    {
+      "family": "limitation_of_liability",
+      "summary": "Prior SOW caps provider liability at three times fees, carves data breach and confidentiality breach out of the cap, and permits indirect damages for data breach claims.",
+      "one_off_approval": true,
+      "client_specific": true,
+      "material_difference": "broader liability cap, uncapped carve-outs and indirect-damage exposure compared with approved library clause",
+      "source": "skill:notes-ingest",
+      "citation": "raw/prior-executed-sow-just-copy-this-one.md#Limitation of liability",
+      "confidence": 0.94
+    },
+    {
+      "family": "data_protection",
+      "summary": "Prior SOW provides uncapped indemnity for all data-protection losses, regulatory fines, third-party claims, investigation costs and remediation costs.",
+      "one_off_approval": true,
+      "client_specific": true,
+      "material_difference": "uncapped data-protection indemnity outside approved liability framework",
+      "source": "skill:notes-ingest",
+      "citation": "raw/prior-executed-sow-just-copy-this-one.md#Data protection indemnity",
+      "confidence": 0.95
+    }
+  ],
+  "provenance": {
+    "engines": [],
+    "demo_scenario": "scenario-b-drama"
+  }
+}

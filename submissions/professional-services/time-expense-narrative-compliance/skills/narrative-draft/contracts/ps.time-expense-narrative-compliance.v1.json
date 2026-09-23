@@ -1,0 +1,241 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ps.time-expense-narrative-compliance.v1",
+  "title": "Time & Expense Narrative Compliance contract v1",
+  "description": "Chains activity-pull -> narrative-draft -> code-map -> guideline-check (Govern) -> exception-report. Every hop carries data, confidence, provenance and citations.",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "engagement",
+    "period",
+    "activity_signals",
+    "time_entries"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "ps.time-expense-narrative-compliance.v1"
+    },
+    "engagement": {
+      "type": "object",
+      "required": [
+        "engagement_id",
+        "client_name",
+        "matter_name"
+      ],
+      "properties": {
+        "engagement_id": {
+          "type": "string"
+        },
+        "client_name": {
+          "type": "string"
+        },
+        "matter_name": {
+          "type": "string"
+        },
+        "billing_guidelines_id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number"
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "period": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "string"
+        },
+        "end": {
+          "type": "string"
+        }
+      }
+    },
+    "signal_config": {
+      "type": "object"
+    },
+    "activity_signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "activity_id",
+          "person",
+          "date",
+          "activity_class",
+          "duration_hours",
+          "subject",
+          "purpose",
+          "source",
+          "confidence",
+          "citations"
+        ],
+        "properties": {
+          "activity_id": {
+            "type": "string"
+          },
+          "person": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "activity_class": {
+            "type": "string"
+          },
+          "duration_hours": {
+            "type": "number"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "meeting_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "billable_signal": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(engine|skill|connector):"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "time_entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "entry_id",
+          "person",
+          "date",
+          "duration_hours",
+          "source",
+          "confidence",
+          "citations"
+        ],
+        "properties": {
+          "entry_id": {
+            "type": "string"
+          },
+          "person": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "duration_hours": {
+            "type": "number"
+          },
+          "narrative": {
+            "type": "string"
+          },
+          "activity_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "submitted_phase_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "submitted_task_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "draft": {
+            "type": "object"
+          },
+          "code_mapping": {
+            "type": "object"
+          },
+          "compliance": {
+            "type": "object"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(engine|skill|connector):"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "code_structure": {
+      "type": "object"
+    },
+    "guidelines": {
+      "type": "object"
+    },
+    "missing_time_report": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "exception_list": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "prebill_summary": {
+      "type": "object"
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "engines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "demo_scenario": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

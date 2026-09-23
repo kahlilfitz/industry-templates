@@ -1,0 +1,488 @@
+{
+  "contract_version": "ps.engagement-staffing-bench-match.v1",
+  "engagement": {
+    "engagement_id": "ENG-PS-2026-2077",
+    "client_name": "Aster Foods Cooperative",
+    "practice": "Finance Transformation",
+    "stage": "Mobilisation - Resourcing",
+    "source": "skill:role-intake",
+    "confidence": 0.96,
+    "citation": "SOW extract AFC-2077, header and staffing request email"
+  },
+  "roles": [
+    {
+      "role_id": "PSS-101",
+      "title": "Finance transformation manager",
+      "seniority": "manager",
+      "start_date": "2026-10-12",
+      "duration_weeks": 20,
+      "allocation_pct": 60,
+      "location": "Denver",
+      "remote_ok": false,
+      "required_languages": [
+        "English"
+      ],
+      "required_skills": [
+        "finance transformation",
+        "ERP advisory",
+        "stakeholder management"
+      ],
+      "preferred_skills": [
+        "food distribution",
+        "risk management"
+      ],
+      "required_certifications": [
+        "CPA"
+      ],
+      "industry_context": "food distribution",
+      "rate_band": {
+        "currency": "USD",
+        "min": 225,
+        "max": 275
+      },
+      "source": "skill:role-intake",
+      "confidence": 0.96,
+      "citation": "SOW AFC-2077 section 4.1 role 1"
+    },
+    {
+      "role_id": "PSS-102",
+      "title": "Spanish-speaking workforce planning analyst",
+      "seniority": "senior consultant",
+      "start_date": "2026-10-12",
+      "duration_weeks": 10,
+      "allocation_pct": 80,
+      "location": "Denver",
+      "remote_ok": false,
+      "required_languages": [
+        "English",
+        "Spanish"
+      ],
+      "required_skills": [
+        "workforce planning",
+        "SQL",
+        "Spanish-language facilitation"
+      ],
+      "preferred_skills": [
+        "food distribution",
+        "Power BI"
+      ],
+      "required_certifications": [],
+      "industry_context": "food distribution",
+      "rate_band": {
+        "currency": "USD",
+        "min": 150,
+        "max": 205
+      },
+      "source": "skill:role-intake",
+      "confidence": 0.94,
+      "citation": "SOW AFC-2077 section 4.1 role 2"
+    }
+  ],
+  "escalations": [],
+  "provenance": {
+    "generated_at": "2026-09-23T21:20:34Z",
+    "demo_scenario": "scenario-b-drama",
+    "engines": [
+      "fit_score/1.0"
+    ]
+  },
+  "bench_candidates": [
+    {
+      "candidate_id": "C-201",
+      "name": "Mina Patel",
+      "seniority": "manager",
+      "skills": [
+        "finance transformation",
+        "ERP advisory",
+        "stakeholder management",
+        "food distribution",
+        "risk management"
+      ],
+      "certifications": [
+        "CPA"
+      ],
+      "industry_experience": [
+        "food distribution",
+        "finance transformation"
+      ],
+      "location": "Denver",
+      "languages": [
+        "English"
+      ],
+      "rate": 260,
+      "current_allocation_pct": 10,
+      "target_utilization_pct": 85,
+      "approved_leave": [],
+      "soft_bookings": [],
+      "source": "connector:resource-management-system",
+      "confidence": 0.98,
+      "citation": "bench export row C-201; profile Mina Patel"
+    },
+    {
+      "candidate_id": "C-202",
+      "name": "Owen Ramos",
+      "seniority": "manager",
+      "skills": [
+        "finance transformation",
+        "ERP advisory",
+        "stakeholder management",
+        "risk management"
+      ],
+      "certifications": [
+        "CPA"
+      ],
+      "industry_experience": [
+        "finance transformation"
+      ],
+      "location": "Denver",
+      "languages": [
+        "English"
+      ],
+      "rate": 270,
+      "current_allocation_pct": 30,
+      "target_utilization_pct": 85,
+      "approved_leave": [],
+      "soft_bookings": [],
+      "source": "connector:resource-management-system",
+      "confidence": 0.96,
+      "citation": "bench export row C-202; profile Owen Ramos"
+    },
+    {
+      "candidate_id": "C-203",
+      "name": "Nico Stone",
+      "seniority": "senior consultant",
+      "skills": [
+        "workforce planning",
+        "SQL",
+        "Spanish-language facilitation",
+        "Power BI",
+        "food distribution"
+      ],
+      "certifications": [],
+      "industry_experience": [
+        "food distribution"
+      ],
+      "location": "Denver",
+      "languages": [
+        "English",
+        "Spanish"
+      ],
+      "rate": 185,
+      "current_allocation_pct": 0,
+      "target_utilization_pct": 85,
+      "approved_leave": [
+        {
+          "start": "2026-10-10",
+          "end": "2026-10-24",
+          "allocation_pct": 40,
+          "citation": "leave calendar request LV-7782"
+        }
+      ],
+      "soft_bookings": [
+        {
+          "start": "2026-10-01",
+          "end": "2026-11-15",
+          "allocation_pct": 30,
+          "citation": "pursuit soft-book SB-914"
+        }
+      ],
+      "source": "connector:resource-management-system",
+      "confidence": 0.97,
+      "citation": "bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914"
+    },
+    {
+      "candidate_id": "C-204",
+      "name": "Priya Desai",
+      "seniority": "senior consultant",
+      "skills": [
+        "finance transformation",
+        "ERP advisory",
+        "workforce planning",
+        "SQL"
+      ],
+      "certifications": [],
+      "industry_experience": [
+        "food distribution"
+      ],
+      "location": "Denver",
+      "languages": [
+        "English",
+        "Spanish"
+      ],
+      "rate": 200,
+      "current_allocation_pct": 20,
+      "target_utilization_pct": 80,
+      "approved_leave": [],
+      "soft_bookings": [],
+      "source": "connector:resource-management-system",
+      "confidence": 0.95,
+      "citation": "bench export row C-204; profile Priya Desai"
+    }
+  ],
+  "scored_roles": [
+    {
+      "role_id": "PSS-101",
+      "role_title": "Finance transformation manager",
+      "candidate_scores": [
+        {
+          "candidate_id": "C-201",
+          "candidate_name": "Mina Patel",
+          "fit_score": 100.0,
+          "component_scores": {
+            "skills": 1.0,
+            "seniority": 1.0,
+            "availability": 1.0,
+            "location_language": 1.0,
+            "rate_band": 1.0,
+            "continuity": 1.0
+          },
+          "availability_context": {
+            "current_allocation_pct": 10.0,
+            "approved_leave_overlap_pct": 0.0,
+            "soft_booking_overlap_pct": 0.0,
+            "effective_available_pct": 90.0,
+            "requested_allocation_pct": 60.0,
+            "utilization_after_staffing_pct": 70.0,
+            "component_score": 1.0
+          },
+          "matched_required_skills": [
+            "ERP advisory",
+            "finance transformation",
+            "stakeholder management"
+          ],
+          "matched_preferred_skills": [
+            "food distribution",
+            "risk management"
+          ],
+          "source": "engine:fit_score",
+          "confidence": 0.96,
+          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-201; profile Mina Patel"
+        },
+        {
+          "candidate_id": "C-202",
+          "candidate_name": "Owen Ramos",
+          "fit_score": 91.0,
+          "component_scores": {
+            "skills": 0.9,
+            "seniority": 1.0,
+            "availability": 1.0,
+            "location_language": 1.0,
+            "rate_band": 1.0,
+            "continuity": 0.0
+          },
+          "availability_context": {
+            "current_allocation_pct": 30.0,
+            "approved_leave_overlap_pct": 0.0,
+            "soft_booking_overlap_pct": 0.0,
+            "effective_available_pct": 70.0,
+            "requested_allocation_pct": 60.0,
+            "utilization_after_staffing_pct": 90.0,
+            "component_score": 1.0
+          },
+          "matched_required_skills": [
+            "ERP advisory",
+            "finance transformation",
+            "stakeholder management"
+          ],
+          "matched_preferred_skills": [
+            "risk management"
+          ],
+          "source": "engine:fit_score",
+          "confidence": 0.96,
+          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-202; profile Owen Ramos"
+        },
+        {
+          "candidate_id": "C-203",
+          "candidate_name": "Nico Stone",
+          "fit_score": 49.3,
+          "component_scores": {
+            "skills": 0.1,
+            "seniority": 0.75,
+            "availability": 0.5,
+            "location_language": 1.0,
+            "rate_band": 0.9,
+            "continuity": 1.0
+          },
+          "availability_context": {
+            "current_allocation_pct": 0.0,
+            "approved_leave_overlap_pct": 40.0,
+            "soft_booking_overlap_pct": 30.0,
+            "effective_available_pct": 30.0,
+            "requested_allocation_pct": 60.0,
+            "utilization_after_staffing_pct": 60.0,
+            "component_score": 0.5
+          },
+          "matched_required_skills": [],
+          "matched_preferred_skills": [
+            "food distribution"
+          ],
+          "source": "engine:fit_score",
+          "confidence": 0.96,
+          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914"
+        },
+        {
+          "candidate_id": "C-204",
+          "candidate_name": "Priya Desai",
+          "fit_score": 73.9,
+          "component_scores": {
+            "skills": 0.467,
+            "seniority": 0.75,
+            "availability": 1.0,
+            "location_language": 1.0,
+            "rate_band": 0.9,
+            "continuity": 1.0
+          },
+          "availability_context": {
+            "current_allocation_pct": 20.0,
+            "approved_leave_overlap_pct": 0.0,
+            "soft_booking_overlap_pct": 0.0,
+            "effective_available_pct": 80.0,
+            "requested_allocation_pct": 60.0,
+            "utilization_after_staffing_pct": 80.0,
+            "component_score": 1.0
+          },
+          "matched_required_skills": [
+            "ERP advisory",
+            "finance transformation"
+          ],
+          "matched_preferred_skills": [],
+          "source": "engine:fit_score",
+          "confidence": 0.95,
+          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-204; profile Priya Desai"
+        }
+      ],
+      "source": "engine:fit_score",
+      "confidence": 0.96,
+      "citation": "SOW AFC-2077 section 4.1 role 1"
+    },
+    {
+      "role_id": "PSS-102",
+      "role_title": "Spanish-speaking workforce planning analyst",
+      "candidate_scores": [
+        {
+          "candidate_id": "C-201",
+          "candidate_name": "Mina Patel",
+          "fit_score": 54.3,
+          "component_scores": {
+            "skills": 0.2,
+            "seniority": 0.75,
+            "availability": 1.0,
+            "location_language": 0.8,
+            "rate_band": 0.2,
+            "continuity": 1.0
+          },
+          "availability_context": {
+            "current_allocation_pct": 10.0,
+            "approved_leave_overlap_pct": 0.0,
+            "soft_booking_overlap_pct": 0.0,
+            "effective_available_pct": 90.0,
+            "requested_allocation_pct": 80.0,
+            "utilization_after_staffing_pct": 90.0,
+            "component_score": 1.0
+          },
+          "matched_required_skills": [],
+          "matched_preferred_skills": [
+            "food distribution"
+          ],
+          "source": "engine:fit_score",
+          "confidence": 0.94,
+          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-201; profile Mina Patel"
+        },
+        {
+          "candidate_id": "C-202",
+          "candidate_name": "Owen Ramos",
+          "fit_score": 42.8,
+          "component_scores": {
+            "skills": 0.1,
+            "seniority": 0.75,
+            "availability": 0.875,
+            "location_language": 0.8,
+            "rate_band": 0.2,
+            "continuity": 0.0
+          },
+          "availability_context": {
+            "current_allocation_pct": 30.0,
+            "approved_leave_overlap_pct": 0.0,
+            "soft_booking_overlap_pct": 0.0,
+            "effective_available_pct": 70.0,
+            "requested_allocation_pct": 80.0,
+            "utilization_after_staffing_pct": 110.0,
+            "component_score": 0.875
+          },
+          "matched_required_skills": [],
+          "matched_preferred_skills": [],
+          "source": "engine:fit_score",
+          "confidence": 0.94,
+          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-202; profile Owen Ramos"
+        },
+        {
+          "candidate_id": "C-203",
+          "candidate_name": "Nico Stone",
+          "fit_score": 87.5,
+          "component_scores": {
+            "skills": 1.0,
+            "seniority": 1.0,
+            "availability": 0.375,
+            "location_language": 1.0,
+            "rate_band": 1.0,
+            "continuity": 1.0
+          },
+          "availability_context": {
+            "current_allocation_pct": 0.0,
+            "approved_leave_overlap_pct": 40.0,
+            "soft_booking_overlap_pct": 30.0,
+            "effective_available_pct": 30.0,
+            "requested_allocation_pct": 80.0,
+            "utilization_after_staffing_pct": 80.0,
+            "component_score": 0.375
+          },
+          "matched_required_skills": [
+            "SQL",
+            "Spanish-language facilitation",
+            "workforce planning"
+          ],
+          "matched_preferred_skills": [
+            "Power BI",
+            "food distribution"
+          ],
+          "source": "engine:fit_score",
+          "confidence": 0.94,
+          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914"
+        },
+        {
+          "candidate_id": "C-204",
+          "candidate_name": "Priya Desai",
+          "fit_score": 82.7,
+          "component_scores": {
+            "skills": 0.567,
+            "seniority": 1.0,
+            "availability": 1.0,
+            "location_language": 1.0,
+            "rate_band": 1.0,
+            "continuity": 1.0
+          },
+          "availability_context": {
+            "current_allocation_pct": 20.0,
+            "approved_leave_overlap_pct": 0.0,
+            "soft_booking_overlap_pct": 0.0,
+            "effective_available_pct": 80.0,
+            "requested_allocation_pct": 80.0,
+            "utilization_after_staffing_pct": 100.0,
+            "component_score": 1.0
+          },
+          "matched_required_skills": [
+            "SQL",
+            "workforce planning"
+          ],
+          "matched_preferred_skills": [],
+          "source": "engine:fit_score",
+          "confidence": 0.94,
+          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-204; profile Priya Desai"
+        }
+      ],
+      "source": "engine:fit_score",
+      "confidence": 0.94,
+      "citation": "SOW AFC-2077 section 4.1 role 2"
+    }
+  ]
+}

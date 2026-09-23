@@ -1,0 +1,69 @@
+{
+  "contract_version": "ps.engagement-staffing-bench-match.v1",
+  "engagement": {
+    "engagement_id": "ENG-PS-2026-1042",
+    "client_name": "Orchard Ridge Clinics",
+    "source": "skill:bench-query",
+    "confidence": 0.96,
+    "citation": "bench export RM-2026-09-23"
+  },
+  "roles": [],
+  "bench_candidates": [
+    {
+      "candidate_id": "C-101",
+      "name": "Ava Morgan",
+      "seniority": "manager",
+      "skills": ["stakeholder management", "mobilisation planning", "risk management", "health operations", "Power Platform"],
+      "certifications": [],
+      "industry_experience": ["health operations", "customer operations"],
+      "location": "Chicago",
+      "languages": ["English"],
+      "rate": 240,
+      "current_allocation_pct": 25,
+      "target_utilization_pct": 80,
+      "approved_leave": [],
+      "soft_bookings": [],
+      "source": "connector:resource-management-system",
+      "confidence": 0.97,
+      "citation": "bench export row C-101; profile Ava Morgan"
+    },
+    {
+      "candidate_id": "C-102",
+      "name": "Leo Brooks",
+      "seniority": "senior consultant",
+      "skills": ["data migration", "SQL", "data reconciliation", "Power Platform", "health operations"],
+      "certifications": [],
+      "industry_experience": ["health operations"],
+      "location": "Milwaukee",
+      "languages": ["English"],
+      "rate": 190,
+      "current_allocation_pct": 10,
+      "target_utilization_pct": 85,
+      "approved_leave": [],
+      "soft_bookings": [],
+      "source": "connector:resource-management-system",
+      "confidence": 0.96,
+      "citation": "bench export row C-102; profile Leo Brooks"
+    },
+    {
+      "candidate_id": "C-103",
+      "name": "Mara Singh",
+      "seniority": "manager",
+      "skills": ["stakeholder management", "risk management", "data reconciliation", "retail operations"],
+      "certifications": [],
+      "industry_experience": ["retail operations"],
+      "location": "Chicago",
+      "languages": ["English", "Spanish"],
+      "rate": 230,
+      "current_allocation_pct": 40,
+      "target_utilization_pct": 80,
+      "approved_leave": [],
+      "soft_bookings": [],
+      "source": "connector:resource-management-system",
+      "confidence": 0.95,
+      "citation": "bench export row C-103; profile Mara Singh"
+    }
+  ],
+  "escalations": [],
+  "provenance": { "generated_at": "2026-09-23T21:20:34Z", "demo_scenario": "scenario-a-happy" }
+}

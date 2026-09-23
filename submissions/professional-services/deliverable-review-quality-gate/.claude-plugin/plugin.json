@@ -1,0 +1,7 @@
+{
+  "name": "deliverable-review-quality-gate",
+  "version": "1.0.0",
+  "description": "Professional Services Cowork plugin: review a draft deliverable before client release. Retrieves the deliverable, support pack and QRM gate criteria; maps assertions to evidence with deterministic assertion_map; determines gate compliance with deterministic gate_check; ranks release blockers, must-fix items and advisories with deterministic severity_rank; drafts a partner review packet. Govern is explicit because release readiness is a firm-risk determination. Draft-first; no sign-off, gate clearance, release approval or substitution for reviewing-partner judgement.",
+  "author": { "name": "Microsoft Professional Services Skills" },
+  "keywords": ["professional-services", "quality", "deliverable-review", "qrm", "substantiation", "release-readiness", "review-packet"]
+}

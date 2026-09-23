@@ -1,0 +1,14 @@
+{
+  "contract_version": "ps.engagement-financial-health-brief.v1",
+  "wip_report": {
+    "source": "connector:time-and-billing",
+    "citation": "raw/wip-ageing-report.csv rows 2-5",
+    "confidence": 0.99
+  },
+  "wip_records": [
+    { "record_id": "WIP-A-001", "age_days": 12, "amount": 12000 },
+    { "record_id": "WIP-A-002", "age_days": 42, "amount": 8000 },
+    { "record_id": "WIP-A-003", "age_days": 74, "amount": 3000 },
+    { "record_id": "WIP-A-004", "age_days": 96, "amount": 2000 }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "credential-case-study-assembly",
+  "version": "1.0.0",
+  "description": "Professional Services Cowork plugin: consumes the sanitised closeout knowledge record from Engagement Closeout & Knowledge Harvest, matches it to a credential taxonomy, checks client naming/reference permissions with deterministic permission_check governance, and drafts credential and case-study variants. Draft-first; it does not publish, approve external use, clear a client name or assert unverified figures.",
+  "author": {
+    "name": "Microsoft Professional Services Skills"
+  },
+  "keywords": [
+    "professional-services",
+    "credentials",
+    "case-study",
+    "business-development",
+    "closeout",
+    "reference-permissions",
+    "anonymisation"
+  ]
+}

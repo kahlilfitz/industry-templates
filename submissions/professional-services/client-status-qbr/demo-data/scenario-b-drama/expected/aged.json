@@ -1,0 +1,340 @@
+{
+  "contract_version": "ps.client-status-qbr.v1",
+  "engagement": {
+    "engagement_id": "PS-VERD-2207",
+    "name": "Verdant Mutual Claims Modernization",
+    "client_name": "Verdant Mutual",
+    "manager": "Jon Bell",
+    "partner": "Leah Moreno",
+    "source": "skill:plan-retrieve",
+    "confidence": 0.98,
+    "citation": "raw/pm-email.txt"
+  },
+  "reporting_period": {
+    "start": "2026-09-14",
+    "end": "2026-09-20",
+    "previous_start": "2026-09-07",
+    "previous_end": "2026-09-13",
+    "source": "skill:plan-retrieve",
+    "confidence": 0.99,
+    "citation": "raw/prior-status-pack.md"
+  },
+  "sources": [
+    {
+      "id": "SRC-PLAN",
+      "type": "plan",
+      "title": "Engagement plan extract",
+      "source": "connector:project-repository",
+      "confidence": 0.98,
+      "citation": "raw/plan-extract.md"
+    },
+    {
+      "id": "SRC-BURN",
+      "type": "finance",
+      "title": "Burn export",
+      "source": "connector:time-billing",
+      "confidence": 0.97,
+      "citation": "raw/burn-export.csv"
+    },
+    {
+      "id": "SRC-STATUS",
+      "type": "prior_status",
+      "title": "Prior client status pack",
+      "source": "connector:sharepoint",
+      "confidence": 0.97,
+      "citation": "raw/prior-status-pack.md"
+    }
+  ],
+  "plan": {
+    "milestones": [
+      {
+        "id": "M-401",
+        "name": "Claims rules design sign-off",
+        "original_baseline_date": "2026-09-30",
+        "current_baseline_date": "2026-10-14",
+        "current_forecast_date": "2026-10-14",
+        "reported_rag": "green",
+        "rebaselined_last_period": true,
+        "source": "skill:plan-retrieve",
+        "confidence": 0.98,
+        "citation": "raw/plan-extract.md table row M-401"
+      },
+      {
+        "id": "M-402",
+        "name": "Pilot readiness review",
+        "original_baseline_date": "2026-10-21",
+        "current_baseline_date": "2026-10-21",
+        "current_forecast_date": "2026-10-24",
+        "reported_rag": "green",
+        "rebaselined_last_period": false,
+        "source": "skill:plan-retrieve",
+        "confidence": 0.98,
+        "citation": "raw/plan-extract.md table row M-402"
+      }
+    ],
+    "scope_changes": [
+      {
+        "id": "SC-401",
+        "title": "Add broker exception workflow to pilot",
+        "status": "submitted",
+        "client_facing_impact": true,
+        "impact_days": 6,
+        "source": "skill:plan-retrieve",
+        "confidence": 0.95,
+        "citation": "raw/plan-extract.md scope table row SC-401"
+      }
+    ],
+    "source": "skill:plan-retrieve",
+    "confidence": 0.98,
+    "citation": "raw/plan-extract.md"
+  },
+  "prior_status": {
+    "milestones": [
+      {
+        "id": "M-401",
+        "forecast_date": "2026-10-07",
+        "reported_rag": "green",
+        "source": "skill:plan-retrieve",
+        "confidence": 0.97,
+        "citation": "raw/prior-status-pack.md milestone table"
+      },
+      {
+        "id": "M-402",
+        "forecast_date": "2026-10-22",
+        "reported_rag": "green",
+        "source": "skill:plan-retrieve",
+        "confidence": 0.97,
+        "citation": "raw/prior-status-pack.md milestone table"
+      }
+    ],
+    "budget": {
+      "forecast_to_complete": 705000,
+      "source": "skill:burn-pull",
+      "confidence": 0.97,
+      "citation": "raw/prior-status-pack.md budget line"
+    },
+    "reported_rag": "green",
+    "source": "skill:plan-retrieve",
+    "confidence": 0.97,
+    "citation": "raw/prior-status-pack.md executive summary"
+  },
+  "budget": {
+    "currency": "USD",
+    "baseline_budget": 700000,
+    "planned_burn_to_date": 500000,
+    "actual_billed_to_date": 473000,
+    "unbilled_wip": 95000,
+    "forecast_to_complete": 780000,
+    "previous_forecast_to_complete": 705000,
+    "source": "skill:burn-pull",
+    "confidence": 0.97,
+    "citation": "raw/burn-export.csv"
+  },
+  "risks": [
+    {
+      "id": "R-401",
+      "title": "Rules catalogue ownership unresolved",
+      "status": "open, monitoring",
+      "opened_date": "2026-06-10",
+      "due_date": "2026-07-31",
+      "owner_type": "joint",
+      "risk_rating": "medium",
+      "source": "skill:plan-retrieve",
+      "confidence": 0.96,
+      "citation": "raw/risk-register.md row R-401"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D-401",
+      "title": "Client to decide broker exception rule owner",
+      "status": "open",
+      "opened_date": "2026-08-28",
+      "due_date": "2026-09-10",
+      "owner_type": "client",
+      "source": "skill:plan-retrieve",
+      "confidence": 0.95,
+      "citation": "raw/decision-log.md row D-401"
+    }
+  ],
+  "actions": [
+    {
+      "id": "A-401",
+      "title": "Finalize exception workflow design",
+      "status": "open",
+      "opened_date": "2026-09-03",
+      "due_date": "2026-09-12",
+      "owner_type": "internal",
+      "blocked_by_decision_id": "D-401",
+      "blocker_type": "client_decision",
+      "source": "skill:plan-retrieve",
+      "confidence": 0.95,
+      "citation": "raw/action-register.md row A-401"
+    }
+  ],
+  "escalations": [
+    "M-401: reported green after rebaseline, but forecast is 14 days against original baseline (status-reporting-rules.md #2.3)",
+    "budget: billed-only burn is 473000 but unbilled WIP 95000 changes actual burn to 568000 (13.6% vs plan) (status-reporting-rules.md #3.3)",
+    "R-401: open risk aged 102 days - re-rate required (status-reporting-rules.md #5.2)",
+    "D-401: decision 10 days overdue (status-reporting-rules.md #5.3)",
+    "A-401: action 8 days overdue (status-reporting-rules.md #5.4)",
+    "A-401: logged as internal but blocked by client decision - classified as pending client action (status-reporting-rules.md #5.5)"
+  ],
+  "provenance": {
+    "engines": [
+      "variance_calc/1.0",
+      "item_age/1.0"
+    ],
+    "demo_scenario": "scenario-b-drama"
+  },
+  "variance_summary": {
+    "schedule": {
+      "rag": "red",
+      "facts": [
+        {
+          "id": "M-401",
+          "name": "Claims rules design sign-off",
+          "reported_rag": "green",
+          "computed_rag": "red",
+          "original_baseline_date": "2026-09-30",
+          "current_forecast_date": "2026-10-14",
+          "original_variance_days": 14,
+          "period_delta_days": 7,
+          "rebaselined_last_period": true,
+          "source": "engine:variance_calc",
+          "confidence": 0.98,
+          "citation": "status-reporting-rules.md #2.1,#2.2,#2.3,#2.4; raw/plan-extract.md table row M-401"
+        },
+        {
+          "id": "M-402",
+          "name": "Pilot readiness review",
+          "reported_rag": "green",
+          "computed_rag": "green",
+          "original_baseline_date": "2026-10-21",
+          "current_forecast_date": "2026-10-24",
+          "original_variance_days": 3,
+          "period_delta_days": 2,
+          "rebaselined_last_period": false,
+          "source": "engine:variance_calc",
+          "confidence": 0.98,
+          "citation": "status-reporting-rules.md #2.1,#2.2,#2.3,#2.4; raw/plan-extract.md table row M-402"
+        }
+      ],
+      "source": "engine:variance_calc",
+      "confidence": 0.98,
+      "citation": "status-reporting-rules.md #2.1-#2.4"
+    },
+    "budget": {
+      "rag": "red",
+      "facts": [
+        {
+          "currency": "USD",
+          "planned_burn_to_date": 500000,
+          "actual_billed_to_date": 473000,
+          "unbilled_wip": 95000,
+          "actual_burn_including_wip": 568000,
+          "burn_variance_amount": 68000,
+          "burn_variance_pct": 13.6,
+          "baseline_budget": 700000,
+          "forecast_to_complete": 780000,
+          "forecast_variance_amount": 80000,
+          "forecast_variance_pct": 11.43,
+          "forecast_period_delta": 75000,
+          "source": "engine:variance_calc",
+          "confidence": 0.97,
+          "citation": "status-reporting-rules.md #3.1,#3.2,#3.3,#3.4; raw/burn-export.csv"
+        }
+      ],
+      "source": "engine:variance_calc",
+      "confidence": 0.97,
+      "citation": "status-reporting-rules.md #3.1-#3.4"
+    },
+    "scope": {
+      "rag": "red",
+      "facts": [
+        {
+          "id": "SC-401",
+          "title": "Add broker exception workflow to pilot",
+          "status": "submitted",
+          "client_facing_impact": true,
+          "impact_days": 6,
+          "source": "engine:variance_calc",
+          "confidence": 0.95,
+          "citation": "status-reporting-rules.md #4.1,#4.2; raw/plan-extract.md scope table row SC-401"
+        }
+      ],
+      "source": "engine:variance_calc",
+      "confidence": 0.95,
+      "citation": "status-reporting-rules.md #4.1-#4.3"
+    },
+    "overall_rag": "red",
+    "source": "engine:variance_calc",
+    "confidence": 0.95,
+    "citation": "status-reporting-rules.md #6.1"
+  },
+  "aged_items": {
+    "risks": [
+      {
+        "id": "R-401",
+        "title": "Rules catalogue ownership unresolved",
+        "age_days": 102,
+        "days_past_due": 51,
+        "bucket": "critical_age",
+        "owner_type": "joint",
+        "client_action": false,
+        "reason": "open risk aged 102 days, >= 90-day escalation threshold",
+        "source": "engine:item_age",
+        "confidence": 0.96,
+        "citation": "status-reporting-rules.md #5.2; raw/risk-register.md row R-401"
+      }
+    ],
+    "decisions": [
+      {
+        "id": "D-401",
+        "title": "Client to decide broker exception rule owner",
+        "age_days": 23,
+        "days_past_due": 10,
+        "bucket": "overdue",
+        "owner_type": "client",
+        "client_action": true,
+        "reason": "decision is 10 days past due, >= 7-day threshold",
+        "source": "engine:item_age",
+        "confidence": 0.95,
+        "citation": "status-reporting-rules.md #5.3; raw/decision-log.md row D-401"
+      }
+    ],
+    "actions": [
+      {
+        "id": "A-401",
+        "title": "Finalize exception workflow design",
+        "age_days": 17,
+        "days_past_due": 8,
+        "bucket": "overdue",
+        "owner_type": "internal",
+        "client_action": true,
+        "reason": "action is 8 days past due, >= 7-day threshold; reclassified as pending client action because blocker is a client decision",
+        "source": "engine:item_age",
+        "confidence": 0.95,
+        "citation": "status-reporting-rules.md #5.4,#5.5; raw/action-register.md row A-401"
+      }
+    ],
+    "pending_client_actions": [
+      {
+        "id": "A-401",
+        "title": "Finalize exception workflow design",
+        "age_days": 17,
+        "days_past_due": 8,
+        "bucket": "overdue",
+        "owner_type": "internal",
+        "client_action": true,
+        "reason": "action is 8 days past due, >= 7-day threshold; reclassified as pending client action because blocker is a client decision",
+        "source": "engine:item_age",
+        "confidence": 0.95,
+        "citation": "status-reporting-rules.md #5.4,#5.5; raw/action-register.md row A-401"
+      }
+    ],
+    "source": "engine:item_age",
+    "confidence": 0.95,
+    "citation": "status-reporting-rules.md #5.1-#5.5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "contract_version": "ps.change-order-scope-control.v1",
+  "delivered_artifacts": [
+    {
+      "artifact_id": "ART-A-001",
+      "name": "Workshop 1 readout",
+      "delivered_at": "2026-08-28",
+      "sow_clause": "2.1",
+      "source": "connector:engagement-workspace",
+      "citation": "workspace artifact register row 12",
+      "confidence": 0.97
+    },
+    {
+      "artifact_id": "ART-A-002",
+      "name": "Workshop 2 operating model notes",
+      "delivered_at": "2026-09-04",
+      "sow_clause": "2.1",
+      "source": "connector:engagement-workspace",
+      "citation": "workspace artifact register row 18",
+      "confidence": 0.97
+    }
+  ]
+}

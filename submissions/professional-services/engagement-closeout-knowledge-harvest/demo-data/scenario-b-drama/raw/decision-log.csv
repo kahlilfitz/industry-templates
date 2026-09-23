@@ -1,0 +1,3 @@
+decision_id,date,summary,impact
+DEC-201,2026-03-28,Approved GridMesh Optimizer cutover for 2026-04-14 after integration defect burn-down,Go-live date and named product became central to the delivery story
+DEC-207,2026-04-03,Created a dedicated data migration command center for outage and field-force records,Reduced integration rework during the final two sprints

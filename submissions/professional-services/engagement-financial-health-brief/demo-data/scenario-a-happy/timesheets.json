@@ -1,0 +1,14 @@
+{
+  "contract_version": "ps.engagement-financial-health-brief.v1",
+  "timesheets": {
+    "source": "connector:time-system",
+    "citation": "raw/timesheet-extract.csv rows 2-5",
+    "confidence": 0.99,
+    "rows": [
+      { "person_id": "SYN-A-01", "role": "Partner", "work_type": "senior_review", "chargeable_hours": 16, "available_hours": 20 },
+      { "person_id": "SYN-A-02", "role": "Director", "work_type": "senior_review", "chargeable_hours": 36, "available_hours": 40 },
+      { "person_id": "SYN-A-03", "role": "Manager", "work_type": "delivery", "chargeable_hours": 420, "available_hours": 500 },
+      { "person_id": "SYN-A-04", "role": "Consultant", "work_type": "delivery", "chargeable_hours": 1828, "available_hours": 2390 }
+    ]
+  }
+}

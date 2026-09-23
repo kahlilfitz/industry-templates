@@ -1,0 +1,26 @@
+{
+  "contract_version": "ps.engagement-staffing-bench-match.v1",
+  "engagement": {
+    "engagement_id": "ENG-PS-2026-1042",
+    "client_name": "Orchard Ridge Clinics",
+    "source": "connector:conflicts-register",
+    "confidence": 0.97,
+    "citation": "conflicts extract CF-ORC-1042"
+  },
+  "roles": [
+    { "role_id": "PSS-001", "start_date": "2026-10-05" },
+    { "role_id": "PSS-002", "start_date": "2026-10-12" }
+  ],
+  "constraints": [
+    {
+      "candidate_id": "C-103",
+      "type": "adverse_matter",
+      "client_name": "Unrelated Synthetic Client",
+      "end_date": "2026-09-15",
+      "citation": "conflicts extract CF-ORC-1042 row 18"
+    }
+  ],
+  "source": "connector:conflicts-register",
+  "confidence": 0.97,
+  "citation": "conflicts extract CF-ORC-1042"
+}

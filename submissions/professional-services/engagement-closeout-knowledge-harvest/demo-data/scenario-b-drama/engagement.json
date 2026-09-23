@@ -1,0 +1,231 @@
+{
+  "contract_version": "ps.engagement-closeout-knowledge-harvest.v1",
+  "run_metadata": {
+    "generated_at": "2026-09-23T21:20:35Z",
+    "demo_scenario": "scenario-b-drama"
+  },
+  "engagement": {
+    "engagement_id": "PS-CL-2099",
+    "title": "Grid operations transformation closeout",
+    "client_name": "HelioNorth Grid Services",
+    "client_descriptor": "European utility client with 6,200 employees and April 2026 go-live using GridMesh Optimizer.",
+    "sector": "utility",
+    "region": "Europe",
+    "client_headcount": 6200,
+    "go_live_date": "2026-04-14",
+    "third_party_products": [
+      "GridMesh Optimizer"
+    ],
+    "confidence": 0.94,
+    "source": "skill:artifact-assemble",
+    "citation": "raw/confidentiality-terms-extract.md clause 1; raw/deliverable-register.csv header"
+  },
+  "artifacts": [
+    {
+      "artifact_id": "DEL-101",
+      "title": "Final transformation roadmap",
+      "artifact_type": "deliverable",
+      "required": true,
+      "status": "complete",
+      "owner": "Delivery lead",
+      "confidence": 0.95,
+      "source": "connector:sharepoint",
+      "citation": "raw/deliverable-register.csv row 2"
+    },
+    {
+      "artifact_id": "DEL-102",
+      "title": "Decision log",
+      "artifact_type": "project-record",
+      "required": true,
+      "status": "complete",
+      "owner": "PMO",
+      "confidence": 0.97,
+      "source": "connector:planner",
+      "citation": "raw/deliverable-register.csv row 3"
+    },
+    {
+      "artifact_id": "DEL-103",
+      "title": "Sanitised architecture diagram",
+      "artifact_type": "asset",
+      "required": true,
+      "status": "complete",
+      "owner": "Architecture lead",
+      "confidence": 0.92,
+      "source": "connector:sharepoint",
+      "citation": "raw/deliverable-register.csv row 4"
+    },
+    {
+      "artifact_id": "DEL-104",
+      "title": "Practice handoff narrative",
+      "artifact_type": "knowledge-record",
+      "required": true,
+      "status": "missing",
+      "owner": "Knowledge manager",
+      "confidence": 0.89,
+      "source": "connector:sharepoint",
+      "citation": "raw/deliverable-register.csv row 5"
+    }
+  ],
+  "candidate_assets": [
+    {
+      "asset_id": "AST-101",
+      "title": "Anonymised grid-ops target architecture",
+      "asset_type": "diagram",
+      "description": "Architecture pattern for field operations integration and outage response orchestration.",
+      "generalisability": 5,
+      "effort_to_recreate": 5,
+      "shelf_life_months": 24,
+      "client_dependency": 1,
+      "confidentiality_markers": [],
+      "aggregation_tokens": [
+        "sector",
+        "region",
+        "unique_architecture"
+      ],
+      "confidence": 0.91,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/deliverable-register.csv row 4"
+    },
+    {
+      "asset_id": "AST-102",
+      "title": "European utility readiness narrative",
+      "asset_type": "case-pattern",
+      "description": "Descriptor and storyline for operating-model readiness in a regulated utility.",
+      "generalisability": 4,
+      "effort_to_recreate": 4,
+      "shelf_life_months": 18,
+      "client_dependency": 1,
+      "confidentiality_markers": [],
+      "aggregation_tokens": [
+        "sector",
+        "region"
+      ],
+      "confidence": 0.9,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/retrospective-transcript.txt lines 4-9"
+    },
+    {
+      "asset_id": "AST-103",
+      "title": "GridMesh go-live runbook",
+      "asset_type": "runbook",
+      "description": "Go-live sequence for GridMesh Optimizer cutover on 2026-04-14.",
+      "generalisability": 4,
+      "effort_to_recreate": 5,
+      "shelf_life_months": 18,
+      "client_dependency": 1,
+      "confidentiality_markers": [
+        "implementation_date"
+      ],
+      "aggregation_tokens": [
+        "go_live_date",
+        "third_party_product"
+      ],
+      "confidence": 0.92,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/decision-log.csv row 4"
+    },
+    {
+      "asset_id": "AST-104",
+      "title": "Operations benefits model",
+      "asset_type": "model",
+      "description": "Benefits model using a 6,200-headcount operations baseline.",
+      "generalisability": 4,
+      "effort_to_recreate": 4,
+      "shelf_life_months": 12,
+      "client_dependency": 2,
+      "confidentiality_markers": [
+        "precise_headcount"
+      ],
+      "aggregation_tokens": [
+        "client_headcount"
+      ],
+      "confidence": 0.9,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/deliverable-register.csv row 6"
+    },
+    {
+      "asset_id": "AST-105",
+      "title": "Executive steering deck",
+      "asset_type": "deck",
+      "description": "Reusable steering narrative, but page-three diagram caption embeds the client logo and name.",
+      "generalisability": 5,
+      "effort_to_recreate": 4,
+      "shelf_life_months": 18,
+      "client_dependency": 1,
+      "confidentiality_markers": [
+        "client_logo",
+        "client_name"
+      ],
+      "aggregation_tokens": [],
+      "confidence": 0.93,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/retrospective-transcript.txt lines 16-19"
+    }
+  ],
+  "decision_log": [
+    {
+      "decision_id": "DEC-201",
+      "summary": "Approved GridMesh Optimizer cutover for 2026-04-14 after integration defect burn-down.",
+      "impact": "Go-live date and named product became central to the delivery story.",
+      "confidence": 0.94,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/decision-log.csv row 4"
+    },
+    {
+      "decision_id": "DEC-207",
+      "summary": "Created a dedicated data migration command center for outage and field-force records.",
+      "impact": "Reduced integration rework during the final two sprints.",
+      "confidence": 0.92,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/decision-log.csv row 5"
+    }
+  ],
+  "retrospective_inputs": [
+    {
+      "input_id": "RET-201",
+      "speaker_role": "Engagement manager",
+      "text": "The European utility framing plus the GridMesh Optimizer date makes a strong credential story, but it may be too specific.",
+      "named_people": [],
+      "confidence": 0.9,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/retrospective-transcript.txt lines 4-9"
+    },
+    {
+      "input_id": "RET-202",
+      "speaker_role": "Delivery lead",
+      "text": "Maya Patel failed to get operations sign-off on the migration rehearsal, which caused two days of executive escalation.",
+      "named_people": [
+        "Maya Patel"
+      ],
+      "confidence": 0.91,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/retrospective-transcript.txt lines 11-13"
+    },
+    {
+      "input_id": "RET-203",
+      "speaker_role": "Architecture lead",
+      "text": "The target architecture diagram is reusable if the sector, product and go-live specifics are handled carefully.",
+      "named_people": [],
+      "confidence": 0.89,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/retrospective-transcript.txt lines 16-19"
+    }
+  ],
+  "confidentiality_terms": [
+    {
+      "term_id": "TERM-11",
+      "summary": "Client identity, logo, operating scale, implementation dates and vendor-specific configuration are confidential unless approved in writing.",
+      "confidence": 0.96,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/confidentiality-terms-extract.md clause 2"
+    },
+    {
+      "term_id": "TERM-12",
+      "summary": "Case studies require separate written approval and may not combine anonymised facts that identify the client.",
+      "confidence": 0.95,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/confidentiality-terms-extract.md clause 4"
+    }
+  ],
+  "escalations": []
+}

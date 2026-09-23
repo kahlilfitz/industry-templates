@@ -1,0 +1,3 @@
+decision_id,date,summary,impact
+DEC-014,2026-06-03,Moved from weekly to twice-weekly decision forum during cutover,Reduced open blocker age before go-live
+DEC-021,2026-06-17,Kept training scenarios role-based instead of system-feature based,Improved manager adoption and reduced rework in readiness sessions

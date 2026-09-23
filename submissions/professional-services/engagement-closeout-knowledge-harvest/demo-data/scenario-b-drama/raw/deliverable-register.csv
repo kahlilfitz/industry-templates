@@ -1,0 +1,7 @@
+artifact_id,title,type,required,status,owner
+DEL-101,Final transformation roadmap,deliverable,true,complete,Delivery lead
+DEL-102,Decision log,project-record,true,complete,PMO
+DEL-103,Sanitised architecture diagram,asset,true,complete,Architecture lead
+DEL-104,Practice handoff narrative,knowledge-record,true,missing,Knowledge manager
+DEL-105,Executive steering deck,deck,false,complete,Engagement manager
+DEL-106,Operations benefits model,model,false,complete,Value lead

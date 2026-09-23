@@ -1,0 +1,5 @@
+candidate_id,type,client_name,status,material,end_date,citation
+C-201,financial_interest,Aster Foods Cooperative,active,true,,conflicts register CF-AFC-2077 row 3 - unresolved restricted equity holding
+C-202,clear,Aster Foods Cooperative,,,,conflicts register CF-AFC-2077 row 6
+C-203,clear,Aster Foods Cooperative,,,,conflicts register CF-AFC-2077 row 7
+C-204,prior_client_role,Aster Foods Cooperative,closed,,2026-04-30,conflicts register CF-AFC-2077 row 9 - former FP&A employee

@@ -1,0 +1,8 @@
+From: Mira Chen (Engagement Manager)   Sent: 2026-09-20 17:35
+To: Delivery PMO
+Subject: Orchid status pack - week ending 20 Sep
+
+Please assemble the weekly status pack for Orchid Health Group. Use the plan export in the
+project repository, this week's burn export and last week's client pack as the comparison
+point. No new scope items this week. Data mapping and UAT are still green, with minor movement
+from last week that I want called out plainly.

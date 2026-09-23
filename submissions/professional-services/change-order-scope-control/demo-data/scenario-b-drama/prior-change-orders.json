@@ -1,0 +1,23 @@
+{
+  "contract_version": "ps.change-order-scope-control.v1",
+  "prior_change_orders": [
+    {
+      "change_id": "ACCOM-001",
+      "summary": "Absorbed extra AP supervisor review cycle",
+      "commercial_disposition": "no_charge_accommodation",
+      "internal_cost": 2950,
+      "source": "connector:contract-repository",
+      "citation": "commercial decision log CDL-2026-08 row 14",
+      "confidence": 0.95
+    },
+    {
+      "change_id": "ACCOM-002",
+      "summary": "Absorbed one additional data mapping review",
+      "commercial_disposition": "no_charge_accommodation",
+      "internal_cost": 2700,
+      "source": "connector:contract-repository",
+      "citation": "commercial decision log CDL-2026-08 row 21",
+      "confidence": 0.95
+    }
+  ]
+}

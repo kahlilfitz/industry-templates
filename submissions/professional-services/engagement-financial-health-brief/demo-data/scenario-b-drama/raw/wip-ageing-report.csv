@@ -1,0 +1,6 @@
+record_id,age_days,amount,currency,status
+WIP-B-001,18,65000,USD,invoice-eligible
+WIP-B-002,47,30000,USD,invoice-eligible
+WIP-B-003,83,10000,USD,invoice-eligible
+WIP-B-004,118,32000,USD,invoice-eligible but client acceptance unresolved
+WIP-B-005,144,18000,USD,invoice-eligible but aged beyond collection threshold

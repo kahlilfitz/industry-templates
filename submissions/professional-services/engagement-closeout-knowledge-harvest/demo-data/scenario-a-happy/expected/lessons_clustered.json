@@ -1,0 +1,310 @@
+{
+  "contract_version": "ps.engagement-closeout-knowledge-harvest.v1",
+  "run_metadata": {
+    "generated_at": "2026-09-23T21:20:35Z",
+    "demo_scenario": "scenario-a-happy"
+  },
+  "engagement": {
+    "engagement_id": "PS-CL-1842",
+    "title": "Regional distributor operating model refresh",
+    "client_name": "Fabrikam Foods Cooperative",
+    "client_descriptor": "Regional food distribution client; use industry-level description only.",
+    "sector": "food distribution",
+    "region": "North America",
+    "client_headcount": null,
+    "go_live_date": "2026-06-30",
+    "third_party_products": [],
+    "confidence": 0.95,
+    "source": "skill:artifact-assemble",
+    "citation": "raw/confidentiality-terms-extract.md clause 1; deliverable-register.csv header"
+  },
+  "artifacts": [
+    {
+      "artifact_id": "DEL-001",
+      "title": "Final operating model deck",
+      "artifact_type": "deliverable",
+      "required": true,
+      "status": "complete",
+      "owner": "Delivery lead",
+      "confidence": 0.96,
+      "source": "connector:sharepoint",
+      "citation": "raw/deliverable-register.csv row 2"
+    },
+    {
+      "artifact_id": "DEL-002",
+      "title": "Decision log",
+      "artifact_type": "project-record",
+      "required": true,
+      "status": "complete",
+      "owner": "PMO",
+      "confidence": 0.98,
+      "source": "connector:planner",
+      "citation": "raw/deliverable-register.csv row 3"
+    },
+    {
+      "artifact_id": "DEL-003",
+      "title": "Training handover pack",
+      "artifact_type": "deliverable",
+      "required": true,
+      "status": "draft",
+      "owner": "Change lead",
+      "confidence": 0.91,
+      "source": "connector:sharepoint",
+      "citation": "raw/deliverable-register.csv row 4"
+    },
+    {
+      "artifact_id": "DEL-004",
+      "title": "Benefits baseline",
+      "artifact_type": "project-record",
+      "required": false,
+      "status": "complete",
+      "owner": "Value lead",
+      "confidence": 0.93,
+      "source": "connector:sharepoint",
+      "citation": "raw/deliverable-register.csv row 5"
+    }
+  ],
+  "candidate_assets": [
+    {
+      "asset_id": "AST-001",
+      "title": "Cutover readiness checklist",
+      "asset_type": "checklist",
+      "description": "Role-neutral checklist for go-live readiness across process, data, support and comms.",
+      "generalisability": 5,
+      "effort_to_recreate": 4,
+      "shelf_life_months": 18,
+      "client_dependency": 1,
+      "confidentiality_markers": [],
+      "aggregation_tokens": [
+        "generic_operating_model"
+      ],
+      "confidence": 0.92,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/retrospective-transcript.txt lines 18-24"
+    },
+    {
+      "asset_id": "AST-002",
+      "title": "Role-based training storyboard",
+      "asset_type": "template",
+      "description": "Storyboard for manager and frontline readiness sessions.",
+      "generalisability": 4,
+      "effort_to_recreate": 3,
+      "shelf_life_months": 12,
+      "client_dependency": 2,
+      "confidentiality_markers": [],
+      "aggregation_tokens": [
+        "generic_training_pattern"
+      ],
+      "confidence": 0.9,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/retrospective-transcript.txt lines 29-34"
+    },
+    {
+      "asset_id": "AST-003",
+      "title": "Client-specific routing configuration workbook",
+      "asset_type": "configuration",
+      "description": "Routing matrix tied to the client's facility network and approval hierarchy.",
+      "generalisability": 2,
+      "effort_to_recreate": 4,
+      "shelf_life_months": 6,
+      "client_dependency": 5,
+      "confidentiality_markers": [
+        "client_specific_configuration"
+      ],
+      "aggregation_tokens": [],
+      "confidence": 0.88,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/deliverable-register.csv row 6"
+    }
+  ],
+  "decision_log": [
+    {
+      "decision_id": "DEC-014",
+      "summary": "Moved from weekly to twice-weekly decision forum during cutover.",
+      "impact": "Reduced open blocker age before go-live.",
+      "confidence": 0.95,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/decision-log.csv row 2"
+    },
+    {
+      "decision_id": "DEC-021",
+      "summary": "Kept training scenarios role-based instead of system-feature based.",
+      "impact": "Improved manager adoption and reduced rework in readiness sessions.",
+      "confidence": 0.93,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/decision-log.csv row 3"
+    }
+  ],
+  "retrospective_inputs": [
+    {
+      "input_id": "RET-001",
+      "speaker_role": "Delivery lead",
+      "text": "The twice-weekly governance huddle removed blockers faster than waiting for steering committee.",
+      "named_people": [],
+      "confidence": 0.91,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/retrospective-transcript.txt lines 8-10"
+    },
+    {
+      "input_id": "RET-002",
+      "speaker_role": "Change lead",
+      "text": "Role-based training landed better than feature tours; reuse the storyboard for the next operating model rollout.",
+      "named_people": [],
+      "confidence": 0.9,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/retrospective-transcript.txt lines 29-34"
+    }
+  ],
+  "confidentiality_terms": [
+    {
+      "term_id": "TERM-01",
+      "summary": "Client name, sites and operating data must be removed before firm knowledge reuse.",
+      "confidence": 0.96,
+      "source": "skill:artifact-assemble",
+      "citation": "raw/confidentiality-terms-extract.md clause 2"
+    }
+  ],
+  "escalations": [
+    "DEL-003: required deliverable 'Training handover pack' is draft - closeout gap (reuse-asset-rubric.md #6.1)"
+  ],
+  "deliverable_index": [
+    {
+      "artifact_id": "DEL-001",
+      "title": "Final operating model deck",
+      "artifact_type": "deliverable",
+      "required": true,
+      "status": "complete",
+      "completeness_gap": false,
+      "owner": "Delivery lead",
+      "confidence": 0.96,
+      "source": "engine:asset_identify",
+      "citation": "raw/deliverable-register.csv row 2; reuse-asset-rubric.md #6.1"
+    },
+    {
+      "artifact_id": "DEL-002",
+      "title": "Decision log",
+      "artifact_type": "project-record",
+      "required": true,
+      "status": "complete",
+      "completeness_gap": false,
+      "owner": "PMO",
+      "confidence": 0.98,
+      "source": "engine:asset_identify",
+      "citation": "raw/deliverable-register.csv row 3; reuse-asset-rubric.md #6.1"
+    },
+    {
+      "artifact_id": "DEL-003",
+      "title": "Training handover pack",
+      "artifact_type": "deliverable",
+      "required": true,
+      "status": "draft",
+      "completeness_gap": true,
+      "owner": "Change lead",
+      "confidence": 0.91,
+      "source": "engine:asset_identify",
+      "citation": "raw/deliverable-register.csv row 4; reuse-asset-rubric.md #6.1"
+    },
+    {
+      "artifact_id": "DEL-004",
+      "title": "Benefits baseline",
+      "artifact_type": "project-record",
+      "required": false,
+      "status": "complete",
+      "completeness_gap": false,
+      "owner": "Value lead",
+      "confidence": 0.93,
+      "source": "engine:asset_identify",
+      "citation": "raw/deliverable-register.csv row 5; reuse-asset-rubric.md #6.1"
+    }
+  ],
+  "reusable_asset_shortlist": [
+    {
+      "asset_id": "AST-001",
+      "title": "Cutover readiness checklist",
+      "asset_type": "checklist",
+      "description": "Role-neutral checklist for go-live readiness across process, data, support and comms.",
+      "reuse_score": 91.0,
+      "recommendation": "shortlist",
+      "reuse_rationale": "generalisability 5/5; effort_to_recreate 4/5; shelf_life 18 months; client_dependency 1/5",
+      "confidentiality_markers": [],
+      "aggregation_tokens": [
+        "generic_operating_model"
+      ],
+      "confidence": 0.92,
+      "source": "engine:asset_identify",
+      "citation": "raw/retrospective-transcript.txt lines 18-24; reuse-asset-rubric.md #1.1,#2.1,#3.1,#4.1,#5.1"
+    },
+    {
+      "asset_id": "AST-002",
+      "title": "Role-based training storyboard",
+      "asset_type": "template",
+      "description": "Storyboard for manager and frontline readiness sessions.",
+      "reuse_score": 71.0,
+      "recommendation": "shortlist",
+      "reuse_rationale": "generalisability 4/5; effort_to_recreate 3/5; shelf_life 12 months; client_dependency 2/5",
+      "confidentiality_markers": [],
+      "aggregation_tokens": [
+        "generic_training_pattern"
+      ],
+      "confidence": 0.9,
+      "source": "engine:asset_identify",
+      "citation": "raw/retrospective-transcript.txt lines 29-34; reuse-asset-rubric.md #1.1,#2.1,#3.1,#4.1,#5.1"
+    },
+    {
+      "asset_id": "AST-003",
+      "title": "Client-specific routing configuration workbook",
+      "asset_type": "configuration",
+      "description": "Routing matrix tied to the client's facility network and approval hierarchy.",
+      "reuse_score": 44.0,
+      "recommendation": "archive_with_engagement",
+      "reuse_rationale": "generalisability 2/5; effort_to_recreate 4/5; shelf_life 6 months; client_dependency 5/5",
+      "confidentiality_markers": [
+        "client_specific_configuration"
+      ],
+      "aggregation_tokens": [],
+      "confidence": 0.88,
+      "source": "engine:asset_identify",
+      "citation": "raw/deliverable-register.csv row 6; reuse-asset-rubric.md #1.1,#2.1,#3.1,#4.1,#5.1"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "asset_identify/1.0",
+      "lesson_cluster/1.0"
+    ],
+    "generated_at": "2026-09-23T21:20:35Z",
+    "demo_scenario": "scenario-a-happy"
+  },
+  "lesson_clusters": [
+    {
+      "cluster_id": "LC-001",
+      "category": "adoption-change",
+      "priority_score": 65,
+      "review_candidate": false,
+      "evidence_ids": [
+        "DEC-021",
+        "RET-002"
+      ],
+      "summary_seed": "Kept training scenarios role-based instead of system-feature based. Improved manager adoption and reduced rework in readiness sessions.",
+      "sensitivity_signals": [],
+      "confidence": 0.92,
+      "source": "engine:lesson_cluster",
+      "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1"
+    },
+    {
+      "cluster_id": "LC-002",
+      "category": "delivery-governance",
+      "priority_score": 75,
+      "review_candidate": false,
+      "evidence_ids": [
+        "DEC-014",
+        "RET-001"
+      ],
+      "summary_seed": "Moved from weekly to twice-weekly decision forum during cutover. Reduced open blocker age before go-live.",
+      "sensitivity_signals": [],
+      "confidence": 0.8,
+      "source": "engine:lesson_cluster",
+      "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1"
+    }
+  ]
+}

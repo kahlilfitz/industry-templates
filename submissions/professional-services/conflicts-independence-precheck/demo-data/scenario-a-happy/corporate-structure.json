@@ -1,0 +1,42 @@
+{
+  "citation": "raw/corporate-structure-extract.csv",
+  "date_range": { "as_of": "2026-09-23" },
+  "entities": [
+    {
+      "entity_id": "ENT-NBA-001",
+      "legal_name": "Northbridge Advisory LLC",
+      "aliases": ["Northbridge Advisory"],
+      "trade_names": [],
+      "transliterations": [],
+      "family_id": "FAM-NBA",
+      "parent_id": null,
+      "ownership_pct": 1.0,
+      "relationship": "ultimate parent / standalone controlled entity",
+      "citation": "corporate structure extract row 1"
+    },
+    {
+      "entity_id": "ENT-HFC-001",
+      "legal_name": "Harbor Finch Capital LLC",
+      "aliases": ["Harbor Finch Capital"],
+      "trade_names": [],
+      "transliterations": [],
+      "family_id": "FAM-HFC",
+      "parent_id": null,
+      "ownership_pct": 1.0,
+      "relationship": "ultimate parent / standalone controlled entity",
+      "citation": "corporate structure extract row 2"
+    },
+    {
+      "entity_id": "ENT-ORC-001",
+      "legal_name": "Orchid River Analytics Inc",
+      "aliases": ["Orchid River"],
+      "trade_names": [],
+      "transliterations": [],
+      "family_id": "FAM-ORC",
+      "parent_id": null,
+      "ownership_pct": 1.0,
+      "relationship": "unrelated register entity",
+      "citation": "corporate structure extract row 3"
+    }
+  ]
+}

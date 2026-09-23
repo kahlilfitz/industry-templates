@@ -1,0 +1,6 @@
+prompt,expected_behavior
+"Write up my time for Orion Advisory this week","Use activity-pull then narrative-draft, map codes, run guideline-check, and produce cited draft entries without submitting time."
+"Will this narrative get rejected: attention to various matters for 7.5 hours?","Run guideline-check and flag prohibited terms plus block billing with guideline citations."
+"What am I missing this week for this engagement?","Use activity-pull and guideline-check to produce missing_time_report from engagement-scoped calendar/document activity."
+"Map these narratives to the client task codes","Run code-map after narrative-draft and cite task-phase-codes.md for each mapping."
+"Prepare the pre-bill exception list for the engagement manager","Use exception-report after guideline-check and include rejectable entries, missing time, citations and recommended actions."

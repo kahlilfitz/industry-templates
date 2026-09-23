@@ -1,0 +1,21 @@
+{
+  "name": "Change Order & Scope Control",
+  "description": "Compare client requests and delivered work against the SOW, cite the governing clause, quantify the effort delta, and draft a defensible change order before margin drift becomes unrecoverable.",
+  "industry": "Professional Services",
+  "platforms": [
+    "Cowork"
+  ],
+  "tags": [
+    "delivery",
+    "commercial-control",
+    "scope",
+    "change-order",
+    "sow",
+    "margin"
+  ],
+  "author": "Kahlil Fitzgerald",
+  "authorUrl": "https://github.com/kahlilfitz",
+  "version": "1.0.0",
+  "createdAt": "2026-09-23",
+  "updatedAt": "2026-09-23"
+}

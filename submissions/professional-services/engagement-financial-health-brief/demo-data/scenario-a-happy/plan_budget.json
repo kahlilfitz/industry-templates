@@ -1,0 +1,23 @@
+{
+  "contract_version": "ps.engagement-financial-health-brief.v1",
+  "plan": {
+    "plan_revision": "baseline-v1",
+    "planned_revenue_to_date": 505000,
+    "planned_delivery_cost_to_date": 305000,
+    "planned_total_delivery_cost": 695000,
+    "planned_remaining_delivery_cost": 390000,
+    "planned_margin_pct": 39.6,
+    "system_etc_cost": 389000,
+    "senior_review_plan_to_date": { "Partner": 16, "Director": 36 },
+    "milestones": [
+      { "milestone_id": "A-M1", "name": "Discovery close", "due_by_review": true, "status": "complete", "remediation_hours": {} },
+      { "milestone_id": "A-M2", "name": "Architecture decision pack", "due_by_review": true, "status": "complete", "remediation_hours": {} },
+      { "milestone_id": "A-M3", "name": "Pilot backlog", "due_by_review": true, "status": "complete", "remediation_hours": {} },
+      { "milestone_id": "A-M4", "name": "Readiness walkthrough", "due_by_review": true, "status": "complete", "remediation_hours": {} },
+      { "milestone_id": "A-M5", "name": "Transition plan", "due_by_review": true, "status": "on_track", "remediation_hours": {} }
+    ],
+    "source": "connector:engagement-plan",
+    "citation": "raw/plan-budget-and-milestones.csv rows 2-8",
+    "confidence": 0.98
+  }
+}

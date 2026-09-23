@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ps.deliverable-review-quality-gate.v1",
+  "title": "Deliverable Review & Quality Gate contract v1",
+  "description": "Chains deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-check -> review-packet. Carries data plus confidence, provenance and citations on every hop so release-readiness escalation is mechanical.",
+  "type": "object",
+  "required": ["contract_version", "engagement_id", "deliverable", "criteria", "assertions", "evidence_set"],
+  "properties": {
+    "contract_version": { "const": "ps.deliverable-review-quality-gate.v1" },
+    "engagement_id": { "type": "string" },
+    "scenario_id": { "type": "string" },
+    "deliverable": {
+      "type": "object",
+      "required": ["deliverable_id", "title", "version", "confidentiality_marking", "required_disclaimer_type", "present_disclaimer_types", "source", "citation", "confidence"],
+      "properties": {
+        "deliverable_id": { "type": "string" },
+        "title": { "type": "string" },
+        "version": { "type": "string" },
+        "type": { "type": "string" },
+        "intended_recipients": { "type": "array", "items": { "type": "string" } },
+        "third_party_recipient_named": { "type": "boolean" },
+        "confidentiality_marking": { "type": "string" },
+        "client_data_handling": { "enum": ["ok", "attention", "breach", "unknown"] },
+        "required_disclaimer_type": { "enum": ["general_advice", "reliance_restriction"] },
+        "present_disclaimer_types": { "type": "array", "items": { "type": "string" } },
+        "required_language": { "type": "array", "items": { "type": "string" } },
+        "present_language": { "type": "array", "items": { "type": "string" } },
+        "brand_checks": { "type": "array", "items": { "type": "object" } },
+        "licensed_content": { "type": "array", "items": { "type": "object" } },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "citation": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "criteria": { "type": "object" },
+    "assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["assertion_id", "class", "text", "location", "confidence", "source", "citation"],
+        "properties": {
+          "assertion_id": { "type": "string" },
+          "class": { "enum": ["factual", "quantified", "forward_looking", "recommendation"] },
+          "text": { "type": "string" },
+          "location": { "$ref": "#/definitions/location" },
+          "evidence_ids": { "type": "array", "items": { "type": "string" } },
+          "hedging_present": { "type": "boolean" },
+          "limitation_present": { "type": "boolean" },
+          "stated_basis": { "type": "boolean" },
+          "sample_size": { "type": ["integer", "null"] },
+          "population_size": { "type": ["integer", "null"] },
+          "scope_aligned": { "type": "boolean" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "evidence_set": { "type": "array", "items": { "type": "object" } },
+    "prior_findings": { "type": "array", "items": { "type": "object" } },
+    "assertion_mappings": { "type": "array", "items": { "type": "object" } },
+    "gate_results": { "type": "array", "items": { "type": "object" } },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "gate_id", "severity", "location", "criteria_section", "confidence", "source", "citation"],
+        "properties": {
+          "finding_id": { "type": "string" },
+          "gate_id": { "type": "string" },
+          "severity": { "enum": ["release_blocker", "must_fix", "advisory"] },
+          "title": { "type": "string" },
+          "detail": { "type": "string" },
+          "location": { "$ref": "#/definitions/location" },
+          "criteria_section": { "type": "string" },
+          "confidence": { "type": "number" },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "ranked_findings": { "type": "array", "items": { "type": "object" } },
+    "release_readiness": { "type": "object" },
+    "escalations": { "type": "array", "items": { "type": "string" } },
+    "provenance": { "type": "object" }
+  },
+  "definitions": {
+    "location": {
+      "type": "object",
+      "required": ["section", "page", "paragraph"],
+      "properties": {
+        "section": { "type": "string" },
+        "page": { "type": "integer" },
+        "paragraph": { "type": "integer" },
+        "label": { "type": "string" }
+      }
+    }
+  }
+}

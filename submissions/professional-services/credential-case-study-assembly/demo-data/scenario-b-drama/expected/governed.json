@@ -1,0 +1,348 @@
+{
+  "contract_version": "ps.credential-case-study-assembly.v1",
+  "engagement": {
+    "engagement_id": "PS-CRD-2026-099",
+    "name": "Core Platform Migration Mobilisation",
+    "closeout_date": "2026-06-30",
+    "fees_usd": 4200000,
+    "duration_weeks": 34,
+    "board_visible": true,
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.93,
+    "citations": [
+      "closeout knowledge record CKR-099 #engagement"
+    ]
+  },
+  "client": {
+    "name": "Vantage Mutual Assurance",
+    "sector": "financial-services",
+    "geography": "Europe",
+    "size_descriptor": "top-five European insurer",
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.94,
+    "citations": [
+      "closeout knowledge record CKR-099 #client"
+    ]
+  },
+  "deliverables": [
+    {
+      "title": "Core platform migration mobilisation",
+      "summary": "Mobilised a core insurance platform migration, mapped claims and policy workflows, and established delivery controls for the first release train.",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.91,
+      "citations": [
+        "closeout knowledge record CKR-099 #deliverables",
+        "final deliverable FD-099 section 3"
+      ]
+    },
+    {
+      "title": "Reference architecture and migration backlog",
+      "summary": "Defined target integration patterns, dependency map and sequenced migration backlog for claims operations.",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.9,
+      "citations": [
+        "final deliverable FD-099 section 4"
+      ]
+    }
+  ],
+  "outcomes": [
+    {
+      "metric": "claims workflows migrated to release backlog",
+      "value": 14,
+      "unit": "workflows",
+      "evidence_type": "verified_deliverable",
+      "clearance_scope": "public_marketing",
+      "governing_clause": "Engagement terms VM-19 clause 18.5",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.91,
+      "citations": [
+        "final deliverable FD-099 appendix B"
+      ]
+    },
+    {
+      "metric": "processing time reduction",
+      "value": 60,
+      "unit": "percent",
+      "evidence_type": "client_internal_estimate",
+      "clearance_scope": "uncleared",
+      "governing_clause": "Engagement terms VM-19 clause 18.8",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.67,
+      "citations": [
+        "client workshop note CW-099-7",
+        "BD request email BD-2026-404"
+      ]
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "credential_draft/1.0",
+      "permission_check/1.0"
+    ],
+    "generated_at": "2026-09-23",
+    "demo_scenario": "scenario-b-drama"
+  },
+  "taxonomy_match": {
+    "sector": {
+      "value": "financial-services",
+      "confidence": 0.91,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #1",
+      "ambiguous": false,
+      "scores": {
+        "financial-services": 4,
+        "public-sector": 0,
+        "healthcare": 0,
+        "industrial": 0,
+        "technology-media-telecom": 1,
+        "cross-industry": 0
+      }
+    },
+    "service_line": {
+      "value": "technology-transformation",
+      "confidence": 0.82,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #2",
+      "ambiguous": false,
+      "scores": {
+        "strategy-advisory": 0,
+        "technology-transformation": 3,
+        "data-ai-analytics": 1,
+        "risk-regulatory": 1,
+        "managed-services": 0
+      }
+    },
+    "capability": {
+      "value": "platform-migration",
+      "confidence": 0.73,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #3",
+      "ambiguous": true,
+      "scores": {
+        "process-redesign": 2,
+        "platform-migration": 2,
+        "ai-automation": 1,
+        "data-modernisation": 0,
+        "change-enablement": 0
+      }
+    },
+    "engagement_size_band": {
+      "value": "strategic",
+      "confidence": 0.96,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #4.4",
+      "fees_usd": 4200000.0,
+      "duration_weeks": 34
+    },
+    "outcome_type": {
+      "value": "cycle-time",
+      "confidence": 0.73,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #5",
+      "ambiguous": false,
+      "scores": {
+        "cost-reduction": 0,
+        "cycle-time": 2,
+        "risk-reduction": 1,
+        "revenue-growth": 0,
+        "experience-improvement": 0,
+        "resilience-quality": 0
+      }
+    },
+    "source": "engine:credential_draft",
+    "citations": [
+      "credential-taxonomy.md #1-#6"
+    ],
+    "confidence": 0.73,
+    "escalations": [
+      "capability: competing taxonomy hints within ambiguity band 0.05; confirm match (credential-taxonomy.md #6.3)"
+    ]
+  },
+  "draft_assets": {
+    "credential_entry": {
+      "title_seed": "Core Platform Migration Mobilisation",
+      "client_name_seed": "Vantage Mutual Assurance",
+      "taxonomy": {
+        "sector": "financial-services",
+        "service_line": "technology-transformation",
+        "capability": "platform-migration",
+        "engagement_size_band": "strategic",
+        "outcome_type": "cycle-time"
+      },
+      "source": "engine:credential_draft",
+      "confidence": 0.73,
+      "citations": [
+        "credential-taxonomy.md #1-#6"
+      ]
+    },
+    "case_study": {
+      "forms_required": [
+        "short",
+        "medium",
+        "long"
+      ],
+      "copy_instruction": "Model drafts copy only after permission_check separates cleared and uncleared figures.",
+      "source": "engine:credential_draft",
+      "confidence": 0.73,
+      "citations": [
+        "credential-taxonomy.md #6.1"
+      ]
+    },
+    "source": "engine:credential_draft",
+    "confidence": 0.73,
+    "citations": [
+      "credential-taxonomy.md #1-#6"
+    ],
+    "anonymised_variant": {
+      "required": true,
+      "safe_descriptor": "a regulated financial-services organisation",
+      "blocked_descriptor": "a top-five European insurer, 2026, core platform migration",
+      "instruction": "Use only the safe_descriptor when naming is refused; do not include uncleared figures.",
+      "source": "engine:permission_check",
+      "confidence": 0.97,
+      "citations": [
+        "reference-naming-permission-rules.md #7.1,#7.3"
+      ]
+    }
+  },
+  "request": {
+    "request_id": "BD-2026-404",
+    "requested_use": "public_marketing",
+    "requested_on": "2026-09-23",
+    "requester": "Jon Bell, Account Partner",
+    "proposed_anonymised_descriptor": "a top-five European insurer, 2026, core platform migration",
+    "requested_quote": {
+      "person": "Elena Markovic",
+      "quote": "The team helped us move faster than any previous migration wave."
+    },
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.94,
+    "citations": [
+      "BD request email BD-2026-404"
+    ]
+  },
+  "terms": {
+    "clauses": [
+      {
+        "clause_id": "VM-19-18.2",
+        "type": "express_prohibition",
+        "applies_to": "name",
+        "scope": "public_marketing",
+        "summary": "The firm may not identify the client by name in marketing material, credential libraries, case studies or press without a later written amendment.",
+        "citation": "Engagement terms VM-19 clause 18.2"
+      },
+      {
+        "clause_id": "VM-19-18.5",
+        "type": "restriction",
+        "applies_to": "outcome_figures",
+        "scope": "public_marketing",
+        "summary": "Only figures verified in final deliverable evidence may be considered for external reference use.",
+        "citation": "Engagement terms VM-19 clause 18.5"
+      },
+      {
+        "clause_id": "VM-19-18.8",
+        "type": "restriction",
+        "applies_to": "client_internal_estimates",
+        "scope": "public_marketing",
+        "summary": "Client-supplied internal estimates are not approved for external use unless separately verified and approved.",
+        "citation": "Engagement terms VM-19 clause 18.8"
+      }
+    ],
+    "source": "connector:contract-repository",
+    "confidence": 0.98,
+    "citations": [
+      "contract repository extract VM-19"
+    ]
+  },
+  "reference_register": {
+    "permissions": [
+      {
+        "permission_id": "RR-099-EVENT",
+        "permission_type": "name",
+        "consent_type": "express_written",
+        "scope": "event_only",
+        "event": "Insurance Operations Forum 2026",
+        "expires_on": "2026-05-31",
+        "citation": "reference register RR-099 row 8"
+      }
+    ],
+    "source": "connector:reference-register",
+    "confidence": 0.98,
+    "citations": [
+      "reference register extract 2026-09-23 row 8"
+    ]
+  },
+  "permission_verdict": {
+    "naming_status": "refuse_to_name",
+    "naming_rationale": "Express prohibition in engagement terms: The firm may not identify the client by name in marketing material, credential libraries, case studies or press without a later written amendment.",
+    "name_governing_clause": "Engagement terms VM-19 clause 18.2",
+    "logo_status": "refuse_logo",
+    "logo_rationale": "Logo cannot be used because client naming is not permitted.",
+    "testimonial_status": "refuse_testimonial",
+    "testimonial_rationale": "No separate consent record for the named individual testimonial.",
+    "anonymised_variant_required": true,
+    "proposed_descriptor": "a top-five European insurer, 2026, core platform migration",
+    "proposed_descriptor_status": "reidentifying",
+    "proposed_descriptor_signals": [
+      "sector",
+      "geography",
+      "date",
+      "unique_programme"
+    ],
+    "proposed_descriptor_rationale": "Descriptor combines 4 identifying signals: sector, geography, date, unique_programme.",
+    "safe_descriptor": "a regulated financial-services organisation",
+    "cleared_figures": [
+      {
+        "metric": "claims workflows migrated to release backlog",
+        "value": 14,
+        "unit": "workflows",
+        "evidence_type": "verified_deliverable",
+        "clearance_scope": "public_marketing",
+        "governing_clause": "Engagement terms VM-19 clause 18.5",
+        "source": "skill:closeout-retrieve",
+        "confidence": 0.91,
+        "citations": [
+          "final deliverable FD-099 appendix B"
+        ],
+        "clearance_state": "cleared",
+        "clearance_rationale": "Verified deliverable evidence cleared for public_marketing.",
+        "citation": "final deliverable FD-099 appendix B; reference-naming-permission-rules.md #6.1"
+      }
+    ],
+    "uncleared_figures": [
+      {
+        "metric": "processing time reduction",
+        "value": 60,
+        "unit": "percent",
+        "evidence_type": "client_internal_estimate",
+        "clearance_scope": "uncleared",
+        "governing_clause": "Engagement terms VM-19 clause 18.8",
+        "source": "skill:closeout-retrieve",
+        "confidence": 0.67,
+        "citations": [
+          "client workshop note CW-099-7",
+          "BD request email BD-2026-404"
+        ],
+        "clearance_state": "uncleared",
+        "clearance_rationale": "Figure is not verified deliverable evidence.",
+        "citation": "client workshop note CW-099-7; BD request email BD-2026-404; reference-naming-permission-rules.md #6.2"
+      }
+    ],
+    "escalations": [
+      "capability: competing taxonomy hints within ambiguity band 0.05; confirm match (credential-taxonomy.md #6.3)",
+      "Naming refused: Express prohibition in engagement terms: The firm may not identify the client by name in marketing material, credential libraries, case studies or press without a later written amendment. (Engagement terms VM-19 clause 18.2)",
+      "Logo refused: Logo cannot be used because client naming is not permitted.",
+      "Testimonial refused: No separate consent record for the named individual testimonial.",
+      "1 outcome figure(s) must stay out of publishable copy (reference-naming-permission-rules.md #6.4)",
+      "Proposed anonymised descriptor blocked: Descriptor combines 4 identifying signals: sector, geography, date, unique_programme. (reference-naming-permission-rules.md #7.1)"
+    ],
+    "source": "engine:permission_check",
+    "confidence": 0.97,
+    "citations": [
+      "Engagement terms VM-19 clause 18.2; reference-naming-permission-rules.md #1.2,#8.1",
+      "reference-naming-permission-rules.md #4.2",
+      "reference-naming-permission-rules.md #5.2",
+      "reference-naming-permission-rules.md #6-#8"
+    ]
+  }
+}

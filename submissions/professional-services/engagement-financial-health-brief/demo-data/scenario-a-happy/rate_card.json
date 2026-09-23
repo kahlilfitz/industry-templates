@@ -1,0 +1,14 @@
+{
+  "contract_version": "ps.engagement-financial-health-brief.v1",
+  "rate_card": {
+    "source": "connector:rate-card",
+    "citation": "raw/rate-card.csv rows 2-5",
+    "confidence": 0.99,
+    "rates": [
+      { "role": "Partner", "bill_rate": 620, "cost_rate": 300 },
+      { "role": "Director", "bill_rate": 460, "cost_rate": 220 },
+      { "role": "Manager", "bill_rate": 320, "cost_rate": 150 },
+      { "role": "Consultant", "bill_rate": 210, "cost_rate": 85 }
+    ]
+  }
+}

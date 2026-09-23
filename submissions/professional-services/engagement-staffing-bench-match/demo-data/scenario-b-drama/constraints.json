@@ -1,0 +1,35 @@
+{
+  "contract_version": "ps.engagement-staffing-bench-match.v1",
+  "engagement": {
+    "engagement_id": "ENG-PS-2026-2077",
+    "client_name": "Aster Foods Cooperative",
+    "source": "connector:conflicts-register",
+    "confidence": 0.97,
+    "citation": "conflicts extract CF-AFC-2077"
+  },
+  "roles": [
+    { "role_id": "PSS-101", "start_date": "2026-10-12" },
+    { "role_id": "PSS-102", "start_date": "2026-10-12" }
+  ],
+  "constraints": [
+    {
+      "candidate_id": "C-201",
+      "type": "financial_interest",
+      "client_name": "Aster Foods Cooperative",
+      "status": "active",
+      "material": true,
+      "citation": "conflicts register CF-AFC-2077 row 3 - unresolved restricted equity holding"
+    },
+    {
+      "candidate_id": "C-204",
+      "type": "prior_client_role",
+      "client_name": "Aster Foods Cooperative",
+      "role_type": "employee",
+      "end_date": "2026-04-30",
+      "citation": "conflicts register CF-AFC-2077 row 9 - former FP&A employee"
+    }
+  ],
+  "source": "connector:conflicts-register",
+  "confidence": 0.97,
+  "citation": "conflicts extract CF-AFC-2077"
+}

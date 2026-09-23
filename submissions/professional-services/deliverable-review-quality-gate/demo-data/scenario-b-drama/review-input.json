@@ -1,0 +1,44 @@
+{
+  "contract_version": "ps.deliverable-review-quality-gate.v1",
+  "engagement_id": "PS-DRQG-B-014",
+  "scenario_id": "scenario-b-drama",
+  "deliverable": {
+    "deliverable_id": "DELIV-VERDANT-HELIOS-V0.9",
+    "title": "Helios Field Service Optimisation",
+    "version": "0.9",
+    "type": "board recommendations",
+    "intended_recipients": ["Verdant Arc Services board", "Cobalt Lenders LLP"],
+    "third_party_recipient_named": true,
+    "confidentiality_marking": "client confidential",
+    "client_data_handling": "ok",
+    "required_disclaimer_type": "reliance_restriction",
+    "present_disclaimer_types": ["general_advice"],
+    "required_language": ["reliance_restriction", "limitations", "no_assurance"],
+    "present_language": ["limitations", "no_assurance"],
+    "brand_checks": [{"check_id":"cover-brand","status":"pass","legal_or_release_control":false,"title":"Brand formatting present","detail":"Cover and section formatting meet visual standard.","location":{"section":"Cover","page":1,"paragraph":1,"label":"Brand"},"confidence":0.95,"citation":"quality-gate-criteria.md #5.1"}],
+    "licensed_content": [{"content_id":"fig-4-benchmark","attribution_present":false,"license_status":"known","detail":"Figure 4 reproduces a licensed benchmark chart without point-of-use attribution.","location":{"section":"Market benchmark","page":9,"paragraph":2,"label":"Figure 4"},"confidence":0.90,"citation":"licensed chart register EV-B4; quality-gate-criteria.md #6.1-#6.2"}],
+    "source": "skill:deliverable-ingest",
+    "citation": "demo-data/scenario-b-drama/raw/draft-deliverable.md",
+    "confidence": 0.96
+  },
+  "criteria": {"criteria_set_id":"PS-QRM-DG-2026-demo","criteria_sections":["quality-gate-criteria.md #1-#7","severity-rules.md #1-#4"],"source":"skill:criteria-retrieve","citation":"demo-data/scenario-b-drama/raw/qrm-gate-criteria-extract.md","confidence":0.98},
+  "assertions": [
+    {"assertion_id":"B-001","class":"quantified","text":"The proposed field-service scheduling redesign will deliver £4.2m annual savings from year one.","location":{"section":"Executive summary","page":3,"paragraph":2,"label":"Headline savings claim"},"evidence_ids":["EV-B1"],"hedging_present":false,"limitation_present":false,"stated_basis":false,"sample_size":null,"population_size":null,"scope_aligned":false,"confidence":0.90,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p3 para2"},
+    {"assertion_id":"B-002","class":"recommendation","text":"Verdant Arc should centralize all regional scheduling roles into one national scheduling hub.","location":{"section":"Recommendation","page":6,"paragraph":1,"label":"Definitive centralization recommendation"},"evidence_ids":["EV-B2","EV-B3"],"hedging_present":false,"limitation_present":false,"stated_basis":true,"sample_size":8,"population_size":120,"scope_aligned":false,"confidence":0.86,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p6 para1"},
+    {"assertion_id":"B-003","class":"factual","text":"Figure 4 reproduces a licensed benchmark chart from Northstar Sector Insights.","location":{"section":"Market benchmark","page":9,"paragraph":2,"label":"Figure 4"},"evidence_ids":["EV-B4"],"hedging_present":false,"limitation_present":true,"stated_basis":true,"sample_size":null,"population_size":null,"scope_aligned":true,"confidence":0.88,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p9 para2"}
+  ],
+  "evidence_set": [
+    {"evidence_id":"EV-B1","type":"stakeholder_verbal","title":"Sponsor verbal estimate","confidence":0.45,"source":"connector:engagement-workspace","citation":"supporting-evidence-index.md EV-B1"},
+    {"evidence_id":"EV-B2","type":"interview_summary","title":"Eight-supervisor interview summary","confidence":0.64,"source":"connector:engagement-workspace","citation":"supporting-evidence-index.md EV-B2"},
+    {"evidence_id":"EV-B3","type":"statement_of_work","title":"SOW limits recommendations to pilot regions","confidence":0.92,"source":"connector:qrm-repository","citation":"supporting-evidence-index.md EV-B3"},
+    {"evidence_id":"EV-B4","type":"licensed_content_register","title":"Licensed chart register","confidence":0.90,"source":"connector:engagement-workspace","citation":"supporting-evidence-index.md EV-B4"},
+    {"evidence_id":"EV-B5","type":"disclaimer_extract","title":"General-advice disclaimer present","confidence":0.96,"source":"connector:engagement-workspace","citation":"supporting-evidence-index.md EV-B5"}
+  ],
+  "prior_findings": [
+    {"finding_id":"PR-B1","claimed_closed":true,"document_fix_present":false,"detail":"Reliance-restriction language was requested and marked closed, but only general-advice language appears.","location":{"section":"Disclaimer","page":12,"paragraph":1,"label":"Disclaimer"},"confidence":0.96,"source":"skill:criteria-retrieve","citation":"prior-review-findings.md PR-B1; quality-gate-criteria.md #7.1-#7.2"},
+    {"finding_id":"PR-B2","claimed_closed":true,"document_fix_present":false,"detail":"Licensed benchmark attribution was requested and marked closed, but Figure 4 has no attribution.","location":{"section":"Market benchmark","page":9,"paragraph":2,"label":"Figure 4"},"confidence":0.93,"source":"skill:criteria-retrieve","citation":"prior-review-findings.md PR-B2; quality-gate-criteria.md #7.1-#7.2"}
+  ],
+  "findings": [],
+  "escalations": [],
+  "provenance": {"generated_at":"2026-09-23T00:00:00Z","engines":[],"demo_scenario":"scenario-b-drama"}
+}

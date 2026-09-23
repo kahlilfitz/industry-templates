@@ -1,0 +1,44 @@
+{
+  "contract_version": "ps.deliverable-review-quality-gate.v1",
+  "engagement_id": "PS-DRQG-A-001",
+  "scenario_id": "scenario-a-happy",
+  "deliverable": {
+    "deliverable_id": "DELIV-ASTER-ORION-V0.8",
+    "title": "Orion Programme Benefits Review",
+    "version": "0.8",
+    "type": "benefits review",
+    "intended_recipients": ["Aster Advisory Group management"],
+    "third_party_recipient_named": false,
+    "confidentiality_marking": "client confidential",
+    "client_data_handling": "ok",
+    "required_disclaimer_type": "general_advice",
+    "present_disclaimer_types": ["general_advice"],
+    "required_language": ["no_assurance", "limitations"],
+    "present_language": ["no_assurance", "limitations"],
+    "brand_checks": [{"check_id":"appendix-footer","status":"fail","legal_or_release_control":false,"title":"Appendix footer missing engagement ID","detail":"One appendix page omits the engagement ID footer; meaning and legal marks are unaffected.","location":{"section":"Appendix C","page":14,"paragraph":1,"label":"Footer"},"confidence":0.88,"citation":"quality-gate-criteria.md #5.1-#5.2"}],
+    "licensed_content": [],
+    "source": "skill:deliverable-ingest",
+    "citation": "demo-data/scenario-a-happy/raw/draft-deliverable.md",
+    "confidence": 0.95
+  },
+  "criteria": {"criteria_set_id":"PS-QRM-DG-2026-demo","criteria_sections":["quality-gate-criteria.md #1-#7","severity-rules.md #1-#4"],"source":"skill:criteria-retrieve","citation":"demo-data/scenario-a-happy/raw/qrm-gate-criteria-extract.md","confidence":0.98},
+  "assertions": [
+    {"assertion_id":"A-001","class":"quantified","text":"The invoice-cycle redesign pilot reduced average approval cycle time by 8.1%.","location":{"section":"Executive summary","page":3,"paragraph":1,"label":"Cycle-time claim"},"evidence_ids":["EV-A1"],"hedging_present":false,"limitation_present":true,"stated_basis":true,"sample_size":942,"population_size":942,"scope_aligned":true,"confidence":0.94,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p3 para1"},
+    {"assertion_id":"A-002","class":"quantified","text":"The approved benefits model estimates GBP 1.1m annual run-rate opportunity.","location":{"section":"Executive summary","page":3,"paragraph":2,"label":"Benefits estimate"},"evidence_ids":["EV-A2"],"hedging_present":true,"limitation_present":true,"stated_basis":true,"sample_size":942,"population_size":942,"scope_aligned":true,"confidence":0.91,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p3 para2"},
+    {"assertion_id":"A-003","class":"recommendation","text":"Scale the redesigned approval workflow to the two remaining regions.","location":{"section":"Recommendation","page":5,"paragraph":1,"label":"Scale recommendation"},"evidence_ids":["EV-A2","EV-A3"],"hedging_present":true,"limitation_present":true,"stated_basis":true,"sample_size":942,"population_size":1100,"scope_aligned":true,"confidence":0.84,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p5 para1"},
+    {"assertion_id":"A-004","class":"forward_looking","text":"Benefits depend on adoption, control ownership and exception volumes.","location":{"section":"Recommendation","page":5,"paragraph":2,"label":"Forward-looking limitation"},"evidence_ids":["EV-A3"],"hedging_present":true,"limitation_present":true,"stated_basis":true,"sample_size":null,"population_size":null,"scope_aligned":true,"confidence":0.82,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p5 para2"}
+  ],
+  "evidence_set": [
+    {"evidence_id":"EV-A1","type":"signed_client_data","title":"Signed client workflow extract","confidence":0.94,"source":"connector:engagement-workspace","citation":"supporting-evidence-index.md EV-A1"},
+    {"evidence_id":"EV-A2","type":"financial_model","title":"Approved benefits model v0.7","confidence":0.91,"source":"connector:engagement-workspace","citation":"supporting-evidence-index.md EV-A2"},
+    {"evidence_id":"EV-A3","type":"workshop_note","title":"Sponsor workshop minutes","confidence":0.82,"source":"connector:engagement-workspace","citation":"supporting-evidence-index.md EV-A3"},
+    {"evidence_id":"EV-A4","type":"internal_benchmark","title":"Internal benchmark","confidence":0.86,"source":"connector:engagement-workspace","citation":"supporting-evidence-index.md EV-A4"}
+  ],
+  "prior_findings": [
+    {"finding_id":"PR-A1","claimed_closed":true,"document_fix_present":true,"detail":"No-assurance limitation is present.","location":{"section":"Disclaimer","page":15,"paragraph":1,"label":"Disclaimer"},"confidence":0.92,"source":"skill:criteria-retrieve","citation":"prior-review-findings.md PR-A1"},
+    {"finding_id":"PR-A2","claimed_closed":false,"document_fix_present":false,"detail":"Appendix footer missing engagement ID remains open as an advisory.","location":{"section":"Appendix C","page":14,"paragraph":1,"label":"Footer"},"confidence":0.88,"source":"skill:criteria-retrieve","citation":"prior-review-findings.md PR-A2"}
+  ],
+  "findings": [],
+  "escalations": [],
+  "provenance": {"generated_at":"2026-09-23T00:00:00Z","engines":[],"demo_scenario":"scenario-a-happy"}
+}

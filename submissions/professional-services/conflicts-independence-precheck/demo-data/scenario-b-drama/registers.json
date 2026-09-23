@@ -1,0 +1,72 @@
+{
+  "as_of": "2026-09-23",
+  "citation": "raw/register-export-2026-09-23.zip",
+  "registers_searched": ["client_register", "matter_register", "adverse_party_register", "independence_register", "prior_clearance_decisions"],
+  "date_range": { "from": "2024-09-23", "to": "2026-09-23" },
+  "client_register": [
+    {
+      "client_record_id": "CR-1200",
+      "entity_id": "ENT-AST-010",
+      "client_name": "Aster Diagnostics LLC",
+      "status": "former",
+      "closed_on": "2025-11-30",
+      "matter_summary": "market-entry diligence for outpatient diagnostics platform",
+      "substantially_related": true,
+      "citation": "client register row CR-1200"
+    },
+    {
+      "client_record_id": "CR-1770",
+      "entity_id": "ENT-KELVAR-077",
+      "client_name": "Kelvar Bio Systems Ltd",
+      "status": "current",
+      "citation": "client register row CR-1770"
+    },
+    {
+      "client_record_id": "CR-2205",
+      "entity_id": "ENT-LAT-050",
+      "client_name": "Lattice Energy Cooperative",
+      "status": "current",
+      "citation": "client register row CR-2205"
+    }
+  ],
+  "matter_register": [
+    {
+      "matter_id": "MAT-7007",
+      "client_entity_id": "ENT-LAT-050",
+      "client_name": "Lattice Energy Cooperative",
+      "status": "live",
+      "matter_type": "strategic_supply_dispute",
+      "adverse_party_entity_ids": ["ENT-VEGA-001"],
+      "adverse_party_names": ["VegaNova Holdings PLC"],
+      "citation": "matter register row MAT-7007"
+    }
+  ],
+  "adverse_party_register": [
+    {
+      "adverse_record_id": "ADV-7007-A",
+      "entity_id": "ENT-VEGA-001",
+      "name": "VegaNova Holdings PLC",
+      "matter_id": "MAT-7007",
+      "citation": "adverse-party register row ADV-7007-A"
+    }
+  ],
+  "independence_register": [
+    {
+      "restriction_id": "IND-3030",
+      "entity_id": "ENT-VEGA-001",
+      "entity_name": "VegaNova Holdings PLC",
+      "restriction_type": "audit_client",
+      "covered_family_id": "FAM-VEGA",
+      "prohibited_services": ["valuation", "management_decision", "systems_implementation_with_management_responsibility"],
+      "citation": "independence register row IND-3030"
+    }
+  ],
+  "prior_clearance_decisions": [
+    {
+      "decision_id": "PCD-511",
+      "entity_id": "ENT-AST-010",
+      "summary": "prior unrelated tax compliance inquiry closed with no live matter overlap in 2025; not controlling for current transaction advisory request",
+      "citation": "prior clearance decision PCD-511"
+    }
+  ]
+}

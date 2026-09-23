@@ -1,0 +1,2 @@
+# Scenario A - happy path
+A well-prepared benefits-review draft. The quantified cycle-time and GBP 1.1m opportunity claims trace to signed client data and an approved benefits model; limitations and no-assurance language are present; confidentiality is marked correctly. Expected result: gates clear with advisories only, chiefly an appendix footer formatting issue, so the packet starts the partner at judgement rather than checklist chasing.

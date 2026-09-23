@@ -1,0 +1,294 @@
+{
+  "contract_version": "ps.credential-case-study-assembly.v1",
+  "engagement": {
+    "engagement_id": "PS-CRD-2026-014",
+    "name": "Claims Workflow Modernisation Closeout",
+    "closeout_date": "2026-08-28",
+    "fees_usd": 640000,
+    "duration_weeks": 18,
+    "board_visible": false,
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.94,
+    "citations": [
+      "closeout knowledge record CKR-014 #engagement"
+    ]
+  },
+  "client": {
+    "name": "Northstar Harbor Cooperative",
+    "sector": "financial-services",
+    "geography": "North America",
+    "size_descriptor": "regional member-owned insurer",
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.95,
+    "citations": [
+      "closeout knowledge record CKR-014 #client"
+    ]
+  },
+  "deliverables": [
+    {
+      "title": "Claims intake workflow redesign",
+      "summary": "Mapped claims intake, redesigned handoffs and implemented a workflow automation pilot across three operating teams.",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.92,
+      "citations": [
+        "closeout knowledge record CKR-014 #deliverables",
+        "final deliverable FD-014 section 2"
+      ]
+    },
+    {
+      "title": "Adoption and measurement pack",
+      "summary": "Created supervisor dashboards and measurement cadence for cycle-time tracking.",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.9,
+      "citations": [
+        "final deliverable FD-014 section 5"
+      ]
+    }
+  ],
+  "outcomes": [
+    {
+      "metric": "manual reconciliation cycle time reduction",
+      "value": 38,
+      "unit": "percent",
+      "evidence_type": "verified_deliverable",
+      "clearance_scope": "public_marketing",
+      "governing_clause": "Engagement terms NT-14 clause 12.2",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.93,
+      "citations": [
+        "final deliverable FD-014 appendix E-2",
+        "closeout knowledge record CKR-014 #outcomes"
+      ]
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "credential_draft/1.0",
+      "permission_check/1.0"
+    ],
+    "generated_at": "2026-09-23",
+    "demo_scenario": "scenario-a-happy"
+  },
+  "taxonomy_match": {
+    "sector": {
+      "value": "financial-services",
+      "confidence": 0.82,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #1",
+      "ambiguous": false,
+      "scores": {
+        "financial-services": 3,
+        "public-sector": 0,
+        "healthcare": 0,
+        "industrial": 0,
+        "technology-media-telecom": 0,
+        "cross-industry": 0
+      }
+    },
+    "service_line": {
+      "value": "data-ai-analytics",
+      "confidence": 0.73,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #2",
+      "ambiguous": false,
+      "scores": {
+        "strategy-advisory": 0,
+        "technology-transformation": 0,
+        "data-ai-analytics": 2,
+        "risk-regulatory": 0,
+        "managed-services": 0
+      }
+    },
+    "capability": {
+      "value": "ai-automation",
+      "confidence": 0.73,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #3",
+      "ambiguous": false,
+      "scores": {
+        "process-redesign": 1,
+        "platform-migration": 0,
+        "ai-automation": 2,
+        "data-modernisation": 0,
+        "change-enablement": 1
+      }
+    },
+    "engagement_size_band": {
+      "value": "medium",
+      "confidence": 0.96,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #4.2",
+      "fees_usd": 640000.0,
+      "duration_weeks": 18
+    },
+    "outcome_type": {
+      "value": "cycle-time",
+      "confidence": 0.73,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #5",
+      "ambiguous": false,
+      "scores": {
+        "cost-reduction": 0,
+        "cycle-time": 2,
+        "risk-reduction": 0,
+        "revenue-growth": 0,
+        "experience-improvement": 0,
+        "resilience-quality": 0
+      }
+    },
+    "source": "engine:credential_draft",
+    "citations": [
+      "credential-taxonomy.md #1-#6"
+    ],
+    "confidence": 0.73,
+    "escalations": []
+  },
+  "draft_assets": {
+    "credential_entry": {
+      "title_seed": "Claims Workflow Modernisation Closeout",
+      "client_name_seed": "Northstar Harbor Cooperative",
+      "taxonomy": {
+        "sector": "financial-services",
+        "service_line": "data-ai-analytics",
+        "capability": "ai-automation",
+        "engagement_size_band": "medium",
+        "outcome_type": "cycle-time"
+      },
+      "source": "engine:credential_draft",
+      "confidence": 0.73,
+      "citations": [
+        "credential-taxonomy.md #1-#6"
+      ]
+    },
+    "case_study": {
+      "forms_required": [
+        "short",
+        "medium",
+        "long"
+      ],
+      "copy_instruction": "Model drafts copy only after permission_check separates cleared and uncleared figures.",
+      "source": "engine:credential_draft",
+      "confidence": 0.73,
+      "citations": [
+        "credential-taxonomy.md #6.1"
+      ]
+    },
+    "source": "engine:credential_draft",
+    "confidence": 0.73,
+    "citations": [
+      "credential-taxonomy.md #1-#6"
+    ],
+    "anonymised_variant": {
+      "required": false,
+      "safe_descriptor": "a regulated financial-services organisation",
+      "blocked_descriptor": "",
+      "instruction": "Use only the safe_descriptor when naming is refused; do not include uncleared figures.",
+      "source": "engine:permission_check",
+      "confidence": 0.97,
+      "citations": [
+        "reference-naming-permission-rules.md #7.1,#7.3"
+      ]
+    }
+  },
+  "request": {
+    "request_id": "BD-2026-221",
+    "requested_use": "public_marketing",
+    "requested_on": "2026-09-23",
+    "requester": "Mira Chen, Growth Marketing",
+    "proposed_anonymised_descriptor": "",
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.96,
+    "citations": [
+      "BD request email BD-2026-221"
+    ]
+  },
+  "terms": {
+    "clauses": [
+      {
+        "clause_id": "NT-14-12.2",
+        "type": "express_written",
+        "applies_to": "name",
+        "scope": "public_marketing",
+        "expires_on": "2027-12-31",
+        "summary": "Client name may be used in credentials and public case-study material after closeout when figures are cited to verified deliverable evidence.",
+        "citation": "Engagement terms NT-14 clause 12.2"
+      },
+      {
+        "clause_id": "NT-14-12.4",
+        "type": "restriction",
+        "applies_to": "logo",
+        "scope": "public_marketing",
+        "summary": "Logo use requires separate written approval.",
+        "citation": "Engagement terms NT-14 clause 12.4"
+      }
+    ],
+    "source": "connector:contract-repository",
+    "confidence": 0.97,
+    "citations": [
+      "contract repository extract NT-14"
+    ]
+  },
+  "reference_register": {
+    "permissions": [
+      {
+        "permission_id": "RR-014-NAME",
+        "permission_type": "name",
+        "consent_type": "express_written",
+        "scope": "public_marketing",
+        "expires_on": "2027-12-31",
+        "citation": "reference register RR-014 row 3"
+      }
+    ],
+    "source": "connector:reference-register",
+    "confidence": 0.98,
+    "citations": [
+      "reference register extract 2026-09-23 row 3"
+    ]
+  },
+  "permission_verdict": {
+    "naming_status": "permit_to_name",
+    "naming_rationale": "Express written consent permits public_marketing within scope public_marketing.",
+    "name_governing_clause": "reference register RR-014 row 3",
+    "logo_status": "refuse_logo",
+    "logo_rationale": "No separate logo-use consent for the requested use.",
+    "testimonial_status": "not_requested",
+    "testimonial_rationale": "No named-individual quote requested.",
+    "anonymised_variant_required": false,
+    "proposed_descriptor": "",
+    "proposed_descriptor_status": "not_provided",
+    "proposed_descriptor_signals": [],
+    "proposed_descriptor_rationale": "No anonymised descriptor was provided.",
+    "safe_descriptor": "a regulated financial-services organisation",
+    "cleared_figures": [
+      {
+        "metric": "manual reconciliation cycle time reduction",
+        "value": 38,
+        "unit": "percent",
+        "evidence_type": "verified_deliverable",
+        "clearance_scope": "public_marketing",
+        "governing_clause": "Engagement terms NT-14 clause 12.2",
+        "source": "skill:closeout-retrieve",
+        "confidence": 0.93,
+        "citations": [
+          "final deliverable FD-014 appendix E-2",
+          "closeout knowledge record CKR-014 #outcomes"
+        ],
+        "clearance_state": "cleared",
+        "clearance_rationale": "Verified deliverable evidence cleared for public_marketing.",
+        "citation": "final deliverable FD-014 appendix E-2; closeout knowledge record CKR-014 #outcomes; reference-naming-permission-rules.md #6.1"
+      }
+    ],
+    "uncleared_figures": [],
+    "escalations": [
+      "Logo refused: No separate logo-use consent for the requested use."
+    ],
+    "source": "engine:permission_check",
+    "confidence": 0.97,
+    "citations": [
+      "reference register RR-014 row 3; reference-naming-permission-rules.md #1.1,#2",
+      "reference-naming-permission-rules.md #4.1",
+      "reference-naming-permission-rules.md #5",
+      "reference-naming-permission-rules.md #6-#8"
+    ]
+  }
+}

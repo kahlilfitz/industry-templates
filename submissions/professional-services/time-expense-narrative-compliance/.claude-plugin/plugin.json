@@ -1,0 +1,18 @@
+{
+  "name": "time-expense-narrative-compliance",
+  "version": "1.0.0",
+  "description": "Professional Services Cowork plugin: draft time-entry narratives from engagement-scoped activity, map task and phase codes deterministically, govern narrative compliance against client billing guidelines, surface missing time and pre-bill exceptions, and stop before submission or billing. Draft-first; privacy-narrow signal defaults; every compliance verdict and flag is rules-engine cited.",
+  "author": {
+    "name": "Microsoft Professional Services Skills"
+  },
+  "keywords": [
+    "professional-services",
+    "time-entry",
+    "expense",
+    "billing",
+    "pre-bill",
+    "wip",
+    "narrative-compliance",
+    "guidelines"
+  ]
+}

@@ -1,0 +1,198 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ps.engagement-closeout-knowledge-harvest.v1",
+  "title": "Engagement Closeout & Knowledge Harvest contract v1",
+  "description": "Chains artifact-assemble -> asset-identify -> lesson-cluster -> sanitize-check (Govern) -> knowledge-record. Carries data + confidence + provenance + citations on every hop. The terminal knowledge_record shape is stable for downstream credential-case-study-assembly consumption.",
+  "type": "object",
+  "required": ["contract_version", "engagement", "artifacts", "candidate_assets", "decision_log", "retrospective_inputs"],
+  "properties": {
+    "contract_version": { "const": "ps.engagement-closeout-knowledge-harvest.v1" },
+    "run_metadata": {
+      "type": "object",
+      "properties": {
+        "generated_at": { "type": "string" },
+        "demo_scenario": { "type": "string" }
+      }
+    },
+    "engagement": {
+      "type": "object",
+      "required": ["engagement_id", "title", "client_descriptor", "confidence", "source", "citation"],
+      "properties": {
+        "engagement_id": { "type": "string" },
+        "title": { "type": "string" },
+        "client_name": { "type": "string" },
+        "client_descriptor": { "type": "string" },
+        "sector": { "type": "string" },
+        "region": { "type": "string" },
+        "client_headcount": { "type": ["integer", "null"] },
+        "go_live_date": { "type": "string" },
+        "third_party_products": { "type": "array", "items": { "type": "string" } },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "citation": { "type": "string" }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["artifact_id", "title", "artifact_type", "required", "status", "confidence", "source", "citation"],
+        "properties": {
+          "artifact_id": { "type": "string" },
+          "title": { "type": "string" },
+          "artifact_type": { "type": "string" },
+          "required": { "type": "boolean" },
+          "status": { "enum": ["complete", "draft", "missing", "superseded"] },
+          "owner": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "candidate_assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "title", "asset_type", "generalisability", "effort_to_recreate", "shelf_life_months", "client_dependency", "confidence", "source", "citation"],
+        "properties": {
+          "asset_id": { "type": "string" },
+          "title": { "type": "string" },
+          "asset_type": { "type": "string" },
+          "description": { "type": "string" },
+          "generalisability": { "type": "integer", "minimum": 0, "maximum": 5 },
+          "effort_to_recreate": { "type": "integer", "minimum": 0, "maximum": 5 },
+          "shelf_life_months": { "type": "integer", "minimum": 0 },
+          "client_dependency": { "type": "integer", "minimum": 0, "maximum": 5 },
+          "confidentiality_markers": { "type": "array", "items": { "type": "string" } },
+          "aggregation_tokens": { "type": "array", "items": { "type": "string" } },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "decision_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["decision_id", "summary", "confidence", "source", "citation"],
+        "properties": {
+          "decision_id": { "type": "string" },
+          "summary": { "type": "string" },
+          "impact": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "retrospective_inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["input_id", "text", "confidence", "source", "citation"],
+        "properties": {
+          "input_id": { "type": "string" },
+          "text": { "type": "string" },
+          "speaker_role": { "type": "string" },
+          "named_people": { "type": "array", "items": { "type": "string" } },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "confidentiality_terms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["term_id", "summary", "confidence", "source", "citation"],
+        "properties": {
+          "term_id": { "type": "string" },
+          "summary": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "deliverable_index": { "type": "array", "items": { "type": "object" } },
+    "reusable_asset_shortlist": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "reuse_score", "recommendation", "confidence", "source", "citation"],
+        "properties": {
+          "asset_id": { "type": "string" },
+          "title": { "type": "string" },
+          "reuse_score": { "type": "number" },
+          "recommendation": { "enum": ["shortlist", "retain_for_internal_reference", "archive_with_engagement"] },
+          "reuse_rationale": { "type": "string" },
+          "clearance_state": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "lesson_clusters": { "type": "array", "items": { "type": "object" } },
+    "sanitisation_report": {
+      "type": "object",
+      "properties": {
+        "overall_disposition": { "type": "string" },
+        "findings": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "released_assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "clearance_state", "review_required", "confidence", "source", "citation"],
+        "properties": {
+          "asset_id": { "type": "string" },
+          "clearance_state": { "type": "string" },
+          "review_required": { "type": "boolean" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "held_assets": { "type": "array", "items": { "type": "object" } },
+    "knowledge_record": {
+      "type": "object",
+      "required": ["record_id", "status", "reusable_assets", "lessons", "sanitisation_summary", "downstream_handoff", "clearance_state", "confidence", "source", "citation"],
+      "properties": {
+        "record_id": { "type": "string" },
+        "status": { "type": "string" },
+        "title": { "type": "string" },
+        "engagement_summary_seed": { "type": "string" },
+        "reusable_assets": { "type": "array", "items": { "type": "object" } },
+        "lessons": { "type": "array", "items": { "type": "object" } },
+        "sanitisation_summary": { "type": "string" },
+        "downstream_handoff": {
+          "type": "object",
+          "properties": {
+            "consumer_template": { "const": "credential-case-study-assembly" },
+            "contract_fields": { "type": "array", "items": { "type": "string" } },
+            "handoff_note": { "type": "string" }
+          }
+        },
+        "clearance_state": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "citation": { "type": "string" }
+      }
+    },
+    "escalations": { "type": "array", "items": { "type": "string" } },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "engines": { "type": "array", "items": { "type": "string" } },
+        "generated_at": { "type": "string" },
+        "demo_scenario": { "type": "string" }
+      }
+    }
+  }
+}
