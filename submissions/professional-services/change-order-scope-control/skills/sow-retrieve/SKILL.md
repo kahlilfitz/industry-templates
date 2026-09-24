@@ -5,7 +5,7 @@ license: Proprietary
 metadata:
   version: "1.0"
   author: Microsoft Professional Services Skills
-  category: Delivery Commercial Control
+  category: analysis
 ---
 # SOW Retrieve
 ## Purpose

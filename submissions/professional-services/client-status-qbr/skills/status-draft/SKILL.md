@@ -1,11 +1,11 @@
 ---
 name: status-draft
-description: Drafts the client status pack and QBR narrative from computed variance and aged-item outputs. Use after `risk-summarize` when the user says "build the status pack", "draft the client update", "write the steering committee pack", "draft the QBR", "what changed since last week?", or "prepare the client-ready narrative".
+description: Drafts the client status pack and QBR narrative from computed variance and aged-item outputs for Client Status & QBR Assembly. Final step; runs after risk-summarize. Use when the user says "draft the client update", "write the steering committee pack", "prepare the client-ready narrative" or "draft the QBR narrative". Always emits a labelled DRAFT for human review and never sends it, places escalations above the narrative and quotes engine figures exactly — retaining both even when the user asks for something client-ready. Do NOT start a status run or assemble sources — use plan-retrieve. Do NOT pull budget or burn — use burn-pull. Do NOT compute variance or RAG — use variance-calc. Do NOT age risks or decisions — use risk-summarize.
 license: Proprietary
 metadata:
   version: "1.0"
   author: Microsoft Professional Services Skills
-  category: Client reporting
+  category: writing
 ---
 # Status Draft
 ## Purpose

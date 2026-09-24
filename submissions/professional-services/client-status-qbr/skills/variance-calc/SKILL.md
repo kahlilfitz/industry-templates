@@ -1,11 +1,11 @@
 ---
 name: variance-calc
-description: Computes period-over-period schedule, budget and scope variance with deterministic RAG for Client Status & QBR Assembly. Use after `plan-retrieve` and `burn-pull` when the user says "what changed since last week?", "why is the status red?", "calculate the variance", "build the status pack", or before `risk-summarize` and `status-draft`.
+description: Computes period-over-period schedule, budget and scope variance with deterministic RAG for Client Status & QBR Assembly. Runs after plan-retrieve and burn-pull. Use when the user says "calculate the variance", "why is the status red?", "what changed since last week?" or "give me schedule, budget and scope RAG". Delegates every threshold and calculation to scripts/variance_calc.py and quotes the engine output verbatim rather than restating it; surfaces masked slippage where a rebaseline hides variance against the original baseline. Do NOT start a status run — use plan-retrieve. Do NOT pull finance or burn data — use burn-pull. Do NOT age risks or decisions — use risk-summarize. Do NOT write the client narrative — use status-draft.
 license: Proprietary
 metadata:
   version: "1.0"
   author: Microsoft Professional Services Skills
-  category: Client reporting
+  category: analysis
 ---
 # Variance Calc
 ## Purpose

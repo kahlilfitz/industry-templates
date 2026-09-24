@@ -1,11 +1,11 @@
 ---
 name: risk-summarize
-description: Ages risks, decisions and actions and separates pending client actions for Client Status & QBR Assembly. Use after `variance-calc` when the user says "show open risks", "what decisions are pending?", "what is waiting on the client?", "summarize actions", "build the status pack", or before `status-draft`.
+description: Ages risks, decisions and actions and separates pending client actions for Client Status & QBR Assembly. Runs after variance-calc. Use when the user says "show open risks", "what decisions are pending?", "what is waiting on the client?" or "summarize actions with ageing". Delegates ageing to scripts/item_age.py and quotes it verbatim; reclassifies an action blocked by a client decision as a pending client action, and flags items whose stated status contradicts their age instead of accepting the label. Do NOT start a status run — use plan-retrieve. Do NOT pull budget or burn — use burn-pull. Do NOT compute variance or RAG — use variance-calc. Do NOT write the client narrative — use status-draft.
 license: Proprietary
 metadata:
   version: "1.0"
   author: Microsoft Professional Services Skills
-  category: Client reporting
+  category: analysis
 ---
 # Risk Summarize
 ## Purpose

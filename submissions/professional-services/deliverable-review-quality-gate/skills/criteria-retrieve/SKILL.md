@@ -5,7 +5,7 @@ license: Proprietary
 metadata:
   version: "1.0"
   author: Microsoft Professional Services Skills
-  category: Quality assurance
+  category: analysis
 ---
 # Criteria Retrieve
 ## Purpose

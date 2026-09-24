@@ -1,11 +1,11 @@
 ---
 name: plan-retrieve
-description: Retrieves and structures the engagement plan, milestone schedule, prior status packs and client reporting template for Client Status & QBR Assembly. Use when the user says "build the status pack", "prepare the weekly status", "what changed since last week?", "draft the QBR", or whenever a status/QBR run begins before `burn-pull`.
+description: Retrieves and structures the engagement plan, milestone schedule, prior status packs and client reporting template for Client Status & QBR Assembly. Entry step for a status or QBR run. Use when the user says "build the status pack", "prepare the weekly status", "start the status run" or "draft the QBR". Extracts milestones with baseline and forecast dates, prior-period RAG and open change requests, citing every field to its source line; flags rebaselined milestones and items absent from the prior pack instead of dropping them. Do NOT use for budget or burn figures — use burn-pull. Do NOT compute variance or RAG — use variance-calc. Do NOT age risks or decisions — use risk-summarize. Do NOT write the client narrative — use status-draft.
 license: Proprietary
 metadata:
   version: "1.0"
   author: Microsoft Professional Services Skills
-  category: Client reporting
+  category: analysis
 ---
 # Plan Retrieve
 ## Purpose

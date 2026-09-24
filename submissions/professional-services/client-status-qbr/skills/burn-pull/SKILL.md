@@ -1,11 +1,11 @@
 ---
 name: burn-pull
-description: Pulls and normalizes time, budget, billed burn, unbilled WIP, accrual and forecast records for Client Status & QBR Assembly. Use after `plan-retrieve` when the user says "build the status pack", "where are we on budget?", "why did burn change?", "what changed since last week?", or before `variance-calc`.
+description: Pulls and normalizes time, budget, billed burn, unbilled WIP, accrual and forecast records for Client Status & QBR Assembly. Runs after plan-retrieve. Use when the user says "where are we on budget?", "why did burn change?", "get the burn numbers into the payload" or "pull the finance export". Keeps billed and unbilled WIP strictly separate, carries a per-field citation for every figure, and escalates when WIP movement cannot be sourced from the prior pack rather than inferring a baseline. Do NOT start a status run or assemble the pack — use plan-retrieve. Do NOT compute variance or RAG — use variance-calc. Do NOT age risks or decisions — use risk-summarize. Do NOT write the client narrative — use status-draft.
 license: Proprietary
 metadata:
   version: "1.0"
   author: Microsoft Professional Services Skills
-  category: Client reporting
+  category: analysis
 ---
 # Burn Pull
 ## Purpose
