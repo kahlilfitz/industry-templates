@@ -65,6 +65,28 @@ def worst(*rags):
     return max(rags, key=ROLLUP_ORDER.index)
 
 
+def require(payload, path, hop):
+    """Returns payload[path] or exits with an actionable message naming the hop
+    to re-run. Never let a missing field surface as a raw KeyError traceback."""
+    current = payload
+    for key in path.split("."):
+        if not isinstance(current, dict) or key not in current:
+            raise SystemExit(
+                f"variance_calc: missing required field '{path}' - run {hop} first to populate it."
+            )
+        current = current[key]
+    return current
+
+
+def require_milestone_field(milestone, key):
+    if key not in milestone:
+        raise SystemExit(
+            f"variance_calc: milestone {milestone.get('id', '(unknown id)')} is missing "
+            f"'{key}' - run plan-retrieve first to populate it."
+        )
+    return milestone[key]
+
+
 def schedule_summary(payload, escalations):
     prior = {
         item["id"]: item for item in payload.get("prior_status", {}).get("milestones", [])
@@ -72,40 +94,54 @@ def schedule_summary(payload, escalations):
     facts = []
     rag = "green"
     confidence = 1.0
-    for milestone in payload["plan"]["milestones"]:
-        original_variance_days = days_between(
-            milestone["current_forecast_date"], milestone["original_baseline_date"]
-        )
+    for milestone in require(payload, "plan.milestones", "plan-retrieve"):
+        original_baseline = require_milestone_field(milestone, "original_baseline_date")
+        current_forecast = require_milestone_field(milestone, "current_forecast_date")
+        original_variance_days = days_between(current_forecast, original_baseline)
         prior_item = prior.get(milestone["id"])
-        if prior_item:
-            period_delta_days = days_between(
-                milestone["current_forecast_date"], prior_item["forecast_date"]
-            )
+        prior_forecast_date = prior_item.get("forecast_date") if prior_item else None
+        if prior_forecast_date:
+            period_delta_days = days_between(current_forecast, prior_forecast_date)
         else:
             period_delta_days = None
+            reason = (
+                "absent from the prior status pack"
+                if prior_item is None
+                else "present in the prior status pack but carries no forecast_date"
+            )
             add_escalation(
                 escalations,
-                f"{milestone['id']}: absent from the prior status pack - period-on-period "
-                "movement cannot be computed and must be confirmed with the delivery lead "
+                f"{milestone['id']}: {reason} - period-on-period movement cannot be computed "
+                "and must be confirmed with the delivery lead "
                 "(status-reporting-rules.md #2.4)",
             )
-        current_baseline = milestone.get("current_baseline_date", milestone["original_baseline_date"])
+        current_baseline = milestone.get("current_baseline_date", original_baseline)
         if "rebaselined_last_period" in milestone:
             rebaselined = bool(milestone["rebaselined_last_period"])
         elif prior_item and prior_item.get("baseline_date"):
             rebaselined = prior_item["baseline_date"] != current_baseline
         else:
             rebaselined = False
-        baseline_moved_since_original = current_baseline != milestone["original_baseline_date"]
+        baseline_moved_since_original = current_baseline != original_baseline
         milestone_rag = rag_from_threshold(
             max(original_variance_days, 0), SCHEDULE_AMBER_DAYS, SCHEDULE_RED_DAYS, strict=True
         )
-        if rebaselined and REBASELINE_CHECK_REQUIRED and milestone.get("reported_rag") == "green" and milestone_rag != "green":
+        # Masked slippage: a green label sitting on top of real variance against the
+        # ORIGINAL baseline, whether the move happened last period or earlier (#2.3).
+        masked = milestone.get("reported_rag") == "green" and milestone_rag != "green"
+        if REBASELINE_CHECK_REQUIRED and masked and rebaselined:
             add_escalation(
                 escalations,
                 f"{milestone['id']}: reported green after rebaseline, but forecast is "
                 f"{original_variance_days} days against original baseline "
                 "(status-reporting-rules.md #2.3)",
+            )
+        elif REBASELINE_CHECK_REQUIRED and masked and baseline_moved_since_original:
+            add_escalation(
+                escalations,
+                f"{milestone['id']}: reported green against a moved baseline "
+                f"({current_baseline}), but forecast is {original_variance_days} days against "
+                f"original baseline {original_baseline} (status-reporting-rules.md #2.3)",
             )
         if milestone.get("confidence", 1.0) < CONFIDENCE_FLOOR:
             milestone_rag = worst(milestone_rag, "amber")
@@ -120,11 +156,11 @@ def schedule_summary(payload, escalations):
         facts.append(
             {
                 "id": milestone["id"],
-                "name": milestone["name"],
+                "name": milestone.get("name", "(untitled)"),
                 "reported_rag": milestone.get("reported_rag"),
                 "computed_rag": milestone_rag,
-                "original_baseline_date": milestone["original_baseline_date"],
-                "current_forecast_date": milestone["current_forecast_date"],
+                "original_baseline_date": original_baseline,
+                "current_forecast_date": current_forecast,
                 "original_variance_days": original_variance_days,
                 "period_delta_days": period_delta_days,
                 "rebaselined_last_period": rebaselined,
@@ -147,27 +183,31 @@ def schedule_summary(payload, escalations):
 
 
 def budget_summary(payload, escalations):
-    budget = payload["budget"]
-    planned = budget["planned_burn_to_date"]
-    billed = budget["actual_billed_to_date"]
-    wip = budget.get("unbilled_wip", 0.0) if INCLUDE_UNBILLED_WIP else 0.0
+    budget = require(payload, "budget", "burn-pull")
+    planned = require(payload, "budget.planned_burn_to_date", "burn-pull")
+    billed = require(payload, "budget.actual_billed_to_date", "burn-pull")
+    baseline_budget = require(payload, "budget.baseline_budget", "burn-pull")
+    forecast_to_complete = require(payload, "budget.forecast_to_complete", "burn-pull")
+    # The contract allows unbilled_wip to be null when the export genuinely has no WIP
+    # line. Null means UNKNOWN, not zero: billed-only burn is then not authoritative.
+    raw_wip = budget.get("unbilled_wip")
+    wip_known = raw_wip is not None
+    wip = float(raw_wip) if (wip_known and INCLUDE_UNBILLED_WIP) else 0.0
     actual_with_wip = billed + wip
     burn_variance_amount = actual_with_wip - planned
     burn_variance_pct = pct(burn_variance_amount, planned)
     burn_measurable = burn_variance_pct is not None
     if not burn_measurable:
-        burn_variance_pct = 0.0
         add_escalation(
             escalations,
             f"budget: planned burn to date is 0 but actual burn including WIP is {actual_with_wip} - "
             "burn variance cannot be computed and must be confirmed with the engagement "
             "financial analyst (status-reporting-rules.md #3.1)",
         )
-    forecast_variance_amount = budget["forecast_to_complete"] - budget["baseline_budget"]
-    forecast_variance_pct = pct(forecast_variance_amount, budget["baseline_budget"])
+    forecast_variance_amount = forecast_to_complete - baseline_budget
+    forecast_variance_pct = pct(forecast_variance_amount, baseline_budget)
     forecast_measurable = forecast_variance_pct is not None
     if not forecast_measurable:
-        forecast_variance_pct = 0.0
         add_escalation(
             escalations,
             "budget: baseline budget is 0 - forecast variance cannot be computed and must be "
@@ -175,13 +215,41 @@ def budget_summary(payload, escalations):
         )
     prior_forecast = budget.get(
         "previous_forecast_to_complete",
-        payload.get("prior_status", {}).get("budget", {}).get("forecast_to_complete", budget["forecast_to_complete"]),
+        payload.get("prior_status", {}).get("budget", {}).get("forecast_to_complete"),
     )
-    forecast_period_delta = budget["forecast_to_complete"] - prior_forecast
-    largest_variance_pct = max(abs(burn_variance_pct), abs(forecast_variance_pct))
+    if prior_forecast is None:
+        forecast_period_delta = None
+        add_escalation(
+            escalations,
+            "budget: prior forecast-to-complete not supplied, so period-on-period forecast "
+            "movement cannot be computed and must not be reported as zero "
+            "(status-reporting-rules.md #3.4)",
+        )
+    else:
+        forecast_period_delta = round(forecast_to_complete - prior_forecast, 2)
+        if forecast_period_delta != 0:
+            add_escalation(
+                escalations,
+                f"budget: forecast-to-complete moved {forecast_period_delta:+} since the prior "
+                f"pack ({prior_forecast} -> {forecast_to_complete}) - include this movement in "
+                "the draft (status-reporting-rules.md #3.4)",
+            )
+    # Percentages used for the RAG comparison only; unmeasurable values are reported as
+    # null in the facts so a 0.0 is never mistaken for a real zero variance.
+    burn_pct_for_rag = burn_variance_pct if burn_measurable else 0.0
+    forecast_pct_for_rag = forecast_variance_pct if forecast_measurable else 0.0
+    largest_variance_pct = max(abs(burn_pct_for_rag), abs(forecast_pct_for_rag))
     rag = rag_from_threshold(largest_variance_pct, BUDGET_AMBER_PCT, BUDGET_RED_PCT)
     if not (burn_measurable and forecast_measurable) and actual_with_wip > 0:
         rag = worst(rag, "amber")
+    if not wip_known:
+        rag = worst(rag, "amber")
+        add_escalation(
+            escalations,
+            "budget: unbilled_wip is missing from the finance export - actual burn is "
+            "billed-only and is NOT authoritative; confirm WIP with the engagement financial "
+            "analyst before reporting (status-reporting-rules.md #3.3)",
+        )
     # Rules #3.1/#3.2 measure variance in either direction, so an underspend can drive
     # amber or red. Name the direction so the RAG is never reported unexplained.
     for label, value, measurable in (
@@ -217,20 +285,21 @@ def budget_summary(payload, escalations):
         "rag": rag,
         "facts": [
             {
-                "currency": budget["currency"],
+                "currency": budget.get("currency", "UNKNOWN"),
                 "planned_burn_to_date": planned,
                 "actual_billed_to_date": billed,
-                "unbilled_wip": wip,
+                "unbilled_wip": raw_wip,
+                "unbilled_wip_known": wip_known,
                 "actual_burn_including_wip": actual_with_wip,
                 "burn_variance_amount": round(burn_variance_amount, 2),
-                "burn_variance_pct": burn_variance_pct,
+                "burn_variance_pct": burn_variance_pct if burn_measurable else None,
                 "burn_variance_measurable": burn_measurable,
-                "baseline_budget": budget["baseline_budget"],
-                "forecast_to_complete": budget["forecast_to_complete"],
+                "baseline_budget": baseline_budget,
+                "forecast_to_complete": forecast_to_complete,
                 "forecast_variance_amount": round(forecast_variance_amount, 2),
-                "forecast_variance_pct": forecast_variance_pct,
+                "forecast_variance_pct": forecast_variance_pct if forecast_measurable else None,
                 "forecast_variance_measurable": forecast_measurable,
-                "forecast_period_delta": round(forecast_period_delta, 2),
+                "forecast_period_delta": forecast_period_delta,
                 "source": ENGINE,
                 "confidence": confidence,
                 "citation": (
@@ -254,7 +323,9 @@ def scope_summary(payload, escalations):
         rag = "red"
     elif len(open_changes) >= SCOPE_AMBER_OPEN_ITEMS:
         rag = "amber"
-    confidence = min([c.get("confidence", 1.0) for c in changes], default=1.0)
+    # Confidence is taken over OPEN changes only: an approved CR extracted at low
+    # confidence must not drag current scope to amber (#4.3).
+    confidence = min([c.get("confidence", 1.0) for c in open_changes], default=1.0)
     if confidence < CONFIDENCE_FLOOR:
         rag = worst(rag, "amber")
         add_escalation(
@@ -262,13 +333,21 @@ def scope_summary(payload, escalations):
             f"scope: extraction confidence {confidence} below {CONFIDENCE_FLOOR} - human review required "
             "(status-reporting-rules.md #1.3,#4.3)",
         )
+    for change in open_changes:
+        if "client_facing_impact" not in change:
+            add_escalation(
+                escalations,
+                f"{change.get('id', '(unknown id)')}: open scope change does not state whether it "
+                "has client-facing impact - ambiguous scope must be confirmed with the "
+                "engagement manager, not assumed absent (status-reporting-rules.md #4.3)",
+            )
     facts = []
     for change in open_changes:
         facts.append(
             {
                 "id": change["id"],
-                "title": change["title"],
-                "status": change["status"],
+                "title": change.get("title", "(untitled)"),
+                "status": change.get("status", "unknown"),
                 "client_facing_impact": bool(change.get("client_facing_impact")),
                 "impact_days": change.get("impact_days", 0),
                 "source": ENGINE,

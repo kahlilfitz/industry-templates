@@ -1,6 +1,6 @@
 {
   "name": "Client Status & QBR Assembly",
-  "description": "Assemble client-ready status packs and QBR narratives from plan, burn, risk, decision and action records, with variances and ageing computed before the draft is written.",
+  "description": "Assemble client status packs and QBR narrative drafts in five draft-only steps. Retrieves the plan, prior status, RAID register and budget burn; computes schedule, budget and scope variance with the deterministic variance_calc engine and item ageing plus client-action separation with item_age; then drafts a cited, client-ready pack. Every figure names the engine and source row behind it, and anything unmeasurable is escalated rather than filled in. Draft-first throughout: no write-back, no send, no re-baseline.",
   "industry": "Professional Services",
   "platforms": [
     "Cowork"
@@ -15,7 +15,7 @@
   ],
   "author": "Kahlil Fitzgerald",
   "authorUrl": "https://github.com/kahlilfitz",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "createdAt": "2026-09-23",
-  "updatedAt": "2026-09-24"
+  "updatedAt": "2026-09-25"
 }

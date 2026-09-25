@@ -22,6 +22,12 @@ Numbers, RAG status, ageing buckets and threshold verdicts come from determinist
 engines (`variance_calc`, `item_age`). The model extracts, orchestrates and writes the cited
 prose. It never sets a status, variance or ageing call itself.
 
+Every skill also ships `scripts/validate_payload.py`, a standard-library-only validator that
+checks the shared `ps.client-status-qbr.v1` payload against the contract at each hop. Nothing
+needs installing: the skills call it as
+`python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/<file>.json --hop <skill>`,
+and a non-zero exit stops the chain rather than letting a gap propagate into the draft.
+
 ## The case that shows why it exists
 
 The second demo looks reassuring if you follow the obvious path:

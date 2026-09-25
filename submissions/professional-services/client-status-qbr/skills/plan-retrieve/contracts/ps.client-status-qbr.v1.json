@@ -51,6 +51,10 @@
         },
         "citation": {
           "type": "string"
+        },
+        "project_code": {
+          "type": "string",
+          "description": "Client-side or finance-system project code, used to tie the finance export back to the engagement. Optional."
         }
       }
     },
@@ -217,6 +221,13 @@
         },
         "citation": {
           "type": "string"
+        },
+        "field_citations": {
+          "type": "object",
+          "description": "Per-field provenance for the budget block. Each key is a budget field name and each value is the exact source row or cell it came from, e.g. {\"actual_billed_to_date\":\"fin-export.csv row 12\"}. Lets a reviewer audit one number without re-opening every source.",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -314,10 +325,37 @@
     },
     "escalations": {
       "type": "array",
+      "description": "Items a human must resolve before the pack is sent. Either a plain sentence or a structured object; both forms are valid so existing consumers keep working.",
       "items": {
-        "type": "string"
-      },
-      "description": "Human-readable escalation lines. Each line embeds its status-reporting-rules.md rule number and the affected item id."
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "rule"
+            ],
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "rule": {
+                "type": "string",
+                "description": "The status-reporting-rules.md rule number that triggered this escalation, e.g. '#3.3'."
+              },
+              "item_id": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "pattern": "^(engine|skill|connector):"
+              }
+            }
+          }
+        ]
+      }
     },
     "provenance": {
       "type": "object",
@@ -457,6 +495,11 @@
         },
         "citation": {
           "type": "string"
+        },
+        "baseline_date": {
+          "type": "string",
+          "format": "date",
+          "description": "The baseline date as reported in the prior pack. Used to detect a baseline that moved between periods."
         }
       }
     },
@@ -621,14 +664,35 @@
         "id": {
           "type": "string"
         },
+        "kind": {
+          "enum": [
+            "risk",
+            "decision",
+            "action",
+            "item"
+          ],
+          "description": "Which RAID register the item came from. Emitted by item_age."
+        },
         "title": {
           "type": "string"
         },
         "age_days": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Null when opened_date is unknown. Null means unmeasurable and is always accompanied by an escalation; it must never be rendered as 0."
         },
         "days_past_due": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Null when due_date is unknown. Null means unmeasurable and is always accompanied by an escalation; it must never be rendered as 0 or as 'on track'."
+        },
+        "due_date_known": {
+          "type": "boolean",
+          "description": "False when the item carries no due date, so days_past_due is null by definition."
         },
         "bucket": {
           "type": "string"

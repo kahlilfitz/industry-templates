@@ -23,26 +23,26 @@ firm standard.
 ## 3. Budget burn and forecast
 | Rule | Condition | RAG / effect |
 |---|---|---|
-| 3.1 | Burn or forecast variance is >= 5% (BUDGET_AMBER_PCT) | Budget RAG amber |
-| 3.2 | Burn or forecast variance is >= 10% (BUDGET_RED_PCT) | Budget RAG red |
+| 3.1 | Burn or forecast variance is >= 5% (BUDGET_AMBER_PCT) in either direction | Budget RAG amber. An underspend is escalated as such, not reported as favourable |
+| 3.2 | Burn or forecast variance is >= 10% (BUDGET_RED_PCT) in either direction | Budget RAG red. State the direction of the variance, never just the colour |
 | 3.3 | Unbilled WIP/accrual exists | Include WIP in actual burn before comparing to plan; billed-only burn is not authoritative |
-| 3.4 | Forecast-to-complete changed since prior period | Include period-over-period forecast movement in the draft |
+| 3.4 | Forecast-to-complete changed since prior period, or no prior forecast was supplied | Include period-over-period forecast movement in the draft. Where no prior forecast exists the movement is unmeasurable and must be escalated, never reported as zero |
 
 ## 4. Scope and change control
 | Rule | Condition | RAG / effect |
 |---|---|---|
 | 4.1 | One or more unapproved scope changes are open (SCOPE_AMBER_OPEN_ITEMS) | Scope RAG amber |
 | 4.2 | Three or more unapproved scope changes are open, or any has client-facing impact | Scope RAG red |
-| 4.3 | Scope impact is ambiguous | Keep as an escalation; do not call scope green |
+| 4.3 | Scope impact is ambiguous, or an open change does not state whether it has client-facing impact | Keep as an escalation; do not call scope green. Confidence is judged over open changes only, so an approved low-confidence change does not drag current scope to amber |
 
 ## 5. Item ageing and ownership
 | Rule | Condition | Effect |
 |---|---|---|
-| 5.1 | Open risk age >= 45 days (RISK_STALE_DAYS) | Flag stale risk for re-rate |
+| 5.1 | Open risk age >= 45 days (RISK_STALE_DAYS), or the RAID register is empty | Flag stale risk for re-rate. An empty register is escalated as a probable retrieval gap and must never be reported as "no open risks" |
 | 5.2 | Open risk age >= 90 days (RISK_CRITICAL_DAYS) | Escalate aged risk in status pack and QBR narrative |
 | 5.3 | Open decision age >= 7 days past due (DECISION_OVERDUE_DAYS) | Mark overdue decision and include in pending decisions |
 | 5.4 | Open action age >= 7 days past due (ACTION_OVERDUE_DAYS) | Mark overdue action |
-| 5.5 | Action is blocked by a client decision or has client owner/blocker | Classify as pending client action even if the action owner was logged as internal |
+| 5.5 | Action is blocked by an *open* client decision, or has a client owner | Classify as pending client action even if the action owner was logged as internal. Once the blocking decision is approved or closed the action is no longer pending on the client and must be escalated for owner confirmation |
 
 ## 6. Roll-up status
 | Rule | Condition | Effect |
@@ -53,4 +53,4 @@ firm standard.
 ## 7. Draft-first boundary
 | Rule | Condition | Effect |
 |---|---|---|
-| 7.1 | User asks to send, file, update a system, re-baseline, close a risk or commit a date | Refuse the execution step and provide the draft/recommendation only |
+| 7.1 | User asks to send, forward, share, post, file, upload, delete, approve, pay, reassign, update a system, re-baseline, close a risk or commit a date | Refuse the execution step and provide the draft/recommendation only, naming who should perform the action |

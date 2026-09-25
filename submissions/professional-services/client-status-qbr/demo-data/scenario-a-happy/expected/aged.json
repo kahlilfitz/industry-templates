@@ -174,7 +174,8 @@
     }
   ],
   "escalations": [
-    "budget: billed-only burn is 268500 (-5.79% vs plan) but unbilled WIP 8200 changes actual burn to 276700 (-2.91% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)"
+    "budget: forecast-to-complete moved +5000 since the prior pack (606000 -> 611000) - include this movement in the draft (status-reporting-rules.md #3.4)",
+    "budget: billed-only burn is 268500 (-5.79% vs plan) but unbilled WIP 8200.0 changes actual burn to 276700.0 (-2.91% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)"
   ],
   "provenance": {
     "engines": [
@@ -230,8 +231,9 @@
           "planned_burn_to_date": 285000,
           "actual_billed_to_date": 268500,
           "unbilled_wip": 8200,
-          "actual_burn_including_wip": 276700,
-          "burn_variance_amount": -8300,
+          "unbilled_wip_known": true,
+          "actual_burn_including_wip": 276700.0,
+          "burn_variance_amount": -8300.0,
           "burn_variance_pct": -2.91,
           "burn_variance_measurable": true,
           "baseline_budget": 620000,

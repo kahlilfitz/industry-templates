@@ -49,16 +49,27 @@ def add_escalation(escalations, message):
         escalations.append(message)
 
 
+def note_missing_opened_date(item, kind, escalations):
+    """Every kind of item escalates a missing open date, not just risks."""
+    add_escalation(
+        escalations,
+        f"{item.get('id', '(unknown id)')}: open {kind} has no opened_date - age cannot be "
+        "computed and the open date must be confirmed with the item owner "
+        "(status-reporting-rules.md #1.1)",
+    )
+
+
 def is_open(item):
     return item.get("status", "").lower() not in ("closed", "done", "cancelled", "approved")
 
 
 def base_record(item, as_of, bucket, reason, rule, client_action=False, kind="item"):
+    age = age_days(as_of, item.get("opened_date"))
     return {
         "id": item["id"],
         "kind": kind,
-        "title": item["title"],
-        "age_days": age_days(as_of, item.get("opened_date")),
+        "title": item.get("title", "(untitled)"),
+        "age_days": age,
         "days_past_due": days_past_due(as_of, item.get("due_date")),
         "due_date_known": bool(item.get("due_date")),
         "bucket": bucket,
@@ -71,17 +82,33 @@ def base_record(item, as_of, bucket, reason, rule, client_action=False, kind="it
     }
 
 
+def check_common(item, as_of, kind, escalations):
+    """Data-quality checks that apply to risks, decisions and actions alike."""
+    if "title" not in item:
+        add_escalation(
+            escalations,
+            f"{item.get('id', '(unknown id)')}: open {kind} has no title - reported as "
+            "'(untitled)' and must be labelled before the pack goes out "
+            "(status-reporting-rules.md #1.1)",
+        )
+    age = age_days(as_of, item.get("opened_date"))
+    if age is not None and age < 0:
+        add_escalation(
+            escalations,
+            f"{item['id']}: open {kind} has an opened_date after the reporting period end "
+            f"({item.get('opened_date')} > {as_of}), giving a negative age - this is a data "
+            "error and must be corrected at source (status-reporting-rules.md #1.1)",
+        )
+
+
 def classify_risk(item, as_of, escalations):
+    check_common(item, as_of, "risk", escalations)
     age = age_days(as_of, item.get("opened_date"))
     rule = "status-reporting-rules.md #5.1"
     if age is None:
         bucket = "unknown_age"
         reason = "open risk has no opened_date, so age cannot be computed"
-        add_escalation(
-            escalations,
-            f"{item['id']}: open risk has no opened_date - ageing cannot be computed and the "
-            f"open date must be confirmed with the risk owner ({rule})",
-        )
+        note_missing_opened_date(item, "risk", escalations)
     elif age >= RISK_CRITICAL_DAYS:
         bucket = "critical_age"
         reason = f"open risk aged {age} days, >= {RISK_CRITICAL_DAYS}-day escalation threshold"
@@ -99,6 +126,9 @@ def classify_risk(item, as_of, escalations):
 
 
 def classify_decision(item, as_of, escalations):
+    check_common(item, as_of, "decision", escalations)
+    if item.get("opened_date") is None:
+        note_missing_opened_date(item, "decision", escalations)
     past_due = days_past_due(as_of, item.get("due_date"))
     rule = "status-reporting-rules.md #5.3"
     if past_due is None:
@@ -128,11 +158,31 @@ def classify_decision(item, as_of, escalations):
 
 
 def classify_action(item, decisions_by_id, as_of, escalations):
+    check_common(item, as_of, "action", escalations)
+    if item.get("opened_date") is None:
+        note_missing_opened_date(item, "action", escalations)
     past_due = days_past_due(as_of, item.get("due_date"))
-    blocked_decision = decisions_by_id.get(item.get("blocked_by_decision_id", ""))
+    referenced = decisions_by_id.get(item.get("blocked_by_decision_id", ""))
+    # Only an OPEN client decision still blocks. Once the client has decided, the
+    # action is ours again and must not sit in pending client actions (#5.5).
+    blocker_resolved = referenced is not None and not is_open(referenced)
+    blocked_decision = referenced if (referenced is not None and is_open(referenced)) else None
+    if blocker_resolved:
+        add_escalation(
+            escalations,
+            f"{item['id']}: still open but its blocking decision "
+            f"{referenced['id']} is {referenced.get('status', 'resolved')} - this is no longer a "
+            "pending client action and the owner must be confirmed "
+            "(status-reporting-rules.md #5.5)",
+        )
     client_action = item.get("owner_type") == "client"
-    if CLIENT_BLOCKER_RECLASSIFIES and (
-        item.get("blocker_type") == "client_decision" or (blocked_decision and blocked_decision.get("owner_type") == "client")
+    if (
+        CLIENT_BLOCKER_RECLASSIFIES
+        and not blocker_resolved
+        and (
+            item.get("blocker_type") == "client_decision"
+            or (blocked_decision and blocked_decision.get("owner_type") == "client")
+        )
     ):
         client_action = True
     rule = "status-reporting-rules.md #5.4"
@@ -180,9 +230,27 @@ def main():
         return 2
 
     output = copy.deepcopy(payload)
+    if "reporting_period" not in output or "end" not in output.get("reporting_period", {}):
+        print(
+            "item_age: missing required field 'reporting_period.end' - run plan-retrieve first "
+            "to populate it.",
+            file=sys.stderr,
+        )
+        return 1
     as_of = output["reporting_period"]["end"]
     escalations = list(output.get("escalations", []))
     decisions_by_id = {item["id"]: item for item in output.get("decisions", [])}
+
+    # An empty RAID register is almost always a retrieval failure, not a project
+    # with no risks. It must never be reported as "no risks" (#5.1,#1.1).
+    if not (output.get("risks") or output.get("decisions") or output.get("actions")):
+        add_escalation(
+            escalations,
+            "RAID register is empty: no risks, decisions or actions were supplied. This is far "
+            "more likely to be a retrieval gap than a project with none, so it must not be "
+            "reported as 'no open risks' - confirm the register location with the delivery lead "
+            "(status-reporting-rules.md #1.1,#5.1)",
+        )
 
     risks = [classify_risk(item, as_of, escalations) for item in output.get("risks", []) if is_open(item)]
     decisions = [classify_decision(item, as_of, escalations) for item in output.get("decisions", []) if is_open(item)]
