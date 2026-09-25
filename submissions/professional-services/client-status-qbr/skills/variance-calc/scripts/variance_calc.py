@@ -415,5 +415,28 @@ def main():
     return 0
 
 
+def _fatal(message):
+    print(f"variance_calc: {message}", file=sys.stderr)
+    return 2
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except FileNotFoundError as exc:
+        sys.exit(_fatal(
+            f"cannot open {exc.filename} - check --input and --out, and that SKILL_DIR points "
+            "at this skill's folder. This is a path error, not a data error: fix the path and "
+            "re-run. Do not compute the variance by hand."
+        ))
+    except KeyError as exc:
+        sys.exit(_fatal(
+            f"the payload is missing the required key {exc}. Re-run the skill that owns that "
+            "field rather than hand-editing the file."
+        ))
+    except (TypeError, ValueError) as exc:
+        sys.exit(_fatal(
+            f"the payload holds a value of the wrong type ({exc}). A numeric field most likely "
+            "contains text, or a date is not ISO YYYY-MM-DD. Correct the source record and "
+            "re-run. Do not compute the variance by hand."
+        ))

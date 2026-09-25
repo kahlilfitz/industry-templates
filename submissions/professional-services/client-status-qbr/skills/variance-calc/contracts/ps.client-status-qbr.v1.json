@@ -570,7 +570,6 @@
         "id",
         "title",
         "status",
-        "opened_date",
         "owner_type",
         "source",
         "confidence",
@@ -587,12 +586,20 @@
           "type": "string"
         },
         "opened_date": {
-          "type": "string",
-          "format": "date"
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "Date the item was opened. Absent or null means the register did not record one; item_age escalates the gap (status-reporting-rules.md #4.x). Never guess a date to satisfy this field."
         },
         "due_date": {
-          "type": "string",
-          "format": "date"
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "Due date where the register records one. Absent or null means unknown, not 'not overdue'."
         },
         "owner_type": {
           "enum": [

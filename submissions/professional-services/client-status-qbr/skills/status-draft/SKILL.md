@@ -32,13 +32,21 @@ variance-only draft. This is step 5 of 5 and the only skill that produces prose.
 `variance_summary` and `aged_items` populated.
 
 ## Steps
+0. **Set the tool folder once per shell.** `SKILL_DIR` is the absolute path of the folder that
+   contains this `SKILL.md` — the plugin's `skills/status-draft/` folder. **Nothing sets it for
+   you.** Substitute the real path before running any command below, and check it:
+   ```bash
+   export SKILL_DIR="/absolute/path/to/client-status-qbr/skills/status-draft"
+   test -f "$SKILL_DIR/scripts/validate_payload.py" || echo "SKILL_DIR is wrong — fix it before continuing"
+   ```
+   The skill folder is read-only and is not your working directory, so a bare
+   `scripts/validate_payload.py` will not resolve. Always call tools through `$SKILL_DIR`.
 1. Validate the incoming payload with the shipped tool before drafting anything:
    ```bash
    python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/aged.json --hop risk-summarize
    ```
-   `$SKILL_DIR` is this skill's own folder. The skill folder is read-only and is not the working
-   directory, so a bare `scripts/validate_payload.py` will not resolve. A non-zero exit means an
-   earlier step left a gap — stop and escalate rather than drafting around it.
+   A non-zero exit means an earlier step left a gap — stop and escalate rather than drafting
+   around it.
 2. Lead with unresolved `escalations[]`, above the narrative.
 3. Draft the status pack sections:
    - executive RAG and period-over-period movement;
@@ -97,10 +105,14 @@ row out to make the pack read more cleanly.
 - **The validation tool exits non-zero.** Each line names the missing block and the skill that
   owns it. Re-run that skill. Never draft from the raw source documents to fill the gap — the
   whole point of the chain is that the numbers are computed, not narrated.
-- **`python` is unavailable, or the script path does not resolve.** Confirm you used the full
-  `"$SKILL_DIR/scripts/validate_payload.py"` form. If Python is genuinely unavailable, you may
-  still draft from an existing payload, but state plainly at the top of your reply that the
-  payload was not validated.
+- **The script path does not resolve** (`No such file or directory`, or a path that starts
+  `/scripts/`). `SKILL_DIR` is unset or wrong. Redo step 0 and re-run. A path error is **not**
+  "Python unavailable" — never draft from an unvalidated payload because of it.
+- **`python` is genuinely not on PATH.** Only once step 0's `test -f` check passes may you treat
+  this as a tool outage: you may still draft from an existing payload, but state plainly at the
+  top of your reply that the payload was not validated. This allowance **never applies after the
+  validator has actually run and exited non-zero** — a failed validation is a stop, not a
+  fallback.
 - **`variance_summary` or `aged_items` is absent.** Stop. Do not draft. Say which step has not
   run yet.
 - **A figure the narrative needs is missing or `null`.** Write that it is not available and

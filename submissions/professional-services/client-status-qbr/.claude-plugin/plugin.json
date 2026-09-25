@@ -1,6 +1,6 @@
 {
   "name": "client-status-qbr",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Assemble client status packs and QBR narrative drafts in five draft-only steps. Retrieves the plan, prior status, RAID register and budget burn; computes schedule, budget and scope variance with the deterministic variance_calc engine and item ageing plus client-action separation with item_age; then drafts a cited, client-ready pack. Every figure names the engine and source row behind it, and anything unmeasurable is escalated rather than filled in. Draft-first throughout: no write-back, no send, no re-baseline.",
   "author": {
     "name": "Microsoft Professional Services Skills"

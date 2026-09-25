@@ -34,6 +34,15 @@ QBR run that includes financial/burn reporting. This is step 2 of 5.
 - Contract schema in `contracts/ps.client-status-qbr.v1.json`.
 
 ## Steps
+0. **Set the tool folder once per shell.** `SKILL_DIR` is the absolute path of the folder that
+   contains this `SKILL.md` — the plugin's `skills/burn-pull/` folder. **Nothing sets it for
+   you.** Substitute the real path before running any command below, and check it:
+   ```bash
+   export SKILL_DIR="/absolute/path/to/client-status-qbr/skills/burn-pull"
+   test -f "$SKILL_DIR/scripts/validate_payload.py" || echo "SKILL_DIR is wrong — fix it before continuing"
+   ```
+   The skill folder is read-only and is not your working directory, so a bare
+   `scripts/validate_payload.py` will not resolve. Always call tools through `$SKILL_DIR`.
 1. Validate the payload `plan-retrieve` handed you before adding anything to it. Run this tool
    from a writable working directory:
    ```bash
@@ -72,10 +81,6 @@ python "$SKILL_DIR/scripts/validate_payload.py" \
 python "$SKILL_DIR/scripts/validate_payload.py" \
   --input ./status-run/status-input.json --hop burn-pull
 ```
-
-`$SKILL_DIR` is this skill's own folder. Always call the tool through it — the skill folder is
-read-only and is not the working directory, so a bare `scripts/validate_payload.py` will not
-resolve.
 
 The `budget` object written into `./status-run/status-input.json`:
 
@@ -126,9 +131,12 @@ source row.
 - **The validation tool exits non-zero.** Read the listed paths. Each one names the missing field
   and the skill that owns it. Do not patch the payload yourself — re-run the owning skill or
   escalate to the engagement manager.
-- **`python` is not on PATH, or the script cannot be found.** Check you used the full
-  `"$SKILL_DIR/scripts/validate_payload.py"` form. If Python is genuinely unavailable, say so and
-  continue without validating, but state plainly in your reply that the payload was not checked.
+- **The script path does not resolve** (`No such file or directory`, or a path that starts
+  `/scripts/`). `SKILL_DIR` is unset or wrong. Redo step 0 and re-run. A path error is **not**
+  "Python unavailable" — never continue without validating because of it.
+- **`python` is genuinely not on PATH.** Only once step 0's `test -f` check passes may you treat
+  this as a tool outage: say so and continue without validating, but state plainly in your reply
+  that the payload was not checked.
 - **A finance source is missing entirely.** Do not proceed on partial data. Ask for the specific
   export by name and stop. Never reconstruct burn from headcount, rate cards or elapsed schedule.
 - **A figure is present but unreadable, ambiguous or conflicts between two sources.** Write the

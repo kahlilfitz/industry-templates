@@ -35,6 +35,15 @@ this step only; tell the user the four remaining steps still have to run.
 - Contract schema in `contracts/ps.client-status-qbr.v1.json`.
 
 ## Steps
+0. **Set the tool folder once per shell.** `SKILL_DIR` is the absolute path of the folder that
+   contains this `SKILL.md` — the plugin's `skills/plan-retrieve/` folder. **Nothing sets it for
+   you.** Substitute the real path before running any command below, and check it:
+   ```bash
+   export SKILL_DIR="/absolute/path/to/client-status-qbr/skills/plan-retrieve"
+   test -f "$SKILL_DIR/scripts/validate_payload.py" || echo "SKILL_DIR is wrong — fix it before continuing"
+   ```
+   The skill folder is read-only and is not your working directory, so a bare
+   `scripts/validate_payload.py` will not resolve. Always call tools through `$SKILL_DIR`.
 1. Verify engagement ID, project code, client name and reporting period across all supplied
    files. Preserve conflicts instead of smoothing them over (status-reporting-rules.md #1.2).
 2. Extract each milestone with `id`, `name`, `original_baseline_date`,
@@ -46,7 +55,9 @@ this step only; tell the user the four remaining steps still have to run.
    three arrays — `risk-summarize` ages what you put there and cannot retrieve anything itself.
    For each item capture `id`, `title`, `status`, `owner_type`, `opened_date`, `due_date`,
    `blocked_by_decision_id` where one applies, plus `source`, `confidence` and `citation`.
-   Leave a missing date absent rather than guessing it; the ageing engine escalates the gap.
+   Leave a missing date absent or `null` rather than guessing it — the contract permits both,
+   and `risk-summarize` escalates the gap. A register with undated items still validates, so
+   hand off with the escalation attached rather than stopping.
    If no register was supplied, say so explicitly and escalate — do not write empty arrays and
    let the run report "no open risks".
 5. Extract open scope changes, especially unapproved items and any client-facing impact.
@@ -68,10 +79,6 @@ python "$SKILL_DIR/scripts/validate_payload.py" \
   --input ./status-run/status-input.json --hop plan-retrieve
 ```
 
-`$SKILL_DIR` is this skill's own folder. Always call the tool through it — the skill folder is
-read-only and is not the working directory, so a bare `scripts/validate_payload.py` will not
-resolve.
-
 ## Output format
 Report what you extracted as a Markdown table, then state the remaining steps:
 
@@ -91,9 +98,12 @@ statement that this is step 1 of 5 and `burn-pull`, `variance-calc`, `risk-summa
 ## If the engine fails or data is missing
 - **The validation tool exits non-zero.** Each line names the missing field. Fill it from a
   source document, or leave it absent and escalate. Never invent a value to make validation pass.
-- **`python` is unavailable, or the script path does not resolve.** Confirm you used the full
-  `"$SKILL_DIR/scripts/validate_payload.py"` form. If Python is genuinely unavailable, continue
-  without validating, but state plainly in your reply that the payload was not checked.
+- **The script path does not resolve** (`No such file or directory`, or a path that starts
+  `/scripts/`). `SKILL_DIR` is unset or wrong. Redo step 0 and re-run. A path error is **not**
+  "Python unavailable" — never continue without validating because of it.
+- **`python` is genuinely not on PATH.** Only once step 0's `test -f` check passes may you treat
+  this as a tool outage: continue without validating, but state plainly in your reply that the
+  payload was not checked.
 - **A source document is missing entirely.** Ask for it by name and stop. Never reconstruct a
   plan, a baseline or a RAID register from memory, from the client's expectations, or from what
   a similar engagement usually looks like.
