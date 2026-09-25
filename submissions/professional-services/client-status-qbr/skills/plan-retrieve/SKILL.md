@@ -35,18 +35,26 @@ this step only; tell the user the four remaining steps still have to run.
 - Contract schema in `contracts/ps.client-status-qbr.v1.json`.
 
 ## Steps
-0. **Set the tool folder once per shell.** `SKILL_DIR` is the folder this `SKILL.md` was loaded
-   from — your loader's base directory for this skill. **Use that path. Do not guess one.** If
-   you do not have it, locate the installed folder rather than inventing a path:
+**Run each numbered step as its own command, or join steps with `&&` — never with `;` and never
+on separate lines in one call. Check each exit status before starting the next step: a non-zero
+exit must stop the run, not be followed by the next command.**
+
+0. **Set the tool folder. Each tool call may start a new shell, so repeat this block in every
+   call.** `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`.
+   Substitute that path on the first line — it is the only line you change:
    ```bash
-   # Preferred: export the base directory your loader used for this SKILL.md.
-   # Fallback - find this skill's installed folder, whatever the version segment is:
-   SKILL_DIR="$(dirname "$(find / -path '*client-status-qbr*/skills/plan-retrieve/SKILL.md' \
-     -print -quit 2>/dev/null)")"
+   SKILL_DIR="<the base directory your loader reported for this SKILL.md>"
    export SKILL_DIR
-   test -f "$SKILL_DIR/scripts/validate_payload.py" \
-     || { echo "SKILL_DIR is wrong - stop and fix it"; false; }
+   case "$SKILL_DIR" in /*) ;; *) false ;; esac &&
+   test -f "$SKILL_DIR/scripts/validate_payload.py" &&
+   { test ! -f "$SKILL_DIR/../../.claude-plugin/plugin.json" ||
+     grep -q '"name"[[:space:]]*:[[:space:]]*"client-status-qbr"' \
+       "$SKILL_DIR/../../.claude-plugin/plugin.json"; } \
+     || { echo "SKILL_DIR is wrong - stop and ask the user for the plugin folder"; false; }
    ```
+   **If your loader gave you no base directory, do not search the filesystem — ask the user for
+   the plugin folder and stop until they answer.** A search can bind to a stale copy of a
+   different version that still contains these scripts, and silently produce wrong figures.
    **Do not run any later command until that check prints nothing.** The skill folder is
    read-only and is not your working directory, so a bare `scripts/validate_payload.py` will
    not resolve. Always call tools through `$SKILL_DIR`.
@@ -64,8 +72,11 @@ this step only; tell the user the four remaining steps still have to run.
    Leave a missing date absent or `null` rather than guessing it — the contract permits both,
    and `risk-summarize` escalates the gap. A register with undated items still validates, so
    hand off with the escalation attached rather than stopping.
-   If no register was supplied, say so explicitly and escalate — do not write empty arrays and
-   let the run report "no open risks".
+   If no register was supplied, still write `"risks": []`, `"decisions": []` and `"actions": []`
+   so the payload can hand off, and add an `escalations[]` entry `"RAID register not supplied -
+   request it (status-reporting-rules.md #5.1)"`. **Never write those empty arrays without that
+   escalation.** `risk-summarize` also escalates an empty register under #5.1, so the run cannot
+   report "no open risks" by accident.
 5. Extract open scope changes, especially unapproved items and any client-facing impact.
 6. Write or update the contract payload. Use `source` values beginning `skill:plan-retrieve`
    and preserve citations to the plan extract, RAID register, prior status pack and template.
@@ -111,9 +122,13 @@ statement that this is step 1 of 5 and `burn-pull`, `variance-calc`, `risk-summa
   this as a tool outage: continue without validating, but state plainly in your reply that the
   payload was not checked.
 - **A milestone has no original baseline in any source.** Leave `original_baseline_date` absent
-  or `null` — never copy `current_baseline_date` into it. The payload still validates and
-  `variance-calc` forces that milestone to amber and escalates under #2.3, so the run continues
-  and budget, scope and RAID reporting are not suppressed.
+  or `null` — never copy `current_baseline_date` into it. The payload still validates;
+  `variance-calc` reports that milestone as at least amber, floors it on its slip against the
+  current baseline, and escalates under #2.3, so the run continues and budget, scope and RAID
+  reporting are not suppressed.
+- **No RAID register was supplied at all.** Write `risks`, `decisions` and `actions` as empty
+  arrays with the #5.1 escalation from step 4. Do not stop: the hand-off requires all three
+  keys, and the escalation is what stops the pack reading as "no open risks".
 - **Any other non-zero exit, or a traceback.** Stop. Quote the last line of the error in your
   reply and escalate. Never work around an unexplained failure by inventing the missing values.
 - **A source document is missing entirely.** Ask for it by name and stop. Never reconstruct a
@@ -122,14 +137,13 @@ statement that this is step 1 of 5 and `burn-pull`, `variance-calc`, `risk-summa
 - **Two documents disagree** (for example the plan and the prior pack give different baselines).
   Record both, cite both, add an `escalations[]` entry naming the conflict, and set `confidence`
   below 0.75. Do not pick a winner silently.
-- **A milestone has a current baseline but no original baseline.** Leave `original_baseline_date`
-  absent and escalate. Never copy the current baseline into it — that is exactly the masking
-  `variance-calc` exists to catch.
 
 
 ## Output
 `./status-run/status-input.json` — the `ps.client-status-qbr.v1` contract payload with
-`engagement`, `reporting_period`, `sources`, `plan` and `prior_status` populated.
+`engagement`, `reporting_period`, `sources`, `plan`, `prior_status`, `risks`, `decisions` and
+`actions` populated. The three register arrays are part of this hop even when they are empty —
+see step 4.
 
 Write every artifact to a writable working directory such as `./status-run/`, created in the
 user's workspace. The skill folder is read-only; never write outputs beside the scripts.

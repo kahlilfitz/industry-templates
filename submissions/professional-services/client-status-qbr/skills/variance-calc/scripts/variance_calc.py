@@ -98,18 +98,28 @@ def schedule_summary(payload, escalations):
         original_baseline = milestone.get("original_baseline_date") or None
         current_forecast = require_milestone_field(milestone, "current_forecast_date")
         baseline_known = original_baseline is not None
+        stated_current_baseline = milestone.get("current_baseline_date") or None
+        variance_vs_current_baseline_days = (
+            days_between(current_forecast, stated_current_baseline)
+            if stated_current_baseline
+            else None
+        )
         if baseline_known:
             original_variance_days = days_between(current_forecast, original_baseline)
         else:
             # One milestone without a first baseline must not halt the whole run and
             # suppress budget, scope and RAID reporting. Masked slippage cannot be
-            # tested without it, so the milestone travels as amber with an escalation.
+            # tested without it, so the milestone travels as at least amber, floored
+            # on its slip against the current baseline.
             original_variance_days = None
+            lower = variance_vs_current_baseline_days
             add_escalation(
                 escalations,
-                f"{milestone['id']}: original baseline not supplied - masked slippage cannot "
-                "be tested and the first committed date must be confirmed with the delivery "
-                "lead (status-reporting-rules.md #2.3)",
+                f"{milestone['id']}: original baseline not supplied - forecast is "
+                f"{lower if lower is not None else 'an unknown number of'} days after the "
+                "current baseline (a lower bound); masked slippage cannot be tested and the "
+                "first committed date must be confirmed with the delivery lead "
+                "(status-reporting-rules.md #2.3)",
             )
         prior_item = prior.get(milestone["id"])
         prior_forecast_date = prior_item.get("forecast_date") if prior_item else None
@@ -128,7 +138,7 @@ def schedule_summary(payload, escalations):
                 "and must be confirmed with the delivery lead "
                 "(status-reporting-rules.md #2.4)",
             )
-        current_baseline = milestone.get("current_baseline_date") or original_baseline
+        current_baseline = stated_current_baseline or original_baseline
         if "rebaselined_last_period" in milestone:
             rebaselined = bool(milestone["rebaselined_last_period"])
         elif prior_item and prior_item.get("baseline_date"):
@@ -146,7 +156,18 @@ def schedule_summary(payload, escalations):
                 strict=True,
             )
         else:
-            milestone_rag = "amber"
+            # Slip against the current baseline is a lower bound on slip against the
+            # original, so a large slip must still read red rather than being capped
+            # at amber. At least amber either way (#2.3).
+            milestone_rag = worst(
+                "amber",
+                rag_from_threshold(
+                    max(variance_vs_current_baseline_days or 0, 0),
+                    SCHEDULE_AMBER_DAYS,
+                    SCHEDULE_RED_DAYS,
+                    strict=True,
+                ),
+            )
         # Masked slippage: a green label sitting on top of real variance against the
         # ORIGINAL baseline, whether the move happened last period or earlier (#2.3).
         masked = (
@@ -188,6 +209,7 @@ def schedule_summary(payload, escalations):
                 "original_baseline_known": baseline_known,
                 "current_forecast_date": current_forecast,
                 "original_variance_days": original_variance_days,
+                "variance_vs_current_baseline_days": variance_vs_current_baseline_days,
                 "period_delta_days": period_delta_days,
                 "rebaselined_last_period": rebaselined,
                 "baseline_moved_since_original": baseline_moved_since_original,

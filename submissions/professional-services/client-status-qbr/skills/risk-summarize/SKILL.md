@@ -30,18 +30,27 @@ Contract payload `ps.client-status-qbr.v1` with `risks`, `decisions`, `actions` 
 `variance_summary` populated.
 
 ## Steps
-0. **Set the tool folder once per shell.** `SKILL_DIR` is the folder this `SKILL.md` was loaded
-   from — your loader's base directory for this skill. **Use that path. Do not guess one.** If
-   you do not have it, locate the installed folder rather than inventing a path:
+**Run each numbered step as its own command, or join steps with `&&` — never with `;` and never
+on separate lines in one call. Check each exit status before starting the next step: a non-zero
+exit must stop the run, not be followed by the next command.**
+
+0. **Set the tool folder. Each tool call may start a new shell, so repeat this block in every
+   call.** `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`.
+   Substitute that path on the first line — it is the only line you change:
    ```bash
-   # Preferred: export the base directory your loader used for this SKILL.md.
-   # Fallback - find this skill's installed folder, whatever the version segment is:
-   SKILL_DIR="$(dirname "$(find / -path '*client-status-qbr*/skills/risk-summarize/SKILL.md' \
-     -print -quit 2>/dev/null)")"
+   SKILL_DIR="<the base directory your loader reported for this SKILL.md>"
    export SKILL_DIR
-   test -f "$SKILL_DIR/scripts/item_age.py" \
-     || { echo "SKILL_DIR is wrong - stop and fix it"; false; }
+   case "$SKILL_DIR" in /*) ;; *) false ;; esac &&
+   test -f "$SKILL_DIR/scripts/validate_payload.py" &&
+   test -f "$SKILL_DIR/scripts/item_age.py" &&
+   { test ! -f "$SKILL_DIR/../../.claude-plugin/plugin.json" ||
+     grep -q '"name"[[:space:]]*:[[:space:]]*"client-status-qbr"' \
+       "$SKILL_DIR/../../.claude-plugin/plugin.json"; } \
+     || { echo "SKILL_DIR is wrong - stop and ask the user for the plugin folder"; false; }
    ```
+   **If your loader gave you no base directory, do not search the filesystem — ask the user for
+   the plugin folder and stop until they answer.** A search can bind to a stale copy of a
+   different version that still contains this engine, and silently produce wrong figures.
    **Do not run any later command until that check prints nothing.** The skill folder is
    read-only and is not your working directory, so a bare `scripts/item_age.py` will not
    resolve. Always call tools through `$SKILL_DIR`.

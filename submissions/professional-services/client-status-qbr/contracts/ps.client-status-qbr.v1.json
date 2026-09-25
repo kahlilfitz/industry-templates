@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "ps.client-status-qbr.v1",
   "title": "Client Status & QBR contract v1",
-  "description": "Versioned contract chaining plan-retrieve -> burn-pull -> variance-calc -> risk-summarize -> status-draft. Carries data + confidence + provenance + citations on every hop so escalation is mechanical. Hop ownership: plan-retrieve writes engagement, reporting_period, sources, plan and prior_status; burn-pull writes budget; variance-calc writes variance_summary; risk-summarize writes aged_items; status-draft consumes the payload and writes no contract fields. Only the hop-1 fields are globally required so that each intermediate payload validates.",
+  "description": "Versioned contract chaining plan-retrieve -> burn-pull -> variance-calc -> risk-summarize -> status-draft. Carries data + confidence + provenance + citations on every hop so escalation is mechanical. Hop ownership: plan-retrieve writes engagement, reporting_period, sources, plan, prior_status, risks, decisions and actions; burn-pull writes budget; variance-calc writes variance_summary; risk-summarize writes aged_items; status-draft consumes the payload and writes no contract fields. Only the hop-1 fields are globally required so that each intermediate payload validates.",
   "type": "object",
   "required": [
     "contract_version",
@@ -429,7 +429,7 @@
             "null"
           ],
           "format": "date",
-          "description": "The milestone's first committed baseline. Absent or null when no supplied source gives it - never copy current_baseline_date into it. variance_calc then reports original_variance_days as null, forces schedule to at least amber and escalates under status-reporting-rules.md #2.3, because masked slippage cannot be tested."
+          "description": "The milestone's first committed baseline. Absent or null when no supplied source gives it - never copy current_baseline_date into it. variance_calc then reports original_variance_days as null, records variance_vs_current_baseline_days as a lower bound, rates the milestone at least amber and worse when that lower bound crosses the #2.1/#2.2 thresholds, and escalates under status-reporting-rules.md #2.3, because masked slippage cannot be tested."
         },
         "current_baseline_date": {
           "type": [
@@ -597,7 +597,7 @@
             "null"
           ],
           "format": "date",
-          "description": "Date the item was opened. Absent or null means the register did not record one; item_age escalates the gap (status-reporting-rules.md #4.x). Never guess a date to satisfy this field."
+          "description": "Date the item was opened. Absent or null means the register did not record one; item_age escalates the gap (status-reporting-rules.md #1.1; ageing #5.1-#5.4). Never guess a date to satisfy this field."
         },
         "due_date": {
           "type": [

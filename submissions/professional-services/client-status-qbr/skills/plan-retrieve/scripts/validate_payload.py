@@ -27,6 +27,7 @@ import re
 import sys
 
 CONTRACT_NAME = "ps.client-status-qbr.v1"
+DATE_SHAPE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # Which skill populates which top-level block. Used to make errors actionable.
 OWNER = {
@@ -124,12 +125,21 @@ def check_format(value, schema, path, errors):
     """
     if schema.get("format") != "date" or not isinstance(value, str):
         return
+    # date.fromisoformat() alone is too permissive on Python >= 3.11: it accepts
+    # "20260920" and "2026-W38-7", neither of which is what the contract promises.
+    # Check the literal shape first so the message and the contract agree.
+    if not DATE_SHAPE.match(value):
+        errors.append(
+            f"{path}: {value!r} is not an ISO date (YYYY-MM-DD) - use null if it is unknown, "
+            "never a blank string and never a guess"
+        )
+        return
     try:
         datetime.date.fromisoformat(value)
     except ValueError:
         errors.append(
-            f"{path}: {value!r} is not an ISO date (YYYY-MM-DD) - use null if it is unknown, "
-            "never a blank string and never a guess"
+            f"{path}: {value!r} is not a real calendar date (YYYY-MM-DD) - use null if it is "
+            "unknown, never a blank string and never a guess"
         )
 
 
