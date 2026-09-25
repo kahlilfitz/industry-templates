@@ -30,15 +30,21 @@ After `plan-retrieve` and `burn-pull`, before `risk-summarize` and always before
 Contract payload `ps.client-status-qbr.v1` with plan, prior status and budget populated.
 
 ## Steps
-0. **Set the tool folder once per shell.** `SKILL_DIR` is the absolute path of the folder that
-   contains this `SKILL.md` — the plugin's `skills/variance-calc/` folder. **Nothing sets it for
-   you.** Substitute the real path before running any command below, and check it:
+0. **Set the tool folder once per shell.** `SKILL_DIR` is the folder this `SKILL.md` was loaded
+   from — your loader's base directory for this skill. **Use that path. Do not guess one.** If
+   you do not have it, locate the installed folder rather than inventing a path:
    ```bash
-   export SKILL_DIR="/absolute/path/to/client-status-qbr/skills/variance-calc"
-   test -f "$SKILL_DIR/scripts/variance_calc.py" || echo "SKILL_DIR is wrong — fix it before continuing"
+   # Preferred: export the base directory your loader used for this SKILL.md.
+   # Fallback - find this skill's installed folder, whatever the version segment is:
+   SKILL_DIR="$(dirname "$(find / -path '*client-status-qbr*/skills/variance-calc/SKILL.md' \
+     -print -quit 2>/dev/null)")"
+   export SKILL_DIR
+   test -f "$SKILL_DIR/scripts/variance_calc.py" \
+     || { echo "SKILL_DIR is wrong - stop and fix it"; false; }
    ```
-   The skill folder is read-only and is not your working directory, so a bare
-   `scripts/variance_calc.py` will not resolve. Always call tools through `$SKILL_DIR`.
+   **Do not run any later command until that check prints nothing.** The skill folder is
+   read-only and is not your working directory, so a bare `scripts/variance_calc.py` will not
+   resolve. Always call tools through `$SKILL_DIR`.
 1. Validate the incoming payload with the shipped tool before computing anything:
    ```bash
    python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/status-input.json --hop burn-pull
@@ -105,6 +111,8 @@ cell — never `0`, never `—`, never a guess.
 - **`python` is genuinely not on PATH.** Only once step 0's `test -f` check passes may you treat
   this as a tool outage: stop and say so — do **not** compute the variance yourself in prose. An
   unverified RAG is worse than none.
+- **Any other non-zero exit, or a traceback.** Stop. Quote the last line of the error in your
+  reply and escalate. Never work around an unexplained failure by computing the variance by hand.
 - **The engine succeeds but reports a value as unmeasurable** (for example
   `burn_variance_measurable: false`, or `forecast_period_delta: null`). That is a correct
   result, not a failure. Report it as unmeasurable, quote the accompanying escalation, and let

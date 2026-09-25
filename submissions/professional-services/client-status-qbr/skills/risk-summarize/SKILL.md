@@ -30,15 +30,21 @@ Contract payload `ps.client-status-qbr.v1` with `risks`, `decisions`, `actions` 
 `variance_summary` populated.
 
 ## Steps
-0. **Set the tool folder once per shell.** `SKILL_DIR` is the absolute path of the folder that
-   contains this `SKILL.md` — the plugin's `skills/risk-summarize/` folder. **Nothing sets it
-   for you.** Substitute the real path before running any command below, and check it:
+0. **Set the tool folder once per shell.** `SKILL_DIR` is the folder this `SKILL.md` was loaded
+   from — your loader's base directory for this skill. **Use that path. Do not guess one.** If
+   you do not have it, locate the installed folder rather than inventing a path:
    ```bash
-   export SKILL_DIR="/absolute/path/to/client-status-qbr/skills/risk-summarize"
-   test -f "$SKILL_DIR/scripts/item_age.py" || echo "SKILL_DIR is wrong — fix it before continuing"
+   # Preferred: export the base directory your loader used for this SKILL.md.
+   # Fallback - find this skill's installed folder, whatever the version segment is:
+   SKILL_DIR="$(dirname "$(find / -path '*client-status-qbr*/skills/risk-summarize/SKILL.md' \
+     -print -quit 2>/dev/null)")"
+   export SKILL_DIR
+   test -f "$SKILL_DIR/scripts/item_age.py" \
+     || { echo "SKILL_DIR is wrong - stop and fix it"; false; }
    ```
-   The skill folder is read-only and is not your working directory, so a bare
-   `scripts/item_age.py` will not resolve. Always call tools through `$SKILL_DIR`.
+   **Do not run any later command until that check prints nothing.** The skill folder is
+   read-only and is not your working directory, so a bare `scripts/item_age.py` will not
+   resolve. Always call tools through `$SKILL_DIR`.
 1. Validate the incoming payload with the shipped tool before ageing anything:
    ```bash
    python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/variance.json --hop variance-calc
@@ -102,6 +108,8 @@ never `0`, and never leave the row out. A `null` always has an escalation beside
 - **`python` is genuinely not on PATH.** Only once step 0's `test -f` check passes may you treat
   this as a tool outage: stop and say so. Do **not** age the items by hand; an unverified ageing
   table reads as authoritative and is not.
+- **Any other non-zero exit, or a traceback.** Stop. Quote the last line of the error in your
+  reply and escalate. Never work around an unexplained failure by ageing the items by hand.
 - **The register comes back empty.** The engine escalates this rather than reporting "no open
   risks", because an empty RAID register is far more often a retrieval failure than a project
   with no risks. Pass that escalation through and ask where the register lives. Never tell the

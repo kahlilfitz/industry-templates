@@ -20,6 +20,7 @@ responsible for populating it, so the fix is unambiguous.
 """
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -45,14 +46,23 @@ OWNER = {
     "provenance": "any skill",
 }
 
-# The blocks each hop must have present before it can do its own work, plus the
-# block it is expected to produce.
+# The blocks each hop must have present once it has done its own work. Each entry
+# lists what the hop needs from upstream plus the block it is itself responsible
+# for producing, so a hand-off can be checked in one call.
 HOPS = {
-    "plan-retrieve": ["contract_version", "engagement", "reporting_period", "plan"],
+    "plan-retrieve": [
+        "contract_version",
+        "engagement",
+        "reporting_period",
+        "plan",
+        "risks",
+        "decisions",
+        "actions",
+    ],
     "burn-pull": ["contract_version", "engagement", "reporting_period", "budget"],
     "variance-calc": ["contract_version", "plan", "budget", "variance_summary"],
     "risk-summarize": ["contract_version", "variance_summary", "aged_items"],
-    "status-draft": ["contract_version", "variance_summary", "aged_items", "draft"],
+    "status-draft": ["contract_version", "variance_summary", "aged_items"],
 }
 
 
@@ -105,6 +115,24 @@ def type_name(value):
     return type(value).__name__
 
 
+def check_format(value, schema, path, errors):
+    """Enforce the one format the contract relies on: ISO dates.
+
+    A blank string is rejected as well as a malformed one. Blank is the shape that
+    silently ages an item as "no date recorded" further down the chain, so it has to
+    be stopped at the hand-off rather than interpreted later.
+    """
+    if schema.get("format") != "date" or not isinstance(value, str):
+        return
+    try:
+        datetime.date.fromisoformat(value)
+    except ValueError:
+        errors.append(
+            f"{path}: {value!r} is not an ISO date (YYYY-MM-DD) - use null if it is unknown, "
+            "never a blank string and never a guess"
+        )
+
+
 def validate(value, schema, root, path, errors):
     try:
         schema = resolve(schema, root)
@@ -143,6 +171,8 @@ def validate(value, schema, root, path, errors):
         if not re.search(schema["pattern"], value):
             errors.append(f"{path}: {value!r} does not match {schema['pattern']}")
 
+    check_format(value, schema, path, errors)
+
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         if "minimum" in schema and value < schema["minimum"]:
             errors.append(f"{path}: {value} is below the minimum {schema['minimum']}")
@@ -153,7 +183,8 @@ def validate(value, schema, root, path, errors):
         properties = schema.get("properties", {})
         for key in schema.get("required", []):
             if key not in value:
-                owner = OWNER.get(key) if path == "$" else None
+                top = path.split(".")[1].split("[")[0] if path != "$" else key
+                owner = OWNER.get(top)
                 hint = f" - populated by {owner}" if owner else ""
                 errors.append(f"{path}.{key}: required field is missing{hint}")
         extra = schema.get("additionalProperties")
@@ -209,6 +240,15 @@ def main():
 
     with open(contract_path, encoding="utf-8") as handle:
         contract = json.load(handle)
+
+    if not isinstance(payload, dict):
+        print(
+            f"validate_payload: {args.input} must be a JSON object, found "
+            f"{type_name(payload)}. The previous skill wrote a bare value or a list "
+            "instead of a contract payload - re-run it.",
+            file=sys.stderr,
+        )
+        return 2
 
     errors = []
     found = payload.get("contract_version")

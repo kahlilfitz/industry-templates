@@ -34,15 +34,21 @@ QBR run that includes financial/burn reporting. This is step 2 of 5.
 - Contract schema in `contracts/ps.client-status-qbr.v1.json`.
 
 ## Steps
-0. **Set the tool folder once per shell.** `SKILL_DIR` is the absolute path of the folder that
-   contains this `SKILL.md` — the plugin's `skills/burn-pull/` folder. **Nothing sets it for
-   you.** Substitute the real path before running any command below, and check it:
+0. **Set the tool folder once per shell.** `SKILL_DIR` is the folder this `SKILL.md` was loaded
+   from — your loader's base directory for this skill. **Use that path. Do not guess one.** If
+   you do not have it, locate the installed folder rather than inventing a path:
    ```bash
-   export SKILL_DIR="/absolute/path/to/client-status-qbr/skills/burn-pull"
-   test -f "$SKILL_DIR/scripts/validate_payload.py" || echo "SKILL_DIR is wrong — fix it before continuing"
+   # Preferred: export the base directory your loader used for this SKILL.md.
+   # Fallback - find this skill's installed folder, whatever the version segment is:
+   SKILL_DIR="$(dirname "$(find / -path '*client-status-qbr*/skills/burn-pull/SKILL.md' \
+     -print -quit 2>/dev/null)")"
+   export SKILL_DIR
+   test -f "$SKILL_DIR/scripts/validate_payload.py" \
+     || { echo "SKILL_DIR is wrong - stop and fix it"; false; }
    ```
-   The skill folder is read-only and is not your working directory, so a bare
-   `scripts/validate_payload.py` will not resolve. Always call tools through `$SKILL_DIR`.
+   **Do not run any later command until that check prints nothing.** The skill folder is
+   read-only and is not your working directory, so a bare `scripts/validate_payload.py` will
+   not resolve. Always call tools through `$SKILL_DIR`.
 1. Validate the payload `plan-retrieve` handed you before adding anything to it. Run this tool
    from a writable working directory:
    ```bash
@@ -137,6 +143,9 @@ source row.
 - **`python` is genuinely not on PATH.** Only once step 0's `test -f` check passes may you treat
   this as a tool outage: say so and continue without validating, but state plainly in your reply
   that the payload was not checked.
+- **Any other non-zero exit, or a traceback.** Stop. Quote the last line of the error in your
+  reply and escalate. Never work around an unexplained failure by filling in the figures
+  yourself.
 - **A finance source is missing entirely.** Do not proceed on partial data. Ask for the specific
   export by name and stop. Never reconstruct burn from headcount, rate cards or elapsed schedule.
 - **A figure is present but unreadable, ambiguous or conflicts between two sources.** Write the

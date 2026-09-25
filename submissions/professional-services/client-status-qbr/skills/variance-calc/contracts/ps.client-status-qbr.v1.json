@@ -411,7 +411,6 @@
       "required": [
         "id",
         "name",
-        "original_baseline_date",
         "current_forecast_date",
         "source",
         "confidence",
@@ -425,11 +424,18 @@
           "type": "string"
         },
         "original_baseline_date": {
-          "type": "string",
-          "format": "date"
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "The milestone's first committed baseline. Absent or null when no supplied source gives it - never copy current_baseline_date into it. variance_calc then reports original_variance_days as null, forces schedule to at least amber and escalates under status-reporting-rules.md #2.3, because masked slippage cannot be tested."
         },
         "current_baseline_date": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "format": "date"
         },
         "current_forecast_date": {

@@ -35,15 +35,21 @@ this step only; tell the user the four remaining steps still have to run.
 - Contract schema in `contracts/ps.client-status-qbr.v1.json`.
 
 ## Steps
-0. **Set the tool folder once per shell.** `SKILL_DIR` is the absolute path of the folder that
-   contains this `SKILL.md` — the plugin's `skills/plan-retrieve/` folder. **Nothing sets it for
-   you.** Substitute the real path before running any command below, and check it:
+0. **Set the tool folder once per shell.** `SKILL_DIR` is the folder this `SKILL.md` was loaded
+   from — your loader's base directory for this skill. **Use that path. Do not guess one.** If
+   you do not have it, locate the installed folder rather than inventing a path:
    ```bash
-   export SKILL_DIR="/absolute/path/to/client-status-qbr/skills/plan-retrieve"
-   test -f "$SKILL_DIR/scripts/validate_payload.py" || echo "SKILL_DIR is wrong — fix it before continuing"
+   # Preferred: export the base directory your loader used for this SKILL.md.
+   # Fallback - find this skill's installed folder, whatever the version segment is:
+   SKILL_DIR="$(dirname "$(find / -path '*client-status-qbr*/skills/plan-retrieve/SKILL.md' \
+     -print -quit 2>/dev/null)")"
+   export SKILL_DIR
+   test -f "$SKILL_DIR/scripts/validate_payload.py" \
+     || { echo "SKILL_DIR is wrong - stop and fix it"; false; }
    ```
-   The skill folder is read-only and is not your working directory, so a bare
-   `scripts/validate_payload.py` will not resolve. Always call tools through `$SKILL_DIR`.
+   **Do not run any later command until that check prints nothing.** The skill folder is
+   read-only and is not your working directory, so a bare `scripts/validate_payload.py` will
+   not resolve. Always call tools through `$SKILL_DIR`.
 1. Verify engagement ID, project code, client name and reporting period across all supplied
    files. Preserve conflicts instead of smoothing them over (status-reporting-rules.md #1.2).
 2. Extract each milestone with `id`, `name`, `original_baseline_date`,
@@ -104,6 +110,12 @@ statement that this is step 1 of 5 and `burn-pull`, `variance-calc`, `risk-summa
 - **`python` is genuinely not on PATH.** Only once step 0's `test -f` check passes may you treat
   this as a tool outage: continue without validating, but state plainly in your reply that the
   payload was not checked.
+- **A milestone has no original baseline in any source.** Leave `original_baseline_date` absent
+  or `null` — never copy `current_baseline_date` into it. The payload still validates and
+  `variance-calc` forces that milestone to amber and escalates under #2.3, so the run continues
+  and budget, scope and RAID reporting are not suppressed.
+- **Any other non-zero exit, or a traceback.** Stop. Quote the last line of the error in your
+  reply and escalate. Never work around an unexplained failure by inventing the missing values.
 - **A source document is missing entirely.** Ask for it by name and stop. Never reconstruct a
   plan, a baseline or a RAID register from memory, from the client's expectations, or from what
   a similar engagement usually looks like.

@@ -95,9 +95,22 @@ def schedule_summary(payload, escalations):
     rag = "green"
     confidence = 1.0
     for milestone in require(payload, "plan.milestones", "plan-retrieve"):
-        original_baseline = require_milestone_field(milestone, "original_baseline_date")
+        original_baseline = milestone.get("original_baseline_date") or None
         current_forecast = require_milestone_field(milestone, "current_forecast_date")
-        original_variance_days = days_between(current_forecast, original_baseline)
+        baseline_known = original_baseline is not None
+        if baseline_known:
+            original_variance_days = days_between(current_forecast, original_baseline)
+        else:
+            # One milestone without a first baseline must not halt the whole run and
+            # suppress budget, scope and RAID reporting. Masked slippage cannot be
+            # tested without it, so the milestone travels as amber with an escalation.
+            original_variance_days = None
+            add_escalation(
+                escalations,
+                f"{milestone['id']}: original baseline not supplied - masked slippage cannot "
+                "be tested and the first committed date must be confirmed with the delivery "
+                "lead (status-reporting-rules.md #2.3)",
+            )
         prior_item = prior.get(milestone["id"])
         prior_forecast_date = prior_item.get("forecast_date") if prior_item else None
         if prior_forecast_date:
@@ -115,20 +128,32 @@ def schedule_summary(payload, escalations):
                 "and must be confirmed with the delivery lead "
                 "(status-reporting-rules.md #2.4)",
             )
-        current_baseline = milestone.get("current_baseline_date", original_baseline)
+        current_baseline = milestone.get("current_baseline_date") or original_baseline
         if "rebaselined_last_period" in milestone:
             rebaselined = bool(milestone["rebaselined_last_period"])
         elif prior_item and prior_item.get("baseline_date"):
             rebaselined = prior_item["baseline_date"] != current_baseline
         else:
             rebaselined = False
-        baseline_moved_since_original = current_baseline != original_baseline
-        milestone_rag = rag_from_threshold(
-            max(original_variance_days, 0), SCHEDULE_AMBER_DAYS, SCHEDULE_RED_DAYS, strict=True
+        baseline_moved_since_original = (
+            baseline_known and current_baseline != original_baseline
         )
+        if baseline_known:
+            milestone_rag = rag_from_threshold(
+                max(original_variance_days, 0),
+                SCHEDULE_AMBER_DAYS,
+                SCHEDULE_RED_DAYS,
+                strict=True,
+            )
+        else:
+            milestone_rag = "amber"
         # Masked slippage: a green label sitting on top of real variance against the
         # ORIGINAL baseline, whether the move happened last period or earlier (#2.3).
-        masked = milestone.get("reported_rag") == "green" and milestone_rag != "green"
+        masked = (
+            baseline_known
+            and milestone.get("reported_rag") == "green"
+            and milestone_rag != "green"
+        )
         if REBASELINE_CHECK_REQUIRED and masked and rebaselined:
             add_escalation(
                 escalations,
@@ -160,6 +185,7 @@ def schedule_summary(payload, escalations):
                 "reported_rag": milestone.get("reported_rag"),
                 "computed_rag": milestone_rag,
                 "original_baseline_date": original_baseline,
+                "original_baseline_known": baseline_known,
                 "current_forecast_date": current_forecast,
                 "original_variance_days": original_variance_days,
                 "period_delta_days": period_delta_days,
@@ -428,6 +454,17 @@ if __name__ == "__main__":
             f"cannot open {exc.filename} - check --input and --out, and that SKILL_DIR points "
             "at this skill's folder. This is a path error, not a data error: fix the path and "
             "re-run. Do not compute the variance by hand."
+        ))
+    except json.JSONDecodeError as exc:
+        sys.exit(_fatal(
+            f"{sys.argv[sys.argv.index('--input') + 1] if '--input' in sys.argv else 'the input'}"
+            f" is not valid JSON ({exc}) - the previous step most likely wrote prose instead of "
+            "a payload. Re-run the owning skill."
+        ))
+    except AttributeError:
+        sys.exit(_fatal(
+            "the payload is not a JSON object with the expected blocks - run "
+            "validate_payload.py to see which block is wrong, then re-run the owning skill."
         ))
     except KeyError as exc:
         sys.exit(_fatal(

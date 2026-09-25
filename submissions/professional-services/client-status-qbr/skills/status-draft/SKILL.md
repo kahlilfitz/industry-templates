@@ -32,15 +32,21 @@ variance-only draft. This is step 5 of 5 and the only skill that produces prose.
 `variance_summary` and `aged_items` populated.
 
 ## Steps
-0. **Set the tool folder once per shell.** `SKILL_DIR` is the absolute path of the folder that
-   contains this `SKILL.md` — the plugin's `skills/status-draft/` folder. **Nothing sets it for
-   you.** Substitute the real path before running any command below, and check it:
+0. **Set the tool folder once per shell.** `SKILL_DIR` is the folder this `SKILL.md` was loaded
+   from — your loader's base directory for this skill. **Use that path. Do not guess one.** If
+   you do not have it, locate the installed folder rather than inventing a path:
    ```bash
-   export SKILL_DIR="/absolute/path/to/client-status-qbr/skills/status-draft"
-   test -f "$SKILL_DIR/scripts/validate_payload.py" || echo "SKILL_DIR is wrong — fix it before continuing"
+   # Preferred: export the base directory your loader used for this SKILL.md.
+   # Fallback - find this skill's installed folder, whatever the version segment is:
+   SKILL_DIR="$(dirname "$(find / -path '*client-status-qbr*/skills/status-draft/SKILL.md' \
+     -print -quit 2>/dev/null)")"
+   export SKILL_DIR
+   test -f "$SKILL_DIR/scripts/validate_payload.py" \
+     || { echo "SKILL_DIR is wrong - stop and fix it"; false; }
    ```
-   The skill folder is read-only and is not your working directory, so a bare
-   `scripts/validate_payload.py` will not resolve. Always call tools through `$SKILL_DIR`.
+   **Do not run any later command until that check prints nothing.** The skill folder is
+   read-only and is not your working directory, so a bare `scripts/validate_payload.py` will
+   not resolve. Always call tools through `$SKILL_DIR`.
 1. Validate the incoming payload with the shipped tool before drafting anything:
    ```bash
    python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/aged.json --hop risk-summarize
@@ -113,6 +119,9 @@ row out to make the pack read more cleanly.
   top of your reply that the payload was not validated. This allowance **never applies after the
   validator has actually run and exited non-zero** — a failed validation is a stop, not a
   fallback.
+- **Any other non-zero exit, or a traceback.** Stop. Quote the last line of the error in your
+  reply and escalate. Never work around an unexplained failure by narrating the numbers from the
+  raw sources.
 - **`variance_summary` or `aged_items` is absent.** Stop. Do not draft. Say which step has not
   run yet.
 - **A figure the narrative needs is missing or `null`.** Write that it is not available and

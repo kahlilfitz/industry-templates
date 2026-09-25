@@ -26,9 +26,24 @@ def parse_date(value):
     return date.fromisoformat(value)
 
 
+def norm_date(value):
+    """Normalise a date field to a real value or None.
+
+    A blank or whitespace-only string is the shape that silently reads as "no date
+    recorded" in one place and as "present" in another. Collapsing it to None here
+    means every caller agrees, and the gap is escalated rather than swallowed.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.strip() or None
+    return value
+
+
 def age_days(as_of, opened):
     """Returns None when the open date is missing so the caller must escalate
     rather than inventing an age."""
+    opened = norm_date(opened)
     if not opened:
         return None
     return (parse_date(as_of) - parse_date(opened)).days
@@ -37,6 +52,7 @@ def age_days(as_of, opened):
 def days_past_due(as_of, due):
     """Returns None when no due date is recorded. A missing due date is not the
     same as "not overdue" and must never be reported as zero days past due."""
+    due = norm_date(due)
     if not due:
         return None
     return max(0, (parse_date(as_of) - parse_date(due)).days)
@@ -60,7 +76,12 @@ def note_missing_opened_date(item, kind, escalations):
 
 
 def is_open(item):
-    return item.get("status", "").lower() not in ("closed", "done", "cancelled", "approved")
+    return str(item.get("status") or "").lower() not in (
+        "closed",
+        "done",
+        "cancelled",
+        "approved",
+    )
 
 
 def base_record(item, as_of, bucket, reason, rule, client_action=False, kind="item"):
@@ -71,7 +92,7 @@ def base_record(item, as_of, bucket, reason, rule, client_action=False, kind="it
         "title": item.get("title", "(untitled)"),
         "age_days": age,
         "days_past_due": days_past_due(as_of, item.get("due_date")),
-        "due_date_known": bool(item.get("due_date")),
+        "due_date_known": norm_date(item.get("due_date")) is not None,
         "bucket": bucket,
         "owner_type": item.get("owner_type", "internal"),
         "client_action": bool(client_action),
@@ -127,7 +148,7 @@ def classify_risk(item, as_of, escalations):
 
 def classify_decision(item, as_of, escalations):
     check_common(item, as_of, "decision", escalations)
-    if item.get("opened_date") is None:
+    if norm_date(item.get("opened_date")) is None:
         note_missing_opened_date(item, "decision", escalations)
     past_due = days_past_due(as_of, item.get("due_date"))
     rule = "status-reporting-rules.md #5.3"
@@ -159,7 +180,7 @@ def classify_decision(item, as_of, escalations):
 
 def classify_action(item, decisions_by_id, as_of, escalations):
     check_common(item, as_of, "action", escalations)
-    if item.get("opened_date") is None:
+    if norm_date(item.get("opened_date")) is None:
         note_missing_opened_date(item, "action", escalations)
     past_due = days_past_due(as_of, item.get("due_date"))
     referenced = decisions_by_id.get(item.get("blocked_by_decision_id", ""))
@@ -315,6 +336,17 @@ if __name__ == "__main__":
             f"cannot open {exc.filename} - check --input and --out, and that SKILL_DIR points "
             "at this skill's folder. This is a path error, not a data error: fix the path and "
             "re-run. Do not age the items by hand."
+        ))
+    except json.JSONDecodeError as exc:
+        sys.exit(_fatal(
+            f"{sys.argv[sys.argv.index('--input') + 1] if '--input' in sys.argv else 'the input'}"
+            f" is not valid JSON ({exc}) - the previous step most likely wrote prose instead of "
+            "a payload. Re-run the owning skill."
+        ))
+    except AttributeError:
+        sys.exit(_fatal(
+            "the payload is not a JSON object with the expected blocks - run "
+            "validate_payload.py to see which block is wrong, then re-run the owning skill."
         ))
     except KeyError as exc:
         sys.exit(_fatal(
