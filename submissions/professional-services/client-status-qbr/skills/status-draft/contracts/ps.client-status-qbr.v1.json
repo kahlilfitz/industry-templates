@@ -2,17 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "ps.client-status-qbr.v1",
   "title": "Client Status & QBR contract v1",
-  "description": "Versioned contract chaining plan-retrieve -> burn-pull -> variance-calc -> risk-summarize -> status-draft. Carries data + confidence + provenance + citations on every hop so escalation is mechanical.",
+  "description": "Versioned contract chaining plan-retrieve -> burn-pull -> variance-calc -> risk-summarize -> status-draft. Carries data + confidence + provenance + citations on every hop so escalation is mechanical. Hop ownership: plan-retrieve writes engagement, reporting_period, sources, plan and prior_status; burn-pull writes budget; variance-calc writes variance_summary; risk-summarize writes aged_items; status-draft consumes the payload and writes no contract fields. Only the hop-1 fields are globally required so that each intermediate payload validates.",
   "type": "object",
   "required": [
     "contract_version",
     "engagement",
     "reporting_period",
-    "plan",
-    "budget",
-    "risks",
-    "decisions",
-    "actions"
+    "plan"
   ],
   "properties": {
     "contract_version": {
@@ -29,48 +25,111 @@
         "citation"
       ],
       "properties": {
-        "engagement_id": { "type": "string" },
-        "name": { "type": "string" },
-        "client_name": { "type": "string" },
-        "manager": { "type": "string" },
-        "partner": { "type": "string" },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "engagement_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "client_name": {
+          "type": "string"
+        },
+        "manager": {
+          "type": "string"
+        },
+        "partner": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "reporting_period": {
       "type": "object",
-      "required": ["start", "end"],
+      "required": [
+        "start",
+        "end"
+      ],
       "properties": {
-        "start": { "type": "string", "format": "date" },
-        "end": { "type": "string", "format": "date" },
-        "previous_start": { "type": "string", "format": "date" },
-        "previous_end": { "type": "string", "format": "date" },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "start": {
+          "type": "string",
+          "format": "date"
+        },
+        "end": {
+          "type": "string",
+          "format": "date"
+        },
+        "previous_start": {
+          "type": "string",
+          "format": "date"
+        },
+        "previous_end": {
+          "type": "string",
+          "format": "date"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "sources": {
       "type": "array",
-      "items": { "$ref": "#/definitions/source_record" }
+      "items": {
+        "$ref": "#/definitions/source_record"
+      }
     },
     "plan": {
       "type": "object",
-      "required": ["milestones", "source", "confidence", "citation"],
+      "required": [
+        "milestones",
+        "source",
+        "confidence",
+        "citation"
+      ],
       "properties": {
         "milestones": {
           "type": "array",
-          "items": { "$ref": "#/definitions/milestone" }
+          "items": {
+            "$ref": "#/definitions/milestone"
+          }
         },
         "scope_changes": {
           "type": "array",
-          "items": { "$ref": "#/definitions/scope_change" }
+          "items": {
+            "$ref": "#/definitions/scope_change"
+          }
         },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "prior_status": {
@@ -78,13 +137,32 @@
       "properties": {
         "milestones": {
           "type": "array",
-          "items": { "$ref": "#/definitions/prior_milestone" }
+          "items": {
+            "$ref": "#/definitions/prior_milestone"
+          }
         },
-        "budget": { "$ref": "#/definitions/prior_budget" },
-        "reported_rag": { "enum": ["green", "amber", "red"] },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "budget": {
+          "$ref": "#/definitions/prior_budget"
+        },
+        "reported_rag": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "budget": {
@@ -101,172 +179,485 @@
         "citation"
       ],
       "properties": {
-        "currency": { "type": "string" },
-        "baseline_budget": { "type": "number" },
-        "planned_burn_to_date": { "type": "number" },
-        "actual_billed_to_date": { "type": "number" },
-        "unbilled_wip": { "type": "number" },
-        "forecast_to_complete": { "type": "number" },
-        "previous_forecast_to_complete": { "type": "number" },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "currency": {
+          "type": "string"
+        },
+        "baseline_budget": {
+          "type": "number",
+          "description": "Approved baseline budget for the whole engagement, in the engagement currency."
+        },
+        "planned_burn_to_date": {
+          "type": "number"
+        },
+        "actual_billed_to_date": {
+          "type": "number"
+        },
+        "unbilled_wip": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Unbilled work in progress / accrual in the engagement currency. Use null only when the finance export genuinely has no WIP line, and raise an escalation; never omit the field and never substitute 0 for unknown."
+        },
+        "forecast_to_complete": {
+          "type": "number",
+          "description": "Estimate at completion (EAC): total forecast cost for the whole engagement including burn already incurred, in the engagement currency. This is NOT the remaining cost to complete. variance-calc compares it directly to baseline_budget under status-reporting-rules.md #3.2."
+        },
+        "previous_forecast_to_complete": {
+          "type": "number"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "risks": {
       "type": "array",
-      "items": { "$ref": "#/definitions/item" }
+      "items": {
+        "$ref": "#/definitions/item"
+      }
     },
     "decisions": {
       "type": "array",
-      "items": { "$ref": "#/definitions/item" }
+      "items": {
+        "$ref": "#/definitions/item"
+      }
     },
     "actions": {
       "type": "array",
-      "items": { "$ref": "#/definitions/item" }
+      "items": {
+        "$ref": "#/definitions/item"
+      }
     },
     "variance_summary": {
       "type": "object",
       "properties": {
-        "schedule": { "$ref": "#/definitions/domain_status" },
-        "budget": { "$ref": "#/definitions/domain_status" },
-        "scope": { "$ref": "#/definitions/domain_status" },
-        "overall_rag": { "enum": ["green", "amber", "red"] },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "schedule": {
+          "$ref": "#/definitions/domain_status"
+        },
+        "budget": {
+          "$ref": "#/definitions/domain_status"
+        },
+        "scope": {
+          "$ref": "#/definitions/domain_status"
+        },
+        "overall_rag": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "aged_items": {
       "type": "object",
       "properties": {
-        "risks": { "type": "array", "items": { "$ref": "#/definitions/aged_item" } },
-        "decisions": { "type": "array", "items": { "$ref": "#/definitions/aged_item" } },
-        "actions": { "type": "array", "items": { "$ref": "#/definitions/aged_item" } },
-        "pending_client_actions": { "type": "array", "items": { "$ref": "#/definitions/aged_item" } },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "risks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/aged_item"
+          }
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/aged_item"
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/aged_item"
+          }
+        },
+        "pending_client_actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/aged_item"
+          }
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "escalations": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      },
+      "description": "Human-readable escalation lines. Each line embeds its status-reporting-rules.md rule number and the affected item id."
     },
     "provenance": {
       "type": "object",
       "properties": {
-        "engines": { "type": "array", "items": { "type": "string" } },
-        "demo_scenario": { "type": "string" }
+        "engines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "demo_scenario": {
+          "type": "string"
+        }
       }
     }
   },
   "definitions": {
     "source_record": {
       "type": "object",
-      "required": ["id", "title", "source", "confidence", "citation"],
+      "required": [
+        "id",
+        "title",
+        "source",
+        "confidence",
+        "citation"
+      ],
       "properties": {
-        "id": { "type": "string" },
-        "type": { "type": "string" },
-        "title": { "type": "string" },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "milestone": {
       "type": "object",
-      "required": ["id", "name", "original_baseline_date", "current_forecast_date", "source", "confidence", "citation"],
+      "required": [
+        "id",
+        "name",
+        "original_baseline_date",
+        "current_forecast_date",
+        "source",
+        "confidence",
+        "citation"
+      ],
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "original_baseline_date": { "type": "string", "format": "date" },
-        "current_baseline_date": { "type": "string", "format": "date" },
-        "current_forecast_date": { "type": "string", "format": "date" },
-        "reported_rag": { "enum": ["green", "amber", "red"] },
-        "rebaselined_last_period": { "type": "boolean" },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "original_baseline_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "current_baseline_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "current_forecast_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "reported_rag": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "rebaselined_last_period": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "prior_milestone": {
       "type": "object",
-      "required": ["id", "forecast_date", "source", "confidence", "citation"],
+      "required": [
+        "id",
+        "forecast_date",
+        "source",
+        "confidence",
+        "citation"
+      ],
       "properties": {
-        "id": { "type": "string" },
-        "forecast_date": { "type": "string", "format": "date" },
-        "reported_rag": { "enum": ["green", "amber", "red"] },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "id": {
+          "type": "string"
+        },
+        "forecast_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "reported_rag": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "scope_change": {
       "type": "object",
-      "required": ["id", "title", "status", "client_facing_impact", "source", "confidence", "citation"],
+      "required": [
+        "id",
+        "title",
+        "status",
+        "client_facing_impact",
+        "source",
+        "confidence",
+        "citation"
+      ],
       "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "status": { "type": "string" },
-        "client_facing_impact": { "type": "boolean" },
-        "impact_days": { "type": "number" },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "client_facing_impact": {
+          "type": "boolean"
+        },
+        "impact_days": {
+          "type": "number"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "prior_budget": {
       "type": "object",
       "properties": {
-        "forecast_to_complete": { "type": "number" },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "forecast_to_complete": {
+          "type": "number"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "item": {
       "type": "object",
-      "required": ["id", "title", "status", "opened_date", "owner_type", "source", "confidence", "citation"],
+      "required": [
+        "id",
+        "title",
+        "status",
+        "opened_date",
+        "owner_type",
+        "source",
+        "confidence",
+        "citation"
+      ],
       "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "status": { "type": "string" },
-        "opened_date": { "type": "string", "format": "date" },
-        "due_date": { "type": "string", "format": "date" },
-        "owner_type": { "enum": ["client", "internal", "joint"] },
-        "blocked_by_decision_id": { "type": "string" },
-        "blocker_type": { "enum": ["client_decision", "internal_dependency", "none"] },
-        "risk_rating": { "type": "string" },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "opened_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "due_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "owner_type": {
+          "enum": [
+            "client",
+            "internal",
+            "joint"
+          ]
+        },
+        "blocked_by_decision_id": {
+          "type": "string"
+        },
+        "blocker_type": {
+          "enum": [
+            "client_decision",
+            "internal_dependency",
+            "none"
+          ]
+        },
+        "risk_rating": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "domain_status": {
       "type": "object",
       "properties": {
-        "rag": { "enum": ["green", "amber", "red"] },
-        "facts": { "type": "array", "items": { "type": "object" } },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "rag": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     },
     "aged_item": {
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "age_days": { "type": "integer" },
-        "days_past_due": { "type": "integer" },
-        "bucket": { "type": "string" },
-        "owner_type": { "enum": ["client", "internal", "joint"] },
-        "client_action": { "type": "boolean" },
-        "reason": { "type": "string" },
-        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "citation": { "type": "string" }
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "age_days": {
+          "type": "integer"
+        },
+        "days_past_due": {
+          "type": "integer"
+        },
+        "bucket": {
+          "type": "string"
+        },
+        "owner_type": {
+          "enum": [
+            "client",
+            "internal",
+            "joint"
+          ]
+        },
+        "client_action": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
       }
     }
   }

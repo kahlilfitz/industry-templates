@@ -174,7 +174,7 @@
   ],
   "escalations": [
     "M-401: reported green after rebaseline, but forecast is 14 days against original baseline (status-reporting-rules.md #2.3)",
-    "budget: billed-only burn is 473000 but unbilled WIP 95000 changes actual burn to 568000 (13.6% vs plan) (status-reporting-rules.md #3.3)",
+    "budget: billed-only burn is 473000 (-5.4% vs plan) but unbilled WIP 95000 changes actual burn to 568000 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
     "R-401: open risk aged 102 days - re-rate required (status-reporting-rules.md #5.2)",
     "D-401: decision 10 days overdue (status-reporting-rules.md #5.3)",
     "A-401: action 8 days overdue (status-reporting-rules.md #5.4)",
@@ -201,6 +201,7 @@
           "original_variance_days": 14,
           "period_delta_days": 7,
           "rebaselined_last_period": true,
+          "baseline_moved_since_original": true,
           "source": "engine:variance_calc",
           "confidence": 0.98,
           "citation": "status-reporting-rules.md #2.1,#2.2,#2.3,#2.4; raw/plan-extract.md table row M-401"
@@ -215,6 +216,7 @@
           "original_variance_days": 3,
           "period_delta_days": 2,
           "rebaselined_last_period": false,
+          "baseline_moved_since_original": false,
           "source": "engine:variance_calc",
           "confidence": 0.98,
           "citation": "status-reporting-rules.md #2.1,#2.2,#2.3,#2.4; raw/plan-extract.md table row M-402"
@@ -235,10 +237,12 @@
           "actual_burn_including_wip": 568000,
           "burn_variance_amount": 68000,
           "burn_variance_pct": 13.6,
+          "burn_variance_measurable": true,
           "baseline_budget": 700000,
           "forecast_to_complete": 780000,
           "forecast_variance_amount": 80000,
           "forecast_variance_pct": 11.43,
+          "forecast_variance_measurable": true,
           "forecast_period_delta": 75000,
           "source": "engine:variance_calc",
           "confidence": 0.97,
@@ -276,9 +280,11 @@
     "risks": [
       {
         "id": "R-401",
+        "kind": "risk",
         "title": "Rules catalogue ownership unresolved",
         "age_days": 102,
         "days_past_due": 51,
+        "due_date_known": true,
         "bucket": "critical_age",
         "owner_type": "joint",
         "client_action": false,
@@ -291,9 +297,11 @@
     "decisions": [
       {
         "id": "D-401",
+        "kind": "decision",
         "title": "Client to decide broker exception rule owner",
         "age_days": 23,
         "days_past_due": 10,
+        "due_date_known": true,
         "bucket": "overdue",
         "owner_type": "client",
         "client_action": true,
@@ -306,9 +314,11 @@
     "actions": [
       {
         "id": "A-401",
+        "kind": "action",
         "title": "Finalize exception workflow design",
         "age_days": 17,
         "days_past_due": 8,
+        "due_date_known": true,
         "bucket": "overdue",
         "owner_type": "internal",
         "client_action": true,
@@ -321,9 +331,11 @@
     "pending_client_actions": [
       {
         "id": "A-401",
+        "kind": "action",
         "title": "Finalize exception workflow design",
         "age_days": 17,
         "days_past_due": 8,
+        "due_date_known": true,
         "bucket": "overdue",
         "owner_type": "internal",
         "client_action": true,
@@ -331,6 +343,21 @@
         "source": "engine:item_age",
         "confidence": 0.95,
         "citation": "status-reporting-rules.md #5.4,#5.5; raw/action-register.md row A-401"
+      },
+      {
+        "id": "D-401",
+        "kind": "decision",
+        "title": "Client to decide broker exception rule owner",
+        "age_days": 23,
+        "days_past_due": 10,
+        "due_date_known": true,
+        "bucket": "overdue",
+        "owner_type": "client",
+        "client_action": true,
+        "reason": "decision is 10 days past due, >= 7-day threshold",
+        "source": "engine:item_age",
+        "confidence": 0.95,
+        "citation": "status-reporting-rules.md #5.3; raw/decision-log.md row D-401"
       }
     ],
     "source": "engine:item_age",

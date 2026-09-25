@@ -27,25 +27,40 @@ def parse_date(value):
 
 
 def age_days(as_of, opened):
+    """Returns None when the open date is missing so the caller must escalate
+    rather than inventing an age."""
+    if not opened:
+        return None
     return (parse_date(as_of) - parse_date(opened)).days
 
 
 def days_past_due(as_of, due):
+    """Returns None when no due date is recorded. A missing due date is not the
+    same as "not overdue" and must never be reported as zero days past due."""
     if not due:
-        return 0
+        return None
     return max(0, (parse_date(as_of) - parse_date(due)).days)
+
+
+def add_escalation(escalations, message):
+    """Escalations are de-duplicated so re-running the engine on its own output
+    is idempotent."""
+    if message not in escalations:
+        escalations.append(message)
 
 
 def is_open(item):
     return item.get("status", "").lower() not in ("closed", "done", "cancelled", "approved")
 
 
-def base_record(item, as_of, bucket, reason, rule, client_action=False):
+def base_record(item, as_of, bucket, reason, rule, client_action=False, kind="item"):
     return {
         "id": item["id"],
+        "kind": kind,
         "title": item["title"],
-        "age_days": age_days(as_of, item["opened_date"]),
+        "age_days": age_days(as_of, item.get("opened_date")),
         "days_past_due": days_past_due(as_of, item.get("due_date")),
+        "due_date_known": bool(item.get("due_date")),
         "bucket": bucket,
         "owner_type": item.get("owner_type", "internal"),
         "client_action": bool(client_action),
@@ -57,35 +72,59 @@ def base_record(item, as_of, bucket, reason, rule, client_action=False):
 
 
 def classify_risk(item, as_of, escalations):
-    age = age_days(as_of, item["opened_date"])
-    if age >= RISK_CRITICAL_DAYS:
+    age = age_days(as_of, item.get("opened_date"))
+    rule = "status-reporting-rules.md #5.1"
+    if age is None:
+        bucket = "unknown_age"
+        reason = "open risk has no opened_date, so age cannot be computed"
+        add_escalation(
+            escalations,
+            f"{item['id']}: open risk has no opened_date - ageing cannot be computed and the "
+            f"open date must be confirmed with the risk owner ({rule})",
+        )
+    elif age >= RISK_CRITICAL_DAYS:
         bucket = "critical_age"
         reason = f"open risk aged {age} days, >= {RISK_CRITICAL_DAYS}-day escalation threshold"
         rule = "status-reporting-rules.md #5.2"
-        escalations.append(f"{item['id']}: open risk aged {age} days - re-rate required ({rule})")
+        add_escalation(
+            escalations, f"{item['id']}: open risk aged {age} days - re-rate required ({rule})"
+        )
     elif age >= RISK_STALE_DAYS:
         bucket = "stale"
         reason = f"open risk aged {age} days, >= {RISK_STALE_DAYS}-day stale threshold"
-        rule = "status-reporting-rules.md #5.1"
     else:
         bucket = "current"
         reason = f"open risk aged {age} days, below stale threshold"
-        rule = "status-reporting-rules.md #5.1"
-    return base_record(item, as_of, bucket, reason, rule)
+    return base_record(item, as_of, bucket, reason, rule, kind="risk")
 
 
 def classify_decision(item, as_of, escalations):
     past_due = days_past_due(as_of, item.get("due_date"))
-    if past_due >= DECISION_OVERDUE_DAYS:
+    rule = "status-reporting-rules.md #5.3"
+    if past_due is None:
+        bucket = "undated"
+        reason = "decision pending with no due date recorded, so overdue status cannot be computed"
+        add_escalation(
+            escalations,
+            f"{item['id']}: open decision has no due_date - overdue status cannot be computed and "
+            f"the decision date must be confirmed with the owner ({rule})",
+        )
+    elif past_due >= DECISION_OVERDUE_DAYS:
         bucket = "overdue"
         reason = f"decision is {past_due} days past due, >= {DECISION_OVERDUE_DAYS}-day threshold"
-        rule = "status-reporting-rules.md #5.3"
-        escalations.append(f"{item['id']}: decision {past_due} days overdue ({rule})")
+        add_escalation(escalations, f"{item['id']}: decision {past_due} days overdue ({rule})")
     else:
         bucket = "pending"
         reason = f"decision pending, {past_due} days past due"
-        rule = "status-reporting-rules.md #5.3"
-    return base_record(item, as_of, bucket, reason, rule, client_action=item.get("owner_type") == "client")
+    return base_record(
+        item,
+        as_of,
+        bucket,
+        reason,
+        rule,
+        client_action=item.get("owner_type") == "client",
+        kind="decision",
+    )
 
 
 def classify_action(item, decisions_by_id, as_of, escalations):
@@ -96,23 +135,31 @@ def classify_action(item, decisions_by_id, as_of, escalations):
         item.get("blocker_type") == "client_decision" or (blocked_decision and blocked_decision.get("owner_type") == "client")
     ):
         client_action = True
-    if past_due >= ACTION_OVERDUE_DAYS:
+    rule = "status-reporting-rules.md #5.4"
+    if past_due is None:
+        bucket = "undated"
+        reason = "action open with no due date recorded, so overdue status cannot be computed"
+        add_escalation(
+            escalations,
+            f"{item['id']}: open action has no due_date - overdue status cannot be computed and "
+            f"the due date must be confirmed with the owner ({rule})",
+        )
+    elif past_due >= ACTION_OVERDUE_DAYS:
         bucket = "overdue"
-        rule = "status-reporting-rules.md #5.4"
         reason = f"action is {past_due} days past due, >= {ACTION_OVERDUE_DAYS}-day threshold"
-        escalations.append(f"{item['id']}: action {past_due} days overdue ({rule})")
+        add_escalation(escalations, f"{item['id']}: action {past_due} days overdue ({rule})")
     else:
         bucket = "open"
-        rule = "status-reporting-rules.md #5.4"
         reason = f"action open, {past_due} days past due"
     if client_action and item.get("owner_type") != "client":
         rule += ",#5.5"
         reason += "; reclassified as pending client action because blocker is a client decision"
-        escalations.append(
+        add_escalation(
+            escalations,
             f"{item['id']}: logged as {item.get('owner_type')} but blocked by client decision - "
-            "classified as pending client action (status-reporting-rules.md #5.5)"
+            "classified as pending client action (status-reporting-rules.md #5.5)",
         )
-    return base_record(item, as_of, bucket, reason, rule, client_action=client_action)
+    return base_record(item, as_of, bucket, reason, rule, client_action=client_action, kind="action")
 
 
 def main():
@@ -123,8 +170,14 @@ def main():
 
     with open(args.input, encoding="utf-8") as handle:
         payload = json.load(handle)
-    if payload.get("contract_version") != "ps.client-status-qbr.v1":
-        raise ValueError("wrong contract version")
+    found = payload.get("contract_version")
+    if found != "ps.client-status-qbr.v1":
+        print(
+            f"item_age: expected contract_version 'ps.client-status-qbr.v1' but found {found!r} "
+            f"in {args.input}. Run plan-retrieve first to build a valid payload.",
+            file=sys.stderr,
+        )
+        return 2
 
     output = copy.deepcopy(payload)
     as_of = output["reporting_period"]["end"]
@@ -138,23 +191,24 @@ def main():
         for item in output.get("actions", [])
         if is_open(item)
     ]
-    pending_client_actions = [item for item in actions if item["client_action"]]
+    # A pending client action is anything the client still owes us, whether it is
+    # logged as an action or as an unmade client decision (#5.5).
+    pending_client_actions = [item for item in actions + decisions if item["client_action"]]
 
-    low_confidence = [
-        item["id"]
+    open_items = [
+        item
         for item in output.get("risks", []) + output.get("decisions", []) + output.get("actions", [])
-        if item.get("confidence", 1.0) < CONFIDENCE_FLOOR
+        if is_open(item)
     ]
-    for item_id in low_confidence:
-        escalations.append(
-            f"{item_id}: extraction confidence below {CONFIDENCE_FLOOR} - human review required "
-            "(status-reporting-rules.md #1.3)"
-        )
+    for item in open_items:
+        if item.get("confidence", 1.0) < CONFIDENCE_FLOOR:
+            add_escalation(
+                escalations,
+                f"{item['id']}: extraction confidence below {CONFIDENCE_FLOOR} - human review required "
+                "(status-reporting-rules.md #1.3)",
+            )
 
-    confidence_values = [
-        item.get("confidence", 1.0)
-        for item in output.get("risks", []) + output.get("decisions", []) + output.get("actions", [])
-    ]
+    confidence_values = [item.get("confidence", 1.0) for item in open_items]
     output["aged_items"] = {
         "risks": risks,
         "decisions": decisions,
@@ -165,7 +219,9 @@ def main():
         "citation": "status-reporting-rules.md #5.1-#5.5",
     }
     output["escalations"] = escalations
-    output.setdefault("provenance", {}).setdefault("engines", []).append("item_age/1.0")
+    engines = output.setdefault("provenance", {}).setdefault("engines", [])
+    if "item_age/1.0" not in engines:
+        engines.append("item_age/1.0")
 
     with open(args.out, "w", encoding="utf-8") as handle:
         json.dump(output, handle, indent=2)
