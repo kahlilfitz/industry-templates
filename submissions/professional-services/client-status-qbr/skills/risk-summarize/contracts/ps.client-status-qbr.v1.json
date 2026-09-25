@@ -249,6 +249,93 @@
         "$ref": "#/definitions/item"
       }
     },
+    "settings": {
+      "type": "object",
+      "description": "Optional run-time settings the user stated in conversation. Absent means every published default in status-reporting-rules.md applies. Only the listed thresholds can be changed; the confidence floor (#1.3), WIP inclusion (#3.3), the rebaseline check (#2.3), client-blocker reclassification (#5.5) and the draft-only boundary (#7) are fixed and cannot be set here (#8.2). Every non-default value is disclosed as an escalation at the top of the pack (#8.1).",
+      "required": [
+        "thresholds",
+        "source",
+        "citation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schedule_amber_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 29,
+              "description": "Amber when forecast is more than this many calendar days past the original baseline. Published default 5 (status-reporting-rules.md #2.1). Bounds 1-29 (#8.1)."
+            },
+            "schedule_red_days": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 30,
+              "description": "Red when forecast is more than this many calendar days past the original baseline. Must exceed schedule_amber_days. Published default 10 (status-reporting-rules.md #2.2). Bounds 2-30 (#8.1)."
+            },
+            "budget_amber_pct": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 24,
+              "description": "Amber when burn or forecast variance is at least this percentage, either direction. Published default 5 (status-reporting-rules.md #3.1). Bounds 1-24 (#8.1)."
+            },
+            "budget_red_pct": {
+              "type": "number",
+              "minimum": 2,
+              "maximum": 25,
+              "description": "Red when burn or forecast variance is at least this percentage, either direction. Must exceed budget_amber_pct. Published default 10 (status-reporting-rules.md #3.2). Bounds 2-25 (#8.1)."
+            },
+            "scope_amber_open_items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "description": "Amber at this many open unapproved scope changes. Published default 1 (status-reporting-rules.md #4.1). Bounds 1-4 (#8.1)."
+            },
+            "scope_red_open_items": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 5,
+              "description": "Red at this many open unapproved scope changes (any client-facing change is always red). Must exceed scope_amber_open_items. Published default 3 (status-reporting-rules.md #4.2). Bounds 2-5 (#8.1)."
+            },
+            "risk_stale_days": {
+              "type": "integer",
+              "minimum": 7,
+              "maximum": 179,
+              "description": "An open risk this many days old is stale and needs a re-rate. Published default 45 (status-reporting-rules.md #5.1). Bounds 7-179 (#8.1)."
+            },
+            "risk_critical_days": {
+              "type": "integer",
+              "minimum": 14,
+              "maximum": 180,
+              "description": "An open risk this many days old is escalated as critical. Must exceed risk_stale_days. Published default 90 (status-reporting-rules.md #5.2). Bounds 14-180 (#8.1)."
+            },
+            "decision_overdue_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "description": "A decision this many days past due is overdue. Published default 7 (status-reporting-rules.md #5.3). Bounds 1-30 (#8.1)."
+            },
+            "action_overdue_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "description": "An action this many days past due is overdue. Published default 7 (status-reporting-rules.md #5.4). Bounds 1-30 (#8.1)."
+            }
+          }
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^user:",
+          "description": "Always 'user:conversation' - a threshold is only ever set because the user asked for it."
+        },
+        "citation": {
+          "type": "string",
+          "description": "The user's words, quoted, that set these values."
+        }
+      }
+    },
     "variance_summary": {
       "type": "object",
       "properties": {
@@ -279,6 +366,21 @@
         },
         "citation": {
           "type": "string"
+        },
+        "thresholds_applied": {
+          "type": "object",
+          "description": "The threshold values the engine actually used for this run (#8.1).",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "thresholds_source": {
+          "type": "string",
+          "enum": [
+            "default",
+            "user"
+          ],
+          "description": "'default' when every published threshold applied; 'user' when at least one came from settings.thresholds (#8.1)."
         }
       }
     },
@@ -320,6 +422,21 @@
         },
         "citation": {
           "type": "string"
+        },
+        "thresholds_applied": {
+          "type": "object",
+          "description": "The threshold values the engine actually used for this run (#8.1).",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "thresholds_source": {
+          "type": "string",
+          "enum": [
+            "default",
+            "user"
+          ],
+          "description": "'default' when every published threshold applied; 'user' when at least one came from settings.thresholds (#8.1)."
         }
       }
     },

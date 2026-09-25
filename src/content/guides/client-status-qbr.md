@@ -25,8 +25,17 @@ prose. It never sets a status, variance or ageing call itself.
 Every skill also ships `scripts/validate_payload.py`, a standard-library-only validator that
 checks the shared `ps.client-status-qbr.v1` payload against the contract at each hop. Nothing
 needs installing: the skills call it as
-`python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/<file>.json --hop <skill>`,
-and a non-zero exit stops the chain rather than letting a gap propagate into the draft.
+`python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/<file>.json" --hop <skill>`,
+and a non-zero exit stops the chain rather than letting a gap propagate into the draft. Each call
+starts with `scripts/step0.sh`, a POSIX `sh` guard that confirms `SKILL_DIR` is the right skill
+folder at the right version and that the working folder `RUN_DIR` exists.
+
+## Setting it up for your engagement
+
+You never edit the plugin. `plan-retrieve` checks your files, converts dates that can only be
+read one way, and asks one question per missing required field. To use different RAG or ageing
+thresholds for a run, say so in conversation. Values are bounded, and every non-default value is
+disclosed at the top of the pack (`references/status-reporting-rules.md` §8).
 
 ## The case that shows why it exists
 
@@ -56,8 +65,8 @@ Draft-first. It never sends the status pack, posts to a client portal, re-baseli
 changes a forecast, closes a risk, commits a date or updates the system of record. It prepares a
 reviewed draft and makes every variance, ageing call and action split traceable.
 
-Grounded in the reporting rules in `references/`; replace them with your own engagement
-reporting policy and controlled templates.
+Grounded in the reporting rules in `references/`. The engines hold the published thresholds as
+built-in defaults; per-run changes go through conversation (§8), not by editing the rules file.
 
 ## Skills in this package
 

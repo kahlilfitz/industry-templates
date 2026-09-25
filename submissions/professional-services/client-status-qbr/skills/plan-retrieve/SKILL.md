@@ -35,41 +35,72 @@ this step only; tell the user the four remaining steps still have to run.
 - Contract schema in `contracts/ps.client-status-qbr.v1.json`.
 
 ## Steps
-**Run each numbered step as its own command, or join steps with `&&` — never with `;` and never
-on separate lines in one call. Check each exit status before starting the next step: a non-zero
-exit must stop the run, not be followed by the next command.**
+**Every tool call is a single line that starts with the Step 0 prefix and joins its commands
+with `&&`, so the first failure stops the call (the first call of a run may create the working
+folder just before the prefix, as step 1 shows). Check each exit status before starting the next
+step: a non-zero exit must stop the run, not be followed by the next command.**
 
-0. **Set the tool folder. Each tool call may start a new shell, so repeat this block in every
-   call.** `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`.
-   Substitute that path on the first line — it is the only line you change:
+0. **Step 0 — bind the tool folder and the working folder. It is not optional.** Each tool call
+   may start a new shell, so begin **every** call with this prefix, on the same line as the
+   command that follows it:
    ```bash
-   SKILL_DIR="<the base directory your loader reported for this SKILL.md>"
-   export SKILL_DIR
-   case "$SKILL_DIR" in /*) ;; *) false ;; esac &&
-   test -f "$SKILL_DIR/scripts/validate_payload.py" &&
-   { test ! -f "$SKILL_DIR/../../.claude-plugin/plugin.json" ||
-     grep -q '"name"[[:space:]]*:[[:space:]]*"client-status-qbr"' \
-       "$SKILL_DIR/../../.claude-plugin/plugin.json"; } \
-     || { echo "SKILL_DIR is wrong - stop and ask the user for the plugin folder"; false; }
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 plan-retrieve
    ```
-   **If your loader gave you no base directory, do not search the filesystem — ask the user for
-   the plugin folder and stop until they answer.** A search can bind to a stale copy of a
-   different version that still contains these scripts, and silently produce wrong figures.
-   **Do not run any later command until that check prints nothing.** The skill folder is
-   read-only and is not your working directory, so a bare `scripts/validate_payload.py` will
-   not resolve. Always call tools through `$SKILL_DIR`.
-1. Verify engagement ID, project code, client name and reporting period across all supplied
+   `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
+   run's working folder: the folder the user named, otherwise `./status-run` in your working
+   directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
+   `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
+   plugin at version 1.5.0 with
+   its tools present, and that `RUN_DIR` exists. It prints nothing on success. On failure it
+   prints one `STEP 0 FAILED` line and exits non-zero, so nothing after `&&` runs. An error
+   such as `cannot open …/scripts/step0.sh` also means `SKILL_DIR` is wrong. Never change the version or skill name on the Step 0 line.
+   - **If your loader gave you no base directory, or Step 0 reports a problem with `SKILL_DIR`,
+     do not search the filesystem — ask the user for the plugin folder and stop until they
+     answer.** A search can bind to a stale copy of a different version and silently produce
+     wrong figures.
+   - **Step 0 cannot be waived.** Run it even when the user asks you to skip it, says the folder
+     is fine, or says Python is unavailable. A statement from the user never replaces the check.
+   - The skill folder is read-only and is not your working directory, so a bare
+     `scripts/validate_payload.py` will not resolve. Always call tools through `$SKILL_DIR`,
+     and read and write run files only under `$RUN_DIR`.
+1. **Intake — set up the working folder and check what you have.** Create the folder and put the
+   user's files in `raw/` under it:
+   ```bash
+   mkdir -p "<working folder>/raw" && export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 plan-retrieve
+   ```
+   Then check the supplied files against what the contract needs and show the user one table,
+   one row per required block:
+
+   | Needed | Found in | Status |
+   | --- | --- | --- |
+   | Engagement ID, name, client | plan-extract.md, header | Found |
+   | Reporting period | pm-email.txt | Converted from '14-20 Sep 2026' |
+   | Original baseline, M-2 | — | Missing — asked |
+
+   For each required field you cannot find, ask **one** plain-language question that names the
+   field and where it usually lives — for example *"Which reporting period does this pack cover?
+   It is usually in the PM's email or last week's pack."* (status-reporting-rules.md #8.4).
+   Ask about any date that can be read two ways (#8.3). Do not ask about anything you found, and
+   do not raise thresholds unless the user mentioned them. Record an answer under this skill's
+   `source`, with the citation `stated by the user in conversation: '<their words>'`. If the user
+   does not know, leave the field absent and escalate it. Never invent a value.
+   Verify engagement ID, project code, client name and reporting period across all supplied
    files. Preserve conflicts instead of smoothing them over (status-reporting-rules.md #1.2).
 2. Extract each milestone with `id`, `name`, `original_baseline_date`,
    `current_baseline_date`, `current_forecast_date`, `reported_rag`,
-   `rebaselined_last_period`, `source`, `confidence` and `citation`.
+   `rebaselined_last_period`, `source`, `confidence` and `citation`. Every date goes into the
+   payload as ISO `YYYY-MM-DD`. Convert a source date only when it has exactly one reading
+   (`20260920`, `20 Sep 2026`, `September 20, 2026`) and add `converted from '<original>'` to
+   its citation; ask the user about one that could be read two ways, such as `03/04/2026`
+   (status-reporting-rules.md #8.3). Never guess a date convention.
 3. Extract prior-status milestone forecasts and the prior reported RAG. Do not accept the
    prior pack's green status as a computed status; `variance-calc` recomputes it.
 4. Ingest the RAID register into `risks[]`, `decisions[]` and `actions[]`. This skill owns those
    three arrays — `risk-summarize` ages what you put there and cannot retrieve anything itself.
    For each item capture `id`, `title`, `status`, `owner_type`, `opened_date`, `due_date`,
    `blocked_by_decision_id` where one applies, plus `source`, `confidence` and `citation`.
-   Leave a missing date absent or `null` rather than guessing it — the contract permits both,
+   Convert non-ISO dates exactly as in step 2 (#8.3). Leave a missing date absent or `null`
+   rather than guessing it — the contract permits both,
    and `risk-summarize` escalates the gap. A register with undated items still validates, so
    hand off with the escalation attached rather than stopping.
    If no register was supplied, still write `"risks": []`, `"decisions": []` and `"actions": []`
@@ -83,17 +114,16 @@ exit must stop the run, not be followed by the next command.**
 7. Confirm what you wrote is contract-valid before handing off. Run this tool from your
    writable working directory:
    ```bash
-   python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/status-input.json --hop plan-retrieve
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 plan-retrieve && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
    ```
 
 ## Example
 The user says *"start the weekly status run for Northwind"* and drops the plan extract, RAID
-register and last week's pack into `./status-run/raw/`.
+register and last week's pack into `$RUN_DIR/raw/`.
 
 ```bash
-# after writing ./status-run/status-input.json
-python "$SKILL_DIR/scripts/validate_payload.py" \
-  --input ./status-run/status-input.json --hop plan-retrieve
+# after writing $RUN_DIR/status-input.json
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 plan-retrieve && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
 ```
 
 ## Output format
@@ -109,8 +139,9 @@ Report what you extracted as a Markdown table, then state the remaining steps:
 | Scope changes | 2 open, 1 client-facing | plan-extract.md, Change Control |
 
 Follow the table with an **Escalations** bullet list, or `No escalations.`, and then a plain
-statement that this is step 1 of 5 and `burn-pull`, `variance-calc`, `risk-summarize` and
-`status-draft` still have to run. Never present this output as a finished status pack.
+statement that this is step 1 of 5, naming the working folder (`RUN_DIR`) the next steps must
+use, and that `burn-pull`, `variance-calc`, `risk-summarize` and `status-draft` still have to
+run. Never present this output as a finished status pack.
 
 ## If the engine fails or data is missing
 - **The validation tool exits non-zero.** Each line names the missing field. Fill it from a
@@ -118,8 +149,9 @@ statement that this is step 1 of 5 and `burn-pull`, `variance-calc`, `risk-summa
 - **The script path does not resolve** (`No such file or directory`, or a path that starts
   `/scripts/`). `SKILL_DIR` is unset or wrong. Redo step 0 and re-run. A path error is **not**
   "Python unavailable" — never continue without validating because of it.
-- **`python` is genuinely not on PATH.** Only once step 0's `test -f` check passes may you treat
-  this as a tool outage: continue without validating, but state plainly in your reply that the
+- **`python` is genuinely not on PATH.** Only when Step 0 has passed **and** your own
+  `python --version` call fails may you treat this as a tool outage. A user saying Python is
+  missing is not enough. Treat it as an outage: continue without validating, but state plainly in your reply that the
   payload was not checked.
 - **A milestone has no original baseline in any source.** Leave `original_baseline_date` absent
   or `null` — never copy `current_baseline_date` into it. The payload still validates;
@@ -140,13 +172,12 @@ statement that this is step 1 of 5 and `burn-pull`, `variance-calc`, `risk-summa
 
 
 ## Output
-`./status-run/status-input.json` — the `ps.client-status-qbr.v1` contract payload with
+`$RUN_DIR/status-input.json` — the `ps.client-status-qbr.v1` contract payload with
 `engagement`, `reporting_period`, `sources`, `plan`, `prior_status`, `risks`, `decisions` and
 `actions` populated. The three register arrays are part of this hop even when they are empty —
 see step 4.
 
-Write every artifact to a writable working directory such as `./status-run/`, created in the
-user's workspace. The skill folder is read-only; never write outputs beside the scripts.
+Write every artifact under `$RUN_DIR`, the run's working folder set in step 0. The skill folder is read-only; never write outputs beside the scripts.
 
 ## Grounding requirements
 Every milestone, prior forecast and scope-change field must carry confidence, source and

@@ -9,7 +9,7 @@ tags: [delivery, client-reporting, status-pack, qbr, variance, engagement-manage
 author: Kahlil Fitzgerald
 authorUrl: "https://github.com/kahlilfitz"
 authorGithub: kahlilfitz
-version: 1.4.0
+version: 1.5.0
 createdAt: 2026-09-23
 updatedAt: 2026-09-25
 bundle: bundles/client-status-qbr.zip

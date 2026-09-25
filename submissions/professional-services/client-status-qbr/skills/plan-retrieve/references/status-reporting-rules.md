@@ -1,6 +1,7 @@
 # Status Reporting Rules - Client Status & QBR Assembly
-Deterministic rules consumed by variance_calc.py and item_age.py. Engines cite these by
-section number; constants in the engines mirror this document 1:1.
+Deterministic rules applied by variance_calc.py and item_age.py. Engines cite these by
+section number; the published defaults are built into the engines and mirror this document 1:1.
+The values in rules #2.1-#5.4 are the defaults a user may override for a single run under #8.
 
 These excerpts are illustrative operating rules for demo grounding, not a reproduced client or
 firm standard.
@@ -48,9 +49,17 @@ firm standard.
 | Rule | Condition | Effect |
 |---|---|---|
 | 6.1 | Overall RAG | Worst of schedule, budget and scope RAG using green < amber < red |
-| 6.2 | Any open escalation from rules #1-#5 | Surface above the drafted narrative |
+| 6.2 | Any open escalation from rules #1-#5 or #8 | Surface above the drafted narrative |
 
 ## 7. Draft-first boundary
 | Rule | Condition | Effect |
 |---|---|---|
 | 7.1 | User asks to send, forward, share, post, file, upload, delete, approve, pay, reassign, update a system, re-baseline, close a risk or commit a date | Refuse the execution step and provide the draft/recommendation only, naming who should perform the action |
+
+## 8. Run-time settings and input conversion
+| Rule | Condition | Effect |
+|---|---|---|
+| 8.1 | The user states a different threshold for this run | Record it in `settings.thresholds` with `source: user:conversation` and the user's words as the citation. Only these keys may change, within these bounds, and amber must stay below red: `schedule_amber_days` 1-29, `schedule_red_days` 2-30, `budget_amber_pct` 1-24, `budget_red_pct` 2-25, `scope_amber_open_items` 1-4, `scope_red_open_items` 2-5, `risk_stale_days` 7-179, `risk_critical_days` 14-180, `decision_overdue_days` 1-30, `action_overdue_days` 1-30. The engines apply the values, report them in `thresholds_applied`, and raise one escalation per non-default value. That escalation is shown first in the draft pack |
+| 8.2 | The user asks to change the confidence floor (#1.3), the rebaseline check (#2.3), WIP inclusion (#3.3), client-blocker reclassification (#5.5) or the draft-first boundary (#7), or asks for a value outside #8.1 | Refuse, name the rule, and keep the published value. Never widen a bound to make a status turn green |
+| 8.3 | A source date is not ISO `YYYY-MM-DD` | Convert it only when there is exactly one possible reading (`20260920`, `20 Sep 2026`, `September 20, 2026`, `2026/09/20`), and add `converted from '<original>'` to that field's citation. When a date could be read two ways (`03/04/2026`), or has no year, ask the user which it is. Never guess, and never apply one guessed convention to other dates |
+| 8.4 | A required field cannot be found in any supplied source | Ask the user one plain-language question naming the field and the document it usually comes from. Record the answer under the skill's own `source`, with the citation `stated by the user in conversation: '<their words>'`. If the user does not know, leave the field absent and escalate. Never invent a value |

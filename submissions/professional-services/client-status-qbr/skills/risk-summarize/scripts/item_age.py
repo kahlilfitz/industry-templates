@@ -5,7 +5,9 @@ Reads a ps.client-status-qbr.v1 payload and writes the same contract with aged_i
 populated. The model may summarize the result, but it never sets age buckets or
 client-action classification itself.
 
-Constants mirror references/status-reporting-rules.md by section number.
+Constants mirror references/status-reporting-rules.md by section number. The user may
+override the four ageing thresholds for one run via settings.thresholds, within the
+bounds of #8.1; every override is disclosed as an escalation.
 """
 import argparse
 import copy
@@ -20,6 +22,61 @@ RISK_CRITICAL_DAYS = 90          # status-reporting-rules.md #5.2
 DECISION_OVERDUE_DAYS = 7        # status-reporting-rules.md #5.3
 ACTION_OVERDUE_DAYS = 7          # status-reporting-rules.md #5.4
 CLIENT_BLOCKER_RECLASSIFIES = True  # status-reporting-rules.md #5.5
+
+# The only ageing thresholds a user may change in conversation, with the bounds the
+# contract enforces (#8.1). Re-checked here so an unvalidated payload cannot run on an
+# out-of-range value.
+OVERRIDABLE = {
+    "risk_stale_days": ("RISK_STALE_DAYS", 7, 179, "#5.1"),
+    "risk_critical_days": ("RISK_CRITICAL_DAYS", 14, 180, "#5.2"),
+    "decision_overdue_days": ("DECISION_OVERDUE_DAYS", 1, 30, "#5.3"),
+    "action_overdue_days": ("ACTION_OVERDUE_DAYS", 1, 30, "#5.4"),
+}
+PAIRS = [("risk_stale_days", "risk_critical_days")]
+
+
+class SettingsError(ValueError):
+    pass
+
+
+def apply_settings(payload, escalations):
+    """Merge user ageing thresholds over the published defaults and disclose every change.
+
+    Returns (thresholds_applied, thresholds_source). Keys that belong to variance_calc
+    are ignored here; that engine applies and discloses its own.
+    """
+    requested = (payload.get("settings") or {}).get("thresholds") or {}
+    defaults = {key: globals()[name] for key, (name, _lo, _hi, _rule) in OVERRIDABLE.items()}
+    applied = dict(defaults)
+    for key, value in requested.items():
+        if key not in OVERRIDABLE:
+            continue
+        _name, lo, hi, _rule = OVERRIDABLE[key]
+        if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
+            raise SettingsError(
+                f"settings.thresholds.{key} = {value!r} must be a whole number of days in the "
+                f"range {lo}-{hi} (status-reporting-rules.md #8.1)"
+            )
+        applied[key] = value
+    for low, high in PAIRS:
+        if applied[low] >= applied[high]:
+            raise SettingsError(
+                f"settings.thresholds: {low} ({applied[low]}) must be below {high} "
+                f"({applied[high]}) (status-reporting-rules.md #8.1)"
+            )
+    source = "default"
+    for key, (name, _lo, _hi, rule) in OVERRIDABLE.items():
+        globals()[name] = applied[key]
+        if applied[key] != defaults[key]:
+            source = "user"
+            add_escalation(
+                escalations,
+                f"settings: custom threshold {key} = {applied[key]} (published default "
+                f"{defaults[key]}, {rule}) was set by the user for this run - this pack does not "
+                "use the published thresholds, so state that before sharing it "
+                "(status-reporting-rules.md #8.1)",
+            )
+    return applied, source
 
 
 def parse_date(value):
@@ -260,6 +317,15 @@ def main():
         return 1
     as_of = output["reporting_period"]["end"]
     escalations = list(output.get("escalations", []))
+    try:
+        thresholds_applied, thresholds_source = apply_settings(output, escalations)
+    except SettingsError as exc:
+        print(
+            f"item_age: {exc}. Ask the user for a value inside the range, then re-run. "
+            "Do not age the items by hand.",
+            file=sys.stderr,
+        )
+        return 2
     decisions_by_id = {item["id"]: item for item in output.get("decisions", [])}
 
     # An empty RAID register is almost always a retrieval failure, not a project
@@ -306,6 +372,8 @@ def main():
         "source": ENGINE,
         "confidence": round(min(confidence_values), 2) if confidence_values else 1.0,
         "citation": "status-reporting-rules.md #5.1-#5.5",
+        "thresholds_applied": thresholds_applied,
+        "thresholds_source": thresholds_source,
     }
     output["escalations"] = escalations
     engines = output.setdefault("provenance", {}).setdefault("engines", [])
@@ -351,7 +419,7 @@ if __name__ == "__main__":
     except KeyError as exc:
         sys.exit(_fatal(
             f"the payload is missing the required key {exc}. Re-run the skill that owns that "
-            "field rather than hand-editing the file."
+            "field so it is populated from a source document. Do not age the items by hand."
         ))
     except (TypeError, ValueError) as exc:
         sys.exit(_fatal(

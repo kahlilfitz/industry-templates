@@ -264,6 +264,15 @@
     "overall_rag": "green",
     "source": "engine:variance_calc",
     "confidence": 0.97,
-    "citation": "status-reporting-rules.md #6.1"
+    "citation": "status-reporting-rules.md #6.1",
+    "thresholds_applied": {
+      "schedule_amber_days": 5,
+      "schedule_red_days": 10,
+      "budget_amber_pct": 5.0,
+      "budget_red_pct": 10.0,
+      "scope_amber_open_items": 1,
+      "scope_red_open_items": 3
+    },
+    "thresholds_source": "default"
   }
 }

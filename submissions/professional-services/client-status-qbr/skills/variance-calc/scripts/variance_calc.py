@@ -5,7 +5,9 @@ Reads a ps.client-status-qbr.v1 payload and writes the same contract with
 variance_summary populated. Same input, same output: no network, no model calls,
 no randomness. The model quotes these values; it never computes RAG or variance.
 
-Constants mirror references/status-reporting-rules.md by section number.
+Constants mirror references/status-reporting-rules.md by section number. The user may
+override the schedule, budget and scope thresholds for one run via settings.thresholds,
+within the bounds of #8.1; every override is disclosed as an escalation.
 """
 import argparse
 import copy
@@ -24,6 +26,67 @@ INCLUDE_UNBILLED_WIP = True          # status-reporting-rules.md #3.3
 SCOPE_AMBER_OPEN_ITEMS = 1           # status-reporting-rules.md #4.1
 SCOPE_RED_OPEN_ITEMS = 3             # status-reporting-rules.md #4.2
 ROLLUP_ORDER = ["green", "amber", "red"]  # status-reporting-rules.md #6.1
+
+# The only thresholds a user may change in conversation, with the bounds the contract
+# enforces (#8.1). The engine re-checks them so a payload that skipped validation
+# still cannot run on an out-of-range value.
+OVERRIDABLE = {
+    "schedule_amber_days": ("SCHEDULE_AMBER_DAYS", 1, 29, "#2.1"),
+    "schedule_red_days": ("SCHEDULE_RED_DAYS", 2, 30, "#2.2"),
+    "budget_amber_pct": ("BUDGET_AMBER_PCT", 1, 24, "#3.1"),
+    "budget_red_pct": ("BUDGET_RED_PCT", 2, 25, "#3.2"),
+    "scope_amber_open_items": ("SCOPE_AMBER_OPEN_ITEMS", 1, 4, "#4.1"),
+    "scope_red_open_items": ("SCOPE_RED_OPEN_ITEMS", 2, 5, "#4.2"),
+}
+PAIRS = [
+    ("schedule_amber_days", "schedule_red_days"),
+    ("budget_amber_pct", "budget_red_pct"),
+    ("scope_amber_open_items", "scope_red_open_items"),
+]
+
+
+class SettingsError(ValueError):
+    pass
+
+
+def apply_settings(payload, escalations):
+    """Merge user thresholds over the published defaults and disclose every change.
+
+    Returns (thresholds_applied, thresholds_source). Keys that belong to item_age are
+    ignored here; that engine applies and discloses its own.
+    """
+    requested = (payload.get("settings") or {}).get("thresholds") or {}
+    defaults = {key: globals()[name] for key, (name, _lo, _hi, _rule) in OVERRIDABLE.items()}
+    applied = dict(defaults)
+    for key, value in requested.items():
+        if key not in OVERRIDABLE:
+            continue
+        _name, lo, hi, rule = OVERRIDABLE[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not lo <= value <= hi:
+            raise SettingsError(
+                f"settings.thresholds.{key} = {value!r} is outside the allowed range {lo}-{hi} "
+                "(status-reporting-rules.md #8.1)"
+            )
+        applied[key] = value
+    for amber, red in PAIRS:
+        if applied[amber] >= applied[red]:
+            raise SettingsError(
+                f"settings.thresholds: {amber} ({applied[amber]}) must be below {red} "
+                f"({applied[red]}) (status-reporting-rules.md #8.1)"
+            )
+    source = "default"
+    for key, (name, _lo, _hi, rule) in OVERRIDABLE.items():
+        globals()[name] = applied[key]
+        if applied[key] != defaults[key]:
+            source = "user"
+            add_escalation(
+                escalations,
+                f"settings: custom threshold {key} = {applied[key]} (published default "
+                f"{defaults[key]}, {rule}) was set by the user for this run - this pack does not "
+                "use the published thresholds, so state that before sharing it "
+                "(status-reporting-rules.md #8.1)",
+            )
+    return applied, source
 
 
 def parse_date(value):
@@ -434,6 +497,15 @@ def main():
 
     output = copy.deepcopy(payload)
     escalations = list(output.get("escalations", []))
+    try:
+        thresholds_applied, thresholds_source = apply_settings(output, escalations)
+    except SettingsError as exc:
+        print(
+            f"variance_calc: {exc}. Ask the user for a value inside the range, then re-run. "
+            "Do not compute the variance by hand.",
+            file=sys.stderr,
+        )
+        return 2
     schedule = schedule_summary(output, escalations)
     budget = budget_summary(output, escalations)
     scope = scope_summary(output, escalations)
@@ -446,6 +518,8 @@ def main():
         "source": ENGINE,
         "confidence": round(min(schedule["confidence"], budget["confidence"], scope["confidence"]), 2),
         "citation": "status-reporting-rules.md #6.1",
+        "thresholds_applied": thresholds_applied,
+        "thresholds_source": thresholds_source,
     }
     output["escalations"] = escalations
     engines = output.setdefault("provenance", {}).setdefault("engines", [])
@@ -491,7 +565,7 @@ if __name__ == "__main__":
     except KeyError as exc:
         sys.exit(_fatal(
             f"the payload is missing the required key {exc}. Re-run the skill that owns that "
-            "field rather than hand-editing the file."
+            "field so it is populated from a source document. Do not compute the variance by hand."
         ))
     except (TypeError, ValueError) as exc:
         sys.exit(_fatal(

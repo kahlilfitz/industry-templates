@@ -265,7 +265,16 @@
     "overall_rag": "green",
     "source": "engine:variance_calc",
     "confidence": 0.97,
-    "citation": "status-reporting-rules.md #6.1"
+    "citation": "status-reporting-rules.md #6.1",
+    "thresholds_applied": {
+      "schedule_amber_days": 5,
+      "schedule_red_days": 10,
+      "budget_amber_pct": 5.0,
+      "budget_red_pct": 10.0,
+      "scope_amber_open_items": 1,
+      "scope_red_open_items": 3
+    },
+    "thresholds_source": "default"
   },
   "aged_items": {
     "risks": [
@@ -368,6 +377,13 @@
     ],
     "source": "engine:item_age",
     "confidence": 0.95,
-    "citation": "status-reporting-rules.md #5.1-#5.5"
+    "citation": "status-reporting-rules.md #5.1-#5.5",
+    "thresholds_applied": {
+      "risk_stale_days": 45,
+      "risk_critical_days": 90,
+      "decision_overdue_days": 7,
+      "action_overdue_days": 7
+    },
+    "thresholds_source": "default"
   }
 }

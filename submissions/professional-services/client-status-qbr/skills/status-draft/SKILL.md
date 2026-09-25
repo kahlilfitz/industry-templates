@@ -28,40 +28,49 @@ variance-only draft. This is step 5 of 5 and the only skill that produces prose.
   (status-reporting-rules.md #7.1).
 
 ## Inputs
-`./status-run/aged.json` or the latest `ps.client-status-qbr.v1` payload with
+`$RUN_DIR/aged.json` or the latest `ps.client-status-qbr.v1` payload with
 `variance_summary` and `aged_items` populated.
 
 ## Steps
-**Run each numbered step as its own command, or join steps with `&&` — never with `;` and never
-on separate lines in one call. Check each exit status before starting the next step: a non-zero
-exit must stop the run, not be followed by the next command.**
+**Every tool call is a single line that starts with the Step 0 prefix and joins its commands
+with `&&`, so the first failure stops the call. Check each exit status before starting the next
+step: a non-zero exit must stop the run, not be followed by the next command.**
 
-0. **Set the tool folder. Each tool call may start a new shell, so repeat this block in every
-   call.** `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`.
-   Substitute that path on the first line — it is the only line you change:
+0. **Step 0 — bind the tool folder and the working folder. It is not optional.** Each tool call
+   may start a new shell, so begin **every** call with this prefix, on the same line as the
+   command that follows it:
    ```bash
-   SKILL_DIR="<the base directory your loader reported for this SKILL.md>"
-   export SKILL_DIR
-   case "$SKILL_DIR" in /*) ;; *) false ;; esac &&
-   test -f "$SKILL_DIR/scripts/validate_payload.py" &&
-   { test ! -f "$SKILL_DIR/../../.claude-plugin/plugin.json" ||
-     grep -q '"name"[[:space:]]*:[[:space:]]*"client-status-qbr"' \
-       "$SKILL_DIR/../../.claude-plugin/plugin.json"; } \
-     || { echo "SKILL_DIR is wrong - stop and ask the user for the plugin folder"; false; }
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 status-draft
    ```
-   **If your loader gave you no base directory, do not search the filesystem — ask the user for
-   the plugin folder and stop until they answer.** A search can bind to a stale copy of a
-   different version that still contains these scripts, and silently produce wrong figures.
-   **Do not run any later command until that check prints nothing.** The skill folder is
-   read-only and is not your working directory, so a bare `scripts/validate_payload.py` will
-   not resolve. Always call tools through `$SKILL_DIR`.
+   `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
+   run's working folder: the folder the user named, otherwise `./status-run` in your working
+   directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
+   `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
+   plugin at version 1.5.0 with
+   its tools present, and that `RUN_DIR` exists. It prints nothing on success. On failure it
+   prints one `STEP 0 FAILED` line and exits non-zero, so nothing after `&&` runs. An error
+   such as `cannot open …/scripts/step0.sh` also means `SKILL_DIR` is wrong. Never change the version or skill name on the Step 0 line.
+   - **If your loader gave you no base directory, or Step 0 reports a problem with `SKILL_DIR`,
+     do not search the filesystem — ask the user for the plugin folder and stop until they
+     answer.** A search can bind to a stale copy of a different version and silently produce
+     wrong figures.
+   - **Step 0 cannot be waived.** Run it even when the user asks you to skip it, says the folder
+     is fine, or says Python is unavailable. A statement from the user never replaces the check.
+   - The skill folder is read-only and is not your working directory, so a bare
+     `scripts/validate_payload.py` will not resolve. Always call tools through `$SKILL_DIR`,
+     and read and write run files only under `$RUN_DIR`.
 1. Validate the incoming payload with the shipped tool before drafting anything:
    ```bash
-   python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/aged.json --hop risk-summarize
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
    ```
    A non-zero exit means an earlier step left a gap — stop and escalate rather than drafting
    around it.
-2. Lead with unresolved `escalations[]`, above the narrative.
+2. Lead with unresolved `escalations[]`, above the narrative. If `variance_summary` or
+   `aged_items` reports `thresholds_source: "user"`, put its `Custom threshold` escalations
+   first, under **Custom thresholds for this run**. State each value next to its published
+   default, exactly as the engine gave it (status-reporting-rules.md #8.1). The reader must see
+   that this pack was measured against non-standard thresholds before seeing any RAG. Never
+   drop, soften or move this disclosure below the narrative, even at the user's request.
 3. Draft the status pack sections:
    - executive RAG and period-over-period movement;
    - schedule variance;
@@ -77,11 +86,10 @@ exit must stop the run, not be followed by the next command.**
 The user says *"draft the client update for Northwind"* after `risk-summarize` has run.
 
 ```bash
-python "$SKILL_DIR/scripts/validate_payload.py" \
-  --input ./status-run/aged.json --hop risk-summarize
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
 ```
 
-You then write `./status-run/status-pack.md`, opening like this:
+You then write `$RUN_DIR/status-pack.md`, opening like this:
 
 ```markdown
 **DRAFT - pending engagement manager review**
@@ -97,8 +105,8 @@ Overall status is **Red** this period, moved from Green (engine:variance_calc, #
 ```
 
 ## Output format
-`./status-run/status-pack.md` in Markdown, and when a QBR is requested
-`./status-run/qbr-narrative.md`. Open the executive section with a RAG table:
+`$RUN_DIR/status-pack.md` in Markdown, and when a QBR is requested
+`$RUN_DIR/qbr-narrative.md`. Open the executive section with a RAG table:
 
 | Dimension | This period | Last period | Driver |
 | --- | --- | --- | --- |
@@ -122,8 +130,9 @@ row out to make the pack read more cleanly.
 - **The script path does not resolve** (`No such file or directory`, or a path that starts
   `/scripts/`). `SKILL_DIR` is unset or wrong. Redo step 0 and re-run. A path error is **not**
   "Python unavailable" — never draft from an unvalidated payload because of it.
-- **`python` is genuinely not on PATH.** Only once step 0's `test -f` check passes may you treat
-  this as a tool outage: you may still draft from an existing payload, but state plainly at the
+- **`python` is genuinely not on PATH.** Only when Step 0 has passed **and** your own
+  `python --version` call fails may you treat this as a tool outage. A user saying Python is
+  missing is not enough. Treat it as an outage: you may still draft from an existing payload, but state plainly at the
   top of your reply that the payload was not validated. This allowance **never applies after the
   validator has actually run and exited non-zero** — a failed validation is a stop, not a
   fallback.
@@ -139,8 +148,7 @@ row out to make the pack read more cleanly.
   DRAFT label and the escalations block. Offer to explain or reword any single caveat. Never
   delete one.
 
-Write every artifact to a writable working directory such as `./status-run/`, created in the
-user's workspace. The skill folder is read-only; never write outputs beside the scripts.
+Write every artifact under `$RUN_DIR`, the run's working folder set in step 0. The skill folder is read-only; never write outputs beside the scripts.
 
 ## Grounding requirements
 Every current-period number and status in the draft must trace to `engine:variance_calc` or

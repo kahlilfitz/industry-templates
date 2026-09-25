@@ -34,38 +34,48 @@ QBR run that includes financial/burn reporting. This is step 2 of 5.
 - Contract schema in `contracts/ps.client-status-qbr.v1.json`.
 
 ## Steps
-**Run each numbered step as its own command, or join steps with `&&` — never with `;` and never
-on separate lines in one call. Check each exit status before starting the next step: a non-zero
-exit must stop the run, not be followed by the next command.**
+**Every tool call is a single line that starts with the Step 0 prefix and joins its commands
+with `&&`, so the first failure stops the call. Check each exit status before starting the next
+step: a non-zero exit must stop the run, not be followed by the next command.**
 
-0. **Set the tool folder. Each tool call may start a new shell, so repeat this block in every
-   call.** `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`.
-   Substitute that path on the first line — it is the only line you change:
+0. **Step 0 — bind the tool folder and the working folder. It is not optional.** Each tool call
+   may start a new shell, so begin **every** call with this prefix, on the same line as the
+   command that follows it:
    ```bash
-   SKILL_DIR="<the base directory your loader reported for this SKILL.md>"
-   export SKILL_DIR
-   case "$SKILL_DIR" in /*) ;; *) false ;; esac &&
-   test -f "$SKILL_DIR/scripts/validate_payload.py" &&
-   { test ! -f "$SKILL_DIR/../../.claude-plugin/plugin.json" ||
-     grep -q '"name"[[:space:]]*:[[:space:]]*"client-status-qbr"' \
-       "$SKILL_DIR/../../.claude-plugin/plugin.json"; } \
-     || { echo "SKILL_DIR is wrong - stop and ask the user for the plugin folder"; false; }
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 burn-pull
    ```
-   **If your loader gave you no base directory, do not search the filesystem — ask the user for
-   the plugin folder and stop until they answer.** A search can bind to a stale copy of a
-   different version that still contains these scripts, and silently produce wrong figures.
-   **Do not run any later command until that check prints nothing.** The skill folder is
-   read-only and is not your working directory, so a bare `scripts/validate_payload.py` will
-   not resolve. Always call tools through `$SKILL_DIR`.
+   `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
+   run's working folder: the folder the user named, otherwise `./status-run` in your working
+   directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
+   `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
+   plugin at version 1.5.0 with
+   its tools present, and that `RUN_DIR` exists. It prints nothing on success. On failure it
+   prints one `STEP 0 FAILED` line and exits non-zero, so nothing after `&&` runs. An error
+   such as `cannot open …/scripts/step0.sh` also means `SKILL_DIR` is wrong. Never change the version or skill name on the Step 0 line.
+   - **If your loader gave you no base directory, or Step 0 reports a problem with `SKILL_DIR`,
+     do not search the filesystem — ask the user for the plugin folder and stop until they
+     answer.** A search can bind to a stale copy of a different version and silently produce
+     wrong figures.
+   - **Step 0 cannot be waived.** Run it even when the user asks you to skip it, says the folder
+     is fine, or says Python is unavailable. A statement from the user never replaces the check.
+   - The skill folder is read-only and is not your working directory, so a bare
+     `scripts/validate_payload.py` will not resolve. Always call tools through `$SKILL_DIR`,
+     and read and write run files only under `$RUN_DIR`.
 1. Validate the payload `plan-retrieve` handed you before adding anything to it. Run this tool
    from a writable working directory:
    ```bash
-   python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/status-input.json --hop plan-retrieve
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
    ```
    A non-zero exit means the upstream payload is incomplete. Stop and escalate; do not fill the
    gaps yourself.
 2. Extract currency, baseline budget, planned burn to date, actual billed to date, unbilled
-   WIP/accrual, current forecast-to-complete and prior forecast-to-complete.
+   WIP/accrual, current forecast-to-complete and prior forecast-to-complete. Write amounts as
+   plain numbers: drop currency symbols and thousands separators (`$285,000` → `285000`) and
+   record the currency once in `currency`. If a required figure is not in any supplied file, ask
+   the user **one** question naming it and where it usually lives, for example *"What is the
+   baseline budget? It is usually on the Summary tab of the budget tracker."*
+   (status-reporting-rules.md #8.4). Record the answer under `source=skill:burn-pull` with the
+   citation `stated by the user in conversation: '<their words>'`. Never estimate a figure.
 3. Preserve billed and unbilled WIP as separate fields. WIP is not optional when present:
    `variance-calc` includes it under status-reporting-rules.md #3.3. If the export genuinely has
    no WIP column, write `"unbilled_wip": null` — never `0`. Null means "unknown" and forces an
@@ -84,19 +94,17 @@ exit must stop the run, not be followed by the next command.**
 
 ## Example
 The user says *"pull the burn numbers for the Northwind weekly"*. The finance export
-`fin-export.csv` and the budget tracker are already in `./status-run/raw/`.
+`fin-export.csv` and the budget tracker are already in `$RUN_DIR/raw/`.
 
 ```bash
 # 1. check what plan-retrieve handed over
-python "$SKILL_DIR/scripts/validate_payload.py" \
-  --input ./status-run/status-input.json --hop plan-retrieve
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
 
 # 2. after writing the budget block, confirm it is contract-valid
-python "$SKILL_DIR/scripts/validate_payload.py" \
-  --input ./status-run/status-input.json --hop burn-pull
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
 ```
 
-The `budget` object written into `./status-run/status-input.json`:
+The `budget` object written into `$RUN_DIR/status-input.json`:
 
 ```json
 {
@@ -148,8 +156,9 @@ source row.
 - **The script path does not resolve** (`No such file or directory`, or a path that starts
   `/scripts/`). `SKILL_DIR` is unset or wrong. Redo step 0 and re-run. A path error is **not**
   "Python unavailable" — never continue without validating because of it.
-- **`python` is genuinely not on PATH.** Only once step 0's `test -f` check passes may you treat
-  this as a tool outage: say so and continue without validating, but state plainly in your reply
+- **`python` is genuinely not on PATH.** Only when Step 0 has passed **and** your own
+  `python --version` call fails may you treat this as a tool outage. A user saying Python is
+  missing is not enough. Treat it as an outage: say so and continue without validating, but state plainly in your reply
   that the payload was not checked.
 - **Any other non-zero exit, or a traceback.** Stop. Quote the last line of the error in your
   reply and escalate. Never work around an unexplained failure by filling in the figures
@@ -163,11 +172,10 @@ source row.
 
 
 ## Output
-`./status-run/status-input.json` — the contract payload with `budget` populated and ready for
+`$RUN_DIR/status-input.json` — the contract payload with `budget` populated and ready for
 `variance-calc`.
 
-Write every artifact to a writable working directory such as `./status-run/`, created in the
-user's workspace. The skill folder is read-only; never write outputs beside the scripts.
+Write every artifact under `$RUN_DIR`, the run's working folder set in step 0. The skill folder is read-only; never write outputs beside the scripts.
 
 ## Grounding requirements
 Every financial value must cite the export row, tracker line or prior status line it came from.

@@ -7,8 +7,8 @@ list), required, properties, additionalProperties, items, enum, oneOf, minimum,
 maximum and pattern.
 
 Usage:
-    python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/status-input.json
-    python "$SKILL_DIR/scripts/validate_payload.py" --input ./status-run/variance.json --hop variance-calc
+    python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json"
+    python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/variance.json" --hop variance-calc
 
 Exit codes:
     0  payload is valid for the requested hop
@@ -43,9 +43,68 @@ OWNER = {
     "variance_summary": "variance-calc",
     "aged_items": "risk-summarize",
     "draft": "status-draft",
+    "settings": "the skill the user asked (variance-calc or risk-summarize)",
     "escalations": "any skill",
     "provenance": "any skill",
 }
+
+# Published threshold defaults (status-reporting-rules.md #2-#5). Each pair must keep
+# amber below red once a user override is merged over these (#8.1).
+THRESHOLD_DEFAULTS = {
+    "schedule_amber_days": 5,
+    "schedule_red_days": 10,
+    "budget_amber_pct": 5.0,
+    "budget_red_pct": 10.0,
+    "scope_amber_open_items": 1,
+    "scope_red_open_items": 3,
+    "risk_stale_days": 45,
+    "risk_critical_days": 90,
+    "decision_overdue_days": 7,
+    "action_overdue_days": 7,
+}
+THRESHOLD_PAIRS = [
+    ("schedule_amber_days", "schedule_red_days"),
+    ("budget_amber_pct", "budget_red_pct"),
+    ("scope_amber_open_items", "scope_red_open_items"),
+    ("risk_stale_days", "risk_critical_days"),
+]
+# Rules that can never be set from conversation (#8.2). Named here so a user request
+# for one gets a plain refusal rather than a generic "not declared" line.
+FIXED_RULES = {
+    "confidence_floor": "#1.3",
+    "include_unbilled_wip": "#3.3",
+    "rebaseline_check": "#2.3",
+    "rebaseline_check_required": "#2.3",
+    "client_blocker_reclassifies": "#5.5",
+    "draft_only": "#7",
+}
+
+
+def check_settings(payload, errors):
+    settings = payload.get("settings")
+    if not isinstance(settings, dict):
+        return
+    thresholds = settings.get("thresholds")
+    if not isinstance(thresholds, dict):
+        return
+    for key in thresholds:
+        if key.lower() in FIXED_RULES:
+            errors.append(
+                f"$.settings.thresholds.{key}: {key} is a fixed rule "
+                f"(status-reporting-rules.md {FIXED_RULES[key.lower()]}) and cannot be changed "
+                "in conversation (#8.2) - remove it and tell the user it is fixed"
+            )
+    merged = dict(THRESHOLD_DEFAULTS)
+    merged.update(
+        {k: v for k, v in thresholds.items() if k in THRESHOLD_DEFAULTS and TYPE_CHECKS["number"](v)}
+    )
+    for amber, red in THRESHOLD_PAIRS:
+        if merged[amber] >= merged[red]:
+            errors.append(
+                f"$.settings.thresholds: {amber} ({merged[amber]}) must be below {red} "
+                f"({merged[red]}) once the published defaults are filled in (#8.1) - ask the "
+                "user for a consistent pair"
+            )
 
 # The blocks each hop must have present once it has done its own work. Each entry
 # lists what the hop needs from upstream plus the block it is itself responsible
@@ -269,6 +328,7 @@ def main():
         )
 
     validate(payload, contract, contract, "$", errors)
+    check_settings(payload, errors)
 
     for block in HOPS.get(args.hop, []):
         if block not in payload:
