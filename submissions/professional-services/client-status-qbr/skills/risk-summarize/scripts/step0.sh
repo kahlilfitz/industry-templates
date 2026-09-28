@@ -5,9 +5,14 @@
 # Since 1.5.1 it also verifies the shared files (contract, rules, validate_payload.py, step0.sh,
 # VERSION) against scripts/SHARED.sha256, and that manifest against the plugin-root copy, so a
 # drifted or tampered copy fails Step 0 instead of passing silently.
-# Maintainers: after changing any shared file, regenerate the manifest from the plugin root with
+# Since 1.6.0 the manifest also covers the two engines (variance_calc.py, item_age.py), which is
+# where the RAG thresholds actually live; each skill verifies its own engine.
+# Maintainers: after changing any shared file or engine, regenerate the manifest from the plugin
+# root with
 #   sha256sum contracts/ps.client-status-qbr.v1.json references/status-reporting-rules.md \
-#     scripts/validate_payload.py scripts/step0.sh scripts/VERSION > scripts/SHARED.sha256
+#     scripts/validate_payload.py scripts/step0.sh scripts/VERSION \
+#     skills/variance-calc/scripts/variance_calc.py \
+#     skills/risk-summarize/scripts/item_age.py > scripts/SHARED.sha256
 # and copy the shared files plus SHARED.sha256 identically into every skills/<name>/ folder.
 
 stop_plugin() {
@@ -59,6 +64,28 @@ root_shared="$SKILL_DIR/../../scripts/SHARED.sha256"
 if [ -f "$SKILL_DIR/../../.claude-plugin/plugin.json" ] && [ -f "$root_shared" ]; then
   [ "$(sha256_of "$root_shared")" = "$(sha256_of "$shared")" ] ||
     stop_plugin "this skill's scripts/SHARED.sha256 differs from the plugin-root copy - the shared files have drifted between skills"
+fi
+
+# The engines are not mirrored, so the manifest keys them by their path from the plugin root and
+# each skill verifies only its own. Without this the integrity check covered every shared file but
+# not the code that computes the RAG thresholds.
+engine_rel=""
+engine_key=""
+case "$skill" in
+  variance-calc)
+    engine_rel="scripts/variance_calc.py"
+    engine_key="skills/variance-calc/scripts/variance_calc.py"
+    ;;
+  risk-summarize)
+    engine_rel="scripts/item_age.py"
+    engine_key="skills/risk-summarize/scripts/item_age.py"
+    ;;
+esac
+if [ -n "$engine_key" ]; then
+  expect=$(tr -d '\r' < "$shared" | awk -v p="$engine_key" '$2 == p { print $1; exit }')
+  [ -n "$expect" ] || stop_plugin "scripts/SHARED.sha256 has no entry for $engine_key"
+  got=$(sha256_of "$SKILL_DIR/$engine_rel") || stop_plugin "no SHA-256 tool (sha256sum, shasum or python) is available to verify $engine_rel"
+  [ "$got" = "$expect" ] || stop_plugin "the engine $engine_rel in SKILL_DIR does not match scripts/SHARED.sha256 - this copy has drifted or been edited"
 fi
 
 manifest="$SKILL_DIR/../../.claude-plugin/plugin.json"

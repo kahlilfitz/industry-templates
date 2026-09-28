@@ -176,6 +176,7 @@
     "M-401: reported green after rebaseline, but forecast is 14 days against original baseline (status-reporting-rules.md #2.3)",
     "budget: forecast-to-complete moved +75000 since the prior pack (705000 -> 780000) - include this movement in the draft (status-reporting-rules.md #3.4)",
     "budget: billed-only burn is 473000 (-5.4% vs plan) but unbilled WIP 95000.0 changes actual burn to 568000.0 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
+    "R-401: risk has an unrecognised status 'open, monitoring' - counted as open so it is not dropped, but it must be mapped to a known open or closed status before the pack goes out (status-reporting-rules.md #1.1)",
     "R-401: open risk aged 102 days - re-rate required (status-reporting-rules.md #5.2)",
     "D-401: decision 10 days overdue (status-reporting-rules.md #5.3)",
     "A-401: action 8 days overdue (status-reporting-rules.md #5.4)",

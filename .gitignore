@@ -8,3 +8,9 @@ dist/
 
 # Generated download packages — rebuilt from submissions/ on every build.
 public/bundles/
+
+# Python build litter. Submissions ship scripts the agent runs from the plugin
+# folder, which leaves these next to the source; they must never be committed
+# or bundled.
+__pycache__/
+*.pyc

@@ -22,6 +22,7 @@ responsible for populating it, so the fix is unambiguous.
 import argparse
 import datetime
 import json
+import math
 import os
 import re
 import sys
@@ -157,11 +158,32 @@ def resolve(schema, root):
     return schema
 
 
+def reject_non_finite(token):
+    """json.load accepts the bare tokens NaN, Infinity and -Infinity by default.
+    They are not valid JSON and no downstream consumer handles them, so refuse
+    the file rather than letting a non-finite value into a RAG comparison."""
+    raise ValueError(
+        f"{token} is not valid JSON. A budget or schedule figure came through as a "
+        "non-finite number - usually an empty or text cell in the source export. Fix "
+        "the source value and re-run."
+    )
+
+
+def is_finite_number(value):
+    """NaN and Infinity are floats, so a bare isinstance check lets them through.
+    NaN then compares False against every threshold and reads as GREEN - an empty
+    WIP cell written by pandas is enough to turn a red budget green. Reject both
+    here so a non-finite amount can never reach a RAG comparison."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(value)
+
+
 TYPE_CHECKS = {
     "object": lambda v: isinstance(v, dict),
     "array": lambda v: isinstance(v, list),
     "string": lambda v: isinstance(v, str),
-    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+    "number": is_finite_number,
     "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
     "boolean": lambda v: isinstance(v, bool),
     "null": lambda v: v is None,
@@ -295,16 +317,21 @@ def main():
 
     try:
         with open(args.input, encoding="utf-8") as handle:
-            payload = json.load(handle)
+            payload = json.load(handle, parse_constant=reject_non_finite)
     except FileNotFoundError:
         print(f"validate_payload: no such file {args.input}", file=sys.stderr)
         return 2
-    except json.JSONDecodeError as exc:
-        print(
-            f"validate_payload: {args.input} is not valid JSON - {exc}. The previous skill "
-            "most likely wrote prose into the file instead of a JSON object.",
-            file=sys.stderr,
-        )
+    except ValueError as exc:
+        # JSONDecodeError subclasses ValueError, so this catches both a malformed
+        # file and a non-finite token surfaced by reject_non_finite.
+        if isinstance(exc, json.JSONDecodeError):
+            print(
+                f"validate_payload: {args.input} is not valid JSON - {exc}. The previous "
+                "skill most likely wrote prose into the file instead of a JSON object.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"validate_payload: {args.input} - {exc}", file=sys.stderr)
         return 2
 
     with open(contract_path, encoding="utf-8") as handle:

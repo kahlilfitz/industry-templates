@@ -97,12 +97,21 @@ def days_between(later, earlier):
     return (parse_date(later) - parse_date(earlier)).days
 
 
-def pct(numerator, denominator):
-    """Returns None when the denominator is zero so the caller must escalate
-    rather than silently reporting 0.0% (and therefore green)."""
+def pct_exact(numerator, denominator):
+    """Unrounded percentage, for threshold comparison only. Returns None when the
+    denominator is zero so the caller must escalate rather than silently
+    reporting 0.0% (and therefore green)."""
     if denominator == 0:
         return None
-    return round(100.0 * numerator / denominator, 2)
+    return 100.0 * numerator / denominator
+
+
+def pct(numerator, denominator):
+    """Percentage rounded to 2 dp, for display and for the reported facts.
+    Never compare this against a RAG threshold - rounding first made 4.995%
+    read amber and 9.996% read red. Use pct_exact() for comparisons."""
+    exact = pct_exact(numerator, denominator)
+    return None if exact is None else round(exact, 2)
 
 
 def add_escalation(escalations, message):
@@ -110,6 +119,121 @@ def add_escalation(escalations, message):
     is idempotent."""
     if message not in escalations:
         escalations.append(message)
+
+
+# --- shared status vocabulary -------------------------------------------------
+# Keep this block byte-identical in variance_calc.py and item_age.py; SHARED.sha256
+# covers both engines so a drifted copy fails Step 0.
+#
+# Statuses come from hand-maintained registers, so they arrive with stray
+# whitespace, mixed case and mixed separators. Classifying them in one place is
+# what stops a "Resolved" risk ageing as critical, a "Completed" action reporting
+# overdue, a "Closed " (trailing space) item staying open and a "Rejected" change
+# request dragging scope to amber.
+
+CLOSED_STATUSES = frozenset(
+    {
+        "accepted",
+        "agreed",
+        "approved",
+        "canceled",
+        "cancelled",
+        "closed",
+        "complete",
+        "completed",
+        "declined",
+        "delivered",
+        "done",
+        "duplicate",
+        "implemented",
+        "mitigated",
+        "no longer required",
+        "not required",
+        "obsolete",
+        "rejected",
+        "resolved",
+        "retired",
+        "signed off",
+        "superseded",
+        "void",
+        "withdrawn",
+    }
+)
+
+OPEN_STATUSES = frozenset(
+    {
+        "active",
+        "assigned",
+        "at risk",
+        "awaiting approval",
+        "awaiting client",
+        "awaiting decision",
+        "blocked",
+        "deferred",
+        "draft",
+        "escalated",
+        "for approval",
+        "in flight",
+        "in progress",
+        "in review",
+        "live",
+        "monitoring",
+        "new",
+        "not started",
+        "on hold",
+        "ongoing",
+        "open",
+        "overdue",
+        "pending",
+        "planned",
+        "proposed",
+        "raised",
+        "submitted",
+        "to do",
+        "todo",
+        "under review",
+        "wip",
+        "work in progress",
+    }
+)
+
+
+def normalise_status(value):
+    """Lower-case, collapse whitespace and treat - and _ as spaces, so
+    'In_Progress', 'in-progress' and '  In Progress ' are one status."""
+    if value is None:
+        return ""
+    text = str(value).replace("_", " ").replace("-", " ")
+    return " ".join(text.split()).casefold()
+
+
+def status_state(value):
+    """Classify a raw status string as 'open', 'closed' or 'unknown'."""
+    norm = normalise_status(value)
+    if not norm:
+        return "unknown"
+    if norm in CLOSED_STATUSES:
+        return "closed"
+    if norm in OPEN_STATUSES:
+        return "open"
+    return "unknown"
+
+
+def is_open(item, kind=None, escalations=None):
+    """An unknown status counts as OPEN so the item cannot vanish from the pack,
+    but it is escalated so a human maps it rather than the engine guessing."""
+    raw = item.get("status")
+    state = status_state(raw)
+    if state == "unknown" and escalations is not None:
+        shown = str(raw).strip() if str(raw or "").strip() else "(missing)"
+        add_escalation(
+            escalations,
+            f"{item.get('id', '(unknown id)')}: {kind or 'item'} has an unrecognised status "
+            f"'{shown}' - counted as open so it is not dropped, but it must be mapped to a "
+            "known open or closed status before the pack goes out "
+            "(status-reporting-rules.md #1.1)",
+        )
+    return state != "closed"
 
 
 def rag_from_threshold(value, amber, red, strict=False):
@@ -347,8 +471,12 @@ def budget_summary(payload, escalations):
             )
     # Percentages used for the RAG comparison only; unmeasurable values are reported as
     # null in the facts so a 0.0 is never mistaken for a real zero variance.
-    burn_pct_for_rag = burn_variance_pct if burn_measurable else 0.0
-    forecast_pct_for_rag = forecast_variance_pct if forecast_measurable else 0.0
+    # Compare the UNROUNDED percentages: rounding to 2 dp first pushed 4.995% over the
+    # 5% amber line and 9.996% over the 10% red line.
+    burn_pct_for_rag = pct_exact(burn_variance_amount, planned) if burn_measurable else 0.0
+    forecast_pct_for_rag = (
+        pct_exact(forecast_variance_amount, baseline_budget) if forecast_measurable else 0.0
+    )
     largest_variance_pct = max(abs(burn_pct_for_rag), abs(forecast_pct_for_rag))
     rag = rag_from_threshold(largest_variance_pct, BUDGET_AMBER_PCT, BUDGET_RED_PCT)
     if not (burn_measurable and forecast_measurable) and actual_with_wip > 0:
@@ -427,7 +555,7 @@ def budget_summary(payload, escalations):
 
 def scope_summary(payload, escalations):
     changes = payload.get("plan", {}).get("scope_changes", [])
-    open_changes = [c for c in changes if c.get("status", "").lower() not in ("approved", "closed", "cancelled")]
+    open_changes = [c for c in changes if is_open(c, "scope change", escalations)]
     client_facing = [c for c in open_changes if c.get("client_facing_impact")]
     rag = "green"
     if len(open_changes) >= SCOPE_RED_OPEN_ITEMS or client_facing:
@@ -478,14 +606,29 @@ def scope_summary(payload, escalations):
     }
 
 
+def reject_non_finite(token):
+    """json.load accepts the bare tokens NaN, Infinity and -Infinity by default.
+    NaN compares False against every threshold, so a single empty cell in a burn
+    export can turn a red budget green. Refuse the file instead."""
+    raise ValueError(
+        f"{token} is not valid JSON. A figure came through as a non-finite number - "
+        "usually an empty or text cell in the source export. Fix the source value "
+        "and re-run."
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Compute deterministic status/QBR variance.")
     parser.add_argument("--input", required=True, help="ps.client-status-qbr.v1 JSON input")
     parser.add_argument("--out", required=True, help="output JSON path")
     args = parser.parse_args()
 
-    with open(args.input, encoding="utf-8") as handle:
-        payload = json.load(handle)
+    try:
+        with open(args.input, encoding="utf-8") as handle:
+            payload = json.load(handle, parse_constant=reject_non_finite)
+    except ValueError as exc:
+        print(f"variance_calc: {args.input} - {exc}", file=sys.stderr)
+        return 2
     found = payload.get("contract_version")
     if found != "ps.client-status-qbr.v1":
         print(

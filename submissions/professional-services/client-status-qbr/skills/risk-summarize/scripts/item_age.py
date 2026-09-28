@@ -132,13 +132,119 @@ def note_missing_opened_date(item, kind, escalations):
     )
 
 
-def is_open(item):
-    return str(item.get("status") or "").lower() not in (
-        "closed",
-        "done",
-        "cancelled",
+# --- shared status vocabulary -------------------------------------------------
+# Keep this block byte-identical in variance_calc.py and item_age.py; SHARED.sha256
+# covers both engines so a drifted copy fails Step 0.
+#
+# Statuses come from hand-maintained registers, so they arrive with stray
+# whitespace, mixed case and mixed separators. Classifying them in one place is
+# what stops a "Resolved" risk ageing as critical, a "Completed" action reporting
+# overdue, a "Closed " (trailing space) item staying open and a "Rejected" change
+# request dragging scope to amber.
+
+CLOSED_STATUSES = frozenset(
+    {
+        "accepted",
+        "agreed",
         "approved",
-    )
+        "canceled",
+        "cancelled",
+        "closed",
+        "complete",
+        "completed",
+        "declined",
+        "delivered",
+        "done",
+        "duplicate",
+        "implemented",
+        "mitigated",
+        "no longer required",
+        "not required",
+        "obsolete",
+        "rejected",
+        "resolved",
+        "retired",
+        "signed off",
+        "superseded",
+        "void",
+        "withdrawn",
+    }
+)
+
+OPEN_STATUSES = frozenset(
+    {
+        "active",
+        "assigned",
+        "at risk",
+        "awaiting approval",
+        "awaiting client",
+        "awaiting decision",
+        "blocked",
+        "deferred",
+        "draft",
+        "escalated",
+        "for approval",
+        "in flight",
+        "in progress",
+        "in review",
+        "live",
+        "monitoring",
+        "new",
+        "not started",
+        "on hold",
+        "ongoing",
+        "open",
+        "overdue",
+        "pending",
+        "planned",
+        "proposed",
+        "raised",
+        "submitted",
+        "to do",
+        "todo",
+        "under review",
+        "wip",
+        "work in progress",
+    }
+)
+
+
+def normalise_status(value):
+    """Lower-case, collapse whitespace and treat - and _ as spaces, so
+    'In_Progress', 'in-progress' and '  In Progress ' are one status."""
+    if value is None:
+        return ""
+    text = str(value).replace("_", " ").replace("-", " ")
+    return " ".join(text.split()).casefold()
+
+
+def status_state(value):
+    """Classify a raw status string as 'open', 'closed' or 'unknown'."""
+    norm = normalise_status(value)
+    if not norm:
+        return "unknown"
+    if norm in CLOSED_STATUSES:
+        return "closed"
+    if norm in OPEN_STATUSES:
+        return "open"
+    return "unknown"
+
+
+def is_open(item, kind=None, escalations=None):
+    """An unknown status counts as OPEN so the item cannot vanish from the pack,
+    but it is escalated so a human maps it rather than the engine guessing."""
+    raw = item.get("status")
+    state = status_state(raw)
+    if state == "unknown" and escalations is not None:
+        shown = str(raw).strip() if str(raw or "").strip() else "(missing)"
+        add_escalation(
+            escalations,
+            f"{item.get('id', '(unknown id)')}: {kind or 'item'} has an unrecognised status "
+            f"'{shown}' - counted as open so it is not dropped, but it must be mapped to a "
+            "known open or closed status before the pack goes out "
+            "(status-reporting-rules.md #1.1)",
+        )
+    return state != "closed"
 
 
 def base_record(item, as_of, bucket, reason, rule, client_action=False, kind="item"):
@@ -290,14 +396,29 @@ def classify_action(item, decisions_by_id, as_of, escalations):
     return base_record(item, as_of, bucket, reason, rule, client_action=client_action, kind="action")
 
 
+def reject_non_finite(token):
+    """json.load accepts the bare tokens NaN, Infinity and -Infinity by default.
+    NaN compares False against every threshold and would age silently as if the
+    item were fine. Refuse the file instead."""
+    raise ValueError(
+        f"{token} is not valid JSON. A figure came through as a non-finite number - "
+        "usually an empty or text cell in the source export. Fix the source value "
+        "and re-run."
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Age risks, decisions and actions deterministically.")
     parser.add_argument("--input", required=True, help="ps.client-status-qbr.v1 JSON input")
     parser.add_argument("--out", required=True, help="output JSON path")
     args = parser.parse_args()
 
-    with open(args.input, encoding="utf-8") as handle:
-        payload = json.load(handle)
+    try:
+        with open(args.input, encoding="utf-8") as handle:
+            payload = json.load(handle, parse_constant=reject_non_finite)
+    except ValueError as exc:
+        print(f"item_age: {args.input} - {exc}", file=sys.stderr)
+        return 2
     found = payload.get("contract_version")
     if found != "ps.client-status-qbr.v1":
         print(
@@ -339,12 +460,20 @@ def main():
             "(status-reporting-rules.md #1.1,#5.1)",
         )
 
-    risks = [classify_risk(item, as_of, escalations) for item in output.get("risks", []) if is_open(item)]
-    decisions = [classify_decision(item, as_of, escalations) for item in output.get("decisions", []) if is_open(item)]
+    risks = [
+        classify_risk(item, as_of, escalations)
+        for item in output.get("risks", [])
+        if is_open(item, "risk", escalations)
+    ]
+    decisions = [
+        classify_decision(item, as_of, escalations)
+        for item in output.get("decisions", [])
+        if is_open(item, "decision", escalations)
+    ]
     actions = [
         classify_action(item, decisions_by_id, as_of, escalations)
         for item in output.get("actions", [])
-        if is_open(item)
+        if is_open(item, "action", escalations)
     ]
     # A pending client action is anything the client still owes us, whether it is
     # logged as an action or as an unmade client decision (#5.5).

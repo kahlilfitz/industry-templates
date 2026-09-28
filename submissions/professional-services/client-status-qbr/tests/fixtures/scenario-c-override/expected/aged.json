@@ -178,6 +178,7 @@
     "budget: forecast-to-complete moved +75000 since the prior pack (705000 -> 780000) - include this movement in the draft (status-reporting-rules.md #3.4)",
     "budget: billed-only burn is 473000 (-5.4% vs plan) but unbilled WIP 95000.0 changes actual burn to 568000.0 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
     "settings: custom threshold risk_critical_days = 120 (published default 90, #5.2) was set by the user for this run - this pack does not use the published thresholds, so state that before sharing it (status-reporting-rules.md #8.1)",
+    "R-401: risk has an unrecognised status 'open, monitoring' - counted as open so it is not dropped, but it must be mapped to a known open or closed status before the pack goes out (status-reporting-rules.md #1.1)",
     "D-401: decision 10 days overdue (status-reporting-rules.md #5.3)",
     "A-401: action 8 days overdue (status-reporting-rules.md #5.4)",
     "A-401: logged as internal but blocked by client decision - classified as pending client action (status-reporting-rules.md #5.5)"

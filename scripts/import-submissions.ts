@@ -42,6 +42,20 @@ const NEVER_BUNDLE = new Set([
   "tests",
 ]);
 
+/**
+ * Build litter that can turn up at any depth, not just the top level. Several
+ * submissions ship Python that the agent is told to run from the plugin folder,
+ * which leaves `__pycache__` next to the script; the compiled files embed the
+ * author's absolute paths, so they must never reach a downloader.
+ */
+const LITTER_DIRS = new Set(["__pycache__", ".pytest_cache", ".ruff_cache", ".DS_Store"]);
+
+function isBuildLitter(rel: string): boolean {
+  return rel
+    .split(posix.sep)
+    .some((segment) => LITTER_DIRS.has(segment) || segment.endsWith(".pyc"));
+}
+
 const errors: string[] = [];
 const notes: string[] = [];
 
@@ -216,6 +230,7 @@ function exportCatalogSkills(dir: string, slug: string, outputDir: string): stri
     const folder = `${slug}-${name}`;
     const to = join(outputDir, folder);
     for (const rel of walk(from)) {
+      if (isBuildLitter(rel)) continue;
       // Reject anything that could escape the output directory before writing.
       const segments = rel.split(posix.sep);
       if (segments.some((s) => !s || s === "." || s === "..")) {
@@ -420,7 +435,7 @@ function main() {
     const zip = new AdmZip();
     for (const rel of walk(dir)) {
       const top = rel.split(posix.sep)[0];
-      if (NEVER_BUNDLE.has(top)) continue;
+      if (NEVER_BUNDLE.has(top) || isBuildLitter(rel)) continue;
       zip.addFile(`${slug}/${rel}`, readFileSync(join(dir, rel.split(posix.sep).join(sep))));
     }
     for (const entry of zip.getEntries()) entry.header.time = stamp;

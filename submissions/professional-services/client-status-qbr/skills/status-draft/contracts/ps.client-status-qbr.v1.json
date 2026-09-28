@@ -188,13 +188,16 @@
         },
         "baseline_budget": {
           "type": "number",
+          "minimum": 0,
           "description": "Approved baseline budget for the whole engagement, in the engagement currency."
         },
         "planned_burn_to_date": {
-          "type": "number"
+          "type": "number",
+          "minimum": 0
         },
         "actual_billed_to_date": {
-          "type": "number"
+          "type": "number",
+          "minimum": 0
         },
         "unbilled_wip": {
           "type": [
@@ -205,10 +208,12 @@
         },
         "forecast_to_complete": {
           "type": "number",
+          "minimum": 0,
           "description": "Estimate at completion (EAC): total forecast cost for the whole engagement including burn already incurred, in the engagement currency. This is NOT the remaining cost to complete. variance-calc compares it directly to baseline_budget under status-reporting-rules.md #3.2."
         },
         "previous_forecast_to_complete": {
-          "type": "number"
+          "type": "number",
+          "minimum": 0
         },
         "source": {
           "type": "string",
