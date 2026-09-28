@@ -40,13 +40,13 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
    may start a new shell, so begin **every** call with this prefix, on the same line as the
    command that follows it:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 status-draft
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.0 status-draft
    ```
    `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
    run's working folder: the folder the user named, otherwise `./status-run` in your working
    directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
    `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
-   plugin at version 1.5.1 with
+   plugin at version 1.6.0 with
    its tools present, that its shared files (contract, rules, validator, `step0.sh`, `VERSION`)
    match `scripts/SHARED.sha256` and the plugin-root copy of that manifest, and that `RUN_DIR`
    exists. A `does not match scripts/SHARED.sha256` failure means this copy has drifted; stop and
@@ -64,7 +64,7 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
      and read and write run files only under `$RUN_DIR`.
 1. Validate the incoming payload with the shipped tool before drafting anything:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.0 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
    ```
    A non-zero exit means an earlier step left a gap — stop and escalate rather than drafting
    around it.
@@ -126,7 +126,7 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
 The user says *"draft the client update for Northwind"* after `risk-summarize` has run.
 
 ```bash
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.0 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
 ```
 
 You write `$RUN_DIR/internal-review.md` first, opening like this:

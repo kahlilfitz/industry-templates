@@ -48,13 +48,13 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
    may start a new shell, so begin **every** call with this prefix, on the same line as the
    command that follows it:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 burn-pull
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.0 burn-pull
    ```
    `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
    run's working folder: the folder the user named, otherwise `./status-run` in your working
    directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
    `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
-   plugin at version 1.5.1 with
+   plugin at version 1.6.0 with
    its tools present, that its shared files (contract, rules, validator, `step0.sh`, `VERSION`)
    match `scripts/SHARED.sha256` and the plugin-root copy of that manifest, and that `RUN_DIR`
    exists. A `does not match scripts/SHARED.sha256` failure means this copy has drifted; stop and
@@ -73,7 +73,7 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
 1. Validate the payload `plan-retrieve` handed you before adding anything to it. Run this tool
    from a writable working directory:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.0 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
    ```
    A non-zero exit means the upstream payload is incomplete. Stop and escalate; do not fill the
    gaps yourself.
@@ -132,10 +132,10 @@ The user says *"pull the burn numbers for the Northwind weekly"*. The finance ex
 
 ```bash
 # 1. check what plan-retrieve handed over
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.0 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
 
 # 2. after writing the budget block, confirm it is contract-valid
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.0 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
 ```
 
 The `budget` object written into `$RUN_DIR/status-input.json`:
