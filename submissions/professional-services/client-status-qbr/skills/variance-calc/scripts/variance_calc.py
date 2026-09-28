@@ -147,6 +147,7 @@ CLOSED_STATUSES = frozenset(
         "closed",
         "complete",
         "completed",
+        "decided",
         "declined",
         "delivered",
         "done",
@@ -606,8 +607,57 @@ def schedule_summary(payload, escalations):
     }
 
 
+# Amounts the contract constrains to a non-negative number. The validator enforces this
+# too, but the engines are run directly and a caller can skip it, so refuse here as well:
+# a negative or boolean budget figure produces a confident, wrong RAG rather than an error.
+NON_NEGATIVE_AMOUNTS = (
+    "baseline_budget",
+    "planned_burn_to_date",
+    "actual_billed_to_date",
+    "forecast_to_complete",
+    "previous_forecast_to_complete",
+)
+
+
+def check_budget_amounts(budget):
+    """Return a list of reasons this budget block cannot be computed on."""
+    problems = []
+    for field in NON_NEGATIVE_AMOUNTS:
+        if field not in budget:
+            continue
+        value = budget[field]
+        # bool is a subclass of int, and True would silently compute as 1.
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            problems.append(
+                f"budget.{field} is {type(value).__name__}, not a number - the finance "
+                "extract is malformed; re-run burn-pull rather than computing on it"
+            )
+        elif value < 0:
+            problems.append(
+                f"budget.{field} is {value}, which is negative - a negative budget amount "
+                "is a sign-convention or extract error and would produce a confident but "
+                "wrong RAG (status-reporting-rules.md #3.1)"
+            )
+    # unbilled_wip is deliberately absent from the list: a credit note or a reversal makes
+    # a genuinely negative WIP figure, and null means unknown, which is handled below.
+    wip = budget.get("unbilled_wip")
+    if wip is not None and (isinstance(wip, bool) or not isinstance(wip, (int, float))):
+        problems.append(
+            f"budget.unbilled_wip is {type(wip).__name__}, not a number or null - "
+            "re-run burn-pull"
+        )
+    return problems
+
+
 def budget_summary(payload, escalations):
     budget = require(payload, "budget", "burn-pull")
+    problems = check_budget_amounts(budget)
+    if problems:
+        raise SystemExit(
+            "variance_calc: the budget block cannot be computed on:\n"
+            + "\n".join(f"  - {problem}" for problem in problems)
+            + "\nFix it at source and re-run burn-pull; do not adjust the figures by hand."
+        )
     # A burn percentage only means something once you know what is being burned and who
     # carries the overrun. Establish both before computing anything (#3.5, #3.6).
     commercial_model = budget.get("commercial_model") or "unknown"

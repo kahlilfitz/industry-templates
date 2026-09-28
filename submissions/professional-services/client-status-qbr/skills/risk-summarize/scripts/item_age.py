@@ -157,6 +157,7 @@ CLOSED_STATUSES = frozenset(
         "closed",
         "complete",
         "completed",
+        "decided",
         "declined",
         "delivered",
         "done",
