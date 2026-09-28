@@ -50,6 +50,8 @@ firm standard.
 |---|---|---|
 | 6.1 | Overall RAG | Worst of schedule, budget and scope RAG using green < amber < red |
 | 6.2 | Any open escalation from rules #1-#5, #7.2 or #8 | Surface above the drafted narrative |
+| 6.3 | Every escalation an engine raises | Recorded in `escalation_records[]` with a stable `id`, a `type` of `blocking` (stops the pack) or `note` (travels with the pack as disclosure), a `severity`, and the `rule` and `owner` read out of the message. Each engine regenerates only the records it owns and keeps every other source's, so re-running a step neither duplicates a finding nor carries a stale one forward |
+| 6.4 | An escalation is cleared | Set `resolved_by`, `resolved_at` and `resolution` on its record. It then drops out of the active `escalations[]` list but stays in `escalation_records[]` as the audit trail. This is the only sanctioned way to take an escalation off the list; deleting the entry is never permitted (#7.1) |
 
 ## 7. Draft-first and personal-data boundary
 | Rule | Condition | Effect |

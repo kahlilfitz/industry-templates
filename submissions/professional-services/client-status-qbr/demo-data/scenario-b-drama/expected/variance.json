@@ -183,6 +183,7 @@
     ],
     "demo_scenario": "scenario-b-drama"
   },
+  "contract_revision": 2,
   "variance_summary": {
     "schedule": {
       "rag": "red",
@@ -195,6 +196,11 @@
           "original_baseline_date": "2026-09-30",
           "original_baseline_known": true,
           "current_forecast_date": "2026-10-14",
+          "status": null,
+          "actual_date": null,
+          "delivered": false,
+          "delivered_variance_days": null,
+          "days_past_forecast": -24,
           "original_variance_days": 14,
           "variance_vs_current_baseline_days": 0,
           "period_delta_days": 7,
@@ -212,6 +218,11 @@
           "original_baseline_date": "2026-10-21",
           "original_baseline_known": true,
           "current_forecast_date": "2026-10-24",
+          "status": null,
+          "actual_date": null,
+          "delivered": false,
+          "delivered_variance_days": null,
+          "days_past_forecast": -34,
           "original_variance_days": 3,
           "variance_vs_current_baseline_days": 3,
           "period_delta_days": 2,
@@ -285,5 +296,46 @@
       "scope_red_open_items": 3
     },
     "thresholds_source": "default"
-  }
+  },
+  "escalation_records": [
+    {
+      "id": "M-401:8c2f2e28",
+      "message": "M-401: reported green after rebaseline, but forecast is 14 days against original baseline (status-reporting-rules.md #2.3)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#2.3",
+      "subject": "M-401",
+      "owner": null,
+      "source": "engine:variance_calc",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "budget:f94077af",
+      "message": "budget: forecast-to-complete moved +75000 since the prior pack (705000 -> 780000) - include this movement in the draft (status-reporting-rules.md #3.4)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#3.4",
+      "subject": "budget",
+      "owner": null,
+      "source": "engine:variance_calc",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "budget:8c0ca5bf",
+      "message": "budget: billed-only burn is 473000 (-5.4% vs plan) but unbilled WIP 95000.0 changes actual burn to 568000.0 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
+      "type": "note",
+      "severity": "low",
+      "rule": "#3.3",
+      "subject": "budget",
+      "owner": null,
+      "source": "engine:variance_calc",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    }
+  ]
 }

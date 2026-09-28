@@ -12,10 +12,15 @@ bounds of #8.1; every override is disclosed as an escalation.
 import argparse
 import copy
 from datetime import date
+import hashlib
 import json
+import re
 import sys
 
 ENGINE = "engine:item_age"
+# Revision of ps.client-status-qbr.v1 this engine writes. Keep it equal to "revision"
+# in the contract and to CONTRACT_REVISION in variance_calc.py.
+CONTRACT_REVISION = 2
 CONFIDENCE_FLOOR = 0.75          # status-reporting-rules.md #1.3
 RISK_STALE_DAYS = 45             # status-reporting-rules.md #5.1
 RISK_CRITICAL_DAYS = 90          # status-reporting-rules.md #5.2
@@ -247,6 +252,111 @@ def is_open(item, kind=None, escalations=None):
     return state != "closed"
 
 
+# --- escalation lifecycle -----------------------------------------------------
+# Escalations were flat strings that every engine appended to, so they had no type,
+# no severity, no owner and no way to be resolved - and re-running an engine on its
+# own output carried every stale finding forward. Each engine now regenerates only
+# the entries it owns and keeps everybody else's.
+
+# Escalations that inform rather than block. Everything else stops the pack.
+ESCALATION_NOTES = (
+    "historic slip, reported separately",
+    "changes actual burn to",
+)
+
+# Who has to act, read out of the message rather than guessed. Order matters:
+# the more specific role wins.
+ESCALATION_OWNERS = (
+    ("engagement financial analyst", "engagement financial analyst"),
+    ("financial analyst", "engagement financial analyst"),
+    ("engagement manager", "engagement manager"),
+    ("delivery lead", "delivery lead"),
+    ("item owner", "item owner"),
+)
+
+
+def escalation_rule(message):
+    """Every rules clause the message cites, e.g. '#2.3, #2.4'.
+
+    Messages routinely cite more than one clause, so capture the whole citation
+    rather than the first token - dropping the rest would lose the reason the
+    escalation was raised.
+    """
+    match = re.search(
+        r"status-reporting-rules\.md\s*(#[0-9.]+(?:\s*,\s*#[0-9.]+)*)", message
+    )
+    if not match:
+        return None
+    rules = re.findall(r"#[0-9.]+", match.group(1))
+    return ", ".join(rule.rstrip(".") for rule in rules)
+
+
+def escalation_subject(message):
+    """The item id an escalation is about, e.g. 'R-401' in 'R-401: open risk ...'."""
+    match = re.match(r"([A-Za-z][A-Za-z0-9_.-]*):\s", message)
+    return match.group(1) if match else None
+
+
+def escalation_owner(message):
+    low = message.casefold()
+    for needle, owner in ESCALATION_OWNERS:
+        if needle in low:
+            return owner
+    return None
+
+
+def escalation_record(message, source):
+    is_note = any(note in message for note in ESCALATION_NOTES)
+    return {
+        "id": "{}:{}".format(
+            escalation_subject(message) or "general",
+            hashlib.sha256(message.encode("utf-8")).hexdigest()[:8],
+        ),
+        "message": message,
+        "type": "note" if is_note else "blocking",
+        "severity": "low" if is_note else "high",
+        "rule": escalation_rule(message),
+        "subject": escalation_subject(message),
+        "owner": escalation_owner(message),
+        "source": source,
+        "resolved_by": None,
+        "resolved_at": None,
+        "resolution": None,
+    }
+
+
+def merge_escalations(prior_records, prior_messages, own_messages, source):
+    """Rebuild the escalation list for this run.
+
+    Keeps every record this engine does not own, regenerates its own from scratch,
+    and preserves loose strings from a pre-1.6.0 payload or from a skill that wrote
+    plain text. A resolved record stays in escalation_records as an audit trail but
+    drops out of the active escalations list.
+    """
+    kept = []
+    seen = set()
+    for record in prior_records:
+        if not isinstance(record, dict) or record.get("source") == source:
+            continue
+        kept.append(record)
+        message = record.get("message")
+        if isinstance(message, str):
+            seen.add(message)
+    own = list(own_messages)
+    for message in prior_messages:
+        if isinstance(message, str) and message not in seen and message not in own:
+            kept.append(escalation_record(message, "unknown"))
+            seen.add(message)
+    records = kept + [escalation_record(message, source) for message in own]
+    active = []
+    for record in records:
+        if record.get("resolved_at"):
+            continue
+        if record["message"] not in active:
+            active.append(record["message"])
+    return records, active
+
+
 def base_record(item, as_of, bucket, reason, rule, client_action=False, kind="item"):
     age = age_days(as_of, item.get("opened_date"))
     return {
@@ -429,6 +539,9 @@ def main():
         return 2
 
     output = copy.deepcopy(payload)
+    # Stamp the schema revision so a downstream reader can tell whether this payload
+    # carries the 1.6.0 fields, without the contract identifier having to change.
+    output["contract_revision"] = CONTRACT_REVISION
     if "reporting_period" not in output or "end" not in output.get("reporting_period", {}):
         print(
             "item_age: missing required field 'reporting_period.end' - run plan-retrieve first "
@@ -437,7 +550,11 @@ def main():
         )
         return 1
     as_of = output["reporting_period"]["end"]
-    escalations = list(output.get("escalations", []))
+    # This engine owns the escalations it raises. Start from an empty list so a re-run
+    # regenerates them rather than appending to whatever the last run left behind.
+    prior_records = list(output.get("escalation_records", []))
+    prior_messages = list(output.get("escalations", []))
+    escalations = []
     try:
         thresholds_applied, thresholds_source = apply_settings(output, escalations)
     except SettingsError as exc:
@@ -504,7 +621,9 @@ def main():
         "thresholds_applied": thresholds_applied,
         "thresholds_source": thresholds_source,
     }
-    output["escalations"] = escalations
+    output["escalation_records"], output["escalations"] = merge_escalations(
+        prior_records, prior_messages, escalations, ENGINE
+    )
     engines = output.setdefault("provenance", {}).setdefault("engines", [])
     if "item_age/1.0" not in engines:
         engines.append("item_age/1.0")

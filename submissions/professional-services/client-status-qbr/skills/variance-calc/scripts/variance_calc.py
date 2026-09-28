@@ -12,10 +12,16 @@ within the bounds of #8.1; every override is disclosed as an escalation.
 import argparse
 import copy
 from datetime import date
+import hashlib
 import json
+import re
 import sys
 
 ENGINE = "engine:variance_calc"
+# Revision of ps.client-status-qbr.v1 this engine writes. The contract identifier stays
+# v1 because every addition is optional; this integer is what tells a consumer whether
+# the payload carries the 1.6.0 fields. Keep it equal to "revision" in the contract.
+CONTRACT_REVISION = 2
 CONFIDENCE_FLOOR = 0.75             # status-reporting-rules.md #1.3
 SCHEDULE_AMBER_DAYS = 5             # status-reporting-rules.md #2.1
 SCHEDULE_RED_DAYS = 10              # status-reporting-rules.md #2.2
@@ -236,6 +242,111 @@ def is_open(item, kind=None, escalations=None):
     return state != "closed"
 
 
+# --- escalation lifecycle -----------------------------------------------------
+# Escalations were flat strings that every engine appended to, so they had no type,
+# no severity, no owner and no way to be resolved - and re-running an engine on its
+# own output carried every stale finding forward. Each engine now regenerates only
+# the entries it owns and keeps everybody else's.
+
+# Escalations that inform rather than block. Everything else stops the pack.
+ESCALATION_NOTES = (
+    "historic slip, reported separately",
+    "changes actual burn to",
+)
+
+# Who has to act, read out of the message rather than guessed. Order matters:
+# the more specific role wins.
+ESCALATION_OWNERS = (
+    ("engagement financial analyst", "engagement financial analyst"),
+    ("financial analyst", "engagement financial analyst"),
+    ("engagement manager", "engagement manager"),
+    ("delivery lead", "delivery lead"),
+    ("item owner", "item owner"),
+)
+
+
+def escalation_rule(message):
+    """Every rules clause the message cites, e.g. '#2.3, #2.4'.
+
+    Messages routinely cite more than one clause, so capture the whole citation
+    rather than the first token - dropping the rest would lose the reason the
+    escalation was raised.
+    """
+    match = re.search(
+        r"status-reporting-rules\.md\s*(#[0-9.]+(?:\s*,\s*#[0-9.]+)*)", message
+    )
+    if not match:
+        return None
+    rules = re.findall(r"#[0-9.]+", match.group(1))
+    return ", ".join(rule.rstrip(".") for rule in rules)
+
+
+def escalation_subject(message):
+    """The item id an escalation is about, e.g. 'R-401' in 'R-401: open risk ...'."""
+    match = re.match(r"([A-Za-z][A-Za-z0-9_.-]*):\s", message)
+    return match.group(1) if match else None
+
+
+def escalation_owner(message):
+    low = message.casefold()
+    for needle, owner in ESCALATION_OWNERS:
+        if needle in low:
+            return owner
+    return None
+
+
+def escalation_record(message, source):
+    is_note = any(note in message for note in ESCALATION_NOTES)
+    return {
+        "id": "{}:{}".format(
+            escalation_subject(message) or "general",
+            hashlib.sha256(message.encode("utf-8")).hexdigest()[:8],
+        ),
+        "message": message,
+        "type": "note" if is_note else "blocking",
+        "severity": "low" if is_note else "high",
+        "rule": escalation_rule(message),
+        "subject": escalation_subject(message),
+        "owner": escalation_owner(message),
+        "source": source,
+        "resolved_by": None,
+        "resolved_at": None,
+        "resolution": None,
+    }
+
+
+def merge_escalations(prior_records, prior_messages, own_messages, source):
+    """Rebuild the escalation list for this run.
+
+    Keeps every record this engine does not own, regenerates its own from scratch,
+    and preserves loose strings from a pre-1.6.0 payload or from a skill that wrote
+    plain text. A resolved record stays in escalation_records as an audit trail but
+    drops out of the active escalations list.
+    """
+    kept = []
+    seen = set()
+    for record in prior_records:
+        if not isinstance(record, dict) or record.get("source") == source:
+            continue
+        kept.append(record)
+        message = record.get("message")
+        if isinstance(message, str):
+            seen.add(message)
+    own = list(own_messages)
+    for message in prior_messages:
+        if isinstance(message, str) and message not in seen and message not in own:
+            kept.append(escalation_record(message, "unknown"))
+            seen.add(message)
+    records = kept + [escalation_record(message, source) for message in own]
+    active = []
+    for record in records:
+        if record.get("resolved_at"):
+            continue
+        if record["message"] not in active:
+            active.append(record["message"])
+    return records, active
+
+
 def rag_from_threshold(value, amber, red, strict=False):
     """strict=True applies "more than" (rules #2.1/#2.2, calendar days).
     strict=False applies "at least" (rules #3.1/#3.2, percentages).
@@ -278,6 +389,18 @@ def schedule_summary(payload, escalations):
     prior = {
         item["id"]: item for item in payload.get("prior_status", {}).get("milestones", [])
     }
+    # Everything schedule-related is measured as at the end of the reporting period.
+    # Without it the engine cannot tell a forecast that has already passed from one
+    # still in the future, so a lapsed date read green (#2.5).
+    as_of = (payload.get("reporting_period") or {}).get("end") or None
+    if as_of is None:
+        add_escalation(
+            escalations,
+            "reporting_period.end is missing - the schedule cannot be assessed as at a date, "
+            "so a forecast that has already passed cannot be distinguished from one still to "
+            "come; confirm the reporting period with the delivery lead "
+            "(status-reporting-rules.md #2.5)",
+        )
     facts = []
     rag = "green"
     confidence = 1.0
@@ -355,6 +478,67 @@ def schedule_summary(payload, escalations):
                     strict=True,
                 ),
             )
+        # H2: a delivered milestone stops driving the current schedule RAG. With no
+        # delivery signal at all, a milestone that landed late kept being measured
+        # forecast-against-baseline every period and read red forever (#2.5).
+        raw_status = milestone.get("status")
+        actual_date = milestone.get("actual_date") or None
+        if raw_status is not None and status_state(raw_status) == "unknown":
+            add_escalation(
+                escalations,
+                f"{milestone['id']}: milestone has an unrecognised status "
+                f"'{str(raw_status).strip() or '(blank)'}' - treated as not yet delivered, but "
+                "it must be mapped to a known status before the pack goes out "
+                "(status-reporting-rules.md #1.1,#2.5)",
+            )
+        delivered = actual_date is not None or status_state(raw_status) == "closed"
+        delivered_variance_days = (
+            days_between(actual_date, original_baseline)
+            if delivered and actual_date and baseline_known
+            else None
+        )
+        days_past_forecast = (
+            days_between(as_of, current_forecast) if as_of and not delivered else None
+        )
+        if delivered and actual_date is None:
+            add_escalation(
+                escalations,
+                f"{milestone['id']}: recorded as delivered but carries no actual_date - the "
+                "delivery date must be confirmed with the delivery lead before historic slip "
+                "can be reported (status-reporting-rules.md #2.5)",
+            )
+        if delivered:
+            # Done is done: it cannot slip again, so it no longer colours the current
+            # schedule. Whatever slip it did incur is reported as historic, not as news.
+            milestone_rag = "green"
+            if (
+                delivered_variance_days is not None
+                and delivered_variance_days > SCHEDULE_AMBER_DAYS
+            ):
+                add_escalation(
+                    escalations,
+                    f"{milestone['id']}: delivered {delivered_variance_days} days after its "
+                    f"original baseline {original_baseline} - historic slip, reported "
+                    "separately from the current schedule RAG "
+                    "(status-reporting-rules.md #2.5)",
+                )
+        elif days_past_forecast is not None and days_past_forecast > 0:
+            # The forecast date has already passed with nothing delivered. This read
+            # green before, because the forecast was never compared to the period end.
+            milestone_rag = worst(
+                milestone_rag,
+                "amber",
+                rag_from_threshold(
+                    days_past_forecast, SCHEDULE_AMBER_DAYS, SCHEDULE_RED_DAYS, strict=True
+                ),
+            )
+            add_escalation(
+                escalations,
+                f"{milestone['id']}: forecast date {current_forecast} passed "
+                f"{days_past_forecast} days before the period end {as_of} with no delivery "
+                "recorded - the forecast must be re-cut with the delivery lead "
+                "(status-reporting-rules.md #2.5)",
+            )
         # Masked slippage: a green label sitting on top of real variance against the
         # ORIGINAL baseline, whether the move happened last period or earlier (#2.3).
         masked = (
@@ -395,6 +579,11 @@ def schedule_summary(payload, escalations):
                 "original_baseline_date": original_baseline,
                 "original_baseline_known": baseline_known,
                 "current_forecast_date": current_forecast,
+                "status": raw_status,
+                "actual_date": actual_date,
+                "delivered": delivered,
+                "delivered_variance_days": delivered_variance_days,
+                "days_past_forecast": days_past_forecast,
                 "original_variance_days": original_variance_days,
                 "variance_vs_current_baseline_days": variance_vs_current_baseline_days,
                 "period_delta_days": period_delta_days,
@@ -639,7 +828,14 @@ def main():
         return 2
 
     output = copy.deepcopy(payload)
-    escalations = list(output.get("escalations", []))
+    # Stamp the schema revision so a downstream reader can tell whether this payload
+    # carries the 1.6.0 fields, without the contract identifier having to change.
+    output["contract_revision"] = CONTRACT_REVISION
+    # This engine owns the escalations it raises. Start from an empty list so a re-run
+    # regenerates them rather than appending to whatever the last run left behind.
+    prior_records = list(output.get("escalation_records", []))
+    prior_messages = list(output.get("escalations", []))
+    escalations = []
     try:
         thresholds_applied, thresholds_source = apply_settings(output, escalations)
     except SettingsError as exc:
@@ -664,7 +860,9 @@ def main():
         "thresholds_applied": thresholds_applied,
         "thresholds_source": thresholds_source,
     }
-    output["escalations"] = escalations
+    output["escalation_records"], output["escalations"] = merge_escalations(
+        prior_records, prior_messages, escalations, ENGINE
+    )
     engines = output.setdefault("provenance", {}).setdefault("engines", [])
     if "variance_calc/1.0" not in engines:
         engines.append("variance_calc/1.0")

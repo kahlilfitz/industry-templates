@@ -183,6 +183,7 @@
     ],
     "demo_scenario": "scenario-a-happy"
   },
+  "contract_revision": 2,
   "variance_summary": {
     "schedule": {
       "rag": "green",
@@ -195,6 +196,11 @@
           "original_baseline_date": "2026-09-25",
           "original_baseline_known": true,
           "current_forecast_date": "2026-09-27",
+          "status": null,
+          "actual_date": null,
+          "delivered": false,
+          "delivered_variance_days": null,
+          "days_past_forecast": -7,
           "original_variance_days": 2,
           "variance_vs_current_baseline_days": 2,
           "period_delta_days": 1,
@@ -212,6 +218,11 @@
           "original_baseline_date": "2026-10-06",
           "original_baseline_known": true,
           "current_forecast_date": "2026-10-08",
+          "status": null,
+          "actual_date": null,
+          "delivered": false,
+          "delivered_variance_days": null,
+          "days_past_forecast": -18,
           "original_variance_days": 2,
           "variance_vs_current_baseline_days": 2,
           "period_delta_days": 1,
@@ -274,5 +285,33 @@
       "scope_red_open_items": 3
     },
     "thresholds_source": "default"
-  }
+  },
+  "escalation_records": [
+    {
+      "id": "budget:d316f484",
+      "message": "budget: forecast-to-complete moved +5000 since the prior pack (606000 -> 611000) - include this movement in the draft (status-reporting-rules.md #3.4)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#3.4",
+      "subject": "budget",
+      "owner": null,
+      "source": "engine:variance_calc",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "budget:f6860884",
+      "message": "budget: billed-only burn is 268500 (-5.79% vs plan) but unbilled WIP 8200.0 changes actual burn to 276700.0 (-2.91% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
+      "type": "note",
+      "severity": "low",
+      "rule": "#3.3",
+      "subject": "budget",
+      "owner": null,
+      "source": "engine:variance_calc",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    }
+  ]
 }

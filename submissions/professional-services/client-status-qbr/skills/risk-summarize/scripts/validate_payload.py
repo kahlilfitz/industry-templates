@@ -354,6 +354,25 @@ def main():
             "run plan-retrieve first to build a valid payload"
         )
 
+    # The contract identifier stays v1 while the schema only gains optional fields, so
+    # it cannot catch a newer payload meeting an older plugin copy. The revision can:
+    # a payload built by 1.6.0 checked against a 1.5.x contract is a stale install, not
+    # a bad payload, and saying so is the difference between a fixable message and a
+    # confusing list of unknown-field errors.
+    contract_revision = contract.get("revision")
+    payload_revision = payload.get("contract_revision")
+    if (
+        isinstance(contract_revision, int)
+        and isinstance(payload_revision, int)
+        and payload_revision > contract_revision
+    ):
+        errors.append(
+            f"$.contract_revision: the payload was built against revision {payload_revision} "
+            f"of {CONTRACT_NAME} but this plugin copy ships revision {contract_revision} - "
+            "this copy of client-status-qbr is out of date; ask the user for the current "
+            "plugin folder rather than editing the payload"
+        )
+
     validate(payload, contract, contract, "$", errors)
     check_settings(payload, errors)
 

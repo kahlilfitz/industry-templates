@@ -198,6 +198,7 @@
     "source": "user:conversation",
     "citation": "stated by the user in conversation: 'for this client use 15% for budget red and 120 days for a critical risk'"
   },
+  "contract_revision": 2,
   "variance_summary": {
     "schedule": {
       "rag": "red",
@@ -210,6 +211,11 @@
           "original_baseline_date": "2026-09-30",
           "original_baseline_known": true,
           "current_forecast_date": "2026-10-14",
+          "status": null,
+          "actual_date": null,
+          "delivered": false,
+          "delivered_variance_days": null,
+          "days_past_forecast": -24,
           "original_variance_days": 14,
           "variance_vs_current_baseline_days": 0,
           "period_delta_days": 7,
@@ -227,6 +233,11 @@
           "original_baseline_date": "2026-10-21",
           "original_baseline_known": true,
           "current_forecast_date": "2026-10-24",
+          "status": null,
+          "actual_date": null,
+          "delivered": false,
+          "delivered_variance_days": null,
+          "days_past_forecast": -34,
           "original_variance_days": 3,
           "variance_vs_current_baseline_days": 3,
           "period_delta_days": 2,
@@ -301,6 +312,125 @@
     },
     "thresholds_source": "user"
   },
+  "escalation_records": [
+    {
+      "id": "settings:adf6fdb6",
+      "message": "settings: custom threshold budget_red_pct = 15 (published default 10.0, #3.2) was set by the user for this run - this pack does not use the published thresholds, so state that before sharing it (status-reporting-rules.md #8.1)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#8.1",
+      "subject": "settings",
+      "owner": null,
+      "source": "engine:variance_calc",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "M-401:8c2f2e28",
+      "message": "M-401: reported green after rebaseline, but forecast is 14 days against original baseline (status-reporting-rules.md #2.3)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#2.3",
+      "subject": "M-401",
+      "owner": null,
+      "source": "engine:variance_calc",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "budget:f94077af",
+      "message": "budget: forecast-to-complete moved +75000 since the prior pack (705000 -> 780000) - include this movement in the draft (status-reporting-rules.md #3.4)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#3.4",
+      "subject": "budget",
+      "owner": null,
+      "source": "engine:variance_calc",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "budget:8c0ca5bf",
+      "message": "budget: billed-only burn is 473000 (-5.4% vs plan) but unbilled WIP 95000.0 changes actual burn to 568000.0 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
+      "type": "note",
+      "severity": "low",
+      "rule": "#3.3",
+      "subject": "budget",
+      "owner": null,
+      "source": "engine:variance_calc",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "settings:5604d565",
+      "message": "settings: custom threshold risk_critical_days = 120 (published default 90, #5.2) was set by the user for this run - this pack does not use the published thresholds, so state that before sharing it (status-reporting-rules.md #8.1)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#8.1",
+      "subject": "settings",
+      "owner": null,
+      "source": "engine:item_age",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "R-401:111238b1",
+      "message": "R-401: risk has an unrecognised status 'open, monitoring' - counted as open so it is not dropped, but it must be mapped to a known open or closed status before the pack goes out (status-reporting-rules.md #1.1)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#1.1",
+      "subject": "R-401",
+      "owner": null,
+      "source": "engine:item_age",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "D-401:091a2e9b",
+      "message": "D-401: decision 10 days overdue (status-reporting-rules.md #5.3)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#5.3",
+      "subject": "D-401",
+      "owner": null,
+      "source": "engine:item_age",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "A-401:7e005ba3",
+      "message": "A-401: action 8 days overdue (status-reporting-rules.md #5.4)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#5.4",
+      "subject": "A-401",
+      "owner": null,
+      "source": "engine:item_age",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
+      "id": "A-401:e1a26fdf",
+      "message": "A-401: logged as internal but blocked by client decision - classified as pending client action (status-reporting-rules.md #5.5)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#5.5",
+      "subject": "A-401",
+      "owner": null,
+      "source": "engine:item_age",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    }
+  ],
   "aged_items": {
     "risks": [
       {

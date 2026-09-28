@@ -3,6 +3,7 @@
   "$id": "ps.client-status-qbr.v1",
   "title": "Client Status & QBR contract v1",
   "description": "Versioned contract chaining plan-retrieve -> burn-pull -> variance-calc -> risk-summarize -> status-draft. Carries data + confidence + provenance + citations on every hop so escalation is mechanical. Hop ownership: plan-retrieve writes engagement, reporting_period, sources, plan, prior_status, risks, decisions and actions; burn-pull writes budget; variance-calc writes variance_summary; risk-summarize writes aged_items; status-draft consumes the payload and writes no contract fields. Only the hop-1 fields are globally required so that each intermediate payload validates.",
+  "revision": 2,
   "type": "object",
   "required": [
     "contract_version",
@@ -13,6 +14,11 @@
   "properties": {
     "contract_version": {
       "const": "ps.client-status-qbr.v1"
+    },
+    "contract_revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Revision of this contract that produced the payload. contract_version stays ps.client-status-qbr.v1 while the schema only gains optional fields, so a consumer cannot otherwise tell a 1.5.x payload from a 1.6.x one. validate_payload rejects a payload declaring a revision newer than the contract it is checked against, which is how a stale plugin copy is caught."
     },
     "engagement": {
       "type": "object",
@@ -479,6 +485,13 @@
         ]
       }
     },
+    "escalation_records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/escalation_record"
+      },
+      "description": "Structured form of escalations[], added at revision 2. escalations[] remains the active message list so existing readers keep working; this array adds the type, severity, rule, owner and resolution fields, and is what status-draft groups by."
+    },
     "provenance": {
       "type": "object",
       "properties": {
@@ -563,6 +576,21 @@
         "current_forecast_date": {
           "type": "string",
           "format": "date"
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Milestone lifecycle status as written in the plan, e.g. 'In progress', 'Complete'. Matched against the engine's status vocabulary after trimming and case folding. A milestone that reads as closed is treated as delivered, so it stops driving the current schedule RAG; its historic slip is reported separately under status-reporting-rules.md #2.5. Omit when the plan does not record one - do not guess."
+        },
+        "actual_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "The date the milestone was actually delivered. Populate whenever the plan records it. Delivery is what closes a milestone: without it a milestone delivered late keeps slipping against its baseline every period and reads red forever. Slip measured from actual_date is historic and is reported separately from the current schedule RAG (status-reporting-rules.md #2.5)."
         },
         "reported_rag": {
           "enum": [
@@ -856,6 +884,87 @@
         },
         "citation": {
           "type": "string"
+        }
+      }
+    },
+    "escalation_record": {
+      "type": "object",
+      "required": [
+        "id",
+        "message",
+        "type",
+        "severity",
+        "source"
+      ],
+      "description": "One escalation with a lifecycle. Engines regenerate the records they own on every run (matched on source) and keep everybody else's, so re-running a hop no longer carries a stale finding forward. A record with resolved_at set stays here as the audit trail but drops out of the active escalations list.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable identifier: the item the escalation is about plus a digest of the message, so the same finding keeps the same id across runs."
+        },
+        "message": {
+          "type": "string",
+          "description": "The human-readable escalation, identical to its entry in escalations[]."
+        },
+        "type": {
+          "enum": [
+            "blocking",
+            "note"
+          ],
+          "description": "blocking stops the pack going out until it is resolved or explicitly waived. note is disclosure that travels with the pack, such as historic slip on a delivered milestone."
+        },
+        "severity": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "rule": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The status-reporting-rules.md clause this escalation comes from, e.g. '#2.5'. Lets the draft group escalations by rule instead of listing them flat."
+        },
+        "subject": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The id of the risk, decision, action, milestone or change request the escalation is about, when it has one."
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Who has to act, read out of the message rather than guessed - e.g. 'delivery lead', 'engagement financial analyst'."
+        },
+        "source": {
+          "type": "string",
+          "description": "What raised it: engine:variance_calc, engine:item_age, a skill, or 'unknown' for a message carried in from a payload older than revision 2."
+        },
+        "resolved_by": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Who cleared it. Setting this, resolved_at and resolution is the only sanctioned way to take an escalation off the active list."
+        },
+        "resolved_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "resolution": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "What was done or agreed. Required reading before a blocking escalation is treated as cleared."
         }
       }
     }

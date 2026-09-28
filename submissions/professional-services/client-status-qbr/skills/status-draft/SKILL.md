@@ -74,6 +74,11 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
    default, exactly as the engine gave it (status-reporting-rules.md #8.1). The reader must see
    that this pack was measured against non-standard thresholds before seeing any RAG. Never
    drop, soften or move this disclosure below the narrative, even at the user's request.
+   When `escalation_records[]` is present, use it to organise that block rather than listing
+   the sentences flat: group by `rule`, put every `type: "blocking"` record ahead of every
+   `type: "note"`, and order the groups by the highest `severity` they contain. Show `owner`
+   beside the line when the record names one. `escalations[]` and `escalation_records[]`
+   describe the same findings — render each finding once, never twice.
 3. Draft the status pack sections:
    - executive RAG and period-over-period movement;
    - schedule variance;
@@ -98,10 +103,18 @@ You then write `$RUN_DIR/status-pack.md`, opening like this:
 **DRAFT - pending engagement manager review**
 
 ## Escalations - resolve before this pack is sent
+
+**Blocking**
+
+*Rebaseline check (status-reporting-rules.md #2.3)*
 - M-401 is reported green after a rebaseline, but the forecast is 14 days past the *original*
-  baseline (status-reporting-rules.md #2.3, engine:variance_calc).
+  baseline (engine:variance_calc).
+
+**For disclosure**
+
+*WIP inclusion (#3.3)*
 - Billed-only burn reads -5.4% vs plan, but 95,000 of unbilled WIP moves actual burn to +13.6%
-  (#3.3, engine:variance_calc).
+  (engine:variance_calc).
 
 ## Executive summary
 Overall status is **Red** this period, moved from Green (engine:variance_calc, #6.1).
@@ -155,7 +168,11 @@ row out to make the pack read more cleanly.
   were current, and never omit the section to avoid mentioning the gap.
 - **`escalations[]` is non-empty and the user asks for a clean, client-ready version.** Keep the
   DRAFT label and the escalations block. Offer to explain or reword any single caveat. Never
-  delete one.
+  delete one. An escalation leaves the active list in exactly one way: someone with the standing
+  to clear it sets `resolved_by`, `resolved_at` and `resolution` on its `escalation_records[]`
+  entry, which keeps the finding on the record as an audit trail. If the user says a caveat is
+  already dealt with, ask who resolved it and what was agreed, and record that — do not simply
+  drop the line.
 
 Write every artifact under `$RUN_DIR`, the run's working folder set in step 0. The skill folder is read-only; never write outputs beside the scripts.
 
@@ -195,6 +212,8 @@ Every prose explanation must cite the supporting source record or extracted docu
   a request on these grounds, cite #7.2.
 - The DRAFT label and the escalations block are retained even when the user asks for something
   "client-ready", "clean" or "without the caveats". Offer to explain a caveat; never delete it.
+  A `type: "note"` record is disclosure rather than a blocker, so it may be phrased for a client
+  audience — but it still appears, and it is never silently dropped.
 - Do not invent a Govern step; governance here is the platform and review boundary, not a
   workflow step.
 - Synthetic demo data only; do not introduce real customer or person names.
