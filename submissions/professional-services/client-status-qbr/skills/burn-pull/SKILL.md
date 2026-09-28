@@ -1,6 +1,6 @@
 ---
 name: burn-pull
-description: Pulls and normalizes time, budget, billed burn, unbilled WIP, accrual and forecast records for Client Status & QBR Assembly. Step 2 of 5; runs after plan-retrieve. Use when the user says "where are we on budget?", "why did burn change?", "get the burn numbers into the payload" or "pull the finance export". Keeps billed and unbilled WIP strictly separate, cites the export row or tracker line behind every figure it writes, and escalates when WIP movement cannot be traced to a source rather than inferring a baseline. Do NOT start a status run or assemble the pack — use plan-retrieve. Do NOT compute variance or RAG — use variance-calc. Do NOT age risks or decisions — use risk-summarize. Do NOT write the client narrative — use status-draft.
+description: Pulls and normalizes time, budget, billed burn, unbilled WIP, accrual and forecast-at-completion (EAC) records for Client Status & QBR Assembly. Step 2 of 5; runs after plan-retrieve. Use when the user says "where are we on budget?" (the raw figures), "why did burn change?" (tracing a burn, WIP or forecast movement to its source rows), "get the burn numbers into the payload" or "pull the finance export". Keeps billed and unbilled WIP separate and cites the source row behind every figure. Do NOT start a status run — use plan-retrieve. Do NOT compute variance, RAG or period-over-period change ("is the budget red?", "what changed since last week?") — use variance-calc. Do NOT age risks — use risk-summarize. Do NOT write the client narrative — use status-draft.
 license: Proprietary
 metadata:
   version: "1.0"
@@ -20,7 +20,12 @@ QBR run that includes financial/burn reporting. This is step 2 of 5.
 ## When NOT to Use
 - Starting a run, or reading the plan, milestones or prior status pack — use `plan-retrieve`.
 - Turning these figures into percentages, thresholds or a budget RAG — use `variance-calc`.
-  This skill writes raw values only; it never decides whether they are good or bad.
+  This skill writes raw values only; it never decides whether they are good or bad. "Where are
+  we on budget?" here means *the figures and their source rows*; "is the budget red or amber?"
+  is a verdict and belongs to `variance-calc`.
+- "What changed since last week?" — period-over-period RAG and variance movement belong to
+  `variance-calc`. This skill owns "why did burn change?": tracing a burn, WIP or forecast
+  movement back to the export row or tracker line that explains it.
 - Risk, decision or action ageing — use `risk-summarize`.
 - Explaining the budget position to the client in prose — use `status-draft`.
 - No finance export, budget tracker or forecast record has been supplied. Ask for it; never
@@ -29,7 +34,8 @@ QBR run that includes financial/burn reporting. This is step 2 of 5.
 ## Inputs
 - Time and billing export.
 - Budget tracker or engagement financials.
-- Forecast-to-complete record.
+- Forecast record giving the **estimate at completion** (EAC — total forecast cost for the
+  whole engagement, including cost already incurred).
 - Prior status pack or prior forecast extract.
 - Contract schema in `contracts/ps.client-status-qbr.v1.json`.
 
@@ -42,14 +48,17 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
    may start a new shell, so begin **every** call with this prefix, on the same line as the
    command that follows it:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 burn-pull
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 burn-pull
    ```
    `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
    run's working folder: the folder the user named, otherwise `./status-run` in your working
    directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
    `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
-   plugin at version 1.5.0 with
-   its tools present, and that `RUN_DIR` exists. It prints nothing on success. On failure it
+   plugin at version 1.5.1 with
+   its tools present, that its shared files (contract, rules, validator, `step0.sh`, `VERSION`)
+   match `scripts/SHARED.sha256` and the plugin-root copy of that manifest, and that `RUN_DIR`
+   exists. A `does not match scripts/SHARED.sha256` failure means this copy has drifted; stop and
+   ask for a clean copy of the plugin rather than editing any file. It prints nothing on success. On failure it
    prints one `STEP 0 FAILED` line and exits non-zero, so nothing after `&&` runs. An error
    such as `cannot open …/scripts/step0.sh` also means `SKILL_DIR` is wrong. Never change the version or skill name on the Step 0 line.
    - **If your loader gave you no base directory, or Step 0 reports a problem with `SKILL_DIR`,
@@ -64,12 +73,22 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
 1. Validate the payload `plan-retrieve` handed you before adding anything to it. Run this tool
    from a writable working directory:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
    ```
    A non-zero exit means the upstream payload is incomplete. Stop and escalate; do not fill the
    gaps yourself.
 2. Extract currency, baseline budget, planned burn to date, actual billed to date, unbilled
-   WIP/accrual, current forecast-to-complete and prior forecast-to-complete. Write amounts as
+   WIP/accrual, current forecast-to-complete and prior forecast-to-complete.
+   **`forecast_to_complete` is the estimate at completion (EAC): the TOTAL forecast cost of the
+   whole engagement, including burn already incurred** — the same meaning as in
+   `contracts/ps.client-status-qbr.v1.json`. `variance-calc` compares it directly to
+   `baseline_budget` (#3.2), so it should normally sit near the baseline, not near the
+   remaining spend. Take it from a column labelled EAC, estimate at completion, total forecast
+   or similar. **Never write a remaining-cost column** (ETC, estimate to complete, remaining,
+   cost to go) into `forecast_to_complete` — doing so reports a large false underspend. If the
+   sources carry only a remaining-cost figure, do not add it to actuals yourself; ask the user
+   for the EAC under #8.4 and escalate if it is not known. `previous_forecast_to_complete` is
+   the prior period's EAC on the same basis. Write amounts as
    plain numbers: drop currency symbols and thousands separators (`$285,000` → `285000`) and
    record the currency once in `currency`. If a required figure is not in any supplied file, ask
    the user **one** question naming it and where it usually lives, for example *"What is the
@@ -88,6 +107,21 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
 5. If unbilled WIP or the forecast-to-complete moved since the prior pack and the movement
    cannot be traced to an export row or tracker line, write an `escalations[]` entry naming the
    untraceable figure. Never infer a WIP baseline to make the movement reconcile.
+   Each `escalations[]` entry you add is an object in the contract's structured form, appended
+   to the top-level `escalations` array (never nested inside `budget`). `message` and `rule`
+   are required; `item_id` and `source` are optional, and `source` must start `skill:`:
+   ```json
+   {
+     "message": "Unbilled WIP moved from 6,100 to 8,200 since the prior pack and no export row explains the change.",
+     "rule": "#1.2",
+     "item_id": "unbilled_wip",
+     "source": "skill:burn-pull"
+   }
+   ```
+   `rule` is the status-reporting-rules.md number that applies, written with its `#`: `#1.2`
+   for a conflict between sources, `#1.3` for confidence below 0.75, `#3.3` for missing WIP,
+   `#3.4` for a missing prior forecast, `#7.2` for personal data withheld and `#8.4` for a
+   figure the user could not supply.
 6. Write or update the `budget` object in the contract payload using
    `source=skill:burn-pull`, then re-run the validation tool with `--hop burn-pull` to confirm
    what you wrote is contract-valid before handing off.
@@ -98,10 +132,10 @@ The user says *"pull the burn numbers for the Northwind weekly"*. The finance ex
 
 ```bash
 # 1. check what plan-retrieve handed over
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
 
 # 2. after writing the budget block, confirm it is contract-valid
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
 ```
 
 The `budget` object written into `$RUN_DIR/status-input.json`:
@@ -114,8 +148,8 @@ The `budget` object written into `$RUN_DIR/status-input.json`:
     "planned_burn_to_date": 285000,
     "actual_billed_to_date": 268500,
     "unbilled_wip": 8200,
-    "forecast_to_complete": 611000,
-    "previous_forecast_to_complete": 606000,
+    "forecast_to_complete": 1211000,
+    "previous_forecast_to_complete": 1206000,
     "source": "skill:burn-pull",
     "confidence": 0.95,
     "citation": "fin-export.csv rows 2-14; budget-tracker.xlsx 'Summary' B4:B9",
@@ -124,12 +158,19 @@ The `budget` object written into `$RUN_DIR/status-input.json`:
       "planned_burn_to_date": "budget-tracker.xlsx Summary!B6",
       "actual_billed_to_date": "fin-export.csv row 12 (billed total)",
       "unbilled_wip": "fin-export.csv row 13 (WIP/accrual)",
-      "forecast_to_complete": "budget-tracker.xlsx Summary!B9",
-      "previous_forecast_to_complete": "prior-status-pack.md, Budget section"
+      "forecast_to_complete": "budget-tracker.xlsx Summary!B9 (EAC, total at completion)",
+      "previous_forecast_to_complete": "prior-status-pack.md, Budget section (EAC)"
     }
   }
 }
 ```
+
+Both forecast figures are totals at completion, so they sit next to the 1,200,000 baseline.
+Through `variance-calc` these figures give a green budget: burn including WIP is 276,700
+against 285,000 planned (−2.91%) and the EAC is +0.92% against baseline, with a +5,000
+forecast movement reported under #3.4. Had the tracker's *remaining* cost (about 934,000) been
+written instead, the engine would report a false −22% underspend and a red budget. No
+figure here was untraceable, so this run adds no `escalations[]` entries.
 
 ## Output format
 Report back to the user as a Markdown table, one row per field, so the source of every figure is
@@ -142,10 +183,12 @@ visible without opening the payload:
 | Planned burn to date | 285,000 | budget-tracker.xlsx Summary!B6 |
 | Actual billed to date | 268,500 | fin-export.csv row 12 |
 | Unbilled WIP | 8,200 | fin-export.csv row 13 |
-| Forecast to complete | 611,000 | budget-tracker.xlsx Summary!B9 |
-| Prior forecast to complete | 606,000 | prior-status-pack.md, Budget |
+| Forecast to complete (EAC, total) | 1,211,000 | budget-tracker.xlsx Summary!B9 |
+| Prior forecast to complete (EAC) | 1,206,000 | prior-status-pack.md, Budget |
 
-Follow the table with an **Escalations** bullet list, or the line `No escalations.` Never report
+Label the forecast rows as EAC so a reader never mistakes them for remaining cost. Follow the
+table with an **Escalations** bullet list — one bullet per `escalations[]` entry you wrote,
+quoting its `message` and `rule` — or the line `No escalations.` Never report
 a figure in the table that is not in the payload, and never report a payload figure that has no
 source row.
 
@@ -198,10 +241,11 @@ Do not collapse billed burn and WIP into a single unexplained number.
 - **Cite every figure.** Every value written to `budget` carries `source`, `confidence` and a
   `citation` naming the export row, tracker line or prior status line behind it. An uncited
   financial figure must not enter the payload.
-- **No personal or sensitive data.** Do not copy individual salaries, rates by named person,
+- **No personal or sensitive data (status-reporting-rules.md #7.2).** Do not copy individual salaries, rates by named person,
   bank or payment details, contact details or any personal identifier into the payload or the
   output. Aggregate to the engagement level. If a figure cannot be reported without naming an
-  individual's pay, escalate instead of writing it.
+  individual's pay, escalate instead of writing it. When you refuse any part of a request on
+  these grounds, cite #7.2 (not #7.1, which is the draft-first rule).
 - No budget RAG, threshold verdict or variance percentage here; all math belongs to
   `variance-calc`.
 - Never use billed-only burn as the final actual if unbilled WIP or accrual is present

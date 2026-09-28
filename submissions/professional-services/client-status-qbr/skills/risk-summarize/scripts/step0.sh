@@ -2,6 +2,13 @@
 #   export SKILL_DIR="<loader base dir>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" <version> <skill> && ...
 # Silent with exit 0 only when SKILL_DIR is the <skill> folder of this plugin at <version> and RUN_DIR exists.
 # Any failure prints one STEP 0 FAILED line and exits 1, so the && chain stops.
+# Since 1.5.1 it also verifies the shared files (contract, rules, validate_payload.py, step0.sh,
+# VERSION) against scripts/SHARED.sha256, and that manifest against the plugin-root copy, so a
+# drifted or tampered copy fails Step 0 instead of passing silently.
+# Maintainers: after changing any shared file, regenerate the manifest from the plugin root with
+#   sha256sum contracts/ps.client-status-qbr.v1.json references/status-reporting-rules.md \
+#     scripts/validate_payload.py scripts/step0.sh scripts/VERSION > scripts/SHARED.sha256
+# and copy the shared files plus SHARED.sha256 identically into every skills/<name>/ folder.
 
 stop_plugin() {
   echo "STEP 0 FAILED: $1 - stop and ask the user for the plugin folder. Do not search the filesystem for it, do not skip this check, and do not compute anything by hand."
@@ -26,6 +33,34 @@ case "$skill" in
   variance-calc) [ -f "$SKILL_DIR/scripts/variance_calc.py" ] || stop_plugin "SKILL_DIR has no scripts/variance_calc.py" ;;
   risk-summarize) [ -f "$SKILL_DIR/scripts/item_age.py" ] || stop_plugin "SKILL_DIR has no scripts/item_age.py" ;;
 esac
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$1"
+  elif command -v python >/dev/null 2>&1; then
+    python -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$1"
+  else
+    return 1
+  fi
+}
+shared="$SKILL_DIR/scripts/SHARED.sha256"
+[ -f "$shared" ] || stop_plugin "SKILL_DIR has no scripts/SHARED.sha256, so its shared files cannot be verified"
+for rel in contracts/ps.client-status-qbr.v1.json references/status-reporting-rules.md scripts/validate_payload.py scripts/step0.sh scripts/VERSION; do
+  expect=$(tr -d '\r' < "$shared" | awk -v p="$rel" '$2 == p { print $1; exit }')
+  [ -n "$expect" ] || stop_plugin "scripts/SHARED.sha256 has no entry for $rel"
+  [ -f "$SKILL_DIR/$rel" ] || stop_plugin "SKILL_DIR is missing the shared file $rel"
+  got=$(sha256_of "$SKILL_DIR/$rel") || stop_plugin "no SHA-256 tool (sha256sum, shasum or python) is available to verify $rel"
+  [ "$got" = "$expect" ] || stop_plugin "the shared file $rel in SKILL_DIR does not match scripts/SHARED.sha256 - this copy has drifted or been edited"
+done
+root_shared="$SKILL_DIR/../../scripts/SHARED.sha256"
+if [ -f "$SKILL_DIR/../../.claude-plugin/plugin.json" ] && [ -f "$root_shared" ]; then
+  [ "$(sha256_of "$root_shared")" = "$(sha256_of "$shared")" ] ||
+    stop_plugin "this skill's scripts/SHARED.sha256 differs from the plugin-root copy - the shared files have drifted between skills"
+fi
+
 manifest="$SKILL_DIR/../../.claude-plugin/plugin.json"
 if [ -f "$manifest" ]; then
   grep -q '"name"[[:space:]]*:[[:space:]]*"client-status-qbr"' "$manifest" ||

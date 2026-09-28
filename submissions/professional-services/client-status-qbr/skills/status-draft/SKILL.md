@@ -40,14 +40,17 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
    may start a new shell, so begin **every** call with this prefix, on the same line as the
    command that follows it:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 status-draft
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 status-draft
    ```
    `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
    run's working folder: the folder the user named, otherwise `./status-run` in your working
    directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
    `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
-   plugin at version 1.5.0 with
-   its tools present, and that `RUN_DIR` exists. It prints nothing on success. On failure it
+   plugin at version 1.5.1 with
+   its tools present, that its shared files (contract, rules, validator, `step0.sh`, `VERSION`)
+   match `scripts/SHARED.sha256` and the plugin-root copy of that manifest, and that `RUN_DIR`
+   exists. A `does not match scripts/SHARED.sha256` failure means this copy has drifted; stop and
+   ask for a clean copy of the plugin rather than editing any file. It prints nothing on success. On failure it
    prints one `STEP 0 FAILED` line and exits non-zero, so nothing after `&&` runs. An error
    such as `cannot open …/scripts/step0.sh` also means `SKILL_DIR` is wrong. Never change the version or skill name on the Step 0 line.
    - **If your loader gave you no base directory, or Step 0 reports a problem with `SKILL_DIR`,
@@ -61,7 +64,7 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
      and read and write run files only under `$RUN_DIR`.
 1. Validate the incoming payload with the shipped tool before drafting anything:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
    ```
    A non-zero exit means an earlier step left a gap — stop and escalate rather than drafting
    around it.
@@ -86,7 +89,7 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
 The user says *"draft the client update for Northwind"* after `risk-summarize` has run.
 
 ```bash
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
 ```
 
 You then write `$RUN_DIR/status-pack.md`, opening like this:
@@ -110,10 +113,16 @@ Overall status is **Red** this period, moved from Green (engine:variance_calc, #
 
 | Dimension | This period | Last period | Driver |
 | --- | --- | --- | --- |
-| Schedule | 🔴 Red | 🟢 Green | M-401 forecast 14 days past original baseline (#2.2) |
-| Budget | 🔴 Red | 🟢 Green | Burn +13.6% vs plan including 95,000 WIP (#3.2, #3.3) |
-| Scope | 🟡 Amber | 🟡 Amber | 2 open change requests, 1 client-facing (#4.1) |
+| Schedule | 🔴 Red | Not reported | M-401 forecast 14 days past original baseline after a rebaseline (#2.2, #2.3) |
+| Budget | 🔴 Red | Not reported | Burn +13.6% vs plan including 95,000 WIP; EAC +11.43% vs baseline (#3.2, #3.3) |
+| Scope | 🔴 Red | Not reported | SC-401 open change request with client-facing impact (#4.2) |
 | **Overall** | **🔴 Red** | **🟢 Green** | Worst-of roll-up (#6.1) |
+
+The example rows are the engines' output for the bundled demo `demo-data/scenario-b-drama`;
+never copy them into a real pack. **Last period** comes only from `prior_status`, which carries
+the overall RAG (`prior_status.reported_rag`) and per-milestone RAG — not per-dimension
+schedule, budget or scope colours. Fill a dimension's Last period cell only if `prior_status`
+actually holds that value; otherwise write `Not reported`. Never infer a prior colour.
 
 Then the prose sections in the order listed in Steps, a **Pending client actions** list kept
 separate from internal actions, and a closing citation list mapping every figure to
@@ -179,9 +188,11 @@ Every prose explanation must cite the supporting source record or extracted docu
   missing rather than estimating it.
 - **Cite every figure.** Each number in the prose carries its engine source and the underlying
   source record. An uncited figure must not appear in the draft.
-- **No personal or sensitive data.** Never put individual salaries, rates by named person,
+- **No personal or sensitive data (status-reporting-rules.md #7.2).** Never put individual salaries, rates by named person,
   personal contact details, performance commentary or any sensitive personal detail into a
-  client-facing draft. Report at role, team or engagement level.
+  client-facing draft, or into your chat reply. Report at role, team or engagement level and
+  refer to people by role ("the engagement manager"), not by name. When you refuse any part of
+  a request on these grounds, cite #7.2.
 - The DRAFT label and the escalations block are retained even when the user asks for something
   "client-ready", "clean" or "without the caveats". Offer to explain a caveat; never delete it.
 - Do not invent a Govern step; governance here is the platform and review boundary, not a

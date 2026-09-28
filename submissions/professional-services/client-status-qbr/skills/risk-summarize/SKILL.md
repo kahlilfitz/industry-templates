@@ -38,14 +38,17 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
    may start a new shell, so begin **every** call with this prefix, on the same line as the
    command that follows it:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 risk-summarize
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 risk-summarize
    ```
    `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
    run's working folder: the folder the user named, otherwise `./status-run` in your working
    directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
    `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
-   plugin at version 1.5.0 with
-   its tools present, and that `RUN_DIR` exists. It prints nothing on success. On failure it
+   plugin at version 1.5.1 with
+   its tools present, that its shared files (contract, rules, validator, `step0.sh`, `VERSION`)
+   match `scripts/SHARED.sha256` and the plugin-root copy of that manifest, and that `RUN_DIR`
+   exists. A `does not match scripts/SHARED.sha256` failure means this copy has drifted; stop and
+   ask for a clean copy of the plugin rather than editing any file. It prints nothing on success. On failure it
    prints one `STEP 0 FAILED` line and exits non-zero, so nothing after `&&` runs. An error
    such as `cannot open …/scripts/step0.sh` also means `SKILL_DIR` is wrong. Never change the version or skill name on the Step 0 line.
    - **If your loader gave you no base directory, or Step 0 reports a problem with `SKILL_DIR`,
@@ -59,7 +62,7 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
      and read and write run files only under `$RUN_DIR`.
 1. Validate the incoming payload with the shipped tool before ageing anything:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 risk-summarize && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/variance.json" --hop variance-calc
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 risk-summarize && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/variance.json" --hop variance-calc
    ```
    A non-zero exit means an earlier step left a gap. Stop and escalate.
 2. **Apply any ageing threshold the user asked for — and only those.** If the user, in this
@@ -79,7 +82,7 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
 3. Run the ageing engine. Call both tools through `$SKILL_DIR` (set in step 0) and write
    outputs into your writable working directory:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 risk-summarize && python "$SKILL_DIR/scripts/item_age.py" --input "$RUN_DIR/variance.json" --out "$RUN_DIR/aged.json"
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 risk-summarize && python "$SKILL_DIR/scripts/item_age.py" --input "$RUN_DIR/variance.json" --out "$RUN_DIR/aged.json"
    ```
    The skill folder is read-only and is not the working directory, so a bare
    `scripts/item_age.py` will not resolve. Always use the `$SKILL_DIR` form.
@@ -92,9 +95,9 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
 The user says *"what's waiting on the client for Northwind?"* after `variance-calc` has run.
 
 ```bash
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 risk-summarize && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/variance.json" --hop variance-calc
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 risk-summarize && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/variance.json" --hop variance-calc
 
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 risk-summarize && python "$SKILL_DIR/scripts/item_age.py" --input "$RUN_DIR/variance.json" --out "$RUN_DIR/aged.json"
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 risk-summarize && python "$SKILL_DIR/scripts/item_age.py" --input "$RUN_DIR/variance.json" --out "$RUN_DIR/aged.json"
 ```
 
 The engine writes `aged_items` into `$RUN_DIR/aged.json`. You quote it — you never
@@ -103,11 +106,16 @@ re-bucket an item yourself.
 ## Output format
 Report the engine's results as a Markdown table, one row per open item:
 
+The rows below are `item_age.py`'s actual output for the bundled demo
+`demo-data/scenario-b-drama` (after `variance-calc`), shown only to illustrate the shape.
+Never copy an ID, title or number from this example into a real run; every cell must come from
+your own `aged.json`, and the Bucket column uses the engine's bucket name verbatim.
+
 | ID | Kind | Title | Age (days) | Days past due | Bucket | Waiting on client |
 | --- | --- | --- | --- | --- | --- | --- |
-| R-401 | Risk | Integration test environment unstable | 102 | — | Critical | No |
-| D-401 | Decision | Approve revised data-migration window | 41 | 10 | Overdue | Yes |
-| A-401 | Action | Confirm UAT participant list | 22 | 8 | Overdue | Yes (blocked by D-401) |
+| R-401 | Risk | Rules catalogue ownership unresolved | 102 | 51 | critical_age | No |
+| D-401 | Decision | Client to decide broker exception rule owner | 23 | 10 | overdue | Yes |
+| A-401 | Action | Finalize exception workflow design | 17 | 8 | overdue | Yes (blocked by D-401) |
 
 Follow the table with a **Pending client actions** bullet list and then an **Escalations**
 bullet list quoting each engine escalation in full with its rule number, or `No escalations.`
@@ -176,9 +184,10 @@ classification must cite either the client owner or the client decision blocker.
 - Every age and overdue value comes from `"$SKILL_DIR/scripts/item_age.py"`.
 - **Cite every figure.** Each aged item carries `source=engine:item_age`, its confidence and the
   `status-reporting-rules.md` rule number behind its bucket.
-- **No personal or sensitive data.** Report owners by role or team where possible. Never copy
+- **No personal or sensitive data (status-reporting-rules.md #7.2).** Report owners by role or team where possible. Never copy
   personal contact details, performance commentary or any sensitive personal detail out of a
-  register note and into the status pack.
+  register note and into the status pack. When you refuse any part of a request on these
+  grounds, cite #7.2.
 - The model never downgrades an aged risk because the register says "monitoring".
 - An action blocked by a client decision is a pending client action, even if logged as internal
   (status-reporting-rules.md #5.5).

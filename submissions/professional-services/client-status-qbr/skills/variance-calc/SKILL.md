@@ -1,6 +1,6 @@
 ---
 name: variance-calc
-description: Computes period-over-period schedule, budget and scope variance with deterministic RAG for Client Status & QBR Assembly. Step 3 of 5; runs after plan-retrieve and burn-pull. Use when the user says "calculate the variance", "why is the status red?", "what changed since last week?" or "give me schedule, budget and scope RAG". Delegates every threshold and calculation to scripts/variance_calc.py and quotes the engine output verbatim rather than restating it; surfaces masked slippage where a rebaseline hides variance against the original baseline. Do NOT start a status run — use plan-retrieve. Do NOT pull finance or burn data — use burn-pull. Do NOT age risks or decisions — use risk-summarize. Do NOT write the client narrative — use status-draft.
+description: Computes period-over-period schedule, budget and scope variance with deterministic RAG for Client Status & QBR Assembly. Step 3 of 5; runs after plan-retrieve and burn-pull. Use when the user says "calculate the variance", "why is the status red?", "is the budget red or amber?", "what changed since last week?" (RAG and variance movement) or "give me schedule, budget and scope RAG". Delegates every threshold and calculation to scripts/variance_calc.py and quotes the engine output verbatim; surfaces slippage a rebaseline hides. Do NOT start a status run — use plan-retrieve. Do NOT pull finance figures or trace why burn moved ("why did burn change?") — use burn-pull. Do NOT age risks or decisions — use risk-summarize. Do NOT write the client narrative — use status-draft.
 license: Proprietary
 metadata:
   version: "1.0"
@@ -19,7 +19,10 @@ After `plan-retrieve` and `burn-pull`, before `risk-summarize` and always before
 ## When NOT to Use
 - Starting a run, or reading the plan and prior status pack — use `plan-retrieve`.
 - Extracting or correcting the underlying finance figures — use `burn-pull`. This skill reads
-  the `budget` object; it never sources or edits it.
+  the `budget` object; it never sources or edits it. "Why did burn change?" and "where are we
+  on budget?" asked for the raw figures are `burn-pull` questions: they trace a movement to
+  export rows. This skill answers "what changed since last week?" in RAG and variance terms,
+  and "is the budget red or amber?".
 - Ageing risks, decisions or actions, or identifying pending client actions — use
   `risk-summarize`. Item ageing thresholds (#5.1–#5.5) belong to that engine, not this one.
 - Writing the client-facing explanation of the RAG — use `status-draft`.
@@ -38,14 +41,17 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
    may start a new shell, so begin **every** call with this prefix, on the same line as the
    command that follows it:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 variance-calc
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 variance-calc
    ```
    `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
    run's working folder: the folder the user named, otherwise `./status-run` in your working
    directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
    `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
-   plugin at version 1.5.0 with
-   its tools present, and that `RUN_DIR` exists. It prints nothing on success. On failure it
+   plugin at version 1.5.1 with
+   its tools present, that its shared files (contract, rules, validator, `step0.sh`, `VERSION`)
+   match `scripts/SHARED.sha256` and the plugin-root copy of that manifest, and that `RUN_DIR`
+   exists. A `does not match scripts/SHARED.sha256` failure means this copy has drifted; stop and
+   ask for a clean copy of the plugin rather than editing any file. It prints nothing on success. On failure it
    prints one `STEP 0 FAILED` line and exits non-zero, so nothing after `&&` runs. An error
    such as `cannot open …/scripts/step0.sh` also means `SKILL_DIR` is wrong. Never change the version or skill name on the Step 0 line.
    - **If your loader gave you no base directory, or Step 0 reports a problem with `SKILL_DIR`,
@@ -59,7 +65,7 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
      and read and write run files only under `$RUN_DIR`.
 1. Validate the incoming payload with the shipped tool before computing anything:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 variance-calc && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 variance-calc && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
    ```
    A non-zero exit means `plan-retrieve` or `burn-pull` left a gap. Stop and escalate.
 2. **Apply any threshold the user asked for — and only those.** If the user, in this
@@ -78,7 +84,7 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
 3. Run the variance engine. Call both tools through `$SKILL_DIR` (set in step 0) and write
    outputs into your writable working directory:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 variance-calc && python "$SKILL_DIR/scripts/variance_calc.py" --input "$RUN_DIR/status-input.json" --out "$RUN_DIR/variance.json"
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 variance-calc && python "$SKILL_DIR/scripts/variance_calc.py" --input "$RUN_DIR/status-input.json" --out "$RUN_DIR/variance.json"
    ```
    The skill folder is read-only and is not the working directory, so a bare
    `scripts/variance_calc.py` will not resolve. Always use the `$SKILL_DIR` form.
@@ -92,9 +98,9 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
 The user says *"why is Northwind red this week?"* after `burn-pull` has run.
 
 ```bash
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 variance-calc && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 variance-calc && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
 
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.0 variance-calc && python "$SKILL_DIR/scripts/variance_calc.py" --input "$RUN_DIR/status-input.json" --out "$RUN_DIR/variance.json"
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 variance-calc && python "$SKILL_DIR/scripts/variance_calc.py" --input "$RUN_DIR/status-input.json" --out "$RUN_DIR/variance.json"
 ```
 
 The engine writes `variance_summary` into `$RUN_DIR/variance.json`. You then quote it — you
@@ -103,12 +109,19 @@ do not recompute any part of it.
 ## Output format
 Report the engine's results as a Markdown table, one row per dimension:
 
+The rows below are the engine's actual output for the bundled demo payload
+`demo-data/scenario-b-drama` — shown only to illustrate the shape. Never copy a colour, figure
+or ID from this example into a real run; every cell must come from your own `variance.json`.
+
 | Dimension | RAG | Driver | Rule |
 | --- | --- | --- | --- |
-| Schedule | 🔴 Red | M-401 forecast 14 days past original baseline | #2.2 |
-| Budget | 🔴 Red | Burn +13.6% vs plan once 95,000 unbilled WIP is included | #3.2, #3.3 |
-| Scope | 🟡 Amber | 2 open change requests, 1 with client-facing impact | #4.1 |
+| Schedule | 🔴 Red | M-401 reported green after a rebaseline, but forecast 14 days past original baseline | #2.2, #2.3 |
+| Budget | 🔴 Red | Burn +13.6% vs plan once 95,000 unbilled WIP is included; EAC +11.43% vs baseline | #3.2, #3.3 |
+| Scope | 🔴 Red | SC-401 open change request with client-facing impact | #4.2 |
 | **Overall** | **🔴 Red** | Worst-of roll-up | #6.1 |
+
+Scope turns **red**, not amber, as soon as any open change has client-facing impact (#4.2);
+amber (#4.1) is only for open changes with no client-facing impact, fewer than the red count.
 
 Follow the table with an **Escalations** bullet list quoting each engine escalation in full,
 including its rule number, or the line `No escalations.` When `thresholds_source` is `user`,
@@ -176,8 +189,9 @@ Every computed fact must carry `source=engine:variance_calc`, confidence and a c
 - Every number comes from `"$SKILL_DIR/scripts/variance_calc.py"`.
 - **Cite every figure.** Each quoted value carries the engine source, its confidence and the
   `status-reporting-rules.md` rule number it was derived under.
-- **No personal or sensitive data.** Do not name individuals' pay, rates or performance in the
-  variance output. Report at engagement level only.
+- **No personal or sensitive data (status-reporting-rules.md #7.2).** Do not name individuals' pay, rates or performance in the
+  variance output. Report at engagement level only. When you refuse any part of a request on
+  these grounds, cite #7.2.
 - The engine compares schedule to the original baseline, not only to the latest rebaseline.
 - Schedule thresholds (#2.1/#2.2) are strict "more than"; budget thresholds (#3.1/#3.2) are
   inclusive "at least". Do not describe them as the same test.
