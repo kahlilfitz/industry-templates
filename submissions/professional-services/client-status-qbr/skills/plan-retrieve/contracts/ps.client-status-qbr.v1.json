@@ -41,10 +41,14 @@
           "type": "string"
         },
         "manager": {
-          "type": "string"
+          "type": "string",
+          "x_internal": true,
+          "description": "Engagement manager, by name. INTERNAL ONLY - this field exists to route the draft for review and must never appear in a client pack. Refer to this person as 'the engagement manager' in anything client-facing (status-reporting-rules.md #7.2)."
         },
         "partner": {
-          "type": "string"
+          "type": "string",
+          "x_internal": true,
+          "description": "Engagement partner, by name. INTERNAL ONLY - same handling as manager: routing and internal review only, never reproduced in a client pack (#7.2)."
         },
         "source": {
           "type": "string",
@@ -191,6 +195,24 @@
       "properties": {
         "currency": {
           "type": "string"
+        },
+        "commercial_model": {
+          "enum": [
+            "time_and_materials",
+            "capped_time_and_materials",
+            "fixed_fee",
+            "milestone_based",
+            "retainer",
+            "unknown"
+          ],
+          "description": "How the engagement is sold. Burn against plan means different things under each: on time_and_materials an overrun is a client conversation, on fixed_fee it is internal margin and is not a client-facing budget problem. Use 'unknown' only when no contract document states it, and expect an escalation - reporting a budget RAG without knowing the commercial model is a guess."
+        },
+        "amounts_basis": {
+          "enum": [
+            "fee",
+            "cost"
+          ],
+          "description": "Whether the amounts in this block are what the client is charged ('fee') or what delivery costs internally ('cost'). Cost figures carry margin and must never drive a client-facing burn percentage; the engines escalate when they see 'cost'. Absent is treated as 'fee' with an escalation, because a silent mix of the two is the single easiest way to publish a wrong number."
         },
         "baseline_budget": {
           "type": "number",
@@ -967,6 +989,10 @@
           "description": "What was done or agreed. Required reading before a blocking escalation is treated as cleared."
         }
       }
+    },
+    "personal_data_boundary": {
+      "type": "object",
+      "description": "Not a payload field - documentation of the #7.2 boundary that validate_payload.py enforces. Never place in any field: an individual's salary, pay, day rate or cost rate; bank, card or payment details; personal contact details (email, phone, home address); performance or conduct commentary about a named person; or any other personal identifier. Report at engagement, team or role level instead. Fields marked x_internal are not sensitive in themselves but are internal-only and must not be reproduced in a client-facing document."
     }
   }
 }

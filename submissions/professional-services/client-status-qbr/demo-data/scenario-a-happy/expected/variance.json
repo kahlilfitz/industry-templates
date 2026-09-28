@@ -109,6 +109,8 @@
   },
   "budget": {
     "currency": "USD",
+    "commercial_model": "time_and_materials",
+    "amounts_basis": "fee",
     "baseline_budget": 620000,
     "planned_burn_to_date": 285000,
     "actual_billed_to_date": 268500,
@@ -242,6 +244,10 @@
       "facts": [
         {
           "currency": "USD",
+          "commercial_model": "time_and_materials",
+          "amounts_basis": "fee",
+          "client_facing": true,
+          "overrun_borne_by": "client",
           "planned_burn_to_date": 285000,
           "actual_billed_to_date": 268500,
           "unbilled_wip": 8200,
@@ -258,12 +264,12 @@
           "forecast_period_delta": 5000,
           "source": "engine:variance_calc",
           "confidence": 0.97,
-          "citation": "status-reporting-rules.md #3.1,#3.2,#3.3,#3.4; raw/burn-export.csv"
+          "citation": "status-reporting-rules.md #3.1,#3.2,#3.3,#3.4,#3.5,#3.6; raw/burn-export.csv"
         }
       ],
       "source": "engine:variance_calc",
       "confidence": 0.97,
-      "citation": "status-reporting-rules.md #3.1-#3.4"
+      "citation": "status-reporting-rules.md #3.1-#3.6"
     },
     "scope": {
       "rag": "green",

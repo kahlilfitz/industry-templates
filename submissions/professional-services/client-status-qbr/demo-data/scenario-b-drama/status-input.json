@@ -120,6 +120,8 @@
   },
   "budget": {
     "currency": "USD",
+    "commercial_model": "time_and_materials",
+    "amounts_basis": "fee",
     "baseline_budget": 700000,
     "planned_burn_to_date": 500000,
     "actual_billed_to_date": 473000,

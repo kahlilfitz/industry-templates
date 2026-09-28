@@ -608,6 +608,34 @@ def schedule_summary(payload, escalations):
 
 def budget_summary(payload, escalations):
     budget = require(payload, "budget", "burn-pull")
+    # A burn percentage only means something once you know what is being burned and who
+    # carries the overrun. Establish both before computing anything (#3.5, #3.6).
+    commercial_model = budget.get("commercial_model") or "unknown"
+    if commercial_model == "unknown":
+        add_escalation(
+            escalations,
+            "budget: the commercial model is not stated, so it is not known whether an "
+            "overrun is a client conversation or internal margin - confirm with the "
+            "engagement financial analyst before this budget RAG is used "
+            "(status-reporting-rules.md #3.5)",
+        )
+    amounts_basis = budget.get("amounts_basis")
+    if amounts_basis is None:
+        amounts_basis = "fee"
+        add_escalation(
+            escalations,
+            "budget: the figures do not say whether they are fee or cost, and have been "
+            "read as fee - confirm with the engagement financial analyst, because reading "
+            "cost figures as fee overstates burn by the whole margin "
+            "(status-reporting-rules.md #3.6)",
+        )
+    elif amounts_basis == "cost":
+        add_escalation(
+            escalations,
+            "budget: the figures are internal cost, not client fee - this burn percentage "
+            "carries margin and must not be shown to the client or used as a client-facing "
+            "budget RAG (status-reporting-rules.md #3.6, #7.2)",
+        )
     planned = require(payload, "budget.planned_burn_to_date", "burn-pull")
     billed = require(payload, "budget.actual_billed_to_date", "burn-pull")
     baseline_budget = require(payload, "budget.baseline_budget", "burn-pull")
@@ -714,6 +742,18 @@ def budget_summary(payload, escalations):
         "facts": [
             {
                 "currency": budget.get("currency", "UNKNOWN"),
+                "commercial_model": commercial_model,
+                "amounts_basis": amounts_basis,
+                "client_facing": amounts_basis == "fee",
+                "overrun_borne_by": (
+                    "client"
+                    if commercial_model in ("time_and_materials", "retainer")
+                    else "firm"
+                    if commercial_model in ("fixed_fee", "milestone_based")
+                    else "capped: the firm above the cap, the client below it"
+                    if commercial_model == "capped_time_and_materials"
+                    else "unknown"
+                ),
                 "planned_burn_to_date": planned,
                 "actual_billed_to_date": billed,
                 "unbilled_wip": raw_wip,
@@ -731,14 +771,14 @@ def budget_summary(payload, escalations):
                 "source": ENGINE,
                 "confidence": confidence,
                 "citation": (
-                    "status-reporting-rules.md #3.1,#3.2,#3.3,#3.4; "
+                    "status-reporting-rules.md #3.1,#3.2,#3.3,#3.4,#3.5,#3.6; "
                     + budget.get("citation", "UNCITED")
                 ),
             }
         ],
         "source": ENGINE,
         "confidence": round(confidence, 2),
-        "citation": "status-reporting-rules.md #3.1-#3.4",
+        "citation": "status-reporting-rules.md #3.1-#3.6",
     }
 
 

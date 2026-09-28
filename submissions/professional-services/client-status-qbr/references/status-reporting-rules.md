@@ -28,6 +28,8 @@ firm standard.
 | 3.2 | Burn or forecast variance is >= 10% (BUDGET_RED_PCT) in either direction | Budget RAG red. State the direction of the variance, never just the colour |
 | 3.3 | Unbilled WIP/accrual exists | Include WIP in actual burn before comparing to plan; billed-only burn is not authoritative |
 | 3.4 | Forecast-to-complete changed since prior period, or no prior forecast was supplied | Include period-over-period forecast movement in the draft. Where no prior forecast exists the movement is unmeasurable and must be escalated, never reported as zero |
+| 3.5 | The commercial model is absent or `unknown` | Escalate. Burn against plan is not interpretable until it is known who bears an overrun: on time and materials or a retainer it is a client conversation, on fixed fee or milestone-based it is internal margin, on capped T&M it is the firm above the cap and the client below it. Report the model alongside every budget RAG |
+| 3.6 | `amounts_basis` is `cost`, or is absent | Cost figures carry margin and must never drive a client-facing burn percentage or appear in a client pack (#7.2). Absent is read as `fee` and escalated, because silently mixing fee and cost overstates or understates burn by the entire margin |
 
 ## 4. Scope and change control
 | Rule | Condition | RAG / effect |

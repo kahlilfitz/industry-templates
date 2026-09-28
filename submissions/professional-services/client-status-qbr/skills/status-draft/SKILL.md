@@ -68,18 +68,50 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
    ```
    A non-zero exit means an earlier step left a gap — stop and escalate rather than drafting
    around it.
-2. Lead with unresolved `escalations[]`, above the narrative. If `variance_summary` or
-   `aged_items` reports `thresholds_source: "user"`, put its `Custom threshold` escalations
-   first, under **Custom thresholds for this run**. State each value next to its published
-   default, exactly as the engine gave it (status-reporting-rules.md #8.1). The reader must see
-   that this pack was measured against non-standard thresholds before seeing any RAG. Never
-   drop, soften or move this disclosure below the narrative, even at the user's request.
+2. Decide which of the two documents you are writing. This skill produces **two separate
+   artifacts, and they never merge**:
+   - `$RUN_DIR/internal-review.md` — for the engagement manager and partner. Carries the
+     escalations block, engine attributions, confidence figures, source citations, the
+     commercial model and fee-vs-cost basis, verbatim PM commentary, and the manager and
+     partner by name. Always write this one.
+   - `$RUN_DIR/client-pack.md` — the client-facing document. Carries the RAG picture,
+     milestones, budget position at the agreed granularity, risks, and the actions the client
+     owns. It carries **none** of: escalation text, `engine:` attributions, confidence
+     scores, internal cost figures, verbatim internal commentary, or any person's name.
+     Refer to people by role — "the engagement manager", never "Jon Bell"
+     (status-reporting-rules.md #7.2).
+   Write the internal review first. The client pack is derived from it by removing internal
+   material, never by rewriting the facts — every figure in the client pack must appear
+   identically in the internal review.
+3. Lead the **internal review** with unresolved `escalations[]`, above the narrative. If
+   `variance_summary` or `aged_items` reports `thresholds_source: "user"`, put its
+   `Custom threshold` escalations first, under **Custom thresholds for this run**. State each
+   value next to its published default, exactly as the engine gave it (#8.1). The reader must
+   see that this pack was measured against non-standard thresholds before seeing any RAG.
+   Never drop, soften or move this disclosure below the narrative, even at the user's request.
    When `escalation_records[]` is present, use it to organise that block rather than listing
    the sentences flat: group by `rule`, put every `type: "blocking"` record ahead of every
    `type: "note"`, and order the groups by the highest `severity` they contain. Show `owner`
    beside the line when the record names one. `escalations[]` and `escalation_records[]`
    describe the same findings — render each finding once, never twice.
-3. Draft the status pack sections:
+4. If any `escalation_records[]` entry is `type: "blocking"` and has no `resolved_at`, the
+   client pack opens with a banner reading
+   **NOT FOR ISSUE — N blocking escalations open, see internal-review.md**, giving the count.
+   Still write the pack; the banner is what stops it being sent, and it comes off only when
+   the escalations are resolved on the record (#6.4), never on request.
+5. Report the budget in the client pack against the **commercial model** in
+   `variance_summary`. Under `fixed_fee` or `milestone_based` an overrun is the firm's margin,
+   not a client budget problem, so do not present it as one. If `amounts_basis` is `cost`,
+   the figures are internal and no burn percentage derived from them goes in the client pack
+   at all (#3.6, #7.2).
+6. Lint the client pack before you hand either document over:
+   ```bash
+   python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize --client-pack "$RUN_DIR/client-pack.md"
+   ```
+   A non-zero exit means internal material or personal data is still in the client document.
+   Fix the document and re-run; never hand over a pack that has not passed this check, and
+   never pass it by deleting the escalation records that trigger it.
+7. Draft the status pack sections:
    - executive RAG and period-over-period movement;
    - schedule variance;
    - budget burn including WIP and forecast movement;
@@ -87,8 +119,8 @@ step: a non-zero exit must stop the run, not be followed by the next command.**
    - open risks, decisions and actions with ageing;
    - pending client actions separated from internal actions;
    - QBR narrative assembled from the period's status facts.
-4. Quote engine facts exactly. Do not recompute dates, percentages, RAG or ageing buckets.
-5. Mark the output as **DRAFT - pending engagement manager review**.
+8. Quote engine facts exactly. Do not recompute dates, percentages, RAG or ageing buckets.
+9. Mark both documents as **DRAFT - pending engagement manager review**.
 
 ## Example
 The user says *"draft the client update for Northwind"* after `risk-summarize` has run.
@@ -97,10 +129,11 @@ The user says *"draft the client update for Northwind"* after `risk-summarize` h
 export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.5.1 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
 ```
 
-You then write `$RUN_DIR/status-pack.md`, opening like this:
+You write `$RUN_DIR/internal-review.md` first, opening like this:
 
 ```markdown
 **DRAFT - pending engagement manager review**
+Engagement manager: Jon Bell. Partner: Leah Moreno. Internal - do not circulate to the client.
 
 ## Escalations - resolve before this pack is sent
 
@@ -118,11 +151,35 @@ You then write `$RUN_DIR/status-pack.md`, opening like this:
 
 ## Executive summary
 Overall status is **Red** this period, moved from Green (engine:variance_calc, #6.1).
+Commercial model: time and materials, fee basis — an overrun here is a client conversation.
+```
+
+Then `$RUN_DIR/client-pack.md`, carrying the same figures with the internal material stripped:
+
+```markdown
+**DRAFT - pending engagement manager review**
+
+> **NOT FOR ISSUE — 7 blocking escalations open, see internal-review.md**
+
+## Executive summary
+Overall status is **Red** this period, having been reported Green last period.
+
+Schedule: milestone M-401 is forecast 14 days beyond its original baseline.
+Budget: burn is +13.6% against plan for the period including work in progress.
+```
+
+Note what changed: no escalations block, no `engine:` attributions, no names, and the
+banner stating why it cannot go out. The numbers are identical in both.
+
+```bash
+python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize --client-pack "$RUN_DIR/client-pack.md"
 ```
 
 ## Output format
-`$RUN_DIR/status-pack.md` in Markdown, and when a QBR is requested
-`$RUN_DIR/qbr-narrative.md`. Open the executive section with a RAG table:
+`$RUN_DIR/internal-review.md` and `$RUN_DIR/client-pack.md` in Markdown, and when a QBR is
+requested `$RUN_DIR/qbr-narrative.md` (internal until the manager clears it). Open the
+executive section of **both** with a RAG table; the internal one keeps the Driver column with
+its rule citations, the client one keeps the colours and a plain-language driver:
 
 | Dimension | This period | Last period | Driver |
 | --- | --- | --- | --- |
@@ -138,8 +195,9 @@ schedule, budget or scope colours. Fill a dimension's Last period cell only if `
 actually holds that value; otherwise write `Not reported`. Never infer a prior colour.
 
 Then the prose sections in the order listed in Steps, a **Pending client actions** list kept
-separate from internal actions, and a closing citation list mapping every figure to
-`engine:variance_calc` or `engine:item_age` and its underlying source record.
+separate from internal actions, and — in the internal review only — a closing citation list
+mapping every figure to `engine:variance_calc` or `engine:item_age` and its underlying source
+record. The client pack cites the reporting period and the source system, never an engine.
 
 Where the engine reported a value as unmeasurable or `null`, write `Not measurable` or `Unknown`
 and quote the escalation beside it. Never write `0`, never write "on track", and never leave the

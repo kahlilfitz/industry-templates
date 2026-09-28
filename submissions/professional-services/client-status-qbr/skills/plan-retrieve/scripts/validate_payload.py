@@ -292,6 +292,138 @@ def validate(value, schema, root, path, errors):
             validate(child, schema["items"], root, f"{path}[{index}]", errors)
 
 
+def internal_field_paths(contract):
+    """Field names the contract marks x_internal, e.g. engagement.manager.
+
+    Read out of the contract rather than hard-coded here so that marking a new field
+    internal is a one-line change in one file.
+    """
+    found = []
+
+    def walk(node, path):
+        if not isinstance(node, dict):
+            return
+        for name, spec in (node.get("properties") or {}).items():
+            here = path + [name]
+            if isinstance(spec, dict):
+                if spec.get("x_internal"):
+                    found.append(".".join(here))
+                walk(spec, here)
+        items = node.get("items")
+        if isinstance(items, dict):
+            walk(items, path + ["[]"])
+
+    walk(contract, [])
+    return found
+
+
+# Rule #7.2. Each entry is (label, compiled pattern). Kept deliberately narrow: these must
+# fire on real personal data and stay quiet on ordinary status prose, because a lint that
+# cries wolf gets switched off and then protects nothing.
+PERSONAL_DATA_PATTERNS = (
+    ("an email address", re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),
+    (
+        "a phone number",
+        re.compile(r"(?<![\d-])(?:\+\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]\d{3}[\s.-]\d{4}(?![\d-])"),
+    ),
+    ("an IBAN", re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b")),
+    (
+        "a bank or card number",
+        re.compile(r"\b(?:\d[ -]?){13,19}\b"),
+    ),
+)
+
+# Keys that carry per-person money or judgement. Aggregate equivalents are fine, which is
+# why this matches the key rather than the value.
+SENSITIVE_KEY = re.compile(
+    r"(?:^|_)(?:salary|salaries|pay|payrate|day_rate|daily_rate|cost_rate|charge_rate|"
+    r"bill_rate|hourly_rate|rate_card|bonus|compensation|iban|bank_account|account_number|"
+    r"sort_code|routing_number|card_number|home_address|personal_email|personal_phone|"
+    r"performance_rating|performance_comment)(?:$|_)",
+    re.IGNORECASE,
+)
+
+
+def lint_personal_data(payload, errors):
+    """Refuse a payload carrying individual-level personal or financial data (#7.2)."""
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                here = f"{path}.{key}"
+                if SENSITIVE_KEY.search(key):
+                    errors.append(
+                        f"{here}: field name reads as individual pay, rate or personal "
+                        "identifier data, which must never enter the payload "
+                        "(status-reporting-rules.md #7.2). Report at engagement, team or "
+                        "role level instead, or leave it out and escalate"
+                    )
+                walk(value, here)
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f"{path}[{index}]")
+        elif isinstance(node, str):
+            for label, pattern in PERSONAL_DATA_PATTERNS:
+                if pattern.search(node):
+                    errors.append(
+                        f"{path}: value contains what looks like {label}, which is "
+                        "personal data and must not be carried in the payload or the pack "
+                        "(status-reporting-rules.md #7.2). Remove it at source; do not "
+                        "mask it and carry on"
+                    )
+                    break
+
+    walk(payload, "$")
+
+
+def lint_client_pack(text, payload, contract, errors):
+    """Check a drafted client-facing document for material that must not leave the firm.
+
+    The engines cannot stop a model typing a manager's name into a narrative, but this can
+    catch it before the document is shared, which is where rule #7.2 actually bites.
+    """
+    lowered = text.casefold()
+
+    for path in internal_field_paths(contract):
+        value = payload
+        for part in path.split("."):
+            value = value.get(part) if isinstance(value, dict) else None
+        if isinstance(value, str) and value.strip() and value.casefold() in lowered:
+            errors.append(
+                f"client pack: contains {value!r}, the value of the internal-only field "
+                f"{path}. Refer to this person by role instead "
+                "(status-reporting-rules.md #7.2)"
+            )
+
+    for label, pattern in PERSONAL_DATA_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            errors.append(
+                f"client pack: contains what looks like {label} "
+                f"({match.group(0)[:40]!r}) - remove it (#7.2)"
+            )
+
+    if re.search(r"\bengine:[A-Za-z_]+", text):
+        errors.append(
+            "client pack: cites an engine (engine:variance_calc / engine:item_age). Engine "
+            "attributions belong in the internal review sheet, not the client document"
+        )
+
+    blocking = [
+        record
+        for record in payload.get("escalation_records", [])
+        if isinstance(record, dict)
+        and record.get("type") == "blocking"
+        and not record.get("resolved_at")
+    ]
+    if blocking and "not for issue" not in lowered:
+        errors.append(
+            f"client pack: {len(blocking)} blocking escalation(s) are unresolved, so the "
+            "pack must carry a NOT FOR ISSUE banner naming that count until they are "
+            "resolved on the record (status-reporting-rules.md #6.4, #7.1)"
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Validate a ps.client-status-qbr.v1 payload against the shipped contract."
@@ -303,6 +435,14 @@ def main():
         help="also assert the blocks this hop needs are present",
     )
     parser.add_argument("--contract", help="override the contract path")
+    parser.add_argument(
+        "--client-pack",
+        metavar="FILE",
+        help=(
+            "also lint a drafted client-facing document against the personal-data and "
+            "internal-material boundary (status-reporting-rules.md #7.2)"
+        ),
+    )
     args = parser.parse_args()
 
     contract_path = find_contract(args.contract)
@@ -375,6 +515,17 @@ def main():
 
     validate(payload, contract, contract, "$", errors)
     check_settings(payload, errors)
+    lint_personal_data(payload, errors)
+
+    if args.client_pack:
+        try:
+            with open(args.client_pack, encoding="utf-8") as handle:
+                lint_client_pack(handle.read(), payload, contract, errors)
+        except FileNotFoundError:
+            errors.append(
+                f"--client-pack: no such file {args.client_pack} - draft the pack before "
+                "linting it"
+            )
 
     for block in HOPS.get(args.hop, []):
         if block not in payload:
