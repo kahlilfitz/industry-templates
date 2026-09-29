@@ -14,6 +14,7 @@ import copy
 from datetime import date
 import hashlib
 import json
+import math
 import re
 import sys
 
@@ -29,6 +30,10 @@ REBASELINE_CHECK_REQUIRED = True     # status-reporting-rules.md #2.3
 BUDGET_AMBER_PCT = 5.0              # status-reporting-rules.md #3.1
 BUDGET_RED_PCT = 10.0               # status-reporting-rules.md #3.2
 INCLUDE_UNBILLED_WIP = True          # status-reporting-rules.md #3.3
+
+# Models where the client's price is fixed, so burn against plan is our margin and not
+# a client-facing budget position (status-reporting-rules.md #3.5, #3.6).
+FIXED_PRICE_MODELS = frozenset({"fixed_fee", "milestone_based"})
 SCOPE_AMBER_OPEN_ITEMS = 1           # status-reporting-rules.md #4.1
 SCOPE_RED_OPEN_ITEMS = 3             # status-reporting-rules.md #4.2
 ROLLUP_ORDER = ["green", "amber", "red"]  # status-reporting-rules.md #6.1
@@ -215,7 +220,13 @@ def normalise_status(value):
 
 
 def status_state(value):
-    """Classify a raw status string as 'open', 'closed' or 'unknown'."""
+    """Classify a raw status string as 'open', 'closed' or 'unknown'.
+
+    Registers are edited by hand, so a cell often holds a comma- or slash-separated
+    list such as 'open, monitoring'. Classify each token and accept the result only
+    when every recognised token agrees; a list mixing open and closed tokens is
+    genuinely ambiguous and stays 'unknown' so a human resolves it.
+    """
     norm = normalise_status(value)
     if not norm:
         return "unknown"
@@ -223,6 +234,23 @@ def status_state(value):
         return "closed"
     if norm in OPEN_STATUSES:
         return "open"
+    tokens = [
+        part.strip()
+        for part in re.split(r"[,;/|]| and ", norm)
+        if part.strip()
+    ]
+    if len(tokens) > 1:
+        states = set()
+        for token in tokens:
+            if token in CLOSED_STATUSES:
+                states.add("closed")
+            elif token in OPEN_STATUSES:
+                states.add("open")
+            else:
+                states.add("unknown")
+        recognised = states - {"unknown"}
+        if len(recognised) == 1 and "unknown" not in states:
+            return recognised.pop()
     return "unknown"
 
 
@@ -253,6 +281,10 @@ def is_open(item, kind=None, escalations=None):
 ESCALATION_NOTES = (
     "historic slip, reported separately",
     "changes actual burn to",
+    # Disclosures, not blockers. Typing these as blocking meant a clean engagement
+    # always carried a NOT FOR ISSUE banner, so a pack could never issue.
+    "include this movement in the draft",
+    "classified as pending client action",
 )
 
 # Who has to act, read out of the message rather than guessed. Order matters:
@@ -263,6 +295,21 @@ ESCALATION_OWNERS = (
     ("engagement manager", "engagement manager"),
     ("delivery lead", "delivery lead"),
     ("item owner", "item owner"),
+)
+
+# Fallback when the message names no role. Most engine messages end "confirm with
+# the owner", which matches nothing above, so every record used to carry a null
+# owner and nobody was named as accountable. The rule that raised the escalation
+# tells us which role owns it.
+ESCALATION_OWNERS_BY_RULE = (
+    ("1", "engagement manager"),
+    ("2", "delivery lead"),
+    ("3", "engagement financial analyst"),
+    ("4", "engagement manager"),
+    ("5", "item owner"),
+    ("6", "item owner"),
+    ("7", "engagement manager"),
+    ("8", "engagement manager"),
 )
 
 
@@ -293,6 +340,12 @@ def escalation_owner(message):
     for needle, owner in ESCALATION_OWNERS:
         if needle in low:
             return owner
+    rules = escalation_rule(message)
+    if rules:
+        section = rules.split(",")[0].strip().lstrip("#").split(".")[0]
+        for prefix, owner in ESCALATION_OWNERS_BY_RULE:
+            if section == prefix:
+                return owner
     return None
 
 
@@ -316,29 +369,120 @@ def escalation_record(message, source):
     }
 
 
+def escalation_text(entry):
+    """The message and origin of a prior escalations[] entry.
+
+    The contract lets an entry be a plain sentence or an object carrying message,
+    rule, item_id and source. Reading only the string form silently deleted every
+    disclosure a skill raised in object form - the form burn-pull mandates - which
+    is exactly what rules #6.2 and #6.3 forbid.
+    """
+    if isinstance(entry, dict):
+        return entry.get("message"), entry.get("source") or "unknown"
+    return entry, "unknown"
+
+
+ESCALATION_RULE_CAP = 10
+
+
+def cap_escalations_by_rule(messages, limit=ESCALATION_RULE_CAP):
+    """Collapse a rule that fires on many items into one summary message.
+
+    Sixty undated actions used to raise sixty near-identical escalations, which buries
+    the two findings a reviewer actually has to act on. The per-item detail is already
+    in aged_items, so the escalation block only needs to say how many and which range.
+    Order is preserved and the collapse is deterministic, so re-runs stay idempotent.
+    """
+    grouped = {}
+    for message in messages:
+        rule = escalation_rule(message)
+        if rule:
+            grouped.setdefault(rule, []).append(message)
+
+    collapse = {
+        rule: group for rule, group in grouped.items() if len(group) > limit
+    }
+    if not collapse:
+        return list(messages)
+
+    emitted = set()
+    capped = []
+    for message in messages:
+        rule = escalation_rule(message)
+        group = collapse.get(rule)
+        if group is None:
+            capped.append(message)
+            continue
+        if rule in emitted:
+            continue
+        emitted.add(rule)
+        subjects = sorted({escalation_subject(m) or "" for m in group} - {""})
+        span = (
+            f"{subjects[0]}...{subjects[-1]}"
+            if len(subjects) > 1
+            else (subjects[0] if subjects else "multiple items")
+        )
+        detail = group[0]
+        prefix = f"{escalation_subject(group[0])}: "
+        if escalation_subject(group[0]) and detail.startswith(prefix):
+            detail = detail[len(prefix):]
+        capped.append(
+            f"{span}: {len(group)} items raise the same finding - {detail} "
+            f"(summarised from {len(group)} escalations; per-item detail is in aged_items)"
+        )
+    return capped
+
+
 def merge_escalations(prior_records, prior_messages, own_messages, source):
     """Rebuild the escalation list for this run.
 
     Keeps every record this engine does not own, regenerates its own from scratch,
-    and preserves loose strings from a pre-1.6.0 payload or from a skill that wrote
-    plain text. A resolved record stays in escalation_records as an audit trail but
-    drops out of the active escalations list.
+    and preserves prior escalations[] entries in either contract form. A resolution
+    recorded under #6.4 is carried forward onto the regenerated record, so clearing
+    a blocker survives the next engine in the chain. A resolved record stays in
+    escalation_records as an audit trail but drops out of the active list.
     """
     kept = []
     seen = set()
+    resolved = {}
     for record in prior_records:
-        if not isinstance(record, dict) or record.get("source") == source:
+        if not isinstance(record, dict):
+            continue
+        if record.get("source") == source:
+            # This engine regenerates its own records, but a resolution recorded
+            # against one has to survive (#6.4) or a blocker can never be cleared
+            # and the NOT FOR ISSUE banner can never come off. The id is a digest
+            # of the message, so an unchanged finding keeps its id.
+            if record.get("resolved_at"):
+                resolved[record.get("id")] = record
             continue
         kept.append(record)
         message = record.get("message")
         if isinstance(message, str):
             seen.add(message)
-    own = list(own_messages)
-    for message in prior_messages:
-        if isinstance(message, str) and message not in seen and message not in own:
-            kept.append(escalation_record(message, "unknown"))
-            seen.add(message)
-    records = kept + [escalation_record(message, source) for message in own]
+    own = cap_escalations_by_rule(list(own_messages))
+    for entry in prior_messages:
+        message, origin = escalation_text(entry)
+        if not isinstance(message, str) or not message.strip():
+            continue
+        if origin == source or message in seen or message in own:
+            continue
+        record = escalation_record(message, origin)
+        if isinstance(entry, dict):
+            # An explicit rule or item id is better evidence than a text match.
+            record["rule"] = entry.get("rule") or record["rule"]
+            record["subject"] = entry.get("item_id") or record["subject"]
+        kept.append(record)
+        seen.add(message)
+    fresh = []
+    for message in own:
+        record = escalation_record(message, source)
+        prior = resolved.get(record["id"])
+        if prior:
+            for key in ("resolved_by", "resolved_at", "resolution"):
+                record[key] = prior.get(key)
+        fresh.append(record)
+    records = kept + fresh
     active = []
     for record in records:
         if record.get("resolved_at"):
@@ -405,7 +549,18 @@ def schedule_summary(payload, escalations):
     facts = []
     rag = "green"
     confidence = 1.0
-    for milestone in require(payload, "plan.milestones", "plan-retrieve"):
+    milestones = require(payload, "plan.milestones", "plan-retrieve")
+    if not milestones:
+        # An empty plan is missing data, not an on-track schedule. Reporting green
+        # here is the "missing data reads as good news" failure.
+        rag = "amber"
+        add_escalation(
+            escalations,
+            "plan: no milestones were supplied - the schedule cannot be assessed and must "
+            "not be reported as green; confirm the plan export with the delivery lead "
+            "(status-reporting-rules.md #1.1,#2.1)",
+        )
+    for milestone in milestones:
         original_baseline = milestone.get("original_baseline_date") or None
         current_forecast = require_milestone_field(milestone, "current_forecast_date")
         baseline_known = original_baseline is not None
@@ -484,6 +639,25 @@ def schedule_summary(payload, escalations):
         # forecast-against-baseline every period and read red forever (#2.5).
         raw_status = milestone.get("status")
         actual_date = milestone.get("actual_date") or None
+        actual_date_rejected = False
+        if actual_date and as_of:
+            # A delivery dated after the period we are reporting on has not happened
+            # yet. Accepting it would retire the milestone from the current RAG on the
+            # strength of a future date. Parsed defensively: the engine must not rely
+            # on having been run behind the validator.
+            try:
+                days_after_period = days_between(actual_date, as_of)
+            except (TypeError, ValueError):
+                days_after_period = None
+            if days_after_period is not None and days_after_period > 0:
+                add_escalation(
+                    escalations,
+                    f"{milestone['id']}: actual_date {actual_date} is after the reporting-period "
+                    f"end {as_of} - a future delivery date is a data error, so the milestone is "
+                    "treated as not delivered (status-reporting-rules.md #1.1,#2.5)",
+                )
+                actual_date = None
+                actual_date_rejected = True
         if raw_status is not None and status_state(raw_status) == "unknown":
             add_escalation(
                 escalations,
@@ -492,7 +666,11 @@ def schedule_summary(payload, escalations):
                 "it must be mapped to a known status before the pack goes out "
                 "(status-reporting-rules.md #1.1,#2.5)",
             )
-        delivered = actual_date is not None or status_state(raw_status) == "closed"
+        # A rejected delivery date overrides a status that claims delivery: the only
+        # evidence of the delivery was the date, and it was not credible.
+        delivered = not actual_date_rejected and (
+            actual_date is not None or status_state(raw_status) == "closed"
+        )
         delivered_variance_days = (
             days_between(actual_date, original_baseline)
             if delivered and actual_date and baseline_known
@@ -632,6 +810,14 @@ def check_budget_amounts(budget):
                 f"budget.{field} is {type(value).__name__}, not a number - the finance "
                 "extract is malformed; re-run burn-pull rather than computing on it"
             )
+        elif not math.isfinite(value):
+            # 1e999 parses to inf, and inf - inf is NaN, which compares false against
+            # every threshold and reads green. The validator rejects these, but the
+            # engine must not depend on having been run behind it.
+            problems.append(
+                f"budget.{field} is not a finite number - the finance extract carries an "
+                "overflow or non-numeric value; re-run burn-pull rather than computing on it"
+            )
         elif value < 0:
             problems.append(
                 f"budget.{field} is {value}, which is negative - a negative budget amount "
@@ -645,6 +831,11 @@ def check_budget_amounts(budget):
         problems.append(
             f"budget.unbilled_wip is {type(wip).__name__}, not a number or null - "
             "re-run burn-pull"
+        )
+    elif isinstance(wip, (int, float)) and not isinstance(wip, bool) and not math.isfinite(wip):
+        problems.append(
+            "budget.unbilled_wip is not a finite number - the finance extract carries an "
+            "overflow or non-numeric value; re-run burn-pull"
         )
     return problems
 
@@ -686,6 +877,17 @@ def budget_summary(payload, escalations):
             "carries margin and must not be shown to the client or used as a client-facing "
             "budget RAG (status-reporting-rules.md #3.6, #7.2)",
         )
+    # On a fixed price the client pays the same whatever is burned, so a fee-basis burn
+    # percentage describes our own margin, not anything the client owes. Reporting it as
+    # a client-facing budget position is the same disclosure error as quoting cost.
+    if commercial_model in FIXED_PRICE_MODELS and amounts_basis == "fee":
+        add_escalation(
+            escalations,
+            f"budget: the commercial model is {commercial_model} but the figures are fee, so "
+            "burn against plan measures our margin, not the client's spend - report delivery "
+            "progress to the client and keep the burn position internal "
+            "(status-reporting-rules.md #3.6, #7.2)",
+        )
     planned = require(payload, "budget.planned_burn_to_date", "burn-pull")
     billed = require(payload, "budget.actual_billed_to_date", "burn-pull")
     baseline_budget = require(payload, "budget.baseline_budget", "burn-pull")
@@ -702,7 +904,7 @@ def budget_summary(payload, escalations):
     if not burn_measurable:
         add_escalation(
             escalations,
-            f"budget: planned burn to date is 0 but actual burn including WIP is {actual_with_wip} - "
+            f"budget: planned burn to date is 0 but actual burn including WIP is {actual_with_wip:,.0f} - "
             "burn variance cannot be computed and must be confirmed with the engagement "
             "financial analyst (status-reporting-rules.md #3.1)",
         )
@@ -781,9 +983,9 @@ def budget_summary(payload, escalations):
         billed_only_pct = pct(billed - planned, planned)
         add_escalation(
             escalations,
-            f"budget: billed-only burn is {billed} "
+            f"budget: billed-only burn is {billed:,.0f} "
             f"({'unmeasurable' if billed_only_pct is None else f'{billed_only_pct}%'} vs plan) but "
-            f"unbilled WIP {wip} changes actual burn to {actual_with_wip} "
+            f"unbilled WIP {wip:,.0f} changes actual burn to {actual_with_wip:,.0f} "
             f"({'unmeasurable' if not burn_measurable else f'{burn_variance_pct}%'} vs plan) - "
             "lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
         )
@@ -794,7 +996,10 @@ def budget_summary(payload, escalations):
                 "currency": budget.get("currency", "UNKNOWN"),
                 "commercial_model": commercial_model,
                 "amounts_basis": amounts_basis,
-                "client_facing": amounts_basis == "fee",
+                "client_facing": (
+                    amounts_basis == "fee"
+                    and commercial_model not in FIXED_PRICE_MODELS
+                ),
                 "overrun_borne_by": (
                     "client"
                     if commercial_model in ("time_and_materials", "retainer")
@@ -833,10 +1038,26 @@ def budget_summary(payload, escalations):
 
 
 def scope_summary(payload, escalations):
-    changes = payload.get("plan", {}).get("scope_changes", [])
+    plan = payload.get("plan", {})
+    change_log_missing = "scope_changes" not in plan
+    if change_log_missing:
+        # No change log at all is an unanswered question, not an absence of change.
+        add_escalation(
+            escalations,
+            "scope: no change log was supplied - scope cannot be called green until the "
+            "change register is confirmed with the engagement manager "
+            "(status-reporting-rules.md #4.3)",
+        )
+    changes = plan.get("scope_changes", [])
     open_changes = [c for c in changes if is_open(c, "scope change", escalations)]
     client_facing = [c for c in open_changes if c.get("client_facing_impact")]
     rag = "green"
+    if change_log_missing:
+        # The escalation above says scope cannot be called green without the change
+        # register. Leaving the RAG green anyway made the engine contradict its own
+        # escalation, which is how an unanswered question reached a client pack as
+        # reassurance (#4.3).
+        rag = "amber"
     if len(open_changes) >= SCOPE_RED_OPEN_ITEMS or client_facing:
         rag = "red"
     elif len(open_changes) >= SCOPE_AMBER_OPEN_ITEMS:
@@ -963,7 +1184,8 @@ def main():
     print(
         "variance_calc: "
         f"schedule={schedule['rag']}, budget={budget['rag']}, scope={scope['rag']}, "
-        f"overall={overall}, escalations={len(escalations)} -> {args.out}"
+        f"overall={overall}, escalations={len(escalations)} new, "
+        f"{len(output['escalations'])} active in total -> {args.out}"
     )
     return 0
 

@@ -7,12 +7,15 @@
 # drifted or tampered copy fails Step 0 instead of passing silently.
 # Since 1.6.0 the manifest also covers the two engines (variance_calc.py, item_age.py), which is
 # where the RAG thresholds actually live; each skill verifies its own engine.
-# Maintainers: after changing any shared file or engine, regenerate the manifest from the plugin
-# root with
+# Since 1.6.1 it also covers each skill's own SKILL.md, keyed by its path from the plugin root.
+# Without that, appending an instruction to a deployed SKILL.md passed Step 0 silently.
+# Maintainers: after changing any shared file, engine or SKILL.md, regenerate the manifest from
+# the plugin root with
 #   sha256sum contracts/ps.client-status-qbr.v1.json references/status-reporting-rules.md \
 #     scripts/validate_payload.py scripts/step0.sh scripts/VERSION \
 #     skills/variance-calc/scripts/variance_calc.py \
-#     skills/risk-summarize/scripts/item_age.py > scripts/SHARED.sha256
+#     skills/risk-summarize/scripts/item_age.py \
+#     skills/*/SKILL.md > scripts/SHARED.sha256
 # and copy the shared files plus SHARED.sha256 identically into every skills/<name>/ folder.
 
 stop_plugin() {
@@ -87,6 +90,15 @@ if [ -n "$engine_key" ]; then
   got=$(sha256_of "$SKILL_DIR/$engine_rel") || stop_plugin "no SHA-256 tool (sha256sum, shasum or python) is available to verify $engine_rel"
   [ "$got" = "$expect" ] || stop_plugin "the engine $engine_rel in SKILL_DIR does not match scripts/SHARED.sha256 - this copy has drifted or been edited"
 fi
+
+# Each skill's own SKILL.md is covered too. Without this, appending an instruction to a
+# deployed SKILL.md passes Step 0 silently, which is precisely the tampering the manifest
+# exists to catch. Each skill verifies only its own file, keyed by path from the plugin root.
+skill_key="skills/$skill/SKILL.md"
+expect=$(tr -d '\r' < "$shared" | awk -v p="$skill_key" '$2 == p { print $1; exit }')
+[ -n "$expect" ] || stop_plugin "scripts/SHARED.sha256 has no entry for $skill_key"
+got=$(sha256_of "$SKILL_DIR/SKILL.md") || stop_plugin "no SHA-256 tool (sha256sum, shasum or python) is available to verify SKILL.md"
+[ "$got" = "$expect" ] || stop_plugin "this skill's SKILL.md does not match scripts/SHARED.sha256 - it has drifted or been edited"
 
 manifest="$SKILL_DIR/../../.claude-plugin/plugin.json"
 if [ -f "$manifest" ]; then

@@ -178,7 +178,7 @@
     "settings: custom threshold budget_red_pct = 15 (published default 10.0, #3.2) was set by the user for this run - this pack does not use the published thresholds, so state that before sharing it (status-reporting-rules.md #8.1)",
     "M-401: reported green after rebaseline, but forecast is 14 days against original baseline (status-reporting-rules.md #2.3)",
     "budget: forecast-to-complete moved +75000 since the prior pack (705000 -> 780000) - include this movement in the draft (status-reporting-rules.md #3.4)",
-    "budget: billed-only burn is 473000 (-5.4% vs plan) but unbilled WIP 95000.0 changes actual burn to 568000.0 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)"
+    "budget: billed-only burn is 473,000 (-5.4% vs plan) but unbilled WIP 95,000 changes actual burn to 568,000 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)"
   ],
   "provenance": {
     "engines": [
@@ -320,7 +320,7 @@
       "severity": "high",
       "rule": "#8.1",
       "subject": "settings",
-      "owner": null,
+      "owner": "engagement manager",
       "source": "engine:variance_calc",
       "resolved_by": null,
       "resolved_at": null,
@@ -333,7 +333,7 @@
       "severity": "high",
       "rule": "#2.3",
       "subject": "M-401",
-      "owner": null,
+      "owner": "delivery lead",
       "source": "engine:variance_calc",
       "resolved_by": null,
       "resolved_at": null,
@@ -342,24 +342,24 @@
     {
       "id": "budget:f94077af",
       "message": "budget: forecast-to-complete moved +75000 since the prior pack (705000 -> 780000) - include this movement in the draft (status-reporting-rules.md #3.4)",
-      "type": "blocking",
-      "severity": "high",
+      "type": "note",
+      "severity": "low",
       "rule": "#3.4",
       "subject": "budget",
-      "owner": null,
+      "owner": "engagement financial analyst",
       "source": "engine:variance_calc",
       "resolved_by": null,
       "resolved_at": null,
       "resolution": null
     },
     {
-      "id": "budget:8c0ca5bf",
-      "message": "budget: billed-only burn is 473000 (-5.4% vs plan) but unbilled WIP 95000.0 changes actual burn to 568000.0 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
+      "id": "budget:055ac34d",
+      "message": "budget: billed-only burn is 473,000 (-5.4% vs plan) but unbilled WIP 95,000 changes actual burn to 568,000 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
       "type": "note",
       "severity": "low",
       "rule": "#3.3",
       "subject": "budget",
-      "owner": null,
+      "owner": "engagement financial analyst",
       "source": "engine:variance_calc",
       "resolved_by": null,
       "resolved_at": null,

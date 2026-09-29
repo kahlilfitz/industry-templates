@@ -8,7 +8,7 @@
     "partner": "Dev Patel",
     "source": "skill:plan-retrieve",
     "confidence": 0.98,
-    "citation": "raw/pm-email.txt"
+    "citation": "raw/pm-email.txt (From: and Cc: line)"
   },
   "reporting_period": {
     "start": "2026-09-14",
@@ -17,7 +17,7 @@
     "previous_end": "2026-09-13",
     "source": "skill:plan-retrieve",
     "confidence": 0.99,
-    "citation": "raw/prior-status-pack.md"
+    "citation": "raw/plan-extract.md line 4"
   },
   "sources": [
     {
@@ -98,7 +98,7 @@
     ],
     "budget": {
       "forecast_to_complete": 606000,
-      "source": "skill:burn-pull",
+      "source": "skill:plan-retrieve",
       "confidence": 0.97,
       "citation": "raw/prior-status-pack.md budget line"
     },
@@ -177,7 +177,7 @@
   ],
   "escalations": [
     "budget: forecast-to-complete moved +5000 since the prior pack (606000 -> 611000) - include this movement in the draft (status-reporting-rules.md #3.4)",
-    "budget: billed-only burn is 268500 (-5.79% vs plan) but unbilled WIP 8200.0 changes actual burn to 276700.0 (-2.91% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)"
+    "budget: billed-only burn is 268,500 (-5.79% vs plan) but unbilled WIP 8,200 changes actual burn to 276,700 (-2.91% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)"
   ],
   "provenance": {
     "engines": [
@@ -296,24 +296,24 @@
     {
       "id": "budget:d316f484",
       "message": "budget: forecast-to-complete moved +5000 since the prior pack (606000 -> 611000) - include this movement in the draft (status-reporting-rules.md #3.4)",
-      "type": "blocking",
-      "severity": "high",
+      "type": "note",
+      "severity": "low",
       "rule": "#3.4",
       "subject": "budget",
-      "owner": null,
+      "owner": "engagement financial analyst",
       "source": "engine:variance_calc",
       "resolved_by": null,
       "resolved_at": null,
       "resolution": null
     },
     {
-      "id": "budget:f6860884",
-      "message": "budget: billed-only burn is 268500 (-5.79% vs plan) but unbilled WIP 8200.0 changes actual burn to 276700.0 (-2.91% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
+      "id": "budget:ee972393",
+      "message": "budget: billed-only burn is 268,500 (-5.79% vs plan) but unbilled WIP 8,200 changes actual burn to 276,700 (-2.91% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
       "type": "note",
       "severity": "low",
       "rule": "#3.3",
       "subject": "budget",
-      "owner": null,
+      "owner": "engagement financial analyst",
       "source": "engine:variance_calc",
       "resolved_by": null,
       "resolved_at": null,

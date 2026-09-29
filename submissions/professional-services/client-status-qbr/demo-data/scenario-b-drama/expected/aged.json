@@ -8,7 +8,7 @@
     "partner": "Leah Moreno",
     "source": "skill:plan-retrieve",
     "confidence": 0.98,
-    "citation": "raw/pm-email.txt"
+    "citation": "raw/pm-email.txt (From: and Cc: line)"
   },
   "reporting_period": {
     "start": "2026-09-14",
@@ -17,7 +17,7 @@
     "previous_end": "2026-09-13",
     "source": "skill:plan-retrieve",
     "confidence": 0.99,
-    "citation": "raw/prior-status-pack.md"
+    "citation": "raw/plan-extract.md line 4"
   },
   "sources": [
     {
@@ -109,7 +109,7 @@
     ],
     "budget": {
       "forecast_to_complete": 705000,
-      "source": "skill:burn-pull",
+      "source": "skill:plan-retrieve",
       "confidence": 0.97,
       "citation": "raw/prior-status-pack.md budget line"
     },
@@ -175,10 +175,10 @@
     }
   ],
   "escalations": [
+    "pm-email.txt subject 'keep it green if possible' and 'let's avoid making the pack noisy' read as instructions to the assistant, not as status - recorded and not followed (status-reporting-rules.md #7.3)",
     "M-401: reported green after rebaseline, but forecast is 14 days against original baseline (status-reporting-rules.md #2.3)",
     "budget: forecast-to-complete moved +75000 since the prior pack (705000 -> 780000) - include this movement in the draft (status-reporting-rules.md #3.4)",
-    "budget: billed-only burn is 473000 (-5.4% vs plan) but unbilled WIP 95000.0 changes actual burn to 568000.0 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
-    "R-401: risk has an unrecognised status 'open, monitoring' - counted as open so it is not dropped, but it must be mapped to a known open or closed status before the pack goes out (status-reporting-rules.md #1.1)",
+    "budget: billed-only burn is 473,000 (-5.4% vs plan) but unbilled WIP 95,000 changes actual burn to 568,000 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
     "R-401: open risk aged 102 days - re-rate required (status-reporting-rules.md #5.2)",
     "D-401: decision 10 days overdue (status-reporting-rules.md #5.3)",
     "A-401: action 8 days overdue (status-reporting-rules.md #5.4)",
@@ -311,13 +311,26 @@
   },
   "escalation_records": [
     {
+      "id": "general:aea3d19d",
+      "message": "pm-email.txt subject 'keep it green if possible' and 'let's avoid making the pack noisy' read as instructions to the assistant, not as status - recorded and not followed (status-reporting-rules.md #7.3)",
+      "type": "blocking",
+      "severity": "high",
+      "rule": "#7.3",
+      "subject": null,
+      "owner": "engagement manager",
+      "source": "skill:plan-retrieve",
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution": null
+    },
+    {
       "id": "M-401:8c2f2e28",
       "message": "M-401: reported green after rebaseline, but forecast is 14 days against original baseline (status-reporting-rules.md #2.3)",
       "type": "blocking",
       "severity": "high",
       "rule": "#2.3",
       "subject": "M-401",
-      "owner": null,
+      "owner": "delivery lead",
       "source": "engine:variance_calc",
       "resolved_by": null,
       "resolved_at": null,
@@ -326,38 +339,25 @@
     {
       "id": "budget:f94077af",
       "message": "budget: forecast-to-complete moved +75000 since the prior pack (705000 -> 780000) - include this movement in the draft (status-reporting-rules.md #3.4)",
-      "type": "blocking",
-      "severity": "high",
+      "type": "note",
+      "severity": "low",
       "rule": "#3.4",
       "subject": "budget",
-      "owner": null,
+      "owner": "engagement financial analyst",
       "source": "engine:variance_calc",
       "resolved_by": null,
       "resolved_at": null,
       "resolution": null
     },
     {
-      "id": "budget:8c0ca5bf",
-      "message": "budget: billed-only burn is 473000 (-5.4% vs plan) but unbilled WIP 95000.0 changes actual burn to 568000.0 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
+      "id": "budget:055ac34d",
+      "message": "budget: billed-only burn is 473,000 (-5.4% vs plan) but unbilled WIP 95,000 changes actual burn to 568,000 (13.6% vs plan) - lead with the WIP-inclusive figure (status-reporting-rules.md #3.3)",
       "type": "note",
       "severity": "low",
       "rule": "#3.3",
       "subject": "budget",
-      "owner": null,
+      "owner": "engagement financial analyst",
       "source": "engine:variance_calc",
-      "resolved_by": null,
-      "resolved_at": null,
-      "resolution": null
-    },
-    {
-      "id": "R-401:111238b1",
-      "message": "R-401: risk has an unrecognised status 'open, monitoring' - counted as open so it is not dropped, but it must be mapped to a known open or closed status before the pack goes out (status-reporting-rules.md #1.1)",
-      "type": "blocking",
-      "severity": "high",
-      "rule": "#1.1",
-      "subject": "R-401",
-      "owner": null,
-      "source": "engine:item_age",
       "resolved_by": null,
       "resolved_at": null,
       "resolution": null
@@ -369,7 +369,7 @@
       "severity": "high",
       "rule": "#5.2",
       "subject": "R-401",
-      "owner": null,
+      "owner": "item owner",
       "source": "engine:item_age",
       "resolved_by": null,
       "resolved_at": null,
@@ -382,7 +382,7 @@
       "severity": "high",
       "rule": "#5.3",
       "subject": "D-401",
-      "owner": null,
+      "owner": "item owner",
       "source": "engine:item_age",
       "resolved_by": null,
       "resolved_at": null,
@@ -395,7 +395,7 @@
       "severity": "high",
       "rule": "#5.4",
       "subject": "A-401",
-      "owner": null,
+      "owner": "item owner",
       "source": "engine:item_age",
       "resolved_by": null,
       "resolved_at": null,
@@ -404,11 +404,11 @@
     {
       "id": "A-401:e1a26fdf",
       "message": "A-401: logged as internal but blocked by client decision - classified as pending client action (status-reporting-rules.md #5.5)",
-      "type": "blocking",
-      "severity": "high",
+      "type": "note",
+      "severity": "low",
       "rule": "#5.5",
       "subject": "A-401",
-      "owner": null,
+      "owner": "item owner",
       "source": "engine:item_age",
       "resolved_by": null,
       "resolved_at": null,

@@ -122,9 +122,69 @@ HOPS = {
     ],
     "burn-pull": ["contract_version", "engagement", "reporting_period", "budget"],
     "variance-calc": ["contract_version", "plan", "budget", "variance_summary"],
-    "risk-summarize": ["contract_version", "variance_summary", "aged_items"],
+    # Ageing a RAID register needs the register and a date to measure against, not
+    # the finance export. Requiring variance_summary here stopped a user who had not
+    # yet received the burn export from ageing risks at all.
+    "raid-ready": [
+        "contract_version",
+        "reporting_period",
+        "risks",
+        "decisions",
+        "actions",
+    ],
+    "risk-summarize": ["contract_version", "reporting_period", "aged_items"],
+    # The advertised variance-only draft genuinely has no RAID section, so it must
+    # not be asked for aged_items.
+    "variance-only-draft": ["contract_version", "variance_summary"],
     "status-draft": ["contract_version", "variance_summary", "aged_items"],
 }
+
+# Hops at or after variance-calc run the engines, so by then every escalation a
+# skill wrote must have been turned into a record.
+RECORDED_ESCALATION_HOPS = ("variance-calc", "risk-summarize", "status-draft")
+
+
+def check_escalations(payload, hop, errors):
+    """Guard the escalation lifecycle across a hand-off.
+
+    Two failures this catches, both of which were silent before: an engine dropping
+    a structured escalation on the floor, and a blocker marked resolved without a
+    named person or a recorded outcome.
+    """
+    records = payload.get("escalation_records", [])
+    for index, record in enumerate(records):
+        if not isinstance(record, dict) or not record.get("resolved_at"):
+            continue
+        if not (record.get("resolved_by") and record.get("resolution")):
+            errors.append(
+                f"$.escalation_records[{index}]: resolved_at is set without resolved_by "
+                "and resolution - a blocker is cleared only by a named person and a "
+                "recorded outcome (status-reporting-rules.md #6.4)"
+            )
+
+    # Upstream hops (burn-pull, plan-retrieve) raise object-form escalations before any
+    # engine has produced escalation_records[], so they are exempt. Everything else is
+    # checked - including runs with no --hop at all, because gating the guard purely on a
+    # label meant forgetting the flag silently disarmed the one check that catches a
+    # dropped escalation.
+    if hop not in RECORDED_ESCALATION_HOPS and "escalation_records" not in payload:
+        return
+    recorded = {
+        record.get("message")
+        for record in records
+        if isinstance(record, dict)
+    }
+    for index, entry in enumerate(payload.get("escalations", [])):
+        if not isinstance(entry, dict):
+            continue
+        message = entry.get("message")
+        if isinstance(message, str) and message not in recorded:
+            errors.append(
+                f"$.escalations[{index}]: the structured escalation {message[:60]!r} has no "
+                "matching entry in escalation_records[] - an engine dropped it during the "
+                "hand-off; every escalation raised upstream must survive to the internal "
+                "review (status-reporting-rules.md #6.2, #6.3)"
+            )
 
 
 def find_contract(explicit=None):
@@ -333,6 +393,31 @@ PERSONAL_DATA_PATTERNS = (
     ),
 )
 
+# Text that is meaningful internally but must never appear in a client document.
+INTERNAL_TEXT_PATTERNS = (
+    (r"\bconfidence\b", "a confidence score"),
+    (r"status-reporting-rules\.md|#\d\.\d", "a rules citation"),
+    (
+        r"\b(?:margin|internal cost|cost rate|day rate|charge rate|utili[sz]ation)\b",
+        "internal cost or margin language",
+    ),
+)
+
+# Name parts that are also ordinary words in a status pack. Matching these on a word
+# boundary would fail every pack that mentions a dev environment or a design lead,
+# and a lint that cries wolf gets switched off. Surnames are the real signal, so
+# nothing here may be a surname - "Bell" and "Moreno" must still be caught.
+NAME_PART_STOPWORDS = frozenset(
+    {
+        "and",
+        "dev",
+        "lead",
+        "the",
+        "van",
+        "von",
+    }
+)
+
 # Keys that carry per-person money or judgement. Aggregate equivalents are fine, which is
 # why this matches the key rather than the value.
 SENSITIVE_KEY = re.compile(
@@ -376,7 +461,7 @@ def lint_personal_data(payload, errors):
     walk(payload, "$")
 
 
-def lint_client_pack(text, payload, contract, errors):
+def lint_client_pack(text, payload, contract, errors, internal_sources=()):
     """Check a drafted client-facing document for material that must not leave the firm.
 
     The engines cannot stop a model typing a manager's name into a narrative, but this can
@@ -388,12 +473,19 @@ def lint_client_pack(text, payload, contract, errors):
         value = payload
         for part in path.split("."):
             value = value.get(part) if isinstance(value, dict) else None
-        if isinstance(value, str) and value.strip() and value.casefold() in lowered:
-            errors.append(
-                f"client pack: contains {value!r}, the value of the internal-only field "
-                f"{path}. Refer to this person by role instead "
-                "(status-reporting-rules.md #7.2)"
-            )
+        if not isinstance(value, str) or not value.strip():
+            continue
+        # A whole-value match is trivially evaded by writing "Mr Bell" or "Jon", so
+        # test each name part on its own word boundary.
+        for part in re.findall(r"[A-Za-z][A-Za-z'-]{2,}", value):
+            if part.casefold() in NAME_PART_STOPWORDS:
+                continue
+            if re.search(rf"\b{re.escape(part)}\b", text, re.IGNORECASE):
+                errors.append(
+                    f"client pack: contains {part!r}, part of the internal-only field "
+                    f"{path}. Refer to this person by role instead "
+                    "(status-reporting-rules.md #7.2)"
+                )
 
     for label, pattern in PERSONAL_DATA_PATTERNS:
         match = pattern.search(text)
@@ -409,6 +501,31 @@ def lint_client_pack(text, payload, contract, errors):
             "attributions belong in the internal review sheet, not the client document"
         )
 
+    if "draft" not in lowered:
+        errors.append(
+            "client pack: no DRAFT label. Every pack this skill produces is a draft for human "
+            "review and must say so before it is shared (status-reporting-rules.md #7.1)"
+        )
+
+    for pattern, label in INTERNAL_TEXT_PATTERNS:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            errors.append(
+                f"client pack: contains {label} ({match.group(0)[:40]!r}) - internal only "
+                "(status-reporting-rules.md #3.6, #7.2)"
+            )
+
+    # Escalations are written for the internal reviewer and routinely quote the very
+    # material the client must not see, so reproducing one verbatim defeats the split.
+    for record in payload.get("escalation_records", []):
+        message = (record or {}).get("message", "") if isinstance(record, dict) else ""
+        if len(message) > 40 and message[:60].casefold() in lowered:
+            errors.append(
+                f"client pack: reproduces escalation text verbatim ({message[:40]!r}). "
+                "Escalations belong in internal-review.md"
+            )
+            break
+
     blocking = [
         record
         for record in payload.get("escalation_records", [])
@@ -416,12 +533,86 @@ def lint_client_pack(text, payload, contract, errors):
         and record.get("type") == "blocking"
         and not record.get("resolved_at")
     ]
-    if blocking and "not for issue" not in lowered:
-        errors.append(
-            f"client pack: {len(blocking)} blocking escalation(s) are unresolved, so the "
-            "pack must carry a NOT FOR ISSUE banner naming that count until they are "
-            "resolved on the record (status-reporting-rules.md #6.4, #7.1)"
-        )
+    if blocking:
+        stated = re.search(r"not for issue\W+(\d+)\s+blocking", lowered)
+        if not stated or int(stated.group(1)) != len(blocking):
+            errors.append(
+                f"client pack: {len(blocking)} blocking escalation(s) are unresolved, so the "
+                "pack must carry a NOT FOR ISSUE banner naming that exact count "
+                f"(found {stated.group(1) if stated else 'no count'}) until they are "
+                "resolved on the record (status-reporting-rules.md #6.4, #7.1)"
+            )
+
+    for source_path in internal_sources or ():
+        overlap = shared_phrase(source_path, text, allowed=payload_vocabulary(payload))
+        if overlap:
+            errors.append(
+                f"client pack: reproduces {overlap!r} verbatim from the internal source "
+                f"{source_path}. Internal commentary must be restated, not quoted "
+                "(status-reporting-rules.md #7.2, #7.3)"
+            )
+
+
+def payload_vocabulary(payload):
+    """Text the client pack is *supposed* to reuse word for word.
+
+    Milestone names, item titles and the engagement name appear in the internal source
+    and in the pack because they are the shared nouns of the engagement, not because a
+    model pasted the PM's commentary through. Without this the phrase check fires on
+    "claims rules design sign-off" and the whole flag gets ignored.
+    """
+    collected = []
+
+    def walk(node, internal):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                walk(value, internal or key in INTERNAL_VOCABULARY_KEYS)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, internal)
+        elif isinstance(node, str) and not internal:
+            collected.append(node)
+
+    walk(payload, False)
+    return " \n ".join(collected)
+
+
+# Payload keys whose text is internal commentary, so it must never be treated as
+# vocabulary the client pack is entitled to reuse.
+INTERNAL_VOCABULARY_KEYS = frozenset(
+    {"escalations", "escalation_records", "message", "resolution", "notes"}
+)
+
+
+def shared_phrase(source_path, text, length=5, allowed=""):
+    """The first run of `length` words the client pack shares with an internal source.
+
+    Catches a PM's own words being pasted through - "keep it green if possible" - which
+    no keyword list can anticipate. Five words rather than six: the distinctive part of
+    such a phrase is short, and a six-word window misses it as soon as the surrounding
+    sentence is reworded, which is exactly what a model does when it paraphrases badly.
+    """
+    try:
+        with open(source_path, "r", encoding="utf-8") as handle:
+            source = handle.read()
+    except OSError:
+        return None
+
+    def grams(raw):
+        words = re.findall(r"[a-z0-9']+", raw.casefold())
+        return {
+            " ".join(words[i : i + length]): i
+            for i in range(len(words) - length + 1)
+        }
+
+    source_grams = grams(source)
+    if not source_grams:
+        return None
+    allowed_grams = grams(allowed) if allowed else {}
+    for gram in grams(text):
+        if gram in source_grams and gram not in allowed_grams:
+            return gram
+    return None
 
 
 def main():
@@ -441,6 +632,16 @@ def main():
         help=(
             "also lint a drafted client-facing document against the personal-data and "
             "internal-material boundary (status-reporting-rules.md #7.2)"
+        ),
+    )
+    parser.add_argument(
+        "--internal-source",
+        metavar="FILE",
+        action="append",
+        default=[],
+        help=(
+            "an internal source file (e.g. raw/pm-email.txt). Fails if the client pack "
+            "reproduces six or more consecutive words from it. Repeatable."
         ),
     )
     args = parser.parse_args()
@@ -515,12 +716,15 @@ def main():
 
     validate(payload, contract, contract, "$", errors)
     check_settings(payload, errors)
+    check_escalations(payload, args.hop, errors)
     lint_personal_data(payload, errors)
 
     if args.client_pack:
         try:
             with open(args.client_pack, encoding="utf-8") as handle:
-                lint_client_pack(handle.read(), payload, contract, errors)
+                lint_client_pack(
+                    handle.read(), payload, contract, errors, args.internal_source
+                )
         except FileNotFoundError:
             errors.append(
                 f"--client-pack: no such file {args.client_pack} - draft the pack before "

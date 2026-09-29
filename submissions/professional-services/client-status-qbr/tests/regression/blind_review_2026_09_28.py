@@ -30,18 +30,18 @@ ITEM_AGE = os.path.join(ROOT, "skills", "risk-summarize", "scripts", "item_age.p
 VALIDATOR = os.path.join(ROOT, "scripts", "validate_payload.py")
 SCENARIO_A = os.path.join(ROOT, "demo-data", "scenario-a-happy", "status-input.json")
 SCENARIO_B = os.path.join(ROOT, "demo-data", "scenario-b-drama", "status-input.json")
+SCENARIO_HANDOFF = os.path.join(
+    ROOT, "tests", "fixtures", "scenario-c-handoff", "status-input.json"
+)
 
 # Cases the 1.6.0 work did not set out to close. Listed rather than deleted so the count
 # stays honest and whoever picks this up next knows exactly what is still open.
 KNOWN_OPEN = {
     "V14": "prior-EAC conflict (#1.2) not detected",
-    "V28": "empty milestone list still reads green",
     "V31": "reported-vs-computed RAG discrepancy not escalated",
     "V32": "PM's reported RAG silently overridden",
     "V39": "client_facing_impact is required, so #4.3's unknown case cannot be expressed",
     "V45": "compact date '20260927' accepted by date.fromisoformat on Python 3.11+",
-    "I02": "empty risk register not escalated",
-    "I20": "dangling blocked_by_decision_id not escalated",
     "I25": "compact date '20260610' accepted by the engine",
     "I27": "absurd reporting_period.end not sanity-checked",
 }
@@ -216,12 +216,30 @@ def v29():
 def v30():
     payload = load(SCENARIO_A)
     milestone = payload["plan"]["milestones"][0]
-    # Baseline is 2026-09-25; deliver it 12 days late, as the review's case did.
-    milestone["current_forecast_date"] = "2026-10-07"
+    # Reporting period ends 2026-09-20. Re-baseline to 2026-09-05 and deliver on
+    # 2026-09-17 so the milestone is 12 days late but delivered inside the period
+    # being reported on - a delivery dated after the period end is a data error
+    # under #2.5, which is covered by V30b.
+    milestone["original_baseline_date"] = "2026-09-05"
+    milestone["current_baseline_date"] = "2026-09-05"
+    milestone["current_forecast_date"] = "2026-09-17"
+    milestone["status"] = "delivered"
+    milestone["actual_date"] = "2026-09-17"
+    run = run_engine(VARIANCE, payload)
+    return run.rag("schedule") == "green" and run.says("delivered")
+
+
+@case("V30b", "variance_calc", "actual_date after the period end is a data error")
+def v30b():
+    payload = load(SCENARIO_A)
+    milestone = payload["plan"]["milestones"][0]
+    # Period ends 2026-09-20, so this delivery has not happened yet. Accepting it
+    # would retire the milestone from the current schedule RAG on a future date.
+    milestone["current_forecast_date"] = "2026-09-18"
     milestone["status"] = "delivered"
     milestone["actual_date"] = "2026-10-07"
     run = run_engine(VARIANCE, payload)
-    return run.rag("schedule") == "green" and run.says("delivered")
+    return run.says("after the reporting-period end") and run.rag("schedule") != "green"
 
 
 # --- status vocabulary -----------------------------------------------------------
@@ -384,6 +402,302 @@ def h4c():
     after = run_engine(ITEM_AGE, payload)
     ids = [record.get("id") for record in after.output.get("escalation_records", [])]
     return target["id"] in ids and target["message"] not in after.escalations
+
+
+# --- 2026-09-28 17:17 evaluation: the hard stop and the logic defects ------------
+
+
+@case("HS1a", "both", "object-form escalations survive the full chain")
+def hs1a():
+    source = load(SCENARIO_HANDOFF)
+    expected = [
+        entry if isinstance(entry, str) else entry["message"]
+        for entry in source["escalations"]
+    ]
+    aged = run_engine(ITEM_AGE, run_engine(VARIANCE, source).output)
+    return all(message in aged.escalations for message in expected)
+
+
+@case("HS1b", "both", "an object-form escalation keeps its rule and item_id")
+def hs1b():
+    source = load(SCENARIO_HANDOFF)
+    aged = run_engine(ITEM_AGE, run_engine(VARIANCE, source).output)
+    records = {
+        record.get("message"): record
+        for record in aged.output.get("escalation_records", [])
+    }
+    for entry in source["escalations"]:
+        if isinstance(entry, str):
+            continue
+        record = records.get(entry["message"])
+        if not record:
+            return False
+        if record.get("rule") != entry["rule"]:
+            return False
+        if record.get("subject") != entry["item_id"]:
+            return False
+        if record.get("source") != entry["source"]:
+            return False
+    return True
+
+
+@case("HS1c", "validator", "an unrecorded object-form escalation is rejected")
+def hs1c():
+    payload = run_engine(VARIANCE, load(SCENARIO_HANDOFF)).output
+    payload["escalations"] = list(payload["escalations"]) + [
+        {"message": "orphan with no record", "rule": "#9.9", "source": "skill:ghost"}
+    ]
+    return run_validator(payload).returncode != 0
+
+
+@case("LD1a", "both", "a resolution survives regeneration by its own engine")
+def ld1a():
+    first = run_engine(VARIANCE, load(SCENARIO_B))
+    payload = copy.deepcopy(first.output)
+    records = payload.get("escalation_records", [])
+    own = [r for r in records if r.get("source") == "engine:variance_calc"]
+    if not own:
+        return False
+    target = own[0]
+    target["resolved_by"] = "the engagement manager"
+    target["resolved_at"] = "2026-09-28"
+    target["resolution"] = "confirmed with the client"
+    again = run_engine(VARIANCE, payload)
+    kept = {r.get("id"): r for r in again.output.get("escalation_records", [])}
+    record = kept.get(target["id"])
+    return (
+        record is not None
+        and record.get("resolved_at") == "2026-09-28"
+        and record.get("resolution") == "confirmed with the client"
+        and target["message"] not in again.escalations
+    )
+
+
+@case("LD1b", "validator", "resolved_at without resolved_by is rejected")
+def ld1b():
+    payload = run_engine(VARIANCE, load(SCENARIO_B)).output
+    records = payload.get("escalation_records", [])
+    if not records:
+        return False
+    records[0]["resolved_at"] = "2026-09-28"
+    return run_validator(payload).returncode != 0
+
+
+@case("LD2a", "variance_calc", "an empty milestone list is escalated, not green")
+def ld2a():
+    payload = load(SCENARIO_A)
+    payload["plan"]["milestones"] = []
+    run = run_engine(VARIANCE, payload)
+    return run.rag("schedule") != "green" and run.says("no milestones were supplied")
+
+
+@case("LD2b", "variance_calc", "an absent scope_changes list is escalated, not green")
+def ld2b():
+    payload = load(SCENARIO_A)
+    # scope_changes lives under plan, not at the payload root.
+    payload["plan"].pop("scope_changes", None)
+    run = run_engine(VARIANCE, payload)
+    return run.rag("scope") != "green" and run.says("no change log was supplied")
+
+
+@case("LD2c", "item_age", "an empty risks list is escalated even with other items")
+def ld2c():
+    payload = run_engine(VARIANCE, load(SCENARIO_B)).output
+    payload["risks"] = []
+    run = run_engine(ITEM_AGE, payload)
+    return run.says("#5.1")
+
+
+@case("LD2d", "item_age", "a dangling blocked_by_decision_id is escalated")
+def ld2d():
+    payload = run_engine(VARIANCE, load(SCENARIO_B)).output
+    actions = payload.get("actions") or []
+    if not actions:
+        return False
+    actions[0]["blocked_by_decision_id"] = "D-999"
+    run = run_engine(ITEM_AGE, payload)
+    return run.says("D-999")
+
+
+@case("LD3a", "variance_calc", "an actual_date after the period end is not delivery")
+def ld3a():
+    payload = load(SCENARIO_A)
+    milestone = payload["plan"]["milestones"][0]
+    target = milestone["id"]
+    milestone["status"] = "delivered"
+    milestone["actual_date"] = "2026-12-31"
+    run = run_engine(VARIANCE, payload)
+    # The overall schedule RAG is deliberately not asserted: rejecting the future date
+    # returns the milestone to an ordinary forecast-vs-baseline assessment, and in
+    # scenario A that assessment is legitimately green. What must not happen is the
+    # milestone being retired from the current RAG on the strength of a future date.
+    facts = (run.output.get("variance_summary", {}).get("schedule") or {}).get("facts", [])
+    fact = next((f for f in facts if f.get("id") == target), None)
+    return (
+        run.says("#2.5")
+        and fact is not None
+        and fact.get("delivered") is False
+        and fact.get("actual_date") is None
+    )
+
+
+@case("LD4a", "both", "one rule firing on many items collapses to one escalation")
+def ld4a():
+    payload = load(SCENARIO_A)
+    payload["actions"] = [
+        {
+            "id": "A-%03d" % i,
+            "title": "Undated action %d" % i,
+            "status": "open",
+            "owner_party": "firm",
+            "opened_date": "2026-09-01",
+        }
+        for i in range(1, 61)
+    ]
+    aged = run_engine(ITEM_AGE, run_engine(VARIANCE, payload).output)
+    undated = [e for e in aged.escalations if "due_date" in e]
+    return len(undated) == 1 and len(aged.output["aged_items"]["actions"]) == 60
+
+
+@case("LD4b", "variance_calc", "a stated commercial model raises no #3.5 escalation")
+def ld4b():
+    payload = load(SCENARIO_A)
+    payload["budget"]["commercial_model"] = "time_and_materials"
+    payload["budget"]["amounts_basis"] = "fee"
+    run = run_engine(VARIANCE, payload)
+    return not run.says("commercial model is not stated")
+
+
+@case("LD4c", "variance_calc", "fixed_fee on a fee basis warns that burn is margin")
+def ld4c():
+    payload = load(SCENARIO_A)
+    payload["budget"]["commercial_model"] = "fixed_fee"
+    payload["budget"]["amounts_basis"] = "fee"
+    run = run_engine(VARIANCE, payload)
+    facts = json.dumps(run.output.get("variance_summary", {}).get("budget", {}))
+    return run.says("measures our margin") and '"client_facing": true' not in facts
+
+
+@case("LD4d", "variance_calc", "the happy path carries no blocking escalation")
+def ld4d():
+    aged = run_engine(ITEM_AGE, run_engine(VARIANCE, load(SCENARIO_A)).output)
+    blocking = [
+        record
+        for record in aged.output.get("escalation_records", [])
+        if record.get("type") == "blocking" and not record.get("resolved_at")
+    ]
+    return not blocking
+
+
+@case("LD5a", "validator", "the lint catches a surname on its own")
+def ld5a():
+    payload = run_engine(VARIANCE, load(SCENARIO_B)).output
+    pack = "# DRAFT pack\n\nMr Bell confirmed the recovery plan.\n"
+    return run_validator(payload, client_pack=pack).returncode != 0
+
+
+@case("LD5b", "validator", "the lint catches cost, margin and confidence text")
+def ld5b():
+    payload = run_engine(VARIANCE, load(SCENARIO_B)).output
+    for body in (
+        "# DRAFT pack\n\nInternal cost 410,000; margin 18%.\n",
+        "# DRAFT pack\n\nSchedule RAG confidence 0.97.\n",
+    ):
+        if run_validator(payload, client_pack=body).returncode == 0:
+            return False
+    return True
+
+
+@case("LD5c", "validator", "the lint catches a missing DRAFT label")
+def ld5c():
+    payload = run_engine(VARIANCE, load(SCENARIO_B)).output
+    pack = "# Status pack\n\nOverall status is Red this period.\n"
+    return run_validator(payload, client_pack=pack).returncode != 0
+
+
+@case("LD5d", "validator", "the lint catches a banner whose count is wrong")
+def ld5d():
+    payload = run_engine(VARIANCE, load(SCENARIO_B)).output
+    blocking = [
+        r
+        for r in payload.get("escalation_records", [])
+        if r.get("type") == "blocking" and not r.get("resolved_at")
+    ]
+    wrong = len(blocking) + 1
+    pack = (
+        "# DRAFT pack\n\n> NOT FOR ISSUE - %d blocking items outstanding\n\n"
+        "Overall status is Red this period.\n" % wrong
+    )
+    return run_validator(payload, client_pack=pack).returncode != 0
+
+
+@case("LD5e", "validator", "an ordinary clean pack still passes the lint")
+def ld5e():
+    payload = run_engine(VARIANCE, load(SCENARIO_B)).output
+    blocking = [
+        r
+        for r in payload.get("escalation_records", [])
+        if r.get("type") == "blocking" and not r.get("resolved_at")
+    ]
+    pack = (
+        "# DRAFT status pack\n\n> NOT FOR ISSUE - %d blocking items outstanding\n\n"
+        "Schedule is red against the original baseline. The dev environment refresh "
+        "completed and the design lead confirmed readiness.\n" % len(blocking)
+    )
+    return run_validator(payload, client_pack=pack).returncode == 0
+
+
+@case("LD6a", "validator", "risk-summarize's hop does not demand variance_summary")
+def ld6a():
+    payload = load(SCENARIO_B)
+    payload.pop("variance_summary", None)
+    payload.pop("budget", None)
+    work = tempfile.mkdtemp()
+    src = os.path.join(work, "in.json")
+    _write(payload, None, src)
+    proc = subprocess.run(
+        [sys.executable, VALIDATOR, "--input", src, "--hop", "raid-ready"],
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode == 0
+
+
+@case("LD7a", "variance_calc", "an overflow literal cannot read green")
+def ld7a():
+    raw = json.dumps(load(SCENARIO_A)).replace('"unbilled_wip": 8200', '"unbilled_wip": 1e999')
+    run = run_engine(VARIANCE, raw=raw)
+    return run.returncode != 0 or run.rag("budget") != "green"
+
+
+@case("WO5a", "both", "every escalation record names an owner")
+def wo5a():
+    aged = run_engine(ITEM_AGE, run_engine(VARIANCE, load(SCENARIO_B)).output)
+    records = aged.output.get("escalation_records", [])
+    return bool(records) and all(record.get("owner") for record in records)
+
+
+@case("WO6a", "variance_calc", "money in escalation text is thousands-separated")
+def wo6a():
+    run = run_engine(VARIANCE, load(SCENARIO_B))
+    wip = [e for e in run.escalations if "unbilled WIP" in e]
+    return bool(wip) and ".0 " not in wip[0]
+
+
+@case("I02", "item_age", "an entirely empty RAID register is escalated")
+def i02():
+    payload = run_engine(VARIANCE, load(SCENARIO_B)).output
+    payload["risks"] = []
+    payload["decisions"] = []
+    payload["actions"] = []
+    return run_engine(ITEM_AGE, payload).says("#5.1")
+
+
+@case("V28", "variance_calc", "an empty milestone list does not read green")
+def v28():
+    payload = load(SCENARIO_A)
+    payload["plan"]["milestones"] = []
+    return run_engine(VARIANCE, payload).rag("schedule") != "green"
 
 
 def main():

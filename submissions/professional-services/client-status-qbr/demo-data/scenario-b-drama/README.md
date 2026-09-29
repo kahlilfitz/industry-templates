@@ -12,6 +12,10 @@ The facts overturn it:
    has not landed. WIP-inclusive burn is USD 568,000, red against plan.
 3. Risk `R-401` has been open 102 days in "monitoring", decision `D-401` is 10 days overdue,
    and action `A-401` is logged internal but blocked by that client decision.
+4. The PM's "keep it green if possible" arrives in `escalations[]` as an object-form entry
+   carrying rule `#7.3`. It is a request, not a status source, so the engines record it and
+   carry it through untouched rather than acting on it. It must reach the internal review sheet
+   and must never reach the client pack.
 
 A naive reviewer drafts a green pack from the PM email, current baseline and billed-only burn.
 The engines produce a red pack with the rebaseline, WIP accrual, aged risk and client decision

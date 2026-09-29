@@ -8,7 +8,7 @@
     "partner": "Leah Moreno",
     "source": "skill:plan-retrieve",
     "confidence": 0.98,
-    "citation": "raw/pm-email.txt"
+    "citation": "raw/pm-email.txt (From: and Cc: line)"
   },
   "reporting_period": {
     "start": "2026-09-14",
@@ -17,7 +17,7 @@
     "previous_end": "2026-09-13",
     "source": "skill:plan-retrieve",
     "confidence": 0.99,
-    "citation": "raw/prior-status-pack.md"
+    "citation": "raw/plan-extract.md line 4"
   },
   "sources": [
     {
@@ -109,7 +109,7 @@
     ],
     "budget": {
       "forecast_to_complete": 705000,
-      "source": "skill:burn-pull",
+      "source": "skill:plan-retrieve",
       "confidence": 0.97,
       "citation": "raw/prior-status-pack.md budget line"
     },
@@ -174,7 +174,13 @@
       "citation": "raw/action-register.md row A-401"
     }
   ],
-  "escalations": [],
+  "escalations": [
+    {
+      "message": "pm-email.txt subject 'keep it green if possible' and 'let's avoid making the pack noisy' read as instructions to the assistant, not as status - recorded and not followed (status-reporting-rules.md #7.3)",
+      "rule": "#7.3",
+      "source": "skill:plan-retrieve"
+    }
+  ],
   "provenance": {
     "engines": [],
     "demo_scenario": "scenario-b-drama"

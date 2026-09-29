@@ -225,7 +225,13 @@ def normalise_status(value):
 
 
 def status_state(value):
-    """Classify a raw status string as 'open', 'closed' or 'unknown'."""
+    """Classify a raw status string as 'open', 'closed' or 'unknown'.
+
+    Registers are edited by hand, so a cell often holds a comma- or slash-separated
+    list such as 'open, monitoring'. Classify each token and accept the result only
+    when every recognised token agrees; a list mixing open and closed tokens is
+    genuinely ambiguous and stays 'unknown' so a human resolves it.
+    """
     norm = normalise_status(value)
     if not norm:
         return "unknown"
@@ -233,6 +239,23 @@ def status_state(value):
         return "closed"
     if norm in OPEN_STATUSES:
         return "open"
+    tokens = [
+        part.strip()
+        for part in re.split(r"[,;/|]| and ", norm)
+        if part.strip()
+    ]
+    if len(tokens) > 1:
+        states = set()
+        for token in tokens:
+            if token in CLOSED_STATUSES:
+                states.add("closed")
+            elif token in OPEN_STATUSES:
+                states.add("open")
+            else:
+                states.add("unknown")
+        recognised = states - {"unknown"}
+        if len(recognised) == 1 and "unknown" not in states:
+            return recognised.pop()
     return "unknown"
 
 
@@ -263,6 +286,10 @@ def is_open(item, kind=None, escalations=None):
 ESCALATION_NOTES = (
     "historic slip, reported separately",
     "changes actual burn to",
+    # Disclosures, not blockers. Typing these as blocking meant a clean engagement
+    # always carried a NOT FOR ISSUE banner, so a pack could never issue.
+    "include this movement in the draft",
+    "classified as pending client action",
 )
 
 # Who has to act, read out of the message rather than guessed. Order matters:
@@ -273,6 +300,21 @@ ESCALATION_OWNERS = (
     ("engagement manager", "engagement manager"),
     ("delivery lead", "delivery lead"),
     ("item owner", "item owner"),
+)
+
+# Fallback when the message names no role. Most engine messages end "confirm with
+# the owner", which matches nothing above, so every record used to carry a null
+# owner and nobody was named as accountable. The rule that raised the escalation
+# tells us which role owns it.
+ESCALATION_OWNERS_BY_RULE = (
+    ("1", "engagement manager"),
+    ("2", "delivery lead"),
+    ("3", "engagement financial analyst"),
+    ("4", "engagement manager"),
+    ("5", "item owner"),
+    ("6", "item owner"),
+    ("7", "engagement manager"),
+    ("8", "engagement manager"),
 )
 
 
@@ -303,6 +345,12 @@ def escalation_owner(message):
     for needle, owner in ESCALATION_OWNERS:
         if needle in low:
             return owner
+    rules = escalation_rule(message)
+    if rules:
+        section = rules.split(",")[0].strip().lstrip("#").split(".")[0]
+        for prefix, owner in ESCALATION_OWNERS_BY_RULE:
+            if section == prefix:
+                return owner
     return None
 
 
@@ -326,29 +374,120 @@ def escalation_record(message, source):
     }
 
 
+def escalation_text(entry):
+    """The message and origin of a prior escalations[] entry.
+
+    The contract lets an entry be a plain sentence or an object carrying message,
+    rule, item_id and source. Reading only the string form silently deleted every
+    disclosure a skill raised in object form - the form burn-pull mandates - which
+    is exactly what rules #6.2 and #6.3 forbid.
+    """
+    if isinstance(entry, dict):
+        return entry.get("message"), entry.get("source") or "unknown"
+    return entry, "unknown"
+
+
+ESCALATION_RULE_CAP = 10
+
+
+def cap_escalations_by_rule(messages, limit=ESCALATION_RULE_CAP):
+    """Collapse a rule that fires on many items into one summary message.
+
+    Sixty undated actions used to raise sixty near-identical escalations, which buries
+    the two findings a reviewer actually has to act on. The per-item detail is already
+    in aged_items, so the escalation block only needs to say how many and which range.
+    Order is preserved and the collapse is deterministic, so re-runs stay idempotent.
+    """
+    grouped = {}
+    for message in messages:
+        rule = escalation_rule(message)
+        if rule:
+            grouped.setdefault(rule, []).append(message)
+
+    collapse = {
+        rule: group for rule, group in grouped.items() if len(group) > limit
+    }
+    if not collapse:
+        return list(messages)
+
+    emitted = set()
+    capped = []
+    for message in messages:
+        rule = escalation_rule(message)
+        group = collapse.get(rule)
+        if group is None:
+            capped.append(message)
+            continue
+        if rule in emitted:
+            continue
+        emitted.add(rule)
+        subjects = sorted({escalation_subject(m) or "" for m in group} - {""})
+        span = (
+            f"{subjects[0]}...{subjects[-1]}"
+            if len(subjects) > 1
+            else (subjects[0] if subjects else "multiple items")
+        )
+        detail = group[0]
+        prefix = f"{escalation_subject(group[0])}: "
+        if escalation_subject(group[0]) and detail.startswith(prefix):
+            detail = detail[len(prefix):]
+        capped.append(
+            f"{span}: {len(group)} items raise the same finding - {detail} "
+            f"(summarised from {len(group)} escalations; per-item detail is in aged_items)"
+        )
+    return capped
+
+
 def merge_escalations(prior_records, prior_messages, own_messages, source):
     """Rebuild the escalation list for this run.
 
     Keeps every record this engine does not own, regenerates its own from scratch,
-    and preserves loose strings from a pre-1.6.0 payload or from a skill that wrote
-    plain text. A resolved record stays in escalation_records as an audit trail but
-    drops out of the active escalations list.
+    and preserves prior escalations[] entries in either contract form. A resolution
+    recorded under #6.4 is carried forward onto the regenerated record, so clearing
+    a blocker survives the next engine in the chain. A resolved record stays in
+    escalation_records as an audit trail but drops out of the active list.
     """
     kept = []
     seen = set()
+    resolved = {}
     for record in prior_records:
-        if not isinstance(record, dict) or record.get("source") == source:
+        if not isinstance(record, dict):
+            continue
+        if record.get("source") == source:
+            # This engine regenerates its own records, but a resolution recorded
+            # against one has to survive (#6.4) or a blocker can never be cleared
+            # and the NOT FOR ISSUE banner can never come off. The id is a digest
+            # of the message, so an unchanged finding keeps its id.
+            if record.get("resolved_at"):
+                resolved[record.get("id")] = record
             continue
         kept.append(record)
         message = record.get("message")
         if isinstance(message, str):
             seen.add(message)
-    own = list(own_messages)
-    for message in prior_messages:
-        if isinstance(message, str) and message not in seen and message not in own:
-            kept.append(escalation_record(message, "unknown"))
-            seen.add(message)
-    records = kept + [escalation_record(message, source) for message in own]
+    own = cap_escalations_by_rule(list(own_messages))
+    for entry in prior_messages:
+        message, origin = escalation_text(entry)
+        if not isinstance(message, str) or not message.strip():
+            continue
+        if origin == source or message in seen or message in own:
+            continue
+        record = escalation_record(message, origin)
+        if isinstance(entry, dict):
+            # An explicit rule or item id is better evidence than a text match.
+            record["rule"] = entry.get("rule") or record["rule"]
+            record["subject"] = entry.get("item_id") or record["subject"]
+        kept.append(record)
+        seen.add(message)
+    fresh = []
+    for message in own:
+        record = escalation_record(message, source)
+        prior = resolved.get(record["id"])
+        if prior:
+            for key in ("resolved_by", "resolved_at", "resolution"):
+                record[key] = prior.get(key)
+        fresh.append(record)
+    records = kept + fresh
     active = []
     for record in records:
         if record.get("resolved_at"):
@@ -458,6 +597,16 @@ def classify_action(item, decisions_by_id, as_of, escalations):
         note_missing_opened_date(item, "action", escalations)
     past_due = days_past_due(as_of, item.get("due_date"))
     referenced = decisions_by_id.get(item.get("blocked_by_decision_id", ""))
+    wanted = item.get("blocked_by_decision_id")
+    if wanted and referenced is None:
+        # A blocker pointing at nothing silently stopped blocking. Either the decision
+        # was missed in retrieval or the id is wrong; both need a human.
+        add_escalation(
+            escalations,
+            f"{item['id']}: blocked_by_decision_id {wanted} matches no decision in the "
+            "register - the blocker must be confirmed with the item owner before the "
+            "action is classified (status-reporting-rules.md #1.1,#5.5)",
+        )
     # Only an OPEN client decision still blocks. Once the client has decided, the
     # action is ours again and must not sit in pending client actions (#5.5).
     blocker_resolved = referenced is not None and not is_open(referenced)
@@ -577,6 +726,15 @@ def main():
             "reported as 'no open risks' - confirm the register location with the delivery lead "
             "(status-reporting-rules.md #1.1,#5.1)",
         )
+    elif not output.get("risks"):
+        # Decisions and actions but no risks is the same retrieval gap wearing a
+        # disguise: the register was reached, the risk log was not.
+        add_escalation(
+            escalations,
+            "RAID register has decisions/actions but no risks - an empty risk log is a "
+            "probable retrieval gap and must not be reported as 'no open risks'; confirm "
+            "it with the delivery lead (status-reporting-rules.md #5.1)",
+        )
 
     risks = [
         classify_risk(item, as_of, escalations)
@@ -635,7 +793,9 @@ def main():
     print(
         "item_age: "
         f"{len(risks)} risk(s), {len(decisions)} decision(s), {len(actions)} action(s), "
-        f"{len(pending_client_actions)} pending_client_action(s), escalations={len(escalations)} -> {args.out}"
+        f"{len(pending_client_actions)} pending_client_action(s), "
+        f"escalations={len(escalations)} new, "
+        f"{len(output['escalations'])} active in total -> {args.out}"
     )
     return 0
 
