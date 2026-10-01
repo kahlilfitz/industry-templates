@@ -3,7 +3,7 @@ name: narrative-draft
 description: "Drafts grounded time-entry narratives for entries that have none and offers cited suggested rewrites beside existing narratives without replacing them. Use when the user says \"write up my time\", \"draft my time entries\", \"turn my calendar into narratives\" or \"suggest a better narrative for this entry\". If no activity packet exists yet, run activity-pull first. Never invents roles, attendees or purpose. Do NOT use for gathering raw activity (use activity-pull), for choosing task codes (use code-map), for judging whether an entry will be rejected (use guideline-check), or for sending or submitting anything. Do NOT use for expense reports or receipts."
 license: Proprietary
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
   author: Microsoft Professional Services Skills
   category: writing
 ---

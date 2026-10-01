@@ -3,11 +3,13 @@
 
 Constants mirror references/task-phase-codes.md and references/client-billing-guidelines.md.
 
-v1.0.2 rules:
+v1.0.3 rules:
 - Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1).
 - Linked signals whose activity classes point to more than one task code are CONFLICTING:
   they map to UNMAPPED at 0.40 and are held for review (task-phase-codes.md #5.3). The engine
-  never majority-votes a code.
+  never majority-votes a code. Every linked signal is mapped BEFORE any non-billable decision,
+  so a client meeting plus an internal call is a conflict, not NB900 (#4.1 vs #3.1).
+- A non-billable signal maps to NB900 (#4.1) unless its class is billing_hygiene -> BH910 (#4.2).
 """
 import argparse
 import datetime
@@ -20,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:code_map"
-ENGINE_VERSION = "code_map/1.0.2"
+ENGINE_VERSION = "code_map/1.0.3"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 DIRECT_MATCH_CONFIDENCE = 0.92  # task-phase-codes.md #5.1
 KEYWORD_MATCH_CONFIDENCE = 0.78  # task-phase-codes.md #5.2
@@ -36,6 +38,7 @@ CLASS_MAP = {
     "internal_admin": ("NB", "NB900", "Internal non-billable administration", "task-phase-codes.md #4.1"),
     "billing_hygiene": ("BH", "BH910", "Pre-bill and WIP hygiene", "task-phase-codes.md #4.2"),
 }
+NON_BILLABLE_PHASES = ("NB", "BH")  # task-phase-codes.md #4
 KEYWORDS = [
     ("meeting", CLASS_MAP["client_meeting"]),
     ("workshop", CLASS_MAP["client_meeting"]),
@@ -81,17 +84,33 @@ def load_packet(path):
     return payload
 
 
+def signal_mapping(signal):
+    """Map one linked signal to a code tuple, or None when its class is unknown.
+
+    A signal explicitly marked non-billable that would otherwise map to a billable code maps to
+    NB900 (#4.1); billing_hygiene keeps BH910 (#4.2).
+    """
+    mapping = CLASS_MAP.get(signal.get("activity_class"))
+    if signal.get("billable_signal") is False and (mapping is None or mapping[0] not in NON_BILLABLE_PHASES):
+        return CLASS_MAP["internal_admin"]
+    return mapping
+
+
 def choose_mapping(entry, linked):
-    """Return (mapping tuple, confidence, basis)."""
+    """Return (mapping tuple, confidence, basis).
+
+    Every linked signal is mapped first; more than one target code (non-billable codes included)
+    is a conflict and returns UNMAPPED at 0.40 (#5.3). There is no non-billable short-circuit.
+    """
     if linked:
-        classes = sorted({a.get("activity_class") for a in linked})
-        if any(a.get("activity_class") == "internal_admin" or a.get("billable_signal") is False for a in linked):
-            return CLASS_MAP["internal_admin"], DIRECT_MATCH_CONFIDENCE, "direct_activity_class"
-        unknown = [c for c in classes if c not in CLASS_MAP]
-        codes = {CLASS_MAP[c][1] for c in classes if c in CLASS_MAP}
-        if not unknown and len(codes) == 1:
-            return CLASS_MAP[classes[0]], DIRECT_MATCH_CONFIDENCE, "direct_activity_class"
-        return UNMAPPED, UNKNOWN_CONFIDENCE, ("conflicting_activity_classes" if len(codes) > 1 else "unknown_activity_class")
+        mappings = [signal_mapping(a) for a in linked]
+        known = [m for m in mappings if m is not None]
+        codes = {m[1] for m in known}
+        if len(codes) > 1:
+            return UNMAPPED, UNKNOWN_CONFIDENCE, "conflicting_activity_classes"
+        if len(known) == len(mappings) and len(codes) == 1:
+            return known[0], DIRECT_MATCH_CONFIDENCE, "direct_activity_class"
+        return UNMAPPED, UNKNOWN_CONFIDENCE, "unknown_activity_class"
     text = " ".join([entry.get("draft", {}).get("narrative", "") or "", entry.get("narrative", "") or ""]).lower()
     for token, mapping in KEYWORDS:
         if token in text:
@@ -103,7 +122,7 @@ def main():
     ap = argparse.ArgumentParser(description="Map drafted time entries to phase/task codes.")
     ap.add_argument("--drafted", required=True, help="Input drafted contract JSON")
     ap.add_argument("--out", required=True, help="Output coded contract JSON")
-    ap.add_argument("--signal-config", help="Signal policy JSON (default: the plugin's config/signal-sources.json)")
+    ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     ap.add_argument("--generated-at", help="Fixed ISO-8601 UTC timestamp for reproducible golden files")
     args = ap.parse_args()
 
@@ -125,9 +144,9 @@ def main():
         flags = []
         if task == "UNMAPPED":
             held += 1
-            classes = sorted({a.get("activity_class") for a in linked})
-            detail = ("linked signals point to different codes (" + ", ".join(
-                f"{c}->{CLASS_MAP[c][1] if c in CLASS_MAP else '?'}" for c in classes) + "); no code is recommended"
+            detail = ("linked signals point to different codes (" + ", ".join(sorted({
+                f"{a.get('activity_class')}->{(signal_mapping(a) or ('?', '?'))[1]}" for a in linked}))
+                + "); no code is recommended"
                       if basis == "conflicting_activity_classes" else "no activity class or keyword maps to a code")
             if submitted_task:
                 detail += f"; submitted {submitted_task} cannot be confirmed"

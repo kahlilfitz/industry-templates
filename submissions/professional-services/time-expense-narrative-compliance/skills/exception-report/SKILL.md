@@ -3,7 +3,7 @@ name: exception-report
 description: "Turns guideline-check output into a draft pre-bill exception packet for the engagement manager and billing coordinator: rejects, needs-review items, code mismatches, privacy exclusions and missing time, each with the engine flag and citation. Use when the user says \"show me the pre-bill exceptions\", \"what needs fixing before billing?\", \"build the WIP cleanup list\" or \"summarize rejected narratives\". Always a draft: nothing is sent without explicit confirmation. Do NOT use for gathering activity (use activity-pull), drafting narratives (use narrative-draft), task codes (use code-map), one entry's compliance or missing time (use guideline-check), client invoices or emails (use the built-in email), or approving pre-bills. Do NOT use for expense reports or receipts."
 license: Proprietary
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -17,7 +17,7 @@ After `guideline-check`, when the user wants the pre-bill exception list, WIP cl
 ## Steps
 1. Run `python3 scripts/exception_report.py --governed governed.json --out exception-report.md --requested-start YYYY-MM-DD --requested-end YYYY-MM-DD`.
 2. Show the draft. It is headed "DRAFT - not sent, not approved", groups rejects, holds, needs-review, missing time and privacy exclusions, and quotes every engine flag with its citation.
-3. If the requested period differs from the governed data period, say so first (the engine adds a period caveat).
+3. If the requested period differs from the dates actually present in the governed data, say so first (the engine adds a period caveat based on the actual entry and activity dates).
 4. If the user asks to send or share the packet (for example "send my billing coordinator the cleanup list"), follow the send rule below. Never send it yourself as part of building the packet.
 ## Send rule (draft-first)
 - This skill produces a draft only. It never sends e-mail, Teams or chat messages on its own.

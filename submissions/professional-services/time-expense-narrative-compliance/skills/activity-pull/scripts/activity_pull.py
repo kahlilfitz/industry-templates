@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:activity_pull"
-ENGINE_VERSION = "activity_pull/1.0.2"
+ENGINE_VERSION = "activity_pull/1.0.3"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 POLICY_CITATION = signal_policy.POLICY_CITATION
 MATCHED_CONFIDENCE = {"calendar": 0.96, "document_activity": 0.94}
@@ -107,7 +107,7 @@ def main():
     ap = argparse.ArgumentParser(description="Build a cited activity packet from engagement-scoped raw exports.")
     ap.add_argument("--raw-dir", required=True, help="Folder holding the raw exports")
     ap.add_argument("--out", required=True, help="Output activity packet JSON")
-    ap.add_argument("--signal-config", help="Signal policy JSON (default: the plugin's config/signal-sources.json)")
+    ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     who = ap.add_mutually_exclusive_group(required=True)
     who.add_argument("--person", action="append", help="Requesting timekeeper (repeat for named colleagues)")
     who.add_argument("--all-timekeepers", action="store_true", help="Engagement-manager view: every timekeeper")
@@ -120,13 +120,24 @@ def main():
     try:
         stamp = generated_at(args.generated_at)
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = args.signal_config or signal_policy.find_plugin_config(script_dir)
-        if not config_path:
-            raise InputError("config/signal-sources.json not found; pass --signal-config")
-        config = {}
-        with open(config_path, encoding="utf-8") as fh:
-            config = json.load(fh)
-        enabled, _ = signal_policy.effective_sources({"signal_config": config}, config_path=config_path)
+        plugin_config_path = signal_policy.find_plugin_config(script_dir)
+        if plugin_config_path:
+            with open(plugin_config_path, encoding="utf-8") as fh:
+                config = json.load(fh)
+        else:
+            config = {"sources": signal_policy.NARROW_DEFAULT,
+                      "note": "plugin config/signal-sources.json not found; documented narrow default applied"}
+        if not isinstance(config, dict) or not isinstance(config.get("sources"), dict):
+            raise InputError("config/signal-sources.json has no 'sources' object")
+        # The plugin config (or narrow default) is always applied; --signal-config may only narrow it.
+        enabled, _ = signal_policy.effective_sources({}, config_path=args.signal_config, script_dir=script_dir)
+        config = json.loads(json.dumps(config))
+        for key, value in enabled.items():
+            entry = config["sources"].get(key)
+            if isinstance(entry, dict):
+                entry["enabled"] = value
+            else:
+                config["sources"][key] = {"enabled": value}
         engagement = read_engagement(os.path.join(args.raw_dir, "engagement-letter-extract.md"))
         workplan_rows = read_csv(os.path.join(args.raw_dir, "engagement-workplan.csv"),
                                  ("workplan_id", "engagement_id", "item_type", "match_key", "activity_class", "deliverable", "purpose"))
@@ -312,7 +323,7 @@ def main():
     }
     if not args.scenario:
         packet["provenance"].pop("demo_scenario")
-    signal_policy.filter_packet(packet, config_path=config_path, engine=ENGINE)
+    signal_policy.filter_packet(packet, config_path=args.signal_config, script_dir=script_dir, engine=ENGINE)
     try:
         with open(args.out, "w", encoding="utf-8", newline="\n") as fh:
             json.dump(packet, fh, indent=2)

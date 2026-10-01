@@ -3,8 +3,8 @@
 **Pre-bill exception packet** - Orion Advisory Cooperative / Billing Controls Implementation (ENG-SYN-042)
 
 - Prepared for: engagement manager and billing coordinator (review only)
-- Period covered by the governed data: 2026-09-14 to 2026-09-18
-- Generated: 2026-09-23T00:00:00Z by exception_report/1.0.2 from guideline_check output (flags quoted verbatim)
+- Period covered by the governed data: 2026-09-14 to 2026-09-18 (entries and activity actually dated 2026-09-14 to 2026-09-18)
+- Generated: 2026-09-23T00:00:00Z by exception_report/1.0.3 from guideline_check output (flags quoted verbatim)
 
 ## Summary
 

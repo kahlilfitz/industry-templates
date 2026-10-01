@@ -29,7 +29,7 @@ A naive reviewer may accept the fluent prose; the engine does not.
 
 ## Privacy seam
 
-`config/signal-sources.json` is part of the package on purpose. Every engine enforces the narrowest effective policy from that file and the packet: engagement-scoped calendar metadata and engagement-workspace document activity are enabled, while mailbox content and mailbox metadata are off by default. If a skill runs without the plugin-level config, that same narrow default remains the mandatory floor, so a packet cannot enable mailbox access by itself. Disabled or unknown signals are removed from evidence and recorded under `provenance.excluded_signals`. A firm can explicitly enable broader sources only with policy approval, matter scoping and user notice.
+`config/signal-sources.json` is part of the package on purpose. Every engine enforces the narrowest effective policy from that file and the packet: engagement-scoped calendar metadata and engagement-workspace document activity are enabled, while mailbox content and mailbox metadata are off by default. If a skill runs without the plugin-level config, that same narrow default remains the mandatory floor, so a packet cannot enable mailbox access by itself. A `--signal-config` file is applied on top of the plugin config and can only narrow it. Disabled or unknown signals are removed from evidence and recorded under `provenance.excluded_signals`. A firm can explicitly enable broader sources only with policy approval, matter scoping and user notice.
 
 ## What you bring
 

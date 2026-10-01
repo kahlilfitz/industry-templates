@@ -874,10 +874,10 @@
     "demo_scenario": "scenario-b-drama",
     "generated_at": "2026-09-23T00:00:00Z",
     "engines": [
-      "activity_pull/1.0.2",
-      "narrative_draft/1.0.2",
-      "code_map/1.0.2",
-      "guideline_check/1.0.2"
+      "activity_pull/1.0.3",
+      "narrative_draft/1.0.3",
+      "code_map/1.0.3",
+      "guideline_check/1.0.3"
     ],
     "sources_read": [
       "calendar",
@@ -933,7 +933,7 @@
         "packet signal_config"
       ],
       "rule": "most_restrictive_wins",
-      "engine": "signal_policy/1.0.2",
+      "engine": "signal_policy/1.0.3",
       "citations": [
         "client-billing-guidelines.md #10.1"
       ]

@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:exception_report"
-ENGINE_VERSION = "exception_report/1.0.2"
+ENGINE_VERSION = "exception_report/1.0.3"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 
 
@@ -64,7 +64,7 @@ def main():
     ap.add_argument("--out", required=True, help="Output Markdown draft")
     ap.add_argument("--requested-start", help="Period the user asked about (YYYY-MM-DD)")
     ap.add_argument("--requested-end", help="Period the user asked about (YYYY-MM-DD)")
-    ap.add_argument("--signal-config", help="Signal policy JSON (default: the plugin's config/signal-sources.json)")
+    ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     ap.add_argument("--generated-at", help="Fixed ISO-8601 UTC timestamp for reproducible golden files")
     args = ap.parse_args()
 
@@ -79,11 +79,17 @@ def main():
     eng = data.get("engagement", {})
     period = data.get("period") or {}
     summary = data["prebill_summary"]
+    data_dates = sorted({d for d in [e.get("date") for e in data["time_entries"]]
+                         + [s.get("date") for s in data.get("activity_signals", [])] if isinstance(d, str) and d})
+    actual = (data_dates[0], data_dates[-1]) if data_dates else (None, None)
     by_verdict = {}
     by_flag_severity = {}
     for entry in data["time_entries"]:
         compliance = entry.get("compliance", {})
-        by_verdict.setdefault(compliance.get("verdict", "unknown"), []).append(entry)
+        verdict = compliance.get("verdict", "unknown")
+        if verdict == "compliant" and compliance.get("flags"):
+            verdict = "needs_review"  # a flagged entry is never listed as a compliant draft
+        by_verdict.setdefault(verdict, []).append(entry)
         for flag in compliance.get("flags", []):
             by_flag_severity.setdefault(flag.get("severity", "needs_review"), []).append((entry, flag))
 
@@ -93,13 +99,22 @@ def main():
         f"**Pre-bill exception packet** - {eng.get('client_name')} / {eng.get('matter_name')} ({eng.get('engagement_id')})",
         "",
         f"- Prepared for: engagement manager and billing coordinator (review only)",
-        f"- Period covered by the governed data: {period.get('start')} to {period.get('end')}",
+        f"- Period covered by the governed data: {period.get('start')} to {period.get('end')} "
+        f"(entries and activity actually dated {actual[0]} to {actual[1]})",
     ]
     if args.requested_start or args.requested_end:
-        req = (args.requested_start or period.get("start"), args.requested_end or period.get("end"))
-        if req != (period.get("start"), period.get("end")):
-            lines.append(f"- **Period caveat:** you asked about {req[0]} to {req[1]}, but the governed data covers "
-                         f"{period.get('start')} to {period.get('end')}. Re-run the chain for the requested period before relying on this packet.")
+        req = (args.requested_start or period.get("start") or actual[0], args.requested_end or period.get("end") or actual[1])
+        declared = (period.get("start"), period.get("end"))
+        beyond_declared = bool(declared[0] and declared[1]) and (req[0] < declared[0] or req[1] > declared[1])
+        beyond_data = not data_dates or req[0] < actual[0] or req[1] > actual[1]
+        narrower = bool(data_dates) and (actual[0] < req[0] or actual[1] > req[1])
+        if beyond_declared or beyond_data:
+            lines.append(f"- **Period caveat:** you asked about {req[0]} to {req[1]}, but the governed data contains entries "
+                         f"and activity dated only {actual[0]} to {actual[1]}. Time outside those dates has not been "
+                         "checked; re-run the chain for the requested period, or confirm no other time exists, before relying on this packet.")
+        elif narrower:
+            lines.append(f"- **Period caveat:** you asked about {req[0]} to {req[1]}, but this packet also covers entries and "
+                         f"activity dated {actual[0]} to {actual[1]}. Re-run the chain for the requested period for a packet limited to it.")
         else:
             lines.append("- Requested period matches the governed data.")
     lines += [

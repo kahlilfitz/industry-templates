@@ -3,7 +3,7 @@ name: activity-pull
 description: "Gathers engagement-scoped calendar metadata, engagement-workspace document activity and existing timesheet rows into a cited activity packet, the first step before time narratives are drafted. Use when the user says \"pull my activity for this matter\", \"gather my week for time entry\", \"what did I work on for this engagement?\" or \"collect my calendar and document activity for billing\". Honors config/signal-sources.json: mailbox sources stay off unless the firm enables them. Do NOT use for writing narratives (use narrative-draft), for finding missing or unrecorded time (use guideline-check), for general calendar questions such as \"what's on my calendar today\" (use the built-in calendar). Do NOT use for expense reports or receipts; this plugin does not handle expenses."
 license: Proprietary
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
   author: Microsoft Professional Services Skills
   category: analysis
 ---

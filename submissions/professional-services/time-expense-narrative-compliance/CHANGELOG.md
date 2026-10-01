@@ -1,6 +1,24 @@
 # Changelog - time-expense-narrative-compliance
 
-## 1.0.2 - 2026-09-30
+## 1.0.3 - 2026-10-01
+
+Fix release after the canonical, hash-matched v1.0.1 evaluation (`evaluate-time-expense-narrative-2026-10-01`, verdict **Blocked**, archived under `Evaluation/1.0.1`). v1.0.2 was frozen but superseded before evaluation; this release contains every v1.0.2 change plus the fixes below. Contract remains `ps.time-expense-narrative-compliance.v1` (backward-compatible additions only).
+
+### Blocking findings fixed
+- **B1 code-map:** every linked signal is now mapped before any non-billable decision. A client meeting linked together with an internal or non-billable call points to two codes, so it maps to `UNMAPPED` at 0.40 with an `unmapped_code` hold (task-phase-codes.md #5.3) instead of NB900 at 0.92.
+- **B2 guideline-check:** an entry billing more than 0.2 h with no linked activity evidence now gets a `no_linked_evidence` hold (client-billing-guidelines.md #6.2) and can never be rated compliant. The #1.2 subject check credits only the entry's own linked signals; it no longer falls back to every signal in the packet.
+- **B3 signal policy (SEC-1):** `config/signal-sources.json` (or, stand-alone, the narrow default) is always applied. `--signal-config` is an additional policy that can narrow but never widen or replace it (most restrictive wins), in every engine including activity-pull. Provenance now labels a default run `config/signal-sources.json` and an override `--signal-config <file> (additional)`.
+- **B4 injection tripwire (SEC-2):** `embedded_instruction` now also catches reviewer- or AI-addressed notes ("Note to AI", "Hey assistant", "Copilot should"), approval and waiver claims ("the client has waived the guidelines", "rules are suspended"), forward/send/export requests, and any e-mail address (including `[at]`/`[dot]` obfuscation) or URL. It inspects the narrative, the original narrative, notes, suggested rewrites and linked activity subjects/deliverables after stripping Unicode format characters. Exception-report never lists a flagged entry under "Compliant drafts".
+
+### Non-blocking findings fixed
+- Billing-hygiene activity now maps to BH910 (task-phase-codes.md #4.2); BH910 is treated as non-billable.
+- The exception-report period caveat compares the requested period with the dates actually present in the entries and activity, not only the declared period.
+- SKILL.md wording updated for code-map (mixed classes, BH910), guideline-check (zero-evidence hold, broader tripwire, additive `--signal-config`) and exception-report (actual-date caveat).
+
+### Tests
+- `tests/run_tests.py` grows from 50 to 72 checks: every paraphrased injection from the canonical report plus contact/URL and zero-width variants, a no-false-positive set of ordinary consulting narratives, the meeting-plus-internal-call conflict, NB900/BH910 mapping, the 8.0 h zero-evidence entry, a tampered `--signal-config` through narrative-draft, code-map, guideline-check and activity-pull, narrowing via `--signal-config`, the default provenance label, the actual-date period caveat and "Compliant drafts" exclusion. Each new fixture fails on the 1.0.2 engines.
+
+## 1.0.2 - 2026-09-30 (frozen, superseded before evaluation)
 
 Fix release after the v1.0.1 evaluation (machine verdict Ready / SHIP WITH NOTES). Contract remains `ps.time-expense-narrative-compliance.v1`; all additions are backward compatible.
 

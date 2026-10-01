@@ -17,7 +17,7 @@ import json
 import os
 
 POLICY_CITATION = "client-billing-guidelines.md #10.1"
-SIGNAL_POLICY_VERSION = "signal_policy/1.0.2"
+SIGNAL_POLICY_VERSION = "signal_policy/1.0.3"
 
 # Connector source prefix -> key in config/signal-sources.json "sources".
 SOURCE_KEYS = (
@@ -77,16 +77,23 @@ def load_policy_file(path):
 
 
 def effective_sources(packet, config_path=None, script_dir=None):
-    """Return ({source_key: enabled}, [policy names used]); most restrictive wins."""
+    """Return ({source_key: enabled}, [policy names used]); most restrictive wins.
+
+    The plugin config (or, stand-alone, the narrow default floor) is ALWAYS applied. A
+    --signal-config file and a packet signal_config are additional policies: they can narrow
+    the allowed sources but never widen or replace the plugin config.
+    """
     policies = []
-    if config_path:
-        policies.append(("signal-config argument", load_policy_file(config_path)))
+    found = find_plugin_config(script_dir) if script_dir else None
+    if found:
+        policies.append(("config/signal-sources.json", load_policy_file(found)))
     else:
-        found = find_plugin_config(script_dir) if script_dir else None
-        if found:
-            policies.append(("config/signal-sources.json", load_policy_file(found)))
-        else:
-            policies.append(("narrow default", NARROW_DEFAULT))
+        policies.append(("narrow default", NARROW_DEFAULT))
+    if config_path:
+        same = found and os.path.normcase(os.path.realpath(config_path)) == os.path.normcase(os.path.realpath(found))
+        if not same:
+            policies.append((f"--signal-config {os.path.basename(config_path)} (additional)",
+                             load_policy_file(config_path)))
     packet_sources = (packet.get("signal_config") or {}).get("sources")
     if isinstance(packet_sources, dict):
         policies.append(("packet signal_config", packet_sources))

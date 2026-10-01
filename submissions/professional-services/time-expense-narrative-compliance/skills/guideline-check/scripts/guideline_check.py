@@ -4,7 +4,7 @@
 Constants mirror references/client-billing-guidelines.md section by section. The model
 reports these flags; it never decides, suppresses or downgrades compliance verdicts.
 
-v1.0.2 rules:
+v1.0.3 rules:
 - Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1); an
   entry that linked one gets a hold_for_review flag and the signal never counts as evidence.
 - #1.1 under 12 words = reject. #1.2 actor's work / subject / purpose are checked on the
@@ -12,7 +12,13 @@ v1.0.2 rules:
 - #2.1 >2.0 h with more than one class = reject; #2.2 <=2.0 h may combine at most two classes,
   and only with an explicit subject and purpose.
 - #3.2 a vague phrase is reject unless the narrative states a specific subject AND purpose.
+- #1.2 the subject is credited only against the entry's own linked signals (no fall-back to
+  every packet signal).
 - #6.2 evidence counts only linked activity on the entry's own date; off-date links are flagged.
+  An entry over 0.2 h with NO linked evidence gets a no_linked_evidence hold (never compliant).
+- #1.3 embedded_instruction hold: reviewer/AI-addressed notes, approval/waiver claims,
+  forward/send instructions, or any e-mail address or URL in narrative or linked signal text
+  (Unicode format characters stripped first).
 - #7.1 near-duplicate = SequenceMatcher ratio or token Jaccard >= 0.92 against earlier
   narratives for the same meeting.
 """
@@ -31,7 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:guideline_check"
-ENGINE_VERSION = "guideline_check/1.0.2"
+ENGINE_VERSION = "guideline_check/1.0.3"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 MIN_NARRATIVE_WORDS = 12  # client-billing-guidelines.md #1.1
 BLOCK_BILLING_HOURS = 2.0  # client-billing-guidelines.md #2.1 / #2.2
@@ -41,6 +47,7 @@ PROHIBITED_TERMS = ("attention to", "various matters", "miscellaneous", "work on
 VAGUE_PHRASES = ("review and revise", "work on", "handle", "follow up", "touch base")  # #3.2
 CODE_MISMATCH_REVIEW_CONFIDENCE = 0.80  # client-billing-guidelines.md #4.2
 NON_BILLABLE_CLASSES = ("internal_admin", "billing_hygiene")  # client-billing-guidelines.md #5.1
+NON_BILLABLE_TASK_CODES = ("NB900", "BH910")  # task-phase-codes.md #4.1 / #4.2
 ROUNDING_INCREMENT = Decimal("0.1")  # client-billing-guidelines.md #6.1
 EVIDENCE_OVERRUN_HOURS = 0.2  # client-billing-guidelines.md #6.2
 NEAR_DUPLICATE_RATIO = 0.92  # client-billing-guidelines.md #7.1
@@ -78,8 +85,39 @@ INSTRUCTION_PATTERNS = (
     r"\b(?:must|should)\s+not\s+be\s+(?:flagged|reviewed|rejected|held)\b",
     r"\b(?:per|according to)\s+(?:the\s+)?(?:partner|client|reviewer|billing)\b.{0,60}\b"
     r"(?:approved|cleared|do not|must not|no review)\b",
+    # 1.0.3: assistant-addressed notes, waiver/authority claims, forward/send instructions.
+    r"\b(?:note|message|instruction|instructions|reminder)s?\s+(?:to|for)\s+(?:the\s+)?"
+    r"(?:ai|assistant|reviewer|copilot|bot|llm|chatbot|claude)\b",
+    r"\b(?:hey|hi|dear|attention|attn)\s+(?:the\s+)?(?:ai|assistant|copilot|bot|llm|chatbot|claude|reviewer)\b",
+    r"\b(?:ai|copilot|llm|chatbot|claude)\s*(?:should|must|needs to|can|will|please)\b",
+    r"\b(?:waive|waived|waives|waiving|exempted|exempts)\b.{0,40}\b"
+    r"(?:guidelines?|rules?|reviews?|requirements?|polic(?:y|ies)|checks?|limits?|caps?)\b",
+    r"\b(?:guidelines?|rules?|requirements?|polic(?:y|ies)|checks?)\b.{0,30}\b"
+    r"(?:waived|suspended|(?:do not|does not|don t|doesn t) apply to (?:this|these|me|my|our))\b",
+    r"\b(?:please\s+)?(?:forward|send|e ?mail|upload|export|transmit|copy)\s+(?:this|these|the|all|a copy|copies)\b"
+    r".{0,40}\b(?:packet|entries|entry|report|data|file|files|list|time|narratives?|records?|exceptions?|prebill|wip)\b",
 )
 INSTRUCTION_RE = re.compile("|".join(INSTRUCTION_PATTERNS))
+# Any e-mail address or URL inside narrative or signal text is out of place in a time narrative.
+CONTACT_RE = re.compile(
+    r"[A-Za-z0-9._%+-]+\s*(?:@|\(at\)|\[at\])\s*[A-Za-z0-9-]+(?:\s*(?:\.|\(dot\)|\[dot\])\s*[A-Za-z0-9-]+)+"
+    r"|\b(?:https?|ftp)://\S+|\bwww\.\S+"
+    r"|\b[a-z0-9-]+\.(?:com|net|org|io|co|ai|biz|info|xyz|me|app|dev)(?:/\S*)?\b",
+    re.IGNORECASE,
+)
+
+
+def strip_format(text):
+    return "".join(ch for ch in (text or "") if unicodedata.category(ch) != "Cf")
+
+
+def embedded_instruction(*texts):
+    """True when any text steers the reviewer/engine or carries an e-mail address or URL."""
+    for text in texts:
+        raw = strip_format(text)
+        if INSTRUCTION_RE.search(normalize(raw)) or CONTACT_RE.search(raw):
+            return True
+    return False
 
 
 class InputError(ValueError):
@@ -163,15 +201,18 @@ def add_flag(flags, flag, severity, detail, citations, confidence=0.95):
     })
 
 
-def required_elements(entry, narrative, linked, all_signals):
-    """#1.2 checks on the narrative text itself. Returns {element: bool}."""
+def required_elements(entry, narrative, linked):
+    """#1.2 checks on the narrative text itself. Returns {element: bool}.
+
+    The subject is credited only against the entry's own linked signals; with nothing linked the
+    subject cannot be evidenced (no fall-back to every signal in the packet).
+    """
     toks = tokens(narrative)
     narrative_tokens = set(toks)
     first = toks[0] if toks else ""
     actor = bool(entry.get("person")) and first in ACTION_VERBS
-    candidates = linked or all_signals
     subject = False
-    for signal in candidates:
+    for signal in linked:
         for text in (signal.get("subject"), signal.get("deliverable")):
             wanted = content_tokens(text)
             if wanted and len(wanted & narrative_tokens) / len(wanted) >= SUBJECT_COVERAGE:
@@ -184,7 +225,7 @@ def main():
     ap = argparse.ArgumentParser(description="Govern time-entry narratives against client billing guidelines.")
     ap.add_argument("--coded", required=True, help="Input coded contract JSON")
     ap.add_argument("--out", required=True, help="Output governed contract JSON")
-    ap.add_argument("--signal-config", help="Signal policy JSON (default: the plugin's config/signal-sources.json)")
+    ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     ap.add_argument("--generated-at", help="Fixed ISO-8601 UTC timestamp for reproducible golden files")
     args = ap.parse_args()
 
@@ -226,7 +267,7 @@ def main():
             add_flag(flags, "minimum_detail", "reject", f"{wc} words < {MIN_NARRATIVE_WORDS} required words",
                      ["client-billing-guidelines.md #1.1"], 0.9)
 
-        elements = required_elements(entry, narrative, linked, signals)
+        elements = required_elements(entry, narrative, linked)
         missing = [k for k in ("actor", "subject", "purpose") if not elements[k]]
         if len(missing) >= 2:
             add_flag(flags, "required_elements_missing", "reject", f"missing required elements: {', '.join(missing)}",
@@ -265,12 +306,17 @@ def main():
                              f"matched vague phrase '{phrase}' with no specific subject and purpose to cure it",
                              ["client-billing-guidelines.md #3.2", "client-billing-guidelines.md #3.3"], 0.93)
 
-        if INSTRUCTION_RE.search(narrative_norm):
+        draft = entry.get("draft") or {}
+        rewrite_texts = [r.get("narrative") for r in draft.get("suggested_rewrites") or [] if isinstance(r, dict)]
+        if embedded_instruction(narrative, entry.get("narrative"), entry.get("notes"), *rewrite_texts,
+                                *[a.get("subject") for a in linked], *[a.get("deliverable") for a in linked]):
             add_flag(flags, "embedded_instruction", "hold_for_review",
-                     "narrative contains text addressed to the reviewer or engine; treated as data and not followed",
+                     "narrative or linked activity text addresses the reviewer/engine, claims an approval or waiver, "
+                     "asks for forwarding, or carries an e-mail address or URL; treated as data and not followed",
                      ["client-billing-guidelines.md #1.3"], 0.95)
 
-        if any(c in NON_BILLABLE_CLASSES for c in classes) or entry.get("code_mapping", {}).get("recommended_task_code") == "NB900":
+        task_code = entry.get("code_mapping", {}).get("recommended_task_code")
+        if any(c in NON_BILLABLE_CLASSES for c in classes) or task_code in NON_BILLABLE_TASK_CODES:
             add_flag(flags, "non_billable_activity", "reject", "entry is linked to internal/non-billable activity",
                      ["client-billing-guidelines.md #5.1", "task-phase-codes.md #4.1"], 0.96)
 
@@ -282,7 +328,11 @@ def main():
                      f"entry dated {entry.get('date')} links activity from another date: "
                      + ", ".join(f"{a['activity_id']} ({a.get('date')})" for a in off_date),
                      ["client-billing-guidelines.md #6.2"], 0.85)
-        if linked and duration - evidence_hours > EVIDENCE_OVERRUN_HOURS:
+        if not linked and duration > EVIDENCE_OVERRUN_HOURS:
+            add_flag(flags, "no_linked_evidence", "hold_for_review",
+                     f"{duration} billed hours has no linked activity evidence (0 hours); the #6.2 tolerance is "
+                     f"{EVIDENCE_OVERRUN_HOURS} hours", ["client-billing-guidelines.md #6.2"], 0.9)
+        elif linked and duration - evidence_hours > EVIDENCE_OVERRUN_HOURS:
             add_flag(flags, "evidence_overrun", "needs_review",
                      f"{duration} billed hours exceeds {evidence_hours} hours of same-date linked evidence "
                      f"({all_date_hours} hours across all linked dates) by more than {EVIDENCE_OVERRUN_HOURS}",

@@ -1,6 +1,6 @@
 {
   "name": "time-expense-narrative-compliance",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Professional Services Cowork plugin for time entries: build a cited activity packet from engagement-scoped calendar and document activity, draft grounded time-entry narratives, map task and phase codes deterministically, check narratives against client billing guidelines, surface missing time and draft a pre-bill exception packet, and stop before submission or billing. Expenses are out of scope in this version: it does not handle expense reports, receipts or travel claims. Draft-first (nothing is sent without explicit confirmation); mailbox sources stay off unless the firm enables them; every compliance verdict and flag is rules-engine cited.",
   "author": {
     "name": "Microsoft Professional Services Skills"

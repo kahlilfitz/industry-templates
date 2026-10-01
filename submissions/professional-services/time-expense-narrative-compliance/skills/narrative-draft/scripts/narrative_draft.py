@@ -5,7 +5,7 @@ Reads a ps.time-expense-narrative-compliance.v1 activity packet and writes the s
 with draft narratives attached. The model may later improve prose, but this engine owns linked
 evidence, confidence, provenance and citations.
 
-v1.0.2 rules:
+v1.0.3 rules:
 - Signals from disabled or unknown sources are dropped first (signal_policy.py,
   client-billing-guidelines.md #10.1); an entry that linked one is marked needs_review.
 - Meetings are "Attended" unless the calendar organizer is the timekeeper ("Led").
@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:narrative_draft"
-ENGINE_VERSION = "narrative_draft/1.0.2"
+ENGINE_VERSION = "narrative_draft/1.0.3"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 MIN_NARRATIVE_WORDS = 12  # client-billing-guidelines.md #1.1
 EXISTING_NARRATIVE_CONFIDENCE = 0.94
@@ -155,7 +155,7 @@ def main():
     ap = argparse.ArgumentParser(description="Draft deterministic narrative candidates from activity signals.")
     ap.add_argument("--activity", required=True, help="Input contract JSON from activity-pull")
     ap.add_argument("--out", required=True, help="Output drafted contract JSON")
-    ap.add_argument("--signal-config", help="Signal policy JSON (default: the plugin's config/signal-sources.json)")
+    ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     ap.add_argument("--generated-at", help="Fixed ISO-8601 UTC timestamp for reproducible golden files")
     args = ap.parse_args()
 
