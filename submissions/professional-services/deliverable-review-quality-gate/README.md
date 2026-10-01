@@ -20,6 +20,15 @@ Version 1.0.2 closes the v1.0.1 automated-evaluation blockers: review packets no
 
 Version 1.0.3 closes the v1.0.2 automated-evaluation blockers. Null or absent registers and any client-data value other than `ok` now hold and escalate. The G8 tripwire folds Cyrillic/Greek look-alikes, catches reviewer- and assistant-addressed paraphrases, scans evidence citations, ignores ordinary "pre-approved" business prose and cannot be suppressed by upstream findings that reuse engine IDs. severity_rank returns a clean error for non-numeric page labels. The review packet is headed `DRAFT - HUMAN REVIEW REQUIRED`.
 
+Version 1.0.4 follows 1.0.3, which was frozen and submitted for evaluation. It carries every 1.0.3 fix, and the G8 tripwire is now structural rather than phrase-based. It catches:
+
+- text that addresses the tool directly (assistant, AI, Copilot, Claude, GPT, bot, agent, reviewer) in vocative form, whatever the verb;
+- verdict steering such as "mark/report/classify this as supported";
+- negative instructions aimed at this review, a finding or an item;
+- look-alike letters from any non-Latin script mixed into a Latin word;
+- steering hidden in IDs or file names;
+- steering split across an assertion's text, citation, evidence titles and location label.
+
 ## The case that shows why it exists
 
 In the second demo scenario, the deliverable looks excellent. It is polished, branded, client-confidential, and has a disclaimer. A skim review would likely move it forward.

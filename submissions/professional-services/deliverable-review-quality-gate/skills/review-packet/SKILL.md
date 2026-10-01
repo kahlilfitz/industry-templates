@@ -3,7 +3,7 @@ name: review-packet
 description: "Drafts the partner/QRM review packet from deterministic gate_check and severity_rank output. Use when the user asks \"draft the review packet\", \"summarize partner review items\", \"make the issue list\", \"what needs fixing before client issue?\" or \"prepare the QRM packet\". Do NOT use to ingest documents (use deliverable-ingest), retrieve criteria (use criteria-retrieve), map support (use assertion-map), or compute findings/severity/status (use gate-check). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or to send, approve, sign off, publish or authorize reliance."
 license: Proprietary
 metadata:
-  version: "1.0.3"
+  version: "1.0.4"
   author: Microsoft Professional Services Skills
   category: writing
 ---

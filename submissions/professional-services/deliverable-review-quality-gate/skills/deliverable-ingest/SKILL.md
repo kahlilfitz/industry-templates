@@ -3,7 +3,7 @@ name: deliverable-ingest
 description: "Retrieves and structures a draft deliverable, recipient context, evidence index and prior review notes for a quality-gate run. Use when the user asks \"review this deliverable\", \"check this support pack\", \"find unsupported claims\" or \"start a deliverable gate review\". For a release yes/no on already-ingested material, use gate-check. Do NOT use to choose criteria (use criteria-retrieve), determine support (use assertion-map), make gate findings (use gate-check), or draft the partner packet (use review-packet). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or general document editing/summarization (use built-in document tools)."
 license: Proprietary
 metadata:
-  version: "1.0.3"
+  version: "1.0.4"
   author: Microsoft Professional Services Skills
   category: analysis
 ---

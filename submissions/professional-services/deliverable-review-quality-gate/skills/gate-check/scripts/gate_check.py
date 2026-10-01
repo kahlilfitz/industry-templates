@@ -14,7 +14,7 @@ if SCRIPT_DIR not in sys.path:
 import assertion_rules as rules  # noqa: E402  byte-identical copy of skills/assertion-map/scripts/assertion_rules.py
 
 ENGINE = "engine:gate_check"
-ENGINE_VERSION = "1.0.3"
+ENGINE_VERSION = "1.0.4"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY = True  # quality-gate-criteria.md #2.2
 DISCLAIMER_TYPES = {"general_advice", "reliance_restriction"}  # quality-gate-criteria.md #2.4: anything else holds
@@ -61,19 +61,51 @@ PRIMARY_SECTIONS = ("deliverable", "criteria", "assertions", "evidence_set", "pr
 UNSCANNED_KEYS = {"contract_version"}  # validated against CONTRACT_VERSION before any scan
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.:#/ -]{1,80}$")
 
-# Cyrillic/Greek letters that render like Latin letters (quality-gate-criteria.md #8.2). Applied after
-# Unicode Cf stripping and NFKC folding so look-alike spellings of steering text still match.
-CONFUSABLES = str.maketrans({
+# Letters that render like Latin letters (quality-gate-criteria.md #8.2): Cyrillic, Greek, Armenian, Cherokee, Lisu
+# and Latin small capitals / IPA forms. Applied after Unicode Cf stripping and NFKC folding (which already folds
+# fullwidth and mathematical alphanumerics) so look-alike spellings of steering text still match. Upper/lower case
+# partners are added automatically because normalize_text folds case between two translate passes.
+_CONFUSABLE_BASE = {
+    # Cyrillic
     "А": "A", "В": "B", "Е": "E", "І": "I", "Ј": "J", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P",
     "С": "C", "Т": "T", "Х": "X", "У": "Y", "Ѕ": "S", "Ԁ": "D", "Ԛ": "Q", "Ԝ": "W",
     "а": "a", "в": "b", "е": "e", "і": "i", "ј": "j", "к": "k", "м": "m", "н": "h", "о": "o", "р": "p",
     "с": "c", "т": "t", "х": "x", "у": "y", "ѕ": "s", "ԁ": "d", "һ": "h", "ӏ": "l", "ԛ": "q", "ԝ": "w",
+    # Greek
     "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O",
     "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X", "Ϲ": "C",
     "α": "a", "β": "b", "ε": "e", "η": "n", "ι": "i", "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t",
     "υ": "u", "χ": "x", "ω": "w", "ϲ": "c", "ϳ": "j",
-})
-CONFUSABLE_CHARS = {chr(code) for code in CONFUSABLES}
+    # Armenian
+    "Օ": "O", "օ": "o", "Ս": "U", "ս": "u", "ո": "n", "հ": "h", "ց": "g", "զ": "q", "ա": "w", "Լ": "L",
+    "Տ": "S", "ı": "i",
+    # Cherokee (capitals; small forms are added below through str.lower)
+    "Ꭰ": "D", "Ꭱ": "R", "Ꭲ": "T", "Ꭵ": "I", "Ꭹ": "Y", "Ꭺ": "A", "Ꭻ": "J", "Ꭼ": "E", "Ꮃ": "W", "Ꮇ": "M",
+    "Ꮋ": "H", "Ꮍ": "Y", "Ꮐ": "G", "Ꮒ": "H", "Ꮓ": "Z", "Ꮏ": "B", "Ꮢ": "R", "Ꮤ": "W", "Ꮥ": "S", "Ꮩ": "V",
+    "Ꮪ": "S", "Ꮮ": "L", "Ꮯ": "C", "Ꮲ": "P", "Ꮶ": "K", "Ᏼ": "B",
+    # Lisu
+    "ꓮ": "A", "ꓐ": "B", "ꓚ": "C", "ꓓ": "D", "ꓰ": "E", "ꓝ": "F", "ꓖ": "G", "ꓧ": "H", "ꓲ": "I", "ꓙ": "J",
+    "ꓗ": "K", "ꓡ": "L", "ꓟ": "M", "ꓠ": "N", "ꓳ": "O", "ꓑ": "P", "ꓣ": "R", "ꓢ": "S", "ꓔ": "T", "ꓴ": "U",
+    "ꓦ": "V", "ꓪ": "W", "ꓫ": "X", "ꓬ": "Y", "ꓜ": "Z",
+    # Latin small capitals and IPA look-alikes (Latin script, so only folding catches them)
+    "ᴀ": "a", "ʙ": "b", "ᴄ": "c", "ᴅ": "d", "ᴇ": "e", "ꜰ": "f", "ɢ": "g", "ʜ": "h", "ɪ": "i", "ᴊ": "j",
+    "ᴋ": "k", "ʟ": "l", "ᴍ": "m", "ɴ": "n", "ᴏ": "o", "ᴘ": "p", "ʀ": "r", "ꜱ": "s", "ᴛ": "t", "ᴜ": "u",
+    "ᴠ": "v", "ᴡ": "w", "ʏ": "y", "ᴢ": "z", "ɑ": "a", "ɡ": "g", "ɩ": "i", "ʋ": "u",
+}
+def _with_case_partners(base):
+    table = dict(base)
+    for source, target in base.items():
+        for variant in (source.lower(), source.upper()):
+            if len(variant) == 1 and variant != source and variant not in table and not variant.isascii():
+                table[variant] = target.lower() if variant == source.lower() else target.upper()
+    return table
+CONFUSABLE_MAP = _with_case_partners(_CONFUSABLE_BASE)
+CONFUSABLES = str.maketrans(CONFUSABLE_MAP)
+CONFUSABLE_CHARS = set(CONFUSABLE_MAP)
+# Non-Latin letters routinely used as symbols inside Latin words in consulting prose (ΔEBITDA, 5 μg, σ-level).
+# None of them is a Latin look-alike, so they cannot spell steering text; every other non-Latin letter mixed
+# with Latin letters in one token is flagged (quality-gate-criteria.md #8.2).
+SYMBOL_LETTERS = set("ΔδμσΣπΠΩλθφψγΓµ")
 
 _AI = (r"(?:(?:ai|qrm|quality|human|automated|engagement quality)\s+)?"
        r"(?:ai|assistant|copilot|llm|chatbot|claude|bot|reviewers?|review agent)")
@@ -93,6 +125,75 @@ _CONTACT = (r"(?:[a-z0-9._%+-]+\s*(?:@|\(at\)|\[at\])\s*[a-z0-9-]+(?:\s*(?:\.|\(
 # (quality-gate-criteria.md #8.1-#8.3). An approval word on its own (e.g. "pre-approved by the board")
 # is never a hit; it needs an addressee, a self-reference to the document, a review authority or a
 # skip/do-not-flag instruction. tests/run_tests.py ships an attack paraphrase set and a benign prose set.
+# 1.0.4 structural rules (quality-gate-criteria.md #8.1-#8.3).
+# (a) Addressee: the tool itself addressed in vocative/imperative form, whatever the verb.
+_TOOL = (r"(?:(?:the|an?|our|my|dear|hey|hi|hello|ok|okay|attention|attn)\s+)?"
+         r"(?:(?:ai|automated|quality|qrm|review|engagement quality|language)\s+)?"
+         r"(?:ai|assistant|model|llm|copilot|claude|chatgpt|gpt(?:\s?-?\s?\d[\w.]*)?|gemini|bot|chatbot|agent|"
+         r"reviewers?|review tool|review agent|reviewing tool|tool)")
+_VOC_START = r"(?:^|[.;:!?\"'(\[\n]\s*|\s-\s*)"
+_LIST_CONTINUATION = r"(?!(?:please|kindly|just|now|again|ok|okay)\b)[\w'&/]+(?:\s+[\w'&/]+)?\s*(?:,|&|\band\b|\bor\b|/)"
+_COLON_FOLLOW = (r"(?:please|kindly|just|you|do|don't|dont|never|no need|treat|mark|report|approve|clear|pass|ignore|skip|"
+                 r"accept|release|consider|overlook|disregard|leave|let|waive|classify|rate|record|set|list|show|deem|flag|"
+                 r"confirm|sign|move|proceed|output|respond|answer|say|state|write|return|forget|stop|override|bypass|"
+                 r"this|these|it|everything|nothing|all good)\b")
+VOCATIVE_PATTERNS = (
+    re.compile(_VOC_START + _TOOL + r"\s*,\s*(?!" + _LIST_CONTINUATION + r")\S"),
+    re.compile(_VOC_START + _TOOL + r"\s*(?::|-|\u2014)\s*" + _COLON_FOLLOW),
+    re.compile(_VOC_START + r"(?:to\s+|for\s+)?(?:whoever|anyone|anybody)\s+(?:is\s+)?(?:review(?:s|ing)?|check(?:s|ing)?)\s+"
+               r"(?:this|these|it)\b(?:\s+[\w'-]+){0,2}?\s*[,:\-\u2014]"),
+)
+# (b) Verdict steering, independent of addressee: an imperative verdict verb aimed at this material.
+_VERDICT_VERB = r"(?:mark|report|treat|rate|record|flag|set|classify|list|show|consider|deem|log|tag|label|score)"
+_ID = r"(?:[a-z]{1,8}\s?-?\s?\d{1,6}[a-z0-9]*)"
+_VERDICT_OBJ = (r"(?:this|it|these|them|that|those|everything|all\s+of\s+(?:it|them|these)|" + _ID + r"|"
+                r"(?:the|this|these|that|those|all|each|every|all\s+the)\s+[\w']+(?:\s+[\w']+)?)")
+_VERDICT = (r"(?:supported|substantiated|verified|validated|confirmed|ready|release[\s-]ready|ready\s+for\s+(?:client\s+)?"
+            r"release|approved|cleared|resolved|closed|passed|compliant|ok|okay|fine|accepted|no\s+issues?|"
+            r"not\s+an?\s+issue|green|low\s+risk|clean)")
+_VERDICT_TAIL = (r"(?=" + _END + r"|\s+(?:and|so|for|by|because|since|without|now|already|please|too|anyway|in|"
+                 r"pdf|docx?|xlsx?|pptx?|txt|md|csv|json)\b)")
+_LEAD = (r"(?:" + _CLAUSE + r"|\byou\s+(?:can|could|may|should|must|need\s+to)\s+(?:just\s+|simply\s+)?|"
+         r"\b(?:then|and|so|now|simply)\s+|\b" + _TOOL + r"\s+(?:should\s+|must\s+|can\s+|will\s+|please\s+)?)")
+# Review objects for negative instructions: the review itself, a finding/flag/item, the document, or an ID.
+_REVIEW_NOUN = (r"(?:one|item|items|issue|issues|entry|entries|finding|findings|flag|flags|point|points|exception|exceptions|"
+                r"claim|claims|assertion|assertions|section|deliverable|draft|report|document|packet|memo|deck|page|"
+                r"paragraph|line|check|review|gate)")
+_REVIEW_OBJ = (r"(?:(?:this|these|it|them|that)(?:\s+" + _REVIEW_NOUN + r")?(?=" + _END + r"|\s+(?:again|further|either|"
+               r"now|please|because|since|as|at all|any more|anymore|for)\b)|(?:this|these|that|the|any)\s+(?:[\w'-]+\s+)?"
+               + _REVIEW_NOUN + r"\b|" + _ID + r"(?=" + _END + r"|\s))")
+STEERING_PATTERNS = (
+    re.compile(_LEAD + r"(?:please\s+|kindly\s+|just\s+)?" + _VERDICT_VERB + r"\s+" + _VERDICT_OBJ +
+               r"(?:\s+[\w']+){0,2}?\s+(?:as\s+(?:being\s+)?|to\s+)?" + _VERDICT + _VERDICT_TAIL),
+    re.compile(r"(?:" + _CLAUSE + r"|\b(?:you|so|then|and)\s+)(?:do not|don't|dont|never|please do not|please don't)\s+"
+               r"(?:flag|escalate|hold|review|re-?review|check|re-?check|raise|report|block|surface|question|challenge|"
+               r"query|verify)\s+" + _REVIEW_OBJ),
+    re.compile(r"(?:" + _CLAUSE + r"|\b(?:you\s+(?:can|could|may|should)|just|please|so|then|and)\s+)skip\s+"
+               r"(?:(?:it|this|these|them|that)(?=" + _END + r")|(?:the|this|these|any|further|all|all\s+the)?\s*"
+               r"(?:checks?|review|reviews|reviewing|gates?|flags?|findings?|validation|verification|qrm|sign[- ]?off|"
+               r"escalation|this\s+(?:item|finding|claim|assertion|flag))\b)"),
+    re.compile(r"\b(?:no|without)\s+(?:further\s+|additional\s+|more\s+)?(?:review|reviews|checks?|checking|escalation|"
+               r"qrm(?:\s+review)?|sign[- ]?off|flagging)\s+(?:is\s+|are\s+)?(?:needed|required|necessary)"
+               r"(?=" + _END + r"|\s+(?:for|on)\s+(?:this|these|it|the\s+" + _REVIEW_NOUN + r")\b)"),
+)
+# Loose forms: the same instruction run on from preceding text without punctuation ("...EV-A2 mark this as
+# supported"). Only self-referential objects (this/these/it/them or an ID) qualify, and a preceding subject or
+# modal ("audit will mark it as closed", "teams do not ...") is excluded so third-person process prose stays clean.
+_NOT_AFTER_SUBJECT = "".join(r"(?<!\b" + word + r" )" for word in (
+    "will", "would", "should", "shall", "can", "could", "may", "might", "must", "to", "they", "we", "i", "who", "which",
+    "that", "then", "and", "or", "team", "teams", "staff", "auditors", "management", "owners", "users", "agents", "it",
+    "he", "she", "also", "not", "never", "usually", "typically", "often", "always", "generally"))
+_SELF_OBJ = r"(?:this|these|it|them|" + _ID + r")"
+LOOSE_STEERING_PATTERNS = (
+    re.compile(r"(?<![\w'-])" + _NOT_AFTER_SUBJECT + _VERDICT_VERB + r"\s+" + _SELF_OBJ + r"(?:\s+" + _REVIEW_NOUN + r")?"
+               r"\s+as\s+(?:being\s+)?" + _VERDICT + _VERDICT_TAIL),
+    re.compile(r"(?<![\w'-])" + _NOT_AFTER_SUBJECT + r"(?:do not|don't|dont|never)\s+(?:flag|escalate|hold|re-?review|"
+               r"re-?check|raise|block|surface|question|challenge)\s+(?:this|these|it|them|" + _ID + r")(?:\s+"
+               + _REVIEW_NOUN + r")?(?=" + _END + r"|\s+(?:again|further|either|now|please|because|since|at all)\b)"),
+)
+# (d) IDs and file names: '-', '_' and '.' become spaces in a second matching view.
+ID_SEPARATORS = re.compile(r"[-_.]+")
+
 INSTRUCTION_PATTERNS = (
     # Notes, greetings or vocatives addressed to the reviewer/assistant.
     re.compile(r"\b(?:note|message|instruction|reminder|comment)s?\s+(?:to|for)\s+(?:the\s+|any\s+|all\s+)?" + _AI + r"\b"),
@@ -211,13 +312,25 @@ def normalize_text(value):
         normalized = normalized.replace(source, target)
     return re.sub(r"\s+", " ", normalized).strip()
 
-def has_confusable_mixed_token(value):
-    """True when one word mixes Latin letters with Cyrillic/Greek look-alikes (e.g. 'аpproved' with Cyrillic 'а').
+def letter_script(ch):
+    """Script of a letter from its Unicode name ('LATIN', 'CYRILLIC', 'ARMENIAN', ...); None for non-letters."""
+    if not ch.isalpha():
+        return None
+    name = unicodedata.name(ch, "")
+    if name.startswith("MODIFIER LETTER"):
+        return None
+    return name.split(" ", 1)[0] if name else "UNKNOWN"
 
-    Genuine Greek symbols such as Δ or μ are not look-alikes, and all-Cyrillic/all-Greek words are not mixed."""
+def has_confusable_mixed_token(value):
+    """True when one token mixes Latin letters with letters of any other script (e.g. 'apprօve' with an Armenian
+    'օ', or 'аpproved' with a Cyrillic 'а').
+
+    Digits and punctuation never count. Single-script words (all Cyrillic, all Greek, Turkish 'ı' or other Latin
+    letters) are not mixed, and the non-confusable symbol letters in SYMBOL_LETTERS (ΔEBITDA, 5 μg) are allowed.
+    Latin small capitals are Latin script; normalize_text folds them instead."""
     for token in re.findall(r"\w+", strip_format_characters(value)):
-        has_latin = any(ch.isalpha() and unicodedata.name(ch, "").startswith("LATIN") for ch in token)
-        if has_latin and any(ch in CONFUSABLE_CHARS for ch in token):
+        scripts = {letter_script(ch) for ch in token if ch not in SYMBOL_LETTERS} - {None}
+        if "LATIN" in scripts and len(scripts) > 1:
             return True
     return False
 
@@ -225,6 +338,9 @@ def suspicious_instruction(value):
     if has_confusable_mixed_token(value):
         return True
     text = normalize_text(value)
+    views = (text, " ".join(ID_SEPARATORS.sub(" ", text).split()))
+    if any(pattern.search(view) for view in views for pattern in VOCATIVE_PATTERNS + STEERING_PATTERNS + LOOSE_STEERING_PATTERNS):
+        return True
     return any(pattern.search(text) for pattern in INSTRUCTION_PATTERNS)
 
 def safe_token(value, fallback):
@@ -263,6 +379,33 @@ def collect_scan_text(payload):
                 residue = residue.replace(source, " ")
         if residue.strip():
             yield path, residue
+
+MAX_AGGREGATE_CHARS = 4000
+
+def assertion_aggregates(payload):
+    """Yield (path, combined text, component texts) per assertion: text, citation, linked evidence titles and the
+    location label, joined in reading order and capped at MAX_AGGREGATE_CHARS. This catches steering text split
+    across fields (quality-gate-criteria.md #8.1) that no single field contains."""
+    evidence = {item["evidence_id"]: item for item in payload.get("evidence_set") or [] if isinstance(item, dict) and isinstance(item.get("evidence_id"), str)}
+    for index, assertion in enumerate(payload.get("assertions") or []):
+        if not isinstance(assertion, dict):
+            continue
+        parts = [assertion.get("text"), assertion.get("citation")]
+        parts += [evidence.get(evidence_id, {}).get("title") for evidence_id in assertion.get("evidence_ids") or [] if isinstance(evidence_id, str)]
+        location = assertion.get("location")
+        parts.append(location.get("label") if isinstance(location, dict) else None)
+        parts = [part for part in parts if isinstance(part, str) and part.strip()]
+        if len(parts) > 1:
+            yield f"$.assertions[{index}] (combined text, citation, evidence titles and location label)", " ".join(parts)[:MAX_AGGREGATE_CHARS], parts
+
+def instruction_hits(payload):
+    """Every untrusted field that trips the tripwire, then each assertion whose combined fields trip it when none
+    of its component fields does on its own (so one note is never counted twice)."""
+    hits = [path for path, text in collect_scan_text(payload) if suspicious_instruction(text)]
+    for path, combined, parts in assertion_aggregates(payload):
+        if suspicious_instruction(combined) and not any(suspicious_instruction(part) for part in parts):
+            hits.append(path)
+    return hits
 
 def loc(section, page, paragraph, label):
     return {"section": section, "page": page, "paragraph": paragraph, "label": label}
@@ -746,7 +889,7 @@ def main():
                     continue
                 add_finding(findings, f"GC-G3-{safe_token(mapping['assertion_id'], 'assertion')}", "G3", MUST_FIX, "Scope or sample limitation missing at point of recommendation", mapping.get("rationale", "Recommendation requires limitation."), mapping["location"], "quality-gate-criteria.md #3.2", mapping.get("confidence", 0.8), mapping.get("citation", "quality-gate-criteria.md #3.2"))
         if EMBEDDED_INSTRUCTION_HOLD:
-            hits = [path for path, text in collect_scan_text(payload) if suspicious_instruction(text)]
+            hits = instruction_hits(payload)
             for hit_index, path in enumerate(hits[:MAX_G8_HITS], start=1):
                 add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Embedded instruction or forwarding request found in deliverable data", f"Untrusted field {path} contains instruction-like, forwarding or look-alike-character text; it must be treated as data and held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.1-#8.3", 0.99, "quality-gate-criteria.md #8.1-#8.3; severity-rules.md #1.1")
                 escalations.append(f"G8: embedded-instruction tripwire in {path} - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")

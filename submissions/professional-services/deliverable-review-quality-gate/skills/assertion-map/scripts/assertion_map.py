@@ -12,7 +12,7 @@ if SCRIPT_DIR not in sys.path:
 import assertion_rules as rules  # noqa: E402  shared byte-identical with gate-check (tests/check_shared_copies.py)
 
 ENGINE = rules.AM_ENGINE
-ENGINE_VERSION = "1.0.3"
+ENGINE_VERSION = "1.0.4"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 InputError = rules.InputError
 
