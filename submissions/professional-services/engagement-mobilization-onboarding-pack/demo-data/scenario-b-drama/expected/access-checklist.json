@@ -151,7 +151,7 @@
     {
       "hold_id": "HOLD-7dcf43721e1e",
       "path": "raw/pursuit-record.md line 4",
-      "reason": "embedded_instruction:approval_claim,wall_status_claim,scope_escalation",
+      "reason": "embedded_instruction:authority,scope",
       "source": "engine:safety_text",
       "confidence": 0.99,
       "citation": "confidentiality-and-ethical-wall-rules.md #4.1-#4.5"

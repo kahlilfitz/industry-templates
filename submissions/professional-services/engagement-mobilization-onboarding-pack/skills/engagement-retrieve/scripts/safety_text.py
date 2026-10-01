@@ -83,8 +83,8 @@ def client_confidential(v):
     return (v or "").strip().lower() not in NON_CONFIDENTIAL
 
 # ---------------------------------------------------------------- normalisation
-# Cyrillic/Greek letters that render like Latin letters. Folded after Cf stripping and NFKC so look-alike spellings
-# of steering text still match (confidentiality-and-ethical-wall-rules.md #4.2).
+# Look-alike letters folded to Latin after Cf stripping and NFKC. Used for identifier matching (other-client names and
+# matter IDs, #3.3; register rows); steering detection does its own folding inside steering_guard (#4.2).
 CONFUSABLES = str.maketrans({
     "А": "A", "В": "B", "Е": "E", "І": "I", "Ј": "J", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P",
     "С": "C", "Т": "T", "Х": "X", "У": "Y", "Ѕ": "S", "Ԁ": "D", "Ԛ": "Q", "Ԝ": "W",
@@ -103,10 +103,6 @@ CONFUSABLES = str.maketrans({
     "\u13d9": "V", "\u13b3": "W", "\u13c3": "Z",
 })
 CONFUSABLES.update({ord(chr(k).lower()): v.lower() for k, v in list(CONFUSABLES.items()) if 0x13A0 <= k <= 0x13F5})
-CONFUSABLE_CHARS = frozenset(chr(c) for c in CONFUSABLES)
-# Scripts that never belong inside an otherwise-Latin word; fullwidth and mathematical letters fold to Latin under
-# NFKC, so a token mixing them with plain Latin is flagged before folding (#4.2).
-_ODD_SCRIPTS = ("CYRILLIC", "GREEK", "ARMENIAN", "CHEROKEE", "FULLWIDTH", "MATHEMATICAL")
 _PUNCT = (("’", "'"), ("‘", "'"), ("‛", "'"), ("‐", "-"), ("‑", "-"), ("‒", "-"), ("–", "-"), ("—", "-"), ("―", "-"), ("“", '"'), ("”", '"'))
 def strip_cf(s): return "".join(c for c in str(s) if unicodedata.category(c) != "Cf")
 def norm(s):
@@ -116,135 +112,66 @@ def norm(s):
 def id_spaced(n):
     """Filenames and IDs read as words: separators between letters/digits become spaces (wall.lifted.docx)."""
     return re.sub(r"(?<=[a-z0-9])[._-]+(?=[a-z0-9])", " ", n)
-def _script(c):
-    if not c.isalpha(): return None
-    n = unicodedata.name(c, "")
-    if c in CONFUSABLE_CHARS: return "odd"
-    if n.startswith("LATIN"): return "latin"
-    return "odd" if n.startswith(_ODD_SCRIPTS) else None
-def mixed_script(s):
-    """True when one word mixes plain Latin letters with look-alike letters from another script or with fullwidth or
-    mathematical letters (e.g. 'wаll' with Cyrillic 'а', 'wＡll', 'w𝐚ll')."""
-    for tok in re.findall(r"\w+", strip_cf(s)):
-        kinds = {_script(c) for c in tok}
-        if "latin" in kinds and "odd" in kinds: return True
-    return False
-
 # ---------------------------------------------------------------- embedded-instruction tripwire
-# SOWs, rosters and inventories legitimately mention AI programmes, systems, access requests, approvals, URLs and
-# e-mail addresses. The families below look for intent, not one phrasing: text that addresses the assistant or
-# reviewer, claims a wall/conflict status change, claims an exception or waiver, grants elevated rights or a roster
-# place, suppresses a control, or moves material to an address (confidentiality-and-ethical-wall-rules.md #4.1-#4.5).
-# A bare approval word ("pre-approved by the board", "conflicts check completed") is not a hit.
-_AI = r"(?:ai|a\.i\.|assistant|copilot|llm|chatbot|claude|gpt|chatgpt|bot|onboarding bot)"
-_AIR = r"(?:ai|a\.i\.|assistant|copilot|llm|chatbot|claude|gpt|chatgpt|bot|onboarding bot|reviewers?|review agent|pack reviewer)"
-_ACT = r"(?:please|treat|mark|approve|clear|ignore|skip|include|add|grant|give|provision|remove|omit|drop|exclude|confirm|assign|share|send|forward|disregard|bypass|override|do not|don't|dont|you|leave|let|no need|move on|list|show|state|note|record|keep)"
-_GUARD = r"(?:(?:the |any |all |these |this )?(?:ethical[- ])?walls?(?: register| check| review| status| restrictions?)?|conflicts? checks?|(?:engine|wall|embedded[- ]instruction|source) holds?|(?:the )?confidentiality (?:briefing|rules|terms)|(?:the )?(?:role|access) matrix|(?:wall |access |knowledge )?restrictions?|(?:the )?register)"
-_NEG = r"(?<!not )(?<!never )(?<!n't )(?<!dont )(?<!no )"
-_CONTACT = (r"(?:[a-z0-9._%+-]+\s*(?:@|\(at\)|\[at\]|\{at\}|<at>)\s*[a-z0-9-]+(?:\s*(?:\.|\(dot\)|\[dot\]|\{dot\}|<dot>|\s+dot\s+)\s*[a-z0-9-]+)+"
-            r"|[a-z0-9._%+-]+\s+at\s+[a-z0-9-]+(?:\s+dot\s+[a-z0-9-]+)+|https?://|www\.|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|me|co|uk|biz|info|app|dev|cloud)/)")
-_OBJ_FOLLOW = r"(?=\s+(?:this|these|it|them|the|a|all|everything|over|out|to|copies|copy))"
-_SEND = (_NEG + r"\b(?:send|sends|sent|sending|re-?send|forward|forwards|forwarded|forwarding|fwd|e-?mail" + _OBJ_FOLLOW + r"|mail" + _OBJ_FOLLOW +
-         r"|share|shares|sharing|copy|copies|copied|copying|cc|bcc|upload|uploads|uploaded|uploading|transmit|transfer|post(?!-)|sync|push|export"
-         r"|airdrop|beam|deliver" + _OBJ_FOLLOW + r")\b")
-_EXT = (r"(?:(?:personal|private|home|external|outside|non-firm|non-company|alternate|backup)\s+(?:e-?mail|mail|mailbox|inbox|address|account|drive|device|laptop|phone|cloud|storage|folder)"
-        r"|outside (?:the )?(?:firm|company|engagement|tenant|organi[sz]ation)|\b(?:gmail|googlemail|hotmail|yahoo|outlook\.com|live\.com|proton(?:mail)?|icloud|dropbox|wetransfer|google drive|box\.com|usb(?: stick| drive| key)?|thumb drive)\b)")
-_WALL = (r"(?:ethical[- ]?walls?\b|chinese walls?\b|information barriers?\b|ethical screens?\b|conflicts?[- ]screens?\b|(?:his|her|their|[a-z]+'s)\s+screen\b"
-         r"|(?<![\w-])walls?\b(?![- ]?(?:chart|planner|calendar|board|display|poster|clock|mount|socket|paper|art|space|map)s?\b)"
-         r"|conflicts?[- ](?:of[- ]interest|checks?|flags?|holds?|restrictions?|blocks?|bars?)\b|conflict of interest\b"
-         r"|(?:wall|knowledge|access|conflicts?|matter|competitor|his|her|their)\s+restrictions?\b|[a-z]+'s\s+(?:wall\s+|conflict\s+|knowledge\s+|access\s+)?restrictions?\b"
-         r"|restrictions?\s+(?:for|on|against)\s+(?:the\s+)?(?:joiner|new (?:joiner|analyst|starter|hire|team member)|analyst|consultant|him|her|them)\b"
-         r"|(?:wall|conflicts?)\s+(?:register|status|blocks?|bars?|holds?|entry|entries|flags?)\b)")
-_PRED = (r"(?:(?:has|have|had|was|were|is|are|got|gets|been|being|now|already|officially|formally|just|since|effectively|fully|finally|today|yesterday|recently)\s+)*"
-         r"(?:lifted|waived|removed|cleared|resolved|closed|rescinded|revoked|withdrawn|expired|ended|dropped|signed[- ]?off|released|stood down|taken down|came down|come down|coming down"
-         r"|disabled|switched off|turned off|suspended|retired|dissolved|gone|void(?:ed)?|cancell?ed|deleted|lapsed|overridden|bypassed|exempted|downgraded"
-         r"|no longer\s+(?:in (?:force|effect|place)|appl(?:y|ies|icable)|relevant|needed|required|necessary|an issue|active|valid|exists?|binding|enforced)"
-         r"|not\s+(?:required|needed|applicable|relevant|an issue|active|in (?:force|effect|place)|binding|enforced)"
-         r"|n/a|out of date|outdated|stale|obsolete|historical(?: only)?|inactive|irrelevant|a formality)\b")
-_REV = r"(?:lift|lifts|lifted|lifting|waive|waives|waived|remove|removes|removed|rescind|rescinded|revoke|revoked|drop|drops|dropped|took down|take down|taken down|disable|disabled|dissolve|dissolved|suspend|suspended|cleared|override|overrode|overridden)"
-_JOINERISH = r"(?:joiner|analyst|new (?:joiner|analyst|starter|hire|team member)|consultant|he|she|they)"
-_EXC = r"(?<!no )(?<!without )(?:exceptions?|exemptions?|waivers?|dispensations?|carve[- ]?outs?|special (?:permission|approval|dispensation|access)|one[- ]off (?:permission|approval|access))\b"
-_WCTX = r"(?:walls?\b|ethical[- ]walls?\b|conflicts?\b|restrictions?\b|information barriers?\b|(?:wall|conflicts?) registers?\b|joiner\b|new (?:joiner|analyst|starter|hire|team member)\b|clearance\b)"
-_ELEV = r"(?:owner|owners|ownership|co-?owner|admin|admins|administrator|administrators|full[- ]control|full access|elevated|super ?user|site[- ]collection(?: admin(?:istrator)?)?|global admin|tenant admin|edit(?:or)? rights|write)"
-_RIGHTS = r"(?:rights|access|permissions?|privileges?|role|roles|level|control)\b"
-_GRANTV = (_NEG + r"\b(?:grant|grants|granted|granting|give|gives|given|giving|provision|provisioned|assign|assigned|request|requests|requested|requesting|upgrade|upgraded"
-           r"|elevate|elevated|promote|promoted|add|added|set up|enable|enabled|receive|receives|get|gets|need|needs|require|requires|to have)\b")
-_PACKN = r"(?:(?:the|this)\s+(?:onboarding\s+|mobili[sz]ation\s+|joiner\s+)?(?:pack|briefing)|(?:onboarding|mobili[sz]ation|joiner)\s+(?:pack|briefing))"
-_PACK = r"(?:this|these|it|the (?:full |whole |complete |finished |final )?(?:onboarding |mobili[sz]ation )?(?:pack|draft|briefing|roster|checklist|knowledge|digest|deliverables?|materials?|documents?|files?|assets?|playbook))"
-PATS = [
- ("assistant_addressed", re.compile(
-    r"\b(?:note|message|instruction|instructions|reminder|comment)s? (?:to|for) (?:the |any |all )?" + _AIR + r"\b"
-    r"|\b(?:hey|hi|hello|dear|attention|attn) (?:the )?" + _AIR + r"\b|\bheads[- ]up (?:for|to) (?:the )?" + _AIR + r"\b"
-    r"|\b" + _AIR + r"\s*[:,\]\)>]+\s*" + _ACT + r"\b"
-    r"|(?:^|[.;!?:]\s*|\b(?:hey|hi|hello|dear|ok|okay|so|now)\s+)(?:the\s+)?" + _AIR + r"\s*,\s*(?!(?:[\w-]+,?\s+){1,3}(?:and|or|&)\s)(?=[a-z])"
-    r"|\b" + _AIR + r"\s+(?:please|kindly)\b"
-    r"|\b" + _AI + r" (?:should|must|needs to|is to|is instructed to|can|may) (?:safely |just )?(?:not )?(?:treat|mark|approve|clear|ignore|skip|include|grant|provision|omit|drop|exclude|disregard|bypass|override|leave|list|show)\b"
-    r"|\b(?:whoever|anyone|anybody|the person|the colleague)\s+(?:who\s+)?(?:is\s+)?(?:draft|build|assembl|prepar|compil|generat|review|writ|put|pull|creat)\w*\s+(?:together\s+)?(?:this|the)\s+(?:onboarding\s+|mobili[sz]ation\s+|joiner\s+|draft\s+)?(?:pack|briefing|digest|plan|checklist|document|draft)\b"
-    r"|\bwhen\s+(?:you|the assistant|the tool|copilot|the ai|the bot|the model|the system)\s+(?:draft|build|assembl|prepar|generat|writ|compil|creat|run)\w*"
-    r"|\b" + _PACKN + r"\s+(?:should|must|needs? to|is to|can|may|will)\s+(?:say|state|show|list|record|note|describe|present|mark|treat|read|indicate|confirm)\b[^.;!?]{0,50}?\b(?:clear(?:ed)?|unrestricted|no (?:wall|restrictions?|conflicts?|holds?)|approved|exempt|confirmed|assigned|lifted|waived)\b"
-    r"|\b" + _PACKN + r"\s+(?:should|must|needs? to|is to|can|may|will)\s+(?:omit|exclude|leave out|skip|drop|remove|hide|not (?:mention|include|show|list|contain))\b")),
- ("override_rules", re.compile(r"\b(?:ignore|disregard|override|bypass|skip|circumvent)\b.{0,30}\b(?:(?:previous|prior|above|earlier|all|your|these|the) instructions|" + _GUARD + r")\b"
-    r"|\b(?:ignore|disregard)\s+(?:what|whatever)\s+(?:the\s+)?(?:wall\s+|conflicts?\s+)?(?:register|risk|conflicts?|compliance)\s+says\b")),
- ("suppress_control", re.compile(
-    r"\b(?:do not|don't|dont|must not|should not|never)\s+(?:flag|hold|escalate|surface|block)\s+(?:this|these|it|the joiner|this joiner)\b"
-    r"|\b(?:do not|don't|dont|must not|should not|never|no need to)\s+(?:raise|flag|surface|escalate|apply|check|review|restrict|enforce)\s+(?:a |any |the )?(?:hold|holds|walls?|restrictions?|wall (?:check|review)|conflict checks?|briefing|knowledge|access)\b"
-    r"|\b(?:omit|remove|drop|leave out|suppress|hide|delete)\b.{0,20}\b(?:(?:the )?(?:confidentiality|ethical[- ]wall|wall) (?:briefing|section|restrictions?|warning)|(?:the |all |any )?(?:escalations?|(?:engine|wall|embedded[- ]instruction|source) holds?|holds? and escalations|holds section))\b"
-    r"|\b(?:no need|not necessary|unnecessary|needn't|need not|don't bother|do not bother|no point|not worth)\s+(?:to\s+|in\s+)?(?:check|checking|consult|consulting|run|running|look(?:ing)? at|apply|applying|use|using|refer(?:ring)? to|review|reviewing|re-?check|verify|verifying|screen|screening|include|including|add|adding|raise|raising|brief|briefing|mention|mentioning|wait(?:ing)? for)\s+(?:against\s+|with\s+|on\s+|for\s+)?(?:the\s+|any\s+|a\s+|its\s+|their\s+)?(?:ethical[- ])?(?:walls?|registers?|wall registers?|conflicts?(?: checks?| registers?| team)?|restrictions?|briefing|confidentiality (?:briefing|section|rules)|holds?|risk(?: team)?|compliance|screening|clearance)\b"
-    r"|\b(?:skip|leave out|drop|omit|bypass|ignore|cut|delete|remove)\s+(?:the\s+|any\s+|all\s+)?(?:ethical[- ])?(?:wall|walls|restrictions?|confidentiality|conflicts?)\s*(?:section|briefing|part|step|check|review|register|paragraph|notes?|warning)?\b"
-    r"|\b(?:leave|keep)\s+(?:the\s+|this\s+)?(?:wall|restrictions?|confidentiality|holds?|escalations?)\s+(?:section\s+|briefing\s+|list\s+)?(?:blank|empty|out|off)\b"
-    r"|\b(?:do not|don't|dont|never|no need to)\s+(?:brief|tell|inform|warn|mention)\b[^.;!?]{0,40}?\b(?:walls?|restrictions?|conflicts?|register|confidentiality)\b"
-    r"|\b(?:restrictions?|walls?|register|wall briefing|confidentiality briefing)\b[^.;!?]{0,40}?\b(?:can|may|should|could)\s+(?:safely\s+|just\s+)?be\s+(?:ignored|disregarded|skipped|bypassed|overlooked|waived|dropped|removed|omitted|left out)\b")),
- ("approval_claim", re.compile(r"\b(?:wall[- ]cleared|pre[- ]?cleared|already (?:wall[- ])?cleared|cleared by (?:risk|compliance|the gc|general counsel|legal|conflicts)|no (?:wall|conflicts?) (?:review|check)s? (?:is |are )?(?:needed|required))\b|\b(?:ethical walls?|walls?|conflicts?|wall restrictions?)\s+(?:has |have |was |were |is |are )?(?:been )?(?:lifted|waived|suspended|no longer appl(?:y|ies)|not required|not applicable)\b|\bpre[- ]?approved\b.{0,30}\b(?:access|admin|knowledge|joiner|wall|exception|exemption)\b|\b(?:treat|mark|consider|record|classify|list)\s+(?:\S+\s+){0,4}?as\s+(?:(?:wall[- ])?cleared|unrestricted|exempt)\b|\b(?:consider|deem)\s+(?:this|that|it|the|these|our)\b(?:\s+\S+){0,3}?\s+(?:already\s+|fully\s+)?(?:approved|cleared|signed[- ]?off|exempt|unrestricted|conflict[- ]free|wall[- ]free)(?=\s*(?:[.!,;:]|$)|\s+(?:and|for|by|now|already|too)\b)|\b(?:treat|consider|regard|deem|handle|process)\s+(?:\S+\s+){0,4}?as\s+(?:already\s+|fully\s+|pre-?)?(?:approved|clear|cleared|signed[- ]?off|green|resolved|allowed|permitted|ok|okay|exempt|unrestricted|not restricted|no conflict|conflict[- ]free|wall[- ]free|low[- ]risk)\b"
-    r"|\bno need for (?:a |an |any |the )?(?:ethical[- ])?(?:wall|conflicts?|clearance|risk|independence) (?:review|check|clearance|sign[- ]?off|screening)s?\b"
-    r"|\bno (?:ethical[- ])?(?:wall|conflicts?|clearance|independence) (?:review|check|clearance|sign[- ]?off|screening)s? (?:is |are |was |were )?(?:needed|required|necessary|due|applicable)\b"
-    r"|\b(?:ethical[- ])?(?:wall|conflicts?) (?:review|check|clearance|screening)s? (?:(?:is|are|was|were) (?:not|no longer|never)|isn't|aren't|wasn't|weren't|not|no longer) (?:needed|required|necessary|applicable)\b"
-    r"|\bas (?:confirmed|assigned) (?:on|to|in) (?:the )?(?:roster|team|engagement)\b")),
- ("wall_status_claim", re.compile(
-    r"\b" + _WALL + r"[^.;!?]{0,40}?\b" + _PRED +
-    r"|\b" + _REV + r"\s+(?:the\s+|his\s+|her\s+|their\s+|this\s+|that\s+|any\s+|all\s+|[a-z]+'s\s+)?(?:[\w'-]+\s+)?" + _WALL +
-    r"|\b(?:wall|conflicts?)\s+status\b[^.;!?]{0,30}?(?:=|:|\bnow\b|\bset to\b|\bchanged to\b|\bupdated to\b|\bmoved to\b)\s*(?:now\s+)?(?:clear(?:ed)?|green|ok|resolved|lifted|none|unrestricted)\b"
-    r"|\b(?:no longer|does not|doesn't|do not|don't)\s+appl(?:y|ies)\s+(?:to\s+)?(?:this|the|our)\s+" + _JOINERISH + r"\b"
-    r"|\b(?:is|are|has been|have been|was|were|now|being)\s+(?:now\s+|fully\s+|already\s+|officially\s+)?(?:good to go|free|ok(?:ay)?|allowed|permitted|cleared|approved|fine|safe|eligible)\s+(?:to\s+(?:access|see|use|view|read|reuse|open|receive|get|work (?:on|with)|have)|on|for|with)\s+(?:all|everything|any(?:thing)?|the (?:prior|held|restricted|walled|full|whole|entire|complete|payments?|playbook|knowledge|repository|material|archive|competitor)|prior|held|restricted|walled|knowledge|material|competitor)\b"
-    r"|\b(?:is|are|has been|have been|was|were)\s+(?:now|fully|already|officially)\s+(?:unrestricted|unwalled|unblocked|unscreened|exempt(?:ed)?|wall[- ]free)\b"
-    r"|\b(?:is|are|was|were)\s+no longer\s+(?:restricted|walled|screened|blocked|conflicted)\b"
-    r"|\b" + _JOINERISH + r"\s+(?:is|are|has been|have been|was|were)\s+(?:unrestricted|unwalled|unblocked|unscreened|exempt(?:ed)?)\b"
-    r"|\b(?:access|see|use|view|read|reuse|share|include|open|receive|get)\b[^.;!?]{0,60}?\bwithout\s+(?:any\s+|the\s+|a\s+)?(?:wall|walls|restrictions?|limits?|limitations?|checks?|review|clearance|screening|conflicts? checks?)\b")),
- ("exception_waiver", re.compile(
-    r"\b(?:wall|ethical[- ]wall|conflicts?|restrictions?|clearance|barrier)\s+(?:exceptions?|exemptions?|waivers?|dispensations?|carve[- ]?outs?|overrides?|sign[- ]?offs?|signoffs?|releases?)\b"
-    r"|\b" + _EXC + r"[^.;!?]{0,50}?\b" + _WCTX +
-    r"|\b" + _WCTX + r"[^.;!?]{0,50}?\b" + _EXC +
-    r"|\b(?:conflicts?|wall)\s+(?:team|committee|office|desk|partner)\s+(?:has\s+|have\s+)?(?:signed[- ]?off|cleared|approved|waived|lifted|released)\b"
-    r"|\b(?:signed[- ]?off|approved|cleared|waived)\s+by\s+(?:the\s+)?(?:gc|general counsel|conflicts?(?: team| committee)?|risk(?: and conflicts)?|compliance|legal|ethics)\b[^.;!?]{0,40}?\b(?:joiner|analyst|access|wall|restriction|knowledge|playbook|material)\b")),
- ("permission_grant", re.compile(
-    _GRANTV + r"\s+(?:[\w'-]+\s+){0,4}?" + _ELEV + r"\s+" + _RIGHTS +
-    r"|\b(?:make|set|add|upgrade|promote|elevate|appoint|nominate)\s+(?:[\w'-]+\s+){0,3}?(?:as|to)\s+(?:an?\s+|the\s+)?(?:(?:site|workspace|team|channel|planner|sharepoint|repository|global|tenant|site[- ]collection)\s+)?(?:owner|co-?owner|admin|administrator)s?\b"
-    r"|\bmake\s+(?:[\w'-]+\s+){0,2}?(?:an?|the)\s+(?:(?:site|workspace|team|channel|planner)\s+)?(?:owner|co-?owner|admin|administrator)\b"
-    r"|\b(?:full[- ]control|owner|admin(?:istrator)?)\s+(?:on|over|of|to)\s+(?:all|every|each|the (?:engagement|client|team|knowledge|delivery))\b"
-    r"|\b(?:add|move|put|list|promote|include|record|mark)\b[^.;!?]{0,40}?\b(?:roster|team(?: list)?|staffing list)\b[^.;!?]{0,20}?\bas (?:a |an )?(?:confirmed|assigned)\b"
-    r"|\b(?:treat|mark|list|record|show)\s+(?:[\w'-]+\s+){1,3}?as\s+(?:a\s+)?(?:confirmed|assigned)\s+(?:team member|member|joiner|analyst|consultant|on the roster)\b")),
- ("scope_escalation", re.compile(r"\b(?:include|add|surface|share|attach|use)\b.{0,40}\b(?:held|withheld|restricted|walled|uncleared|unreleased)\s+(?:assets?|knowledge|material|deliverables?|records?|workspaces?)\b|\bregardless of\s+(?:the\s+)?(?:clearance|walls?|restrictions?|holds?|permissions?|role matrix|confidentiality|register)\b|\b(?:grant|give|add|provision)\b.{0,30}\badmin(?:istrator)?\b.{0,40}\b(?:every|all|each)\b|\bshare everything\b|\b(?:proceed|go ahead|continue|carry on|start)\s+with\s+(?:full|all|complete|unrestricted|open|everything)\s+(?:[\w-]+\s+)?(?:access|visibility)\b(?!\s+(?:requests?|forms?|reviews?|checklists?|process|procedure))|\b(?:add|move|promote)\b.{0,30}\bto the confirmed roster\b|\bassignment (?:is|has been) (?:approved|confirmed) (?:by|per)\b")),
- ("send_to_address", re.compile(_SEND + r".*?" + _CONTACT + r"|" + _CONTACT + r".*?" + _SEND)),
- ("external_destination", re.compile(_SEND + r"[^.;!?]{0,80}?" + _EXT + r"|\b(?:forward|send|e-?mail|share|upload|transmit|cc)\s+" + _PACK + r"\b.{0,60}" + _CONTACT)),
-]
+# Steering detection is the shared, family-based steering_guard module (vendored byte-identically; never edited
+# here). Plugin vocabulary reaches it only through its hooks. Families: addressee, verdict, suppression,
+# rule_override, authority, scope, exfiltration, mixed_script, split, oversize
+# (confidentiality-and-ethical-wall-rules.md #4.1-#4.5).
+import steering_guard as sg
+HOOKS = {"extra_verdict_words": ("wall cleared", "unrestricted", "access approved"),
+         "extra_rule_nouns": ("clearance", "role matrix", "ethical wall", "conflict check")}
+# The engagement's own client and firm domains (declared in the signed SOW or engagement letter) are the only
+# trusted destinations; a send/share verb next to any other e-mail address or URL holds (#4.4).
+_TRUSTED = ()
+DOMAIN_RE = re.compile(r"^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+UNTRUSTABLE_DOMAINS = {"gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com", "yahoo.com", "ymail.com", "aol.com", "icloud.com", "me.com", "mac.com", "proton.me", "protonmail.com", "pm.me", "gmx.com", "gmx.net", "mail.com", "zoho.com", "yandex.com", "tutanota.com", "dropbox.com", "wetransfer.com", "box.com", "google.com", "drive.google.com", "onedrive.live.com", "1drv.ms", "sharepoint.com", "onmicrosoft.com", "github.com", "pastebin.com", "example.com", "example.net", "example.org"}
+def domain_ok(d): return isinstance(d, str) and bool(DOMAIN_RE.match(d)) and d not in UNTRUSTABLE_DOMAINS
+def set_trusted_domains(domains):
+    """Trust only well-formed, non-consumer domains; anything else is ignored (trusting less only holds more)."""
+    global _TRUSTED
+    _TRUSTED = tuple(sorted({d.strip().lower().lstrip("@.") for d in (domains or []) if isinstance(d, str) and domain_ok(d.strip().lower().lstrip("@."))}))
+    return _TRUSTED
+def hooks(): return dict(HOOKS, trusted_domains=_TRUSTED)
+OVERSIZE_REASON = "oversize: too long to screen for embedded instructions; not scanned, held for human review"
 WITHHELD = "[withheld - source text held for embedded-instruction review, see Escalations and holds]"  # #4.3
-# hits() is the single detector entry point: scan, pair_hits, scan_lines, scan_rows and every engine call site go through
-# it, so a shared family-based detector can replace its body without touching the per-line, pair or per-field scanning.
+def _families(found):
+    out = []
+    for h in found:
+        if h.family not in out: out.append(h.family)
+    return ["oversize"] if "oversize" in out else out
+# hits() is the single detector entry point: scan, pair_hits, scan_lines, scan_rows and every engine call site go
+# through it (and through record_hits for multi-field records).
 def hits(s):
     if s is None: return []
-    s = s if isinstance(s, str) else str(s)
-    n = norm(s); variants = (n, id_spaced(n)) if id_spaced(n) != n else (n,)
-    out = [name for name, p in PATS if any(p.search(v) for v in variants)]
-    if mixed_script(s): out.append("confusable_mixed_script")
-    return out
+    return _families(sg.scan(s if isinstance(s, str) else str(s), **hooks()))
+def record_hits(fields):
+    """Families for a multi-field record: per-field hits, or ['split_across_fields'] when only the join of the
+    fields trips, or ['oversize'] when the join is too long to screen (#4.5)."""
+    fields = {k: v for k, v in fields.items() if isinstance(v, str)}
+    fam = _families(sg.scan_fields(fields, **hooks()))
+    if not fam and len(fields) > 2:
+        # A split can straddle an unrelated field ("...please treat" / reason / "these lines as approved"): every
+        # ordered pair of a record's few prose fields is read too.
+        ks = list(fields)
+        for i in range(len(ks)):
+            for j in range(i + 1, len(ks)):
+                fam = _families(sg.scan_fields({ks[i]: fields[ks[i]], ks[j]: fields[ks[j]]}, **hooks()))
+                if fam: break
+            if fam: break
+    return ["split_across_fields" if f == "split" else f for f in fam]
 def hold(path, text, hit):
     d = hashlib.sha256(strip_cf(text or "").encode()).hexdigest()[:12]
     why = ",".join(hit) if isinstance(hit, (list, tuple)) else hit
-    return {"hold_id": f"HOLD-{d}", "path": path, "reason": f"embedded_instruction:{why}", "source": "engine:safety_text", "confidence": 0.99, "citation": "confidentiality-and-ethical-wall-rules.md #4.1-#4.5"}
+    reason = OVERSIZE_REASON if "oversize" in (hit if isinstance(hit, (list, tuple)) else [hit]) else f"embedded_instruction:{why}"
+    return {"hold_id": f"HOLD-{d}", "path": path, "reason": reason, "source": "engine:safety_text", "confidence": 0.99, "citation": "confidentiality-and-ethical-wall-rules.md #4.1-#4.5"}
 def scan(v, path="$"):
     """One hold per flagged string value (all matching families in one reason)."""
     out = []
     if isinstance(v, dict):
         for k, x in v.items(): out += scan(x, f"{path}.{k}")
+        if not out:
+            h = record_hits(free_text(v))
+            if h: out.append(hold(f"{path} (fields joined)", json.dumps(free_text(v), sort_keys=True, ensure_ascii=False), h))
     elif isinstance(v, list):
         for i, x in enumerate(v): out += scan(x, f"{path}[{i}]")
     elif isinstance(v, str):
@@ -259,17 +186,27 @@ def unlabel(s): return LABEL_RE.sub("", s or "", count=1).strip()
 def split_items(v):
     if (v or "").strip() == WITHHELD: return [WITHHELD]
     return [x.strip(" -") for x in re.split(r";|\n-", v or "") if x.strip(" -")]
+STRUCTURED_KEYS = {"citation", "citations", "system", "platform", "depends_on_knowledge", "verdict", "blocking_rule"}
+def prose_key(k):
+    """Identifiers, enums, permissions, classifications, sources and citations are scanned cell by cell but are not
+    prose: joining them ("clear" + "row 5") manufactures sentences no one wrote, so they never join a record or pair."""
+    k = str(k)
+    return k not in SCREEN_SKIP and k not in STRUCTURED_KEYS and not k.endswith(("_id", "_ids", "_status", "_permission", "_classification", "_type"))
+def free_text(d):
+    """The free-text string fields of a record (see prose_key)."""
+    return {k: v for k, v in d.items() if isinstance(v, str) and v.strip() and v not in (WITHHELD, OTHER_WITHHELD) and prose_key(k)}
 def pair_hits(a, b):
+    """Adjacent lines, items or cells read together (labels removed by steering_guard.scan_fields). Fires only when
+    the pair trips and neither half does on its own; the last item of a and the first item of b are also paired."""
     if not (a or "").strip() or not (b or "").strip() or hits(a) or hits(b): return []
     ua, ub = unlabel(a), unlabel(b)
     if not ua or not ub: return []
-    cands = [ua + " " + ub]; ia, ib = split_items(ua), split_items(ub)
-    if ia and ib: cands.append(ia[-1] + " " + ib[0])
-    out = []
-    for c in cands:
-        for h in hits(c):
-            if h not in out: out.append(h)
-    return out + ["split_across_fields"] if out else []
+    cands = [(ua, ub)]; ia, ib = split_items(ua), split_items(ub)
+    if ia and ib and (ia[-1], ib[0]) != (ua, ub): cands.append((ia[-1], ib[0]))
+    for x, y in cands:
+        h = record_hits({"a": x, "b": y})
+        if h: return h if "oversize" in h else ["split_across_fields"]
+    return []
 def scan_lines(text, path):
     """Scan a free-text source line by line and pair by pair. Returns (holds, text with pair-flagged lines replaced
     by their label and the neutral placeholder)."""
@@ -293,21 +230,32 @@ def scan_rows(rows, label):
             if h: out.append(hold(f"{label} row {i}.{k}", v, h))
     pairs = []
     for i, r in enumerate(rows):
-        ks = [k for k in r if (r.get(k) or "").strip()]
+        ks = [k for k in r if prose_key(k) and (r.get(k) or "").strip()]
         pairs += [((i, a), (i, b)) for a, b in zip(ks, ks[1:])]
         if i + 1 < len(rows):
-            pairs += [((i, k), (i + 1, k)) for k in r if (r.get(k) or "").strip() and (rows[i + 1].get(k) or "").strip()]
+            pairs += [((i, k), (i + 1, k)) for k in ks if (rows[i + 1].get(k) or "").strip()]
     bad = []
     for (i, a), (j, b) in pairs:
         h = pair_hits(rows[i][a], rows[j][b])
         if h:
             where = f"{label} row {i + 2}.{a}+{b}" if i == j else f"{label} rows {i + 2}-{j + 2}.{a}"
             out.append(hold(where, rows[i][a] + "\n" + rows[j][b], h)); bad += [(i, a), (j, b)]
+    # A row is one record: when only the join of all its cells trips, every cell is withheld and the row held (#4.5).
+    hit_rows = {i for i, _ in bad} | {i - 2 for i, r in enumerate(rows, 2) for v in r.values() if hits(v)}
+    for i, r in enumerate(rows):
+        if i in hit_rows: continue
+        ft = free_text(r); h = record_hits(ft) if len(ft) > 1 else []
+        if h:
+            out.append(hold(f"{label} row {i + 2} (fields joined)", "\n".join(ft.values()), h))
+            bad += [(i, k) for k in ft]
     for i, k in bad: rows[i][k] = WITHHELD
     return out
 def redact(v):
     """Replace every flagged string with the neutral placeholder; flagged text never travels to any output (#4.3)."""
-    if isinstance(v, dict): return {k: redact(x) for k, x in v.items()}
+    if isinstance(v, dict):
+        r = {k: redact(x) for k, x in v.items()}; ft = free_text(r)
+        if ft and record_hits(ft): r.update({k: WITHHELD for k in ft})
+        return r
     if isinstance(v, list): return [redact(x) for x in v]
     if isinstance(v, str) and hits(v): return WITHHELD
     return v

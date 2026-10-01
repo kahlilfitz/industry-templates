@@ -55,7 +55,7 @@ def check_matched(p):
     field(p,"knowledge_digest","obj","matched",required=True); check_contract(p,"matched")  # confidentiality-and-ethical-wall-rules.md #1.3
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--matched",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
-    p=load_json(a.matched); check_matched(p)
+    p=load_json(a.matched); check_matched(p); set_trusted_domains((p.get("engagement") or {}).get("trusted_domains"))
     rows=read_csv(a.wall_register,False); ws=read_csv(a.workspace_inventory,False); holds=list(p.get("holds",[])); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
     status="clear"; reason="wall register marks joiner clear for this client/matter"; cit="confidentiality-and-ethical-wall-rules.md #2.2"
     own=words(e.get("client_name"),e.get("matter_id"),e.get("engagement_id"),e.get("title"),*(e.get("affiliates") or []),j.get("person"),*[r.get("person") for r in p.get("team_roster",[])],*(p.get("scope_summary") or {}).get("systems",[])); own_ids={k(e.get("matter_id")),k(e.get("engagement_id"))}-{""}

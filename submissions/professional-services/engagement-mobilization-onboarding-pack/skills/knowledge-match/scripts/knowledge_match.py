@@ -44,7 +44,7 @@ def rel(scope,item):
     return (round(min(.99,.55+.08*len(over)),2) if over else .4),over
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--scope",required=True); ap.add_argument("--closeout",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
-    s=load_json(a.scope); check_scope(s)
+    s=load_json(a.scope); check_scope(s); set_trusted_domains((s.get("engagement") or {}).get("trusted_domains"))
     c=adapt(a.closeout); holds=dedup_holds(list(s.get("holds",[]))+scan(c["knowledge_record"],"upstream/closeout.knowledge_record")+scan(c["released_assets"],"upstream/closeout.released_assets")); rels={x.get("asset_id"):x for x in c["released_assets"] if x.get("clearance_state") in STATES}
     inc=[]; exc=[]; kr=c["knowledge_record"]
     for asset in kr.get("reusable_assets",[]):

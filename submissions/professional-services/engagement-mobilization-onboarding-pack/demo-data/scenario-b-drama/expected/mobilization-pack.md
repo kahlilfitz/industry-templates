@@ -68,4 +68,4 @@ Status: denied_by_wall
 - Confirmed roster row excluded: Dana Cho is ineligible/conflicted in Scenario 02 (independence-eligibility-rules.md #3.1)
 - 1 source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)
 - 1 workspace(s) held pending wall review; the pack stays on hold until Risk/Conflicts resolve the wall decision (workspace-inventory-rules.md #3.3)
-- HOLD HOLD-7dcf43721e1e: embedded_instruction:approval_claim,wall_status_claim,scope_escalation at raw/pursuit-record.md line 4 (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)
+- HOLD HOLD-7dcf43721e1e: embedded_instruction:authority,scope at raw/pursuit-record.md line 4 (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)

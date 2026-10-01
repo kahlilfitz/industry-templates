@@ -66,6 +66,13 @@
             "type": "string"
           },
           "description": "Own-client affiliates from the staffing input; treated as this engagement's identity, never as another client."
+        },
+        "trusted_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Client and firm domains declared in the signed SOW or engagement letter (consumer and malformed domains dropped); the only e-mail/URL destinations the steering detector treats as trusted (confidentiality-and-ethical-wall-rules.md #4.4). Omitted when none are declared."
         }
       }
     },

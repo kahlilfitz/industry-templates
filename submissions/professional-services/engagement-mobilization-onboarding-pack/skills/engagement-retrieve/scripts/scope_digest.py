@@ -63,6 +63,19 @@ def main():
     if miss: raise InputError(f"confirmed roster is missing required column(s): {', '.join(miss)}; fail closed")
     if rows.malformed: raise InputError(f"confirmed roster row(s) {', '.join(map(str,rows.malformed))} have more fields than the header; fail closed")
     validate_staffing(st)
+    # The engagement's own client and firm domains, declared in the signed SOW or engagement letter, are the only
+    # trusted e-mail/URL destinations; consumer or malformed domains are never trusted (confidentiality-and-ethical-wall-rules.md #4.4).
+    set_trusted_domains(()); declared=[]; bad_dom=0
+    for doc in (sow,letter):
+        for lab in ("Client domains","Client domain","Firm domains","Firm domain"):
+            line=fld(doc,lab)
+            if not line or hits(line): continue
+            for d in re.split(r"[;,\s]+",line.lower()):
+                d=d.strip().lstrip("@.").rstrip(".")
+                if not d: continue
+                if domain_ok(d): declared.append(d)
+                else: bad_dom+=1
+    trusted=list(set_trusted_domains(declared))
     h1,sow=scan_lines(sow,"raw/sow-extract.md"); h2,letter=scan_lines(letter,"raw/engagement-letter-extract.md"); h3,pursuit=scan_lines(pursuit,"raw/pursuit-record.md")
     holds=h1+h2+h3+scan_rows(rows,"raw/confirmed-roster.csv")+scan(st,"upstream/staffing")
     smap,prop=statuses(st); roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]
@@ -95,6 +108,9 @@ def main():
     if not joiners: esc.append("No joining team member found in the confirmed roster; wall check and access checklist will hold (confidentiality-and-ethical-wall-rules.md #2.2)")
     elif len(joiners)>1: esc.append(f"Multiple joiners found ({', '.join(joiners)}); this pack covers {joiners[0]} only - run again per joiner (role-access-matrix.md #4.1)")
     for x in excl: esc.append(f"Confirmed roster row excluded: {x['person']} is ineligible/conflicted in Scenario 02 ({x['citation']})")
+    if bad_dom:
+        holds.append({"hold_id":"HOLD-DOMAIN-NOT-TRUSTED","path":"raw/sow-extract.md or raw/engagement-letter-extract.md domain declaration","reason":f"{bad_dom} declared client/firm domain(s) are malformed or consumer/file-sharing domains and are not trusted (not repeated)","source":ENGINE,"confidence":.97,"citation":"confidentiality-and-ethical-wall-rules.md #4.4"})
+        esc.append("A declared client/firm domain is malformed or a consumer/file-sharing domain; confirm the engagement's domains with the engagement manager (confidentiality-and-ethical-wall-rules.md #4.4)")
     holds=dedup_holds(holds)
     eng=st.get("engagement") or {}; sow_client=fld(sow,"Client"); sow_eid=fld(sow,"Engagement ID")
     # A staffing file for another client or engagement is another client's data: hold it and screen its identity out
@@ -104,8 +120,8 @@ def main():
         holds.append({"hold_id":"HOLD-STAFFING-ENGAGEMENT-MISMATCH","path":"upstream/staffing.engagement."+"/".join(mism),"reason":"staffing input names a different client or engagement than the SOW (name not repeated); staffing evidence not trusted","source":ENGINE,"confidence":.99,"citation":"confidentiality-and-ethical-wall-rules.md #3.3; role-access-matrix.md #3.1"})
         esc.append("Staffing input is for a different client or engagement than the SOW; staffing evidence held for the engagement manager (confidentiality-and-ethical-wall-rules.md #3.3)")
     affiliates=[x for x in (eng.get("affiliates") or []) if x.strip()] if not mism else []
-    if any(h["reason"].startswith("embedded_instruction") for h in holds): esc.append(f"{sum(h['reason'].startswith('embedded_instruction') for h in holds)} source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
-    body={"engagement":{"engagement_id":one(fld(sow,"Engagement ID")) or eng.get("engagement_id") or "","matter_id":one(fld(sow,"Matter ID")),"title":one(fld(sow,"Title")),"client_name":one(sow_client) or ("" if mism else eng.get("client_name")) or "","affiliates":affiliates,"sector":one(fld(pursuit,"Sector")),"region":one(fld(pursuit,"Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context"},"joiner":joiner,"scope_summary":{"objectives":items(fld(sow,"Objectives")),"in_scope":items(fld(sow,"In scope")),"exclusions":exclusions,"deliverables":items(fld(sow,"Deliverables")),"key_dates":items(fld(sow,"Key dates")),"systems":items(fld(sow,"Systems")),"first_week_focus":items(fld(sow,"First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(fld(letter,"Confidentiality")),"ethical_wall_terms":items(fld(letter,"Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
+    if any(h.get("source")=="engine:safety_text" for h in holds): esc.append(f"{sum(h.get('source')=='engine:safety_text' for h in holds)} source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
+    body={"engagement":{"engagement_id":one(fld(sow,"Engagement ID")) or eng.get("engagement_id") or "","matter_id":one(fld(sow,"Matter ID")),"title":one(fld(sow,"Title")),"client_name":one(sow_client) or ("" if mism else eng.get("client_name")) or "","affiliates":affiliates,"sector":one(fld(pursuit,"Sector")),"region":one(fld(pursuit,"Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context",**({"trusted_domains":trusted} if trusted else {})},"joiner":joiner,"scope_summary":{"objectives":items(fld(sow,"Objectives")),"in_scope":items(fld(sow,"In scope")),"exclusions":exclusions,"deliverables":items(fld(sow,"Deliverables")),"key_dates":items(fld(sow,"Key dates")),"systems":items(fld(sow,"Systems")),"first_week_focus":items(fld(sow,"First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(fld(letter,"Confidentiality")),"ethical_wall_terms":items(fld(letter,"Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
     body=redact(body)
     if mism:
         own=words(sow_client,sow_eid,fld(sow,"Matter ID"),fld(sow,"Title"))
