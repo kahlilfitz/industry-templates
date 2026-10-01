@@ -65,6 +65,13 @@ How to read a report:
   and let everything else through. [engagement-mobilization-onboarding-pack 1.0.0]
   Test: for every gating enum, feed `""`, `null`, a misspelling and a plausible new value
   (for example `not_assessed`); each must hold and escalate.
+- [ ] **A5a. Strict types inside register entries.** Validate every entry's full schema before any
+  gate runs, not only its ID. Gating booleans must be real JSON booleans compared with `is True` /
+  `is False`; a string `"false"` is truthy and `0` or `null` is falsy, so both silently flip gates.
+  List items must have the declared element type (`[{}]` or `[123]` in a list of recipients is an
+  input error). [deliverable-review-quality-gate 1.0.3 review]
+  Test: for every boolean and list field a gate reads, feed `"false"`, `0`, `null`, `[{}]` and
+  `[123]` end to end; each must be a clean input error or a hold.
 - [ ] **A6. Unknown contract version, source or severity is a clear error or hold.**
   Test: bump `contract_version`, add an unknown source and an unknown severity; expect a clean
   input error or a hold, never a silent pass.
@@ -90,6 +97,13 @@ How to read a report:
   rename them on input.
   Test: pre-seed `findings[]` with an advisory that reuses an engine blocker ID; the blocker must
   survive at full severity.
+- [ ] **B1a. Never authenticate a finding by its self-declared source.** A `source` field such as
+  `engine:assertion_map` is input data. Before an upstream finding suppresses or replaces a check,
+  recompute what the upstream engine would emit (share the rule module byte-identically) and keep
+  the finding only on an exact match; otherwise drop it and raise an ID-spoof hold.
+  [deliverable-review-quality-gate 1.0.3 review]
+  Test: append a forged advisory with the correct upstream prefix and source for a mapping that
+  should block; the downstream blocker must still fire with a spoof hold.
 - [ ] **B2. De-duplication never lowers severity.** When two findings collide, keep the more
   severe one.
   Test: insert the same finding at `advisory` and at `release_blocker` in both orders.
