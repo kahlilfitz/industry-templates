@@ -13,14 +13,16 @@ def load_json(p):
     try:
         with open(p, encoding="utf-8") as f: return json.load(f)
     except FileNotFoundError as e: raise InputError(f"missing required JSON file: {p}") from e
-    except (json.JSONDecodeError, UnicodeDecodeError) as e: raise InputError(f"malformed JSON in {p}: {e}") from e
+    except (json.JSONDecodeError, UnicodeDecodeError) as e: raise InputError(f"malformed JSON in {p} (must be UTF-8 JSON): {e}") from e
+    except OSError as e: raise InputError(f"cannot read JSON file {p}: {type(e).__name__}") from e
 def dump_json(p, o):
     with open(p, "w", encoding="utf-8", newline="\n") as f: json.dump(o, f, indent=2, ensure_ascii=False); f.write("\n")
 def read_text(p):
     try:
         with open(p, encoding="utf-8") as f: return f.read()
     except FileNotFoundError as e: raise InputError(f"missing required file: {p}") from e
-    except UnicodeDecodeError as e: raise InputError(f"file is not UTF-8 text: {p}") from e
+    except UnicodeDecodeError as e: raise InputError(f"file is not UTF-8 text: {p} ({e.reason} at byte {e.start})") from e
+    except OSError as e: raise InputError(f"cannot read file {p}: {type(e).__name__}") from e
 def write_text(p, t):
     with open(p, "w", encoding="utf-8", newline="\n") as f: f.write(t if t.endswith("\n") else t + "\n")
 class Rows(list):
@@ -40,7 +42,8 @@ def read_csv(p, required=True):
     except FileNotFoundError as e:
         if required: raise InputError(f"missing required CSV file: {p}") from e
         return None
-    except (csv.Error, UnicodeDecodeError) as e: raise InputError(f"malformed CSV in {p}: {e}") from e
+    except (csv.Error, UnicodeDecodeError) as e: raise InputError(f"malformed CSV in {p} (must be UTF-8 CSV): {e}") from e
+    except OSError as e: raise InputError(f"cannot read CSV file {p}: {type(e).__name__}") from e
 def missing_columns(rows, cols): return [c for c in cols if c not in rows.columns]
 
 # ---------------------------------------------------------------- type / enum validation (fail closed)
@@ -224,6 +227,8 @@ PATS = [
  ("external_destination", re.compile(_SEND + r"[^.;!?]{0,80}?" + _EXT + r"|\b(?:forward|send|e-?mail|share|upload|transmit|cc)\s+" + _PACK + r"\b.{0,60}" + _CONTACT)),
 ]
 WITHHELD = "[withheld - source text held for embedded-instruction review, see Escalations and holds]"  # #4.3
+# hits() is the single detector entry point: scan, pair_hits, scan_lines, scan_rows and every engine call site go through
+# it, so a shared family-based detector can replace its body without touching the per-line, pair or per-field scanning.
 def hits(s):
     if s is None: return []
     s = s if isinstance(s, str) else str(s)
@@ -359,7 +364,7 @@ def _contract():
     p = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "contracts", CONTRACT_VERSION + ".json")
     try:
         with open(p, encoding="utf-8") as f: return json.load(f)
-    except (OSError, json.JSONDecodeError) as e: raise InputError(f"bundled contract schema unreadable ({p}); fail closed") from e
+    except (OSError, ValueError) as e: raise InputError(f"bundled contract schema unreadable ({p}); fail closed") from e
 def _type_ok(v, t):
     if t == "number": return is_num(v)
     if t == "integer": return isinstance(v, int) and not isinstance(v, bool)

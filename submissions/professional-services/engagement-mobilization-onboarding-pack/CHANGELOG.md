@@ -27,7 +27,7 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
   - new `hold_reasons` and `name_withheld_workspace_ids` fields;
   - updated citations;
   - Scenario A's first-week wording now says the onboarding checklist is pending practice review.
-- **QA follow-up (independent QA of a0505b5; still 1.0.1, no version bump).** Every reproducer is now an end-to-end regression (19 new checks; 12 of them fail on a0505b5, the other 7 are controls).
+- **QA follow-up (independent QA of a0505b5; still 1.0.1, no version bump).** Every reproducer is now an end-to-end regression (21 new checks; 12 of the first 19 fail on a0505b5, the other 7 are controls; the decode sweep fails on 3ca0b43).
   - **HIGH: other clients leaked outside briefing topics.** `safety_text.client_terms`/`screen_other` (shared) build other-client identities from every wall-register row (`wall_check`), from a Closeout `engagement` that is not this one (`knowledge_match`), and from a staffing input for a different client (`scope_digest`, new `HOLD-STAFFING-ENGAGEMENT-MISMATCH`). They screen every output text field: scope, deliverables, key dates, roster responsibilities, knowledge title/summary, citations, escalations. A matching field becomes `[withheld - names another client or matter, ...]` and raises `HOLD-OTHER-CLIENT-*` plus an escalation; the name is never repeated. Workspace names that name another client are shown by ID only, whatever the wall status. Staffing `engagement.affiliates` is now carried and counted as the engagement's own identity. Reference: new confidentiality #3.3.
   - **HIGH: claims split across lines or fields.**
     - `safety_text.pair_hits`/`scan_lines`/`scan_rows` also read adjacent lines (labels removed), adjacent items across fields, adjacent CSV cells and the same column in adjacent rows. When a pair trips but neither half does, both halves are withheld and held with `split_across_fields`.
@@ -47,7 +47,9 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
     - instruction-hold citation `#4.1-#4.4` → `#4.1-#4.5`;
     - Scenario B's admin row reason adds `admin rights are never requested`.
     - No status, hold or decision changed.
-  - Suite: 86 → 105 checks.
+  - **Loaders: UTF-8 decode and unreadable paths.** `safety_text.load_json`/`read_text`/`read_csv` (and the bundled-contract loader) turn non-UTF-8 bytes (e.g. a cp1252 export) and unreadable paths (directory, permission) into a clean `InputError` that names the file and never echoes its bytes. Unreadable paths previously escaped as a raw `PermissionError`. 14-input decode sweep across all four engines (confidentiality #1.3).
+  - `safety_text.hits()` is documented as the single detector entry point. Per-line, adjacent-pair and per-field scanning all call it, so a shared steering detector can be swapped in without changing call sites.
+  - Suite: 86 → 107 checks.
 
 ## 1.0.0 - 2026-10-01
 

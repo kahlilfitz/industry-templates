@@ -271,6 +271,26 @@ def qa101_checks(t,ba,bb):
             try: S.check_contract(rd(os.path.join(ROOT,"demo-data",sc,"expected",f)),w)
             except Exception as e: bad.append(f"{sc}/{f}: {e}")
     ck("QA-4 every golden output validates against the bundled contract",not bad,str(bad))
+    # QA-5: non-UTF-8 bytes (e.g. a cp1252 export) or an unreadable path at any loader stop with a clean InputError
+    def badcopy(src,dst):
+        b=open(src,"rb").read(); open(dst,"wb").write(b.replace(b"\n",b" Zo\xeb \xff\xfe\n",1))
+    res=[]
+    for f_ in ("sow-extract.md","engagement-letter-extract.md","pursuit-record.md","confirmed-roster.csv"):
+        rr=os.path.join(t,"u8_"+f_.split(".")[0]); shutil.copytree(ra,rr); badcopy(os.path.join(ra,f_),os.path.join(rr,f_))
+        res.append(("scope_digest "+f_,run("scope_digest","--raw-dir",rr,"--staffing",ua,"--confirmed-roster",os.path.join(rr,"confirmed-roster.csv"),"--out",os.path.join(t,"u8.json"),"--generated-at",TS)))
+    bj=os.path.join(t,"u8_staff.json"); badcopy(ua,bj); res.append(("scope_digest staffing JSON",run("scope_digest","--raw-dir",ra,"--staffing",bj,"--confirmed-roster",os.path.join(ra,"confirmed-roster.csv"),"--out",os.path.join(t,"u8.json"),"--generated-at",TS)))
+    res.append(("scope_digest staffing path is a directory",run("scope_digest","--raw-dir",ra,"--staffing",ra,"--confirmed-roster",os.path.join(ra,"confirmed-roster.csv"),"--out",os.path.join(t,"u8.json"),"--generated-at",TS)))
+    bs_=os.path.join(t,"u8_scope.json"); badcopy(os.path.join(ba,"expected","scope.json"),bs_); res.append(("knowledge_match scope JSON",run("knowledge_match","--scope",bs_,"--closeout",ca,"--out",os.path.join(t,"u8.json"),"--generated-at",TS)))
+    bc_=os.path.join(t,"u8_close.json"); badcopy(ca,bc_); res.append(("knowledge_match closeout JSON",run("knowledge_match","--scope",os.path.join(ba,"expected","scope.json"),"--closeout",bc_,"--out",os.path.join(t,"u8.json"),"--generated-at",TS)))
+    bm_=os.path.join(t,"u8_matched.json"); badcopy(os.path.join(ba,"expected","matched.json"),bm_); res.append(("wall_check matched JSON",run("wall_check","--matched",bm_,"--wall-register",wa,"--workspace-inventory",wsa,"--out",os.path.join(t,"u8.json"),"--generated-at",TS)))
+    bw_=os.path.join(t,"u8_wall.csv"); badcopy(wa,bw_); res.append(("wall_check register CSV",run("wall_check","--matched",os.path.join(ba,"expected","matched.json"),"--wall-register",bw_,"--workspace-inventory",wsa,"--out",os.path.join(t,"u8.json"),"--generated-at",TS)))
+    bi_=os.path.join(t,"u8_inv.csv"); badcopy(wsa,bi_); res.append(("wall_check inventory CSV",run("wall_check","--matched",os.path.join(ba,"expected","matched.json"),"--wall-register",wa,"--workspace-inventory",bi_,"--out",os.path.join(t,"u8.json"),"--generated-at",TS)))
+    bg_=os.path.join(t,"u8_gov.json"); badcopy(os.path.join(ba,"expected","governed.json"),bg_); res.append(("access_checklist governed JSON",run("access_checklist","--governed",bg_,"--workspace-inventory",wsa,"--out",os.path.join(t,"u8.json"),"--pack-out",os.path.join(t,"u8.md"),"--generated-at",TS)))
+    res.append(("access_checklist inventory CSV",run("access_checklist","--governed",os.path.join(ba,"expected","governed.json"),"--workspace-inventory",bi_,"--out",os.path.join(t,"u8.json"),"--pack-out",os.path.join(t,"u8.md"),"--generated-at",TS)))
+    res.append(("access_checklist inventory path is a directory",run("access_checklist","--governed",os.path.join(ba,"expected","governed.json"),"--workspace-inventory",ra,"--out",os.path.join(t,"u8.json"),"--pack-out",os.path.join(t,"u8.md"),"--generated-at",TS)))
+    bad=[(l,m) for l,(c,m) in res if not (c==1 and m.startswith("InputError"))]
+    ck(f"QA-5 decode sweep: non-UTF-8 bytes or an unreadable path at all {len(res)} loader inputs stop with a clean InputError",not bad,ascii(bad))
+    ck("QA-5 decode errors name the file, never echo its bytes",all("\xeb" not in m and "Zo" not in m for l,(c,m) in res))
 def main():
   with tempfile.TemporaryDirectory() as t:
     for sc in ["scenario-a-happy","scenario-b-drama"]:

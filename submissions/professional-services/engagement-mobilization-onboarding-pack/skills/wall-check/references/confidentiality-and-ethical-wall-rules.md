@@ -5,7 +5,7 @@ Mobilization packs are internal drafts and grant no publish, send or reuse permi
 ### 1.2 SOW controls access context
 Where pursuit or informal notes conflict with the signed SOW or engagement letter, the SOW/engagement letter governs and the conflict is escalated.
 ### 1.3 Pipeline inputs validated against the contract
-Each engine validates the intermediate document it reads (scope, matched, governed) against the bundled contract: nested object and list element types, enums and numeric ranges. A wrong type or unrecognised enum stops the run with a clean `InputError`; nothing is coerced, rendered character by character or passed through. The only exception is an unrecognised `wall_decision.status`, which is treated as a hold (rule 2.2).
+Each engine validates the intermediate document it reads (scope, matched, governed) against the bundled contract: nested object and list element types, enums and numeric ranges. A wrong type or unrecognised enum stops the run with a clean `InputError`; nothing is coerced, rendered character by character or passed through. The only exception is an unrecognised `wall_decision.status`, which is treated as a hold (rule 2.2). Every input file must be readable UTF-8: non-UTF-8 bytes or an unreadable path stop the run with an `InputError` that names the file without echoing its content.
 ## 2. Ethical-wall status
 ### 2.1 Missing or malformed wall register holds
 If the wall register is missing, or lacks any of the `person`, `client_name`, `matter_id` or `status` columns, the knowledge digest and dependent access items are held. Register rows with more fields than the header raise a hold.
