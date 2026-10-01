@@ -381,11 +381,12 @@ def main():
             reasons = []
             if not purpose:
                 reasons.append("no controlled source states a purpose; purpose left null (never invented)")
-            if signal_policy.embedded_instruction(signal_policy.signal_texts(signal)):
+            hits = signal_policy.screen(signal_policy.signal_texts(signal))
+            if hits:
                 signal["embedded_instruction"] = True
                 signal["citations"].append(signal_policy.INJECTION_CITATION)
-                reasons.append("text flagged as embedded_instruction; treated as data, never "
-                               "drafted from or displayed (client-billing-guidelines.md #11.2)")
+                reasons.append(signal_policy.hold_reason(hits, "text flagged as embedded_instruction") + "; treated "
+                               "as data, never drafted from or displayed (client-billing-guidelines.md #11.2)")
             if reasons:
                 signal["needs_review"] = True
                 signal["review_reason"] = "; ".join(reasons)

@@ -156,7 +156,7 @@
           },
           "embedded_instruction": {
             "type": "boolean",
-            "description": "True when free text in the signal trips the embedded-instruction tripwire; the text is never drafted from or displayed (client-billing-guidelines.md #11.1, #11.2)."
+            "description": "True when free text in the signal trips the embedded-instruction tripwire or is too long to screen; the text is never drafted from or displayed (client-billing-guidelines.md #11.1, #11.2)."
           }
         }
       }
@@ -240,7 +240,7 @@
           },
           "embedded_instruction": {
             "type": "boolean",
-            "description": "True when the existing narrative or notes trip the embedded-instruction tripwire (client-billing-guidelines.md #11.1)."
+            "description": "True when the existing narrative or notes trip the embedded-instruction tripwire or are too long to screen (client-billing-guidelines.md #11.1)."
           }
         }
       }

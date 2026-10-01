@@ -18,22 +18,26 @@
    and unrecognised enum values raise SchemaError - nothing is coerced through truthiness, and a
    string can never stand in for the boolean team-view confirmation.
 4. Embedded-instruction tripwire (client-billing-guidelines.md #11.1). Free text is data.
-   embedded_instruction() normalises (NFKC, strip Unicode Cf and combining marks, fold Cyrillic,
-   Greek, Armenian and Cherokee look-alikes and Latin small capitals/variants, fold punctuation and
-   case) and flags text addressed to the assistant/AI/reviewer whatever the verb, verdict steering
-   whoever it addresses, approval or waiver claims, forwarding requests, e-mail addresses and URLs,
-   and any word that mixes Latin with another script. signal_texts()/entry_texts() also scan file
-   names in word form and a bounded aggregate of related fields, so a split instruction is caught.
+   embedded_instruction()/screen() route every text through the shared steering_guard detector
+   (intent families: addressee, verdict, suppression, rule override, authority, scope,
+   exfiltration, mixed script) with the billing hooks in STEERING_HOOKS. signal_texts() and
+   entry_texts() return multi-field records that go through steering_guard.scan_fields, so an
+   instruction split across fields is caught. An 'oversize' result is never a pass: the item is
+   held with OVERSIZE_REASON.
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
 """
 import datetime
+import functools
 import json
 import math
 import os
 import re
-import unicodedata
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import steering_guard  # noqa: E402  (shared detector, vendored byte-identically next to each engine)
 
 POLICY_CITATION = "client-billing-guidelines.md #10.1"
 INJECTION_CITATION = "client-billing-guidelines.md #11.1"
@@ -276,312 +280,142 @@ def enforce_timekeeper_scope(packet, engine="engine:unknown", strict=False):
 
 
 # --- Embedded-instruction tripwire (client-billing-guidelines.md #11.1 / #11.2) -------------
+# The detector is the shared steering_guard module, vendored byte-identically next to each engine
+# (tests/check_shared_copies.py pins its SHA-256). Plugin vocabulary goes only through its hooks.
 
-# Cyrillic and Greek letters that render like Latin ones (NFKC does not fold these).
-CONFUSABLES = str.maketrans({
-    "\u0430": "a", "\u0432": "b", "\u0435": "e", "\u0451": "e", "\u043a": "k", "\u043c": "m", "\u043d": "h",
-    "\u043e": "o", "\u0440": "p", "\u0441": "c", "\u0442": "t", "\u0443": "y", "\u0445": "x", "\u0455": "s",
-    "\u0456": "i", "\u0457": "i", "\u0458": "j", "\u04bb": "h", "\u04cf": "l", "\u0501": "d", "\u051b": "q",
-    "\u051d": "w", "\u03b1": "a", "\u03b2": "b", "\u03b5": "e", "\u03b7": "n", "\u03b9": "i", "\u03ba": "k",
-    "\u03bd": "v", "\u03bf": "o", "\u03c1": "p", "\u03c4": "t", "\u03c5": "u", "\u03c7": "x",
-    # Armenian
-    "\u0585": "o", "\u057d": "u", "\u0581": "g", "\u0570": "h", "\u0578": "n", "\u057c": "n", "\u0566": "q",
-    "\u0584": "p", "\u0561": "w", "\u0575": "j", "\u0582": "i",
-    # Latin letters NFKC leaves alone
-    "\u0251": "a", "\u0269": "i", "\u028b": "u", "\u0261": "g", "\u0131": "i", "\u0237": "j",
-})
-# Cherokee capitals that render like Latin letters; lower() maps them to Cherokee small letters,
-# so both forms are folded.
-_CHEROKEE = {0x13A0: "d", 0x13A1: "r", 0x13A2: "t", 0x13A5: "i", 0x13A9: "y", 0x13AA: "a", 0x13AB: "j",
-             0x13AC: "e", 0x13B3: "w", 0x13B7: "m", 0x13BB: "h", 0x13BD: "y", 0x13C0: "g", 0x13C2: "h",
-             0x13C3: "z", 0x13CF: "b", 0x13D2: "r", 0x13D9: "v", 0x13DA: "s", 0x13DE: "l", 0x13DF: "c",
-             0x13E2: "p", 0x13E6: "k", 0x13EB: "o", 0x13F4: "b"}
-CONFUSABLES.update({cp: v for cp, v in _CHEROKEE.items()})
-CONFUSABLES.update({ord(chr(cp).lower()): v for cp, v in _CHEROKEE.items() if chr(cp).lower() != chr(cp)})
-# Latin small capitals and other one-letter Latin variants, by Unicode name
-# ("LATIN LETTER SMALL CAPITAL A", "LATIN SMALL LETTER DOTLESS I", "LATIN SMALL LETTER A WITH STROKE").
-_LATIN_NAME_RE = re.compile(r"LATIN (?:SMALL |CAPITAL )?LETTER (?:SMALL CAPITAL |DOTLESS |SCRIPT |TURNED )?([A-Z])(?: |$)")
-_OBJ = (r"(?:this|it|these|that|them|my (?:entry|entries|time|narrative)|"
-        r"the (?:entry|entries|time entry|time entries|narrative|narratives|line|charge|item))")
-_ENTRY_OBJ = r"(?:(?:this|these|the|my) (?:entry|entries|time entry|time entries|narrative|line|charge|item|one))"
-_SUBJ = r"(?:this|it|these|entry|entries|narrative|time|line|charge)"
-INSTRUCTION_PATTERNS = (
-    # ignore / override the rules
-    r"\b(?:ignore|disregard|forget|override|overrule|bypass)\s+(?:(?:all|any|the|your|previous|prior|above|earlier|"
-    r"these|those|billing|review|client|engine|system)\s+)*(?:rules?|instructions?|guidelines?|polic(?:y|ies)|flags?|"
-    r"checks?|engine|review|reviewer|prompts?|verdicts?)\b",
-    # mark / treat it as compliant
-    r"\b(?:mark|set|classify|record|log)\s+" + _OBJ + r"(?:\s+\w+){0,2}?\s+(?:as\s+)?(?:compliant|approved|passed|"
-    r"clean|cleared|reviewed|billable)\b",
-    r"\b(?:treat|consider|regard|handle)\s+" + _OBJ + r"(?:\s+\w+){0,2}?\s+as\s+(?:already\s+)?(?:compliant|approved|"
-    r"billable|passed|reviewed|clean|cleared|fine|ok|okay|good|settled|final|verified|accepted|done|closed|resolved)\b",
-    # do not check / no need to look at this
-    r"\b(?:do not|don t|dont|never|no need to|not necessary to|unnecessary to|needn t|need not|nobody needs to|"
-    r"no one needs to|nobody should|no one should|nobody has to|no one has to)\s+(?:double check|flag|reject|review|"
-    r"re review|check|hold|question|change|edit|touch|modify|alter|query|escalate|examine|inspect|verify|look at|"
-    r"look into|scrutini[sz]e|audit|challenge)\s+" + _OBJ,
-    r"\b(?:don t|do not|dont|no need to|needn t)\s+bother\s+(?:checking|reviewing|looking|verifying|flagging|with)\b",
-    r"\b" + _SUBJ + r"\s+(?:must|should|need|needs|is|are|shall)\s+not\s+(?:to\s+)?be\s+(?:flagged|reviewed|rejected|"
-    r"held|checked|questioned|changed|edited|touched|queried|escalated|examined)\b",
-    # approval / sign-off / authority claims about this entry
-    r"\bplease\s+approve\s+(?:this|these|the|my|all)\s+(?:\w+\s+){0,2}?(?:entry|entries|pre ?bill|prebill|"
-    r"narratives?|timesheets?)\b",
-    r"\b" + _SUBJ + r"(?:\s+s|\s+(?:(?:has|have|had)\s+)?(?:already\s+|previously\s+)?(?:been|was|were|is|are))\s+"
-    r"(?:been\s+)?(?:already\s+|previously\s+)?(?:pre ?approved|okayed|ok d|signed off|blessed|rubber stamped|"
-    r"green ?lit|whitelisted)\b",
-    r"\b" + _SUBJ + r"(?:\s+s)?\s+(?:(?:has|have|had)\s+)?(?:(?:already|previously)\s+(?:(?:been|was|were|is|are)\s+)?|"
-    r"(?:been|was|were|is|are)\s+(?:already|previously)\s+)(?:approved|cleared|reviewed|checked|verified|vetted|"
-    r"accepted)\b",
-    r"\balready\s+(?:cleared|signed off|okayed|vetted|blessed)\s+by\s+(?:the\s+)?(?:\w+\s+){0,2}?(?:billing|partner|"
-    r"client|manager|director|reviewer|finance|lead|principal|team)\b",
-    r"\bno\s+(?:further\s+)?(?:review|reviews|checks?|scrutiny|verification)\s+(?:is\s+|are\s+)?(?:required|needed|"
-    r"necessary)\b",
-    r"\b(?:per|according to)\s+(?:the\s+)?(?:\w+\s+)?(?:partner|client|reviewer|billing|manager|director|principal)\b"
-    r".{0,40}\b(?:this|the)\s+(?:entry|entries|time|narrative|charge|line)\b.{0,30}\b(?:approved|cleared|fine|ok|"
-    r"okay|pass|accepted|exempt)\b",
-    r"\b(?:signed off|okayed|ok d|blessed|rubber stamped|green ?lit|green lighted)\s+(?:on\s+)?" + _ENTRY_OBJ,
-    r"\b(?:this|it|entry|entries|these|narrative|time)(?:\s+s)?\s+(?:has|have|already has|already have|got|carries|"
-    r"comes with)\s+(?:the\s+)?(?:\w+\s+){0,2}?(?:blessing|sign off|signoff|okay|go ahead|green light|"
-    r"stamp of approval)\b",
-    # leave it alone / let it through
-    r"\bleave\s+" + _OBJ + r"(?:\s+(?:one|entry|entries|line|narrative))?\s+(?:alone|as is|as it is|exactly as "
-    r"(?:it is|written|entered)|unchanged|untouched|as written|as entered)\b",
-    r"\b(?:let|allow|wave|pass)\s+(?:this|it|these|the entry|the entries)(?:\s+one)?\s+(?:go\s+|to\s+go\s+|"
-    r"to\s+pass\s+|pass\s+)?(?:through|by)\b",
-    r"\b(?:this|it|the entry|the narrative|this entry|this one)(?:\s+s)?\s+(?:is\s+)?(?:fine|good|ok|okay|correct|"
-    r"acceptable|final|clean|compliant)\s+as\s+(?:is|written|it stands|submitted|entered)\b",
-    r"\b(?:bill|submit|post|release|include)\s+(?:this|it|these|the entry|the entries)\s+as\s+(?:is|written|entered)\b",
-    r"\baccept\s+(?:this|these|it|the entry|the entries)(?:\s+\w+){0,2}?\s+(?:as is|as written|without)\b",
-    r"\b(?:keep|leave|omit|exclude|drop|remove)\s+(?:this|it|these|the entry|the entries|me|my entry|my entries)\s+"
-    r"(?:off|out of|from)\s+(?:the\s+)?(?:exception|exceptions|review|pre ?bill|hold|cleanup|flag)",
-    r"\b(?:skip|disable|turn off|switch off|suppress)\s+(?:the\s+|all\s+|any\s+|your\s+)?(?:compliance\s+|billing\s+|"
-    r"guideline\s+)?(?:checks?|reviews?|rules?|guidelines?|flags?|tripwire)\s+(?:for|on)\s+(?:this|these|it|me|my)\b",
-    r"\b(?:skip|bypass)\s+" + _ENTRY_OBJ,
-    # addressed to the reviewer / assistant
-    r"\b(?:assistant|ai|model|reviewer|system|engine|copilot|bot|llm|chatbot|claude|gpt)\s+(?:please\s+)?(?:ignore|"
-    r"mark|approve|skip|send|forward|treat|accept|clear|leave|disregard)\b",
-    r"\b(?:note|notes|message|instruction|instructions|reminder)\s+(?:to|for)\s+(?:the\s+)?(?:ai|assistant|reviewer|"
-    r"copilot|bot|llm|chatbot|claude|gpt|model|engine)\b",
-    r"\b(?:hey|hi|hello|dear|attention|attn)\s+(?:the\s+)?(?:ai|assistant|copilot|bot|llm|chatbot|claude|gpt|"
-    r"reviewer|model)\b",
-    r"\b(?:ai|copilot|llm|chatbot|claude|gpt|assistant|bot|model|reviewer)\s+(?:should|must|needs to|need to|can|will|"
-    r"please|is to|has to)\s+(?:treat|mark|approve|ignore|skip|accept|pass|leave|consider|forward|send|clear|let|keep)"
-    r"\s+" + _OBJ,
-    r"\b(?:ai|copilot|llm|chatbot|claude|gpt|assistant|bot|model|reviewer)\s+(?:should|must|needs to|need to|will|"
-    r"is to)\s+not\s+(?:flag|review|check|question|reject|hold)\b",
-    # waiver / suspension of the rules
-    r"\b(?:waive|waived|waives|waiving|exempted|exempts|suspended|suspends|lifted)\s+(?:the\s+|all\s+|its\s+|"
-    r"their\s+|our\s+|any\s+)?(?:billing\s+|review\s+|outside counsel\s+)?(?:guidelines?|rules?|reviews?|"
-    r"review requirements?|billing requirements?|polic(?:y|ies)|checks?|caps?)\b",
-    r"\b(?:exempt|exempted|excused)\s+from\s+(?:the\s+|all\s+|any\s+)?(?:billing\s+)?(?:guidelines?|rules?|reviews?|"
-    r"checks?|scrutiny|compliance)\b",
-    r"\b(?:billing\s+|review\s+)?(?:guidelines?|rules?|checks?|reviews?|requirements?)\s+(?:are|is|were|was|"
-    r"have been|has been)\s+(?:waived|suspended|lifted|relaxed|not applicable|off)\s+(?:for|on)\s+"
-    r"(?:this|these|me|my|our|it)\b",
-    r"\b(?:guidelines?|rules?|requirements?|polic(?:y|ies)|checks?)\s+(?:do not|does not|don t|doesn t)\s+apply\s+"
-    r"(?:to|for)\s+(?:this|these|me|my|our|it)\b",
-    # forward / send / export the data
-    r"\b(?:forward|send|e ?mail|upload|export|transmit|share|copy|cc|bcc)\s+(?:this|these|all|a copy of\s+"
-    r"(?:this|these|the))\s+(?:\w+\s+){0,2}?(?:packet|entries|entry|report|list|narratives?|records?|exceptions?|"
-    r"prebill|pre bill|wip|timesheets?)\b",
-    r"\b(?:forward|send|e ?mail|share|cc|bcc|copy)\s+(?:the\s+)?(?:time entries|entries|packet|pre ?bill|"
-    r"exception list|exceptions|cleanup list|wip|timesheets?|narratives)\s+to\b",
-)
-_ADDRESSEE = (r"(?:assistant|ai|a i|copilot|m365 copilot|claude|chatgpt|gpt(?: ?\d+)?|llm|chatbot|bot|gemini|"
-              r"agent|model|reviewer|engine|system)")
-_STRONG_ADDRESSEE = r"(?:assistant|ai|a i|copilot|claude|chatgpt|gpt(?: ?\d+)?|llm|chatbot|bot|gemini)"
-_VERDICT_VERB = (r"(?:mark|report|treat|rate|record|flag|set|class|classify|categori[sz]e|show|list|log|tag|label|"
-                 r"code|count|consider|enter|book|file|keep|leave|put|note|register|score|grade|return|output)")
-_VERDICT_OBJ = (r"(?:this|it|that|these|them|(?:this|that|these|those|the|my|our|each|every|all)\s+(?:\w+\s+){0,2}?"
-                r"(?:entry|entries|item|items|line|lines|charge|charges|narrative|narratives|time|one|ones|record|"
-                r"records|row|rows|task|tasks))")
-_VERDICT_STATE = (r"(?:compliant|approved|pre ?approved|billable|ok|okay|clean|fine|accepted|cleared|passed|pass|good|"
-                  r"exempt|green|valid|verified|reviewed|acceptable|unflagged|not flagged|no issues?|in compliance|"
-                  r"within (?:the )?guidelines?)")
-_SELF = r"(?:this|it|these|that|them|me|my|our|us|(?:the|this|my) (?:entry|entries|time|narrative|line|charge|item))"
-# Verdict steering, whoever it is addressed to (client-billing-guidelines.md #11.1).
-INSTRUCTION_PATTERNS += (
-    r"\b" + _VERDICT_VERB + r"\s+" + _VERDICT_OBJ + r"(?:\s+\w+){0,2}?\s+(?:as\s+|to\s+be\s+|is\s+)?(?:already\s+|"
-    r"fully\s+)?" + _VERDICT_STATE + r"\b",
-    r"\b(?:this|the|my)\s+(?:entry|entries|time entry|time entries|narrative|line|charge|item|time)\s+(?:should|must|"
-    r"shall|needs to|need to|is to|ought to)\s+be\s+(?:\w+\s+){0,2}?(?:as\s+)?" + _VERDICT_STATE + r"\b",
-    r"\b(?:this|the|my)\s+(?:entry|entries|time entry|narrative|charge)\s+(?:is|are)\s+(?:already\s+|fully\s+)?"
-    r"(?:compliant|exempt|cleared|ok|okay|pre ?approved|in compliance)\b",
-    r"\b(?:do not|don t|dont|never|please do not)\s+(?:flag|hold|review|re review|reject|escalate|query|question)"
-    r"(?:\s+" + _SELF + r")?\s*$",
-    r"\b(?:do not|don t|dont|never)\s+(?:flag|hold|review|reject|escalate|query|question)\s+" + _SELF + r"\b",
-    r"\bno\s+(?:further\s+|additional\s+)?(?:review|reviews|check|checks|checking|scrutiny|flags?|hold)\s+"
-    r"(?:is\s+|are\s+)?(?:required|needed|necessary|wanted)\b",
-    r"\b(?:needs|need|requires|require)\s+no\s+(?:further\s+|additional\s+)?(?:review|checks?|scrutiny|flag)\b",
-    r"\bno\s+need\s+(?:for|to)\s+(?:a\s+)?(?:review|re review|check|flag|hold|escalat\w*)\b",
-    r"\b(?:review|re review|checks?|scrutiny)\s+(?:is\s+|are\s+)?(?:not\s+(?:needed|required|necessary)|unnecessary)"
-    r"\s+(?:for|on)\s+" + _SELF + r"\b",
-)
-# Text addressed to the assistant/AI/reviewer, whatever the verb: a vocative ("Assistant, ...",
-# "Claude: approve this") or a tool name followed by an imperative and an object. Run on folded
-# text before punctuation is flattened, because the comma or colon is the signal.
-VOCATIVE_RE = re.compile(
-    r"(?:^|[.!?;\n(\[\"']\s*|\bplease\s*,?\s*|\b(?:hey|hi|hello|dear|attention|attn|psst|yo|ok|okay)\s*,?\s*)"
-    r"(?:the\s+|dear\s+|my\s+)?" + _ADDRESSEE + r"\s*(?:"
-    r",\s*(?!\w+\s+and\b)(?:(?:please|kindly|you|do|don't|dont|never|ignore|disregard|now|just)\b|"
-    r"\S+(?:\s+\S+){0,3}?\s+(?:this|it|these|that|them|the|my|our|all|every|any|me|us|you|your)\b)"
-    r"|[:\-\u2013\u2014!]\s*(?:please\s+|kindly\s+)?\S+\s+(?:this|it|these|that|them|my|me|all)\b)"
-)
-# Text addressed to the tool, whatever the verb: a tool name opening a sentence and followed by a
-# comma (but not a list such as "AI, ML and analytics"), or any addressee followed by a verdict.
-ADDRESSED_RE = re.compile(
-    r"(?:^|[.!?;\n(\[\"']\s*|\bplease\s*,?\s*|\b(?:hey|hi|hello|dear|attention|attn|psst|yo|ok|okay)\s*,?\s*)"
-    r"(?:the\s+|dear\s+|my\s+)?(?:" + _STRONG_ADDRESSEE + r"\s*,\s*(?!\w+(?:\s+\w+)?\s*(?:,|&|/|\band\b|\bor\b))\w"
-    r"|" + _ADDRESSEE + r"\s*[:,\-\u2013\u2014]\s*(?:\S+\s+){0,3}?(?:" + _VERDICT_STATE
-    + r"|no\s+(?:changes?|issues?|problems?|concerns?|action|edits?)|nothing\s+to)\b)"
-)
-TOOL_IMPERATIVE_RE = re.compile(
-    r"^(?:hey\s+|hi\s+|dear\s+|attention\s+)?(?:the\s+)?" + _STRONG_ADDRESSEE + r"\s+(?:please\s+|kindly\s+)?"
-    r"(?!(?:of|for|and|with|on|to|in|at|by|is|was|are|were|has|had|tools?|use|usage|based|enabled|driven|"
-    r"assisted|generated|powered|readiness|governance|strategy|roadmap|rollout|pilot|workshop|session|controller|"
-    r"accountant|director|manager|team|lead)\b)"
-    r"\w+\s+(?:this|it|these|that|them|my|me|all|every|the (?:entry|entries|time|narrative|line|charge|item))\b"
-)
-# Anchored at the start of a sentence: imperatives that a time narrative never contains.
-IMPERATIVE_PATTERNS = (
-    r"^(?:please\s+|kindly\s+|just\s+)?(?:approve|submit|release|finali[sz]e|post|accept|clear)\s+(?:this|these|the|"
-    r"my|all|it)\b(?:\s+\w+){0,3}?\s+(?:entry|entries|pre ?bill|prebill|narratives?|timesheets?|time)\b",
-    r"^(?:please\s+|kindly\s+|just\s+)?(?:approve|submit|accept|clear)\s+(?:it|this|these)(?:\s+(?:one|now|as is))?$",
-    r"^(?:please\s+|kindly\s+)?(?:do not|don t|dont|never)\s+(?:flag|reject|review|check|hold|question|change|edit|"
-    r"escalate)\b",
-    r"^(?:please\s+|kindly\s+)?(?:forward|send|e ?mail|share|export|upload|cc)\s+(?:this|these|it|all|the|a copy)\b",
-    r"^(?:please\s+|kindly\s+)?(?:ignore|disregard|bypass|override)\b",
-)
-INSTRUCTION_RE = re.compile("|".join(INSTRUCTION_PATTERNS))
-IMPERATIVE_RE = re.compile("|".join(IMPERATIVE_PATTERNS))
-SEGMENT_SPLIT_RE = re.compile(r"[.!?;:\n\u2013\u2014]+|\s-\s|,\s+")
-# Any e-mail address or URL inside narrative or signal text is out of place in a time narrative.
-CONTACT_RE = re.compile(
-    r"[a-z0-9._%+-]+\s*(?:@|\(at\)|\[at\])\s*[a-z0-9-]+(?:\s*(?:\.|\(dot\)|\[dot\])\s*[a-z0-9-]+)+"
-    r"|\b(?:https?|ftp)://\S+|\bwww\.\S+"
-    r"|\b[a-z0-9-]+\.(?:com|net|org|io|co|ai|biz|info|xyz|me|app|dev)(?:/\S*)?\b",
-    re.IGNORECASE,
-)
+STEERING_HOOKS = {
+    "extra_verdict_words": ("billable", "compliant", "no write down", "approved for billing"),
+    "extra_rule_nouns": ("ocg", "ocgs", "billing guidelines", "phase code"),
+    # Time narratives, activity subjects, file names and attendee lists never legitimately carry
+    # an e-mail address or URL, so any address is held (client-billing-guidelines.md #11.1).
+    "contact_is_steering": True,
+}
+OVERSIZE_REASON = (f"too long to screen for embedded instructions (over {steering_guard.MAX_TOTAL_CHARS:,} "
+                   "characters, alone or joined with its related fields); not scanned, held for human review")
 
 
-def _latin_variant(ch):
-    if ch.isascii() or not ch.isalpha():
-        return ch
-    match = _LATIN_NAME_RE.match(unicodedata.name(ch, ""))
-    return match.group(1).lower() if match else ch
+PAIR_KEYS = ("subject", "purpose", "deliverable", "file_name")
+OWN_KEYS = ("narrative", "notes")
+CACHE_MAX_CHARS = 20000  # longer texts are scanned every time rather than held in the cache
 
 
-def normalise(text):
-    """NFKC (folds fullwidth and mathematical alphanumerics), strip Unicode Cf and combining marks."""
-    text = unicodedata.normalize("NFKC", text if isinstance(text, str) else "")
-    text = unicodedata.normalize("NFKD", "".join(ch for ch in text if unicodedata.category(ch) != "Cf"))
-    return unicodedata.normalize("NFC", "".join(ch for ch in text if unicodedata.category(ch) != "Mn"))
+def _fields(mapping):
+    return {str(k): v for k, v in mapping.items() if isinstance(v, str) and v.strip()}
 
 
-def fold_text(text):
-    """normalise(), lower-case, fold Cyrillic/Greek/Armenian/Cherokee look-alikes and Latin variants."""
-    folded = normalise(text).lower().translate(CONFUSABLES)
-    return "".join(_latin_variant(ch) for ch in folded)
+@functools.lru_cache(maxsize=8192)
+def _scan_cached(text):
+    return tuple(steering_guard.scan(text, **STEERING_HOOKS))
 
 
-def _script(ch):
-    name = unicodedata.name(ch, "")
-    return "LATIN" if name.startswith("LATIN") else (name.split(" ", 1)[0] or "UNKNOWN")
+@functools.lru_cache(maxsize=8192)
+def _scan_fields_cached(items):
+    return tuple(steering_guard.scan_fields(dict(items), **STEERING_HOOKS))
 
 
-def mixed_script(text):
-    """True when one word mixes Latin letters with letters of any other script (a look-alike tell)."""
-    for token in re.findall(r"[^\W\d_]+", normalise(text)):
-        if token.isascii() or re.fullmatch("\u03bc[a-zA-Z]{1,2}", token):  # SI micro units: um, us, ug, uL
-            continue
-        scripts = {_script(ch) for ch in token if ch.isalpha()}
-        if "LATIN" in scripts and len(scripts) > 1:
-            return True
-    return False
+def _scan_text(text):
+    return list(_scan_cached(text)) if len(text) <= CACHE_MAX_CHARS else steering_guard.scan(text, **STEERING_HOOKS)
 
 
-def filename_words(name):
-    """'Assistant-report_thisEntry.docx' -> 'Assistant report this Entry docx' (scan form only)."""
-    name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
-    return re.sub(r"[-_.]+", " ", name).strip()
+def _scan_record(fields):
+    items = tuple(fields.items())
+    if sum(len(v) for v in fields.values()) <= CACHE_MAX_CHARS:
+        return list(_scan_fields_cached(items))
+    return steering_guard.scan_fields(fields, **STEERING_HOOKS)
 
 
-def flatten_text(folded):
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]+", " ", folded)).strip()
+def _pairs(fields):
+    """Ordered field pairs that are also joined: a two-field split ("Mark this" + "entry compliant")
+    can be diluted by the record's other fields in the full join, so it is scanned on its own."""
+    own = [k for k in fields if k in OWN_KEYS]
+    if own:  # entry record: its own text against every other field, both orders
+        return [(a, b) for a in own for b in fields if b != a] + [(b, a) for a in own for b in fields if b not in own]
+    prose = [k for k in fields if k in PAIR_KEYS]
+    return [(a, b) for a in prose for b in prose if a != b]
 
 
-def _trips(text):
-    folded = fold_text(text)
-    if not folded.strip():
-        return False
-    if mixed_script(text) or CONTACT_RE.search(folded) or VOCATIVE_RE.search(folded) or ADDRESSED_RE.search(folded):
-        return True
-    if INSTRUCTION_RE.search(flatten_text(folded)):
-        return True
-    segments = [flatten_text(seg) for seg in SEGMENT_SPLIT_RE.split(folded)]
-    return any(IMPERATIVE_RE.search(seg) or TOOL_IMPERATIVE_RE.search(seg) for seg in segments)
+def screen_record(record):
+    """steering_guard.scan_fields on the whole record, then on each ordered pair of its prose fields."""
+    fields = _fields(record)
+    if not fields:
+        return []
+    hits = _scan_record(fields)
+    if hits:
+        return hits
+    for a, b in _pairs(fields):
+        hits = _scan_record({a: fields[a], b: fields[b]})
+        if hits:
+            return hits
+    return []
+
+
+def screen(*texts):
+    """steering_guard hits for every text. A str is scanned alone; a dict is one multi-field record
+    (screen_record: each field, the joins, and its prose-field pairs, so a split instruction is
+    caught); a list or tuple is scanned item by item. An 'oversize' hit means the text was NOT
+    scanned: hold it."""
+    hits = []
+    for text in texts:
+        if isinstance(text, dict):
+            hits += screen_record(text)
+        elif isinstance(text, (list, tuple)):
+            hits += screen(*text)
+        elif isinstance(text, str) and text.strip():
+            hits += _scan_text(text)
+    return hits
+
+
+def is_oversize(hits):
+    return any(h.family == "oversize" for h in hits)
 
 
 def embedded_instruction(*texts):
-    """True when any text steers the reviewer/assistant, claims an approval or waiver, asks for
-    forwarding, or carries an e-mail address or URL (client-billing-guidelines.md #11.1)."""
-    for text in texts:
-        if isinstance(text, (list, tuple)):
-            if embedded_instruction(*text):
-                return True
-        elif isinstance(text, str) and _trips(text):
-            return True
-    return False
+    """True when any text (or any multi-field record) is steering, or too long to screen (#11.1)."""
+    return bool(screen(*texts))
 
 
-AGGREGATE_LIMIT = 4000
+def hold_reason(hits, default):
+    """The review reason for a held item: the oversize reason when it was not scanned."""
+    return OVERSIZE_REASON if is_oversize(hits) else default
 
 
-def aggregate(parts):
-    """The related fields joined (both orders), bounded, so an instruction split across fields
-    ("Mark this" + "entry compliant") is caught even when no single field trips (#11.1)."""
-    parts = [p.strip() for p in parts if isinstance(p, str) and p.strip()]
-    if len(parts) < 2:
-        return []
-    return [" ".join(parts)[:AGGREGATE_LIMIT], " ".join(reversed(parts))[:AGGREGATE_LIMIT]]
+def _joined(values):
+    items = [v if isinstance(v, str) else json.dumps(v, default=str) for v in values]
+    return "; ".join(i for i in items if i.strip())
 
 
 def signal_texts(signal):
-    """Every free-text field of an activity signal that can reach a draft, a table or a report, the
-    file name in word form, and a bounded aggregate of the related fields."""
+    """One multi-field record holding every free-text field of an activity signal that can reach a
+    draft, a table or a report (file names are read as words by steering_guard.normalize)."""
     if not isinstance(signal, dict):
-        return []
-    texts = [signal.get(k) for k in ("subject", "deliverable", "purpose", "organizer", "file_name",
-                                      "activity_class", "meeting_id")]
-    if isinstance(signal.get("file_name"), str):
-        texts.append(filename_words(signal["file_name"]))
+        return {}
+    record = {k: signal.get(k) for k in ("subject", "purpose", "deliverable", "file_name", "organizer",
+                                          "activity_class", "meeting_id")}
     attendees = signal.get("attendees")
     if isinstance(attendees, list):
-        texts.extend(a if isinstance(a, str) else json.dumps(a, default=str) for a in attendees)
+        record["attendees"] = _joined(attendees)
     elif attendees is not None:
-        texts.append(json.dumps(attendees, default=str))  # wrong type: scan everything it holds
-    file_words = filename_words(signal["file_name"]) if isinstance(signal.get("file_name"), str) else None
-    texts += aggregate([signal.get("subject"), signal.get("purpose"), signal.get("deliverable"), file_words])
-    return [t for t in texts if isinstance(t, str)]
+        record["attendees"] = json.dumps(attendees, default=str)  # wrong type: scan everything it holds
+    return record
 
 
 def entry_texts(entry, linked=()):
-    """An entry's own free text (narrative, notes) plus a bounded aggregate with its linked activity."""
+    """One multi-field record: an entry's own free text (narrative, notes) and, when it has any, the
+    subject/purpose/deliverable of its linked activities, so an instruction split between the entry
+    and its activity is caught."""
     if not isinstance(entry, dict):
-        return []
-    own = [entry.get("narrative"), entry.get("notes")]
-    related = []
-    for signal in linked:
-        if isinstance(signal, dict):
-            related += [signal.get("subject"), signal.get("purpose"), signal.get("deliverable")]
-    texts = [t for t in own if isinstance(t, str)]
-    texts += aggregate(own)
-    texts += aggregate(own + related) if any(isinstance(t, str) and t.strip() for t in own) else []
-    return texts
+        return {}
+    record = {"narrative": entry.get("narrative"), "notes": entry.get("notes")}
+    if any(isinstance(v, str) and v.strip() for v in record.values()):
+        for n, signal in enumerate(linked):
+            if isinstance(signal, dict):
+                for key in ("subject", "purpose", "deliverable"):
+                    record[f"linked{n}_{key}"] = signal.get(key)
+    return record
 
 
 def redact(text):
-    """Return WITHHELD_TEXT when text trips the wire; otherwise the text unchanged (#11.2)."""
+    """Return WITHHELD_TEXT when text trips the wire or is too long to screen (#11.2)."""
     return WITHHELD_TEXT if embedded_instruction(text) else text
 
 

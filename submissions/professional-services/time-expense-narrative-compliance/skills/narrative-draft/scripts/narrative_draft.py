@@ -95,9 +95,15 @@ def is_calendar(activity):
 
 
 def flagged_activities(linked):
-    """IDs of linked activities whose free text trips the embedded-instruction tripwire (#11.1)."""
-    return [a.get("activity_id") for a in linked
-            if a.get("embedded_instruction") is True or signal_policy.embedded_instruction(signal_policy.signal_texts(a))]
+    """(IDs, hits) of linked activities whose free text trips the embedded-instruction tripwire or is
+    too long to screen (#11.1)."""
+    ids, hits = [], []
+    for a in linked:
+        found = signal_policy.screen(signal_policy.signal_texts(a))
+        if a.get("embedded_instruction") is True or found:
+            ids.append(a.get("activity_id"))
+            hits += found
+    return ids, hits
 
 
 def clause(entry, activity):
@@ -133,10 +139,11 @@ def grounded_narrative(entry, linked):
     if not linked:
         return ("", "needs_activity_evidence", NO_EVIDENCE_CONFIDENCE,
                 ["no cited activity signal from an enabled source is linked; nothing to draft from"], [])
-    flagged = flagged_activities(linked)
+    flagged, hits = flagged_activities(linked)
     if flagged:
+        why = signal_policy.hold_reason(hits, "linked activity text flagged as embedded_instruction")
         return ("", "needs_review_embedded_instruction", NO_EVIDENCE_CONFIDENCE,
-                [f"linked activity text flagged as embedded_instruction ({', '.join(flagged)}); "
+                [f"{why} ({', '.join(flagged)}); "
                  "treated as data and withheld - no narrative drafted from it (client-billing-guidelines.md #11.1, #11.2)"],
                 [])
     ordered = sorted(linked, key=lambda a: 0 if a.get("activity_class") == "client_meeting" else 1)
@@ -169,10 +176,11 @@ def build_narrative(entry, linked):
         return narrative, status, confidence, reasons, [], covered
 
     reasons = []
-    existing_flagged = (entry.get("embedded_instruction") is True
-                        or signal_policy.embedded_instruction(signal_policy.entry_texts(entry, linked)))
+    hits = signal_policy.screen(signal_policy.entry_texts(entry, linked))
+    existing_flagged = entry.get("embedded_instruction") is True or bool(hits)
     if existing_flagged:
-        reasons.append("existing narrative flagged as embedded_instruction; withheld from the "
+        reasons.append(signal_policy.hold_reason(hits, "existing narrative flagged as embedded_instruction")
+                       + "; withheld from the "
                        "draft and left in the source entry only as evidence for guideline-check, never obeyed "
                        "(client-billing-guidelines.md #11.1, #11.2)")
     suggestions = []
