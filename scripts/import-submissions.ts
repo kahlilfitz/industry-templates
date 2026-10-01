@@ -1,19 +1,13 @@
 /**
- * Import `submissions/` into the published gallery.
+ * Validate `submissions/` and build downloadable packages.
  *
- * Contributors only ever touch `submissions/<industry>/<slug>/`. This script is the single
- * place that turns a submission into the two generated artifacts the site is
- * built from:
+ * Contributors only touch `submissions/<industry>/<slug>/`. This script validates each
+ * submission and writes one generated artifact:
  *
- *   - `src/content/templates/<slug>.md`  — catalog frontmatter + overview body
- *   - `public/bundles/<slug>.zip`        — the downloadable package
+ *   - `public/bundles/<slug>.zip`
  *
- * plus, when the submission ships a human-facing `README.md`:
- *
- *   - `src/content/guides/<slug>.md`     — becomes the detail page's main content
- *
- * Run `npm run check:submissions` to validate without writing anything, or
- * `npm run import:submissions` to regenerate. CI runs both.
+ * Run `npm run check:submissions` to validate without writing anything, or `npm run build`
+ * to recreate every bundle. CI runs both.
  *
  * With `--catalog-output <dir>`, each plugin's inner skills are additionally
  * exported unpacked to that directory, flattened one per folder. CI publishes
@@ -23,17 +17,25 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import AdmZip from "adm-zip";
-import { templateSchema } from "../src/lib/template-schema";
 
 const ROOT = process.cwd();
 const SUBMISSIONS = join(ROOT, "submissions");
-const OUT_TEMPLATES = join(ROOT, "src", "content", "templates");
-const OUT_GUIDES = join(ROOT, "src", "content", "guides");
 const OUT_BUNDLES = join(ROOT, "public", "bundles");
 
 const CHECK_ONLY = process.argv.includes("--check");
+const INDUSTRIES = new Set([
+  "Manufacturing",
+  "Retail & CPG",
+  "Financial Services",
+  "Healthcare",
+  "Energy",
+  "Public Sector",
+  "Professional Services",
+  "Cross-industry",
+]);
+const PLATFORMS = new Set(["Cowork", "Copilot Studio", "Scout"]);
 
-/** Files and folders that are for humans or CI, never shipped in the bundle. */
+/** Files and folders excluded by default. A submission may opt tests in via metadata.bundleTests. */
 const NEVER_BUNDLE = new Set([
   "metadata.json",
   "metadata.yaml",
@@ -61,6 +63,82 @@ const notes: string[] = [];
 
 function fail(slug: string, message: string) {
   errors.push(`  ${slug}: ${message}`);
+}
+
+type SubmissionData = {
+  industry: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  bundleTests: boolean;
+};
+
+function optionalDate(slug: string, field: string, value: unknown): Date | undefined {
+  if (value === undefined) return undefined;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.valueOf())) {
+    fail(slug, `${field} must be a valid date`);
+    return undefined;
+  }
+  return date;
+}
+
+function validateMetadata(
+  slug: string,
+  meta: Record<string, unknown>,
+  authorGithub: string | undefined,
+): SubmissionData | undefined {
+  const before = errors.length;
+  for (const field of ["name", "description", "author"] as const) {
+    if (typeof meta[field] !== "string" || !meta[field].trim()) {
+      fail(slug, `${field} is required and must be a non-empty string`);
+    }
+  }
+  if (typeof meta.industry !== "string" || !INDUSTRIES.has(meta.industry)) {
+    fail(slug, `industry must be one of: ${[...INDUSTRIES].join(", ")}`);
+  }
+  if (
+    !Array.isArray(meta.platforms) ||
+    meta.platforms.length === 0 ||
+    meta.platforms.some((platform) => typeof platform !== "string" || !PLATFORMS.has(platform))
+  ) {
+    fail(slug, `platforms must contain one or more of: ${[...PLATFORMS].join(", ")}`);
+  }
+  if (
+    !Array.isArray(meta.tags) ||
+    meta.tags.length === 0 ||
+    meta.tags.some((tag) => typeof tag !== "string" || !tag.trim())
+  ) {
+    fail(slug, "tags must contain one or more non-empty strings");
+  }
+  if (meta.authorUrl !== undefined) {
+    try {
+      new URL(String(meta.authorUrl));
+    } catch {
+      fail(slug, "authorUrl must be a valid URL");
+    }
+  }
+  if (
+    authorGithub !== undefined &&
+    !/^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i.test(authorGithub)
+  ) {
+    fail(slug, "authorGithub must be a bare GitHub username (no leading @)");
+  }
+  if (meta.version !== undefined && typeof meta.version !== "string") {
+    fail(slug, "version must be a string");
+  }
+  if (meta.bundleTests !== undefined && typeof meta.bundleTests !== "boolean") {
+    fail(slug, "bundleTests must be a boolean");
+  }
+
+  const createdAt = optionalDate(slug, "createdAt", meta.createdAt);
+  const updatedAt = optionalDate(slug, "updatedAt", meta.updatedAt);
+  if (errors.length !== before || typeof meta.industry !== "string") return undefined;
+  return {
+    industry: meta.industry,
+    createdAt,
+    updatedAt,
+    bundleTests: meta.bundleTests === true,
+  };
 }
 
 /** Every file under `dir`, as slash-separated paths relative to `dir`, sorted. */
@@ -92,10 +170,6 @@ function resolveGithub(
 /** The folder an industry's submissions live in: "Retail & CPG" -> "retail-and-cpg". */
 function industryFolder(industry: string): string {
   return industry.toLowerCase().replace(/ & /g, "-and-").replace(/\s+/g, "-");
-}
-
-function yamlScalar(value: string): string {
-  return /^[\w][\w .\-/()&,']*$/.test(value) ? value : JSON.stringify(value);
 }
 
 type SkillEntry = { name: string; description?: string };
@@ -137,67 +211,6 @@ function readPluginSkills(dir: string): SkillEntry[] {
 }
 
 /**
- * The boilerplate every template page carries: what the package contains and
- * how to install it. Generated from the payload itself so it can never drift
- * from the files that actually ship. Appended after a submission's `README.md`
- * when it has one, and used on its own when it doesn't.
- */
-function standardSections(
-  repoPath: string,
-  skills: SkillEntry[],
-  hasDemoData: boolean,
-  hasTests: boolean,
-): string {
-  const lines: string[] = [];
-
-  if (skills.length > 0) {
-    lines.push("## Skills in this package", "");
-    for (const s of skills) {
-      lines.push(`- **${s.name}**${s.description ? ` — ${s.description}` : ""}`);
-    }
-    lines.push("");
-  }
-
-  if (hasDemoData) {
-    lines.push(
-      "## Demo data",
-      "",
-      "The package ships synthetic demo scenarios so you can run the template end-to-end before wiring it to your own systems. Each scenario has a happy path and a messier one, with the expected outputs alongside the inputs.",
-      "",
-    );
-  }
-
-  lines.push(
-    "## Install",
-    "",
-    "1. Download the plugin package (the `.zip` on this page).",
-    "2. Upload it to your tenant via **M365 admin center › Manage apps › Upload custom app**, or sideload it for testing with the [Microsoft 365 Agents Toolkit CLI](https://learn.microsoft.com/en-us/microsoftteams/platform/toolkit/microsoft-365-agents-toolkit-cli) (`atk install --file-path <zip> --scope Personal`).",
-    "3. Open **Cowork › Sources & Skills › Plugins** and enable it from the **Discover** section.",
-    "",
-    "See [Build plugins for Copilot Cowork](https://learn.microsoft.com/en-us/microsoft-365/copilot/cowork/cowork-plugin-development) for details.",
-    "",
-  );
-
-  if (hasTests) {
-    lines.push(
-      "## Test evidence",
-      "",
-      `A test report and sample prompt set are kept with the source, in [\`submissions/${repoPath}/tests/\`](https://github.com/SravaniSeethi/industry-templates/tree/main/submissions/${repoPath}/tests).`,
-      "",
-    );
-  }
-
-  lines.push(
-    "## Before you use it on real work",
-    "",
-    "This template is draft-first and document-grounded: it prepares the work for a person to review and sign off, and it does not write back to a system of record. The rules, thresholds, and reference documents in `references/` are examples — replace them with your own before production use.",
-    "",
-  );
-
-  return lines.join("\n");
-}
-
-/**
  * Export a plugin's skills as standalone canonical Agent Skills.
  *
  * A template ships as a Cowork plugin package, but each `skills/<name>/` inside
@@ -211,7 +224,7 @@ function standardSections(
  *
  * Every folder is named `<template-slug>-<skill-name>`. The importer's format
  * wants one flat level, so bare skill names would share a single namespace
- * across the whole gallery — and they collide in practice: `policy-retrieve`
+ * across the whole library — and they collide in practice: `policy-retrieve`
  * belongs to two Retail templates, and `knowledge-retrieve` to one Retail and
  * one Manufacturing template. The prefix makes every folder unique by
  * construction and says which template a skill came from, which matters once
@@ -264,23 +277,6 @@ function catalogOutputDir(): string | undefined {
   return outputDir;
 }
 
-/** The generated page body: catalog summary, package callout, then boilerplate. */
-function buildBody(
-  repoPath: string,
-  meta: Record<string, unknown>,
-  skills: SkillEntry[],
-  hasDemoData: boolean,
-  hasTests: boolean,
-): string {
-  return [
-    String(meta.description ?? "").trim(),
-    "",
-    `> **${meta.industry} template.** This is a Microsoft 365 Copilot **Cowork** plugin package — a \`.zip\` bundling the skills, rules, and contracts below.`,
-    "",
-    standardSections(repoPath, skills, hasDemoData, hasTests),
-  ].join("\n");
-}
-
 function main() {
   if (!existsSync(SUBMISSIONS)) {
     console.error("No submissions/ directory found.");
@@ -307,12 +303,9 @@ function main() {
   const catalogDir = CHECK_ONLY ? undefined : catalogOutputDir();
 
   if (!CHECK_ONLY) {
-    // Regenerate from scratch so a removed submission does not leave a stale
-    // page or bundle behind.
-    for (const dir of [OUT_TEMPLATES, OUT_GUIDES, OUT_BUNDLES]) {
-      rmSync(dir, { recursive: true, force: true });
-      mkdirSync(dir, { recursive: true });
-    }
+    // Regenerate from scratch so a removed submission does not leave a stale bundle behind.
+    rmSync(OUT_BUNDLES, { recursive: true, force: true });
+    mkdirSync(OUT_BUNDLES, { recursive: true });
     if (catalogDir) {
       rmSync(catalogDir, { recursive: true, force: true });
       mkdirSync(catalogDir, { recursive: true });
@@ -353,10 +346,9 @@ function main() {
       continue;
     }
 
-    let manifest: Record<string, unknown> = {};
     if (hasManifest) {
       try {
-        manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+        JSON.parse(readFileSync(manifestPath, "utf8"));
       } catch (e) {
         fail(slug, `.claude-plugin/plugin.json is not valid JSON — ${(e as Error).message}`);
         continue;
@@ -372,39 +364,12 @@ function main() {
     const type = hasManifest ? "plugin" : "skill";
     const authorGithub = resolveGithub(meta.authorGithub, meta.authorUrl);
 
-    const frontmatterData = {
-      name: meta.name,
-      description: meta.description,
-      agentDescription: meta.agentDescription ?? manifest.description ?? undefined,
-      industry: meta.industry,
-      platforms: meta.platforms,
-      type,
-      tags: meta.tags,
-      author: meta.author,
-      authorUrl: meta.authorUrl,
-      authorGithub,
-      version: meta.version ?? manifest.version ?? undefined,
-      createdAt: meta.createdAt,
-      updatedAt: meta.updatedAt,
-      bundle: `bundles/${slug}.zip`,
-      skills: skills.length ? skills.map((s) => ({ name: s.name })) : undefined,
-      coverColor: meta.coverColor,
-      featured: meta.featured ?? false,
-    };
-
-    const parsed = templateSchema.safeParse(frontmatterData);
-    if (!parsed.success) {
-      for (const issue of parsed.error.issues) {
-        fail(slug, `${issue.path.join(".") || "(root)"} — ${issue.message}`);
-      }
-      continue;
-    }
-    const d = parsed.data;
+    const d = validateMetadata(slug, meta, authorGithub);
+    if (!d) continue;
 
     // The industry now appears twice: as the folder a submission sits in, and as
-    // `metadata.json`'s `industry`, which is what the site actually publishes.
-    // Only the metadata is authoritative — this keeps the folder from drifting
-    // away from it and quietly filing a template under the wrong heading.
+    // `metadata.json`'s `industry`. Metadata is authoritative, so keep the folder
+    // from drifting away from it and quietly filing a template under the wrong heading.
     if (industryFolder(d.industry) !== industryDir) {
       fail(
         slug,
@@ -414,11 +379,8 @@ function main() {
       continue;
     }
 
-    const hasDemoData = existsSync(join(dir, "demo-data"));
-    const hasTests = existsSync(join(dir, "tests"));
-
     notes.push(
-      `  ${slug} — ${d.industry} · ${d.type} · ${skills.length} ${skills.length === 1 ? "skill" : "skills"}`,
+      `  ${slug} — ${d.industry} · ${type} · ${skills.length} ${skills.length === 1 ? "skill" : "skills"}`,
     );
 
     if (CHECK_ONLY) continue;
@@ -435,51 +397,13 @@ function main() {
     const zip = new AdmZip();
     for (const rel of walk(dir)) {
       const top = rel.split(posix.sep)[0];
-      if (NEVER_BUNDLE.has(top) || isBuildLitter(rel)) continue;
+      if ((NEVER_BUNDLE.has(top) && !(top === "tests" && d.bundleTests)) || isBuildLitter(rel)) {
+        continue;
+      }
       zip.addFile(`${slug}/${rel}`, readFileSync(join(dir, rel.split(posix.sep).join(sep))));
     }
     for (const entry of zip.getEntries()) entry.header.time = stamp;
     zip.writeZip(join(OUT_BUNDLES, `${slug}.zip`));
-
-    // --- page -------------------------------------------------------------
-    const fm: string[] = ["---"];
-    fm.push(`name: ${yamlScalar(d.name)}`);
-    fm.push(`description: ${JSON.stringify(d.description)}`);
-    if (d.agentDescription) fm.push(`agentDescription: ${JSON.stringify(d.agentDescription)}`);
-    fm.push(`industry: ${yamlScalar(d.industry)}`);
-    fm.push(`platforms: [${d.platforms.join(", ")}]`);
-    fm.push(`type: ${d.type}`);
-    fm.push(`tags: [${d.tags.join(", ")}]`);
-    fm.push(`author: ${yamlScalar(d.author)}`);
-    if (d.authorUrl) fm.push(`authorUrl: ${JSON.stringify(d.authorUrl)}`);
-    if (d.authorGithub) fm.push(`authorGithub: ${d.authorGithub}`);
-    if (d.version) fm.push(`version: ${yamlScalar(d.version)}`);
-    if (d.createdAt) fm.push(`createdAt: ${d.createdAt.toISOString().slice(0, 10)}`);
-    if (d.updatedAt) fm.push(`updatedAt: ${d.updatedAt.toISOString().slice(0, 10)}`);
-    fm.push(`bundle: ${d.bundle}`);
-    if (d.skills?.length) {
-      fm.push("skills:");
-      for (const s of d.skills) fm.push(`  - name: ${yamlScalar(s.name)}`);
-    }
-    if (d.coverColor) fm.push(`coverColor: ${JSON.stringify(d.coverColor)}`);
-    if (d.featured) fm.push("featured: true");
-    fm.push("---", "");
-
-    const repoPath = `${industryDir}/${slug}`;
-    const body = buildBody(repoPath, meta, skills, hasDemoData, hasTests);
-    writeFileSync(join(OUT_TEMPLATES, `${slug}.md`), fm.join("\n") + body, "utf8");
-
-    // --- guide (human-facing README becomes the page's main content) ------
-    // The README leads, in the author's own voice; the "what's in the package"
-    // and install boilerplate is appended so it always matches the real payload.
-    const readmePath = join(dir, "README.md");
-    if (existsSync(readmePath)) {
-      const readme = readFileSync(readmePath, "utf8")
-        .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "")
-        .trimEnd();
-      const guide = `${readme}\n\n${standardSections(slug, skills, hasDemoData, hasTests)}`;
-      writeFileSync(join(OUT_GUIDES, `${slug}.md`), guide, "utf8");
-    }
 
     // --- catalog branch (this plugin's skills, flattened) -----------------
     if (catalogDir) catalogSkills.push(...exportCatalogSkills(dir, slug, catalogDir));

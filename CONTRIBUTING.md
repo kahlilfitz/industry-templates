@@ -1,12 +1,12 @@
 # Contributing a template
 
-Thanks for helping grow the **Industry Templates** gallery. A *template* is a reusable package
+Thanks for helping grow the **Industry Templates** repository. A *template* is a reusable package
 that teaches an AI agent to do a specific job in a specific industry — targeting one or more of
 **Cowork**, **Copilot Studio** and **Scout**.
 
 You contribute by adding **one submission under [`submissions/<industry>/`](submissions/)** and
-opening a pull request. You never edit `src/content/` or `public/bundles/` directly — CI
-validates your metadata and generates the published page and the download package for you.
+opening a pull request. You never edit `public/bundles/` directly — CI validates the metadata
+and generates the download packages.
 
 ## The submission shape
 
@@ -44,33 +44,27 @@ leaf folder name — lowercase and hyphenated, e.g. `quality-inspection` → `/t
 
 | Field         | Required | Notes |
 |---------------|----------|-------|
-| `name`        | yes      | Display name shown in the gallery. |
-| `description` | yes      | The catalog summary on the card and at the top of the page. One human-friendly sentence. |
-| `industry`    | yes      | One of `Manufacturing`, `Retail & CPG`, `Financial Services`, `Healthcare`, `Energy`, `Public Sector`, `Professional Services`, `Cross-industry`. This is the gallery's primary facet. |
+| `name`        | yes      | Human-readable package name. |
+| `description` | yes      | One human-friendly sentence describing the package. |
+| `industry`    | yes      | One of `Manufacturing`, `Retail & CPG`, `Financial Services`, `Healthcare`, `Energy`, `Public Sector`, `Professional Services`, `Cross-industry`. |
 | `platforms`   | yes      | One or more of `Cowork`, `Copilot Studio`, `Scout`. |
 | `tags`        | yes      | Lowercase tags for search and filtering. Don't repeat the industry here — it has its own filter. |
 | `author`      | yes      | Person or team who wrote the template. |
 
 Optional: `authorUrl`, `authorGithub`, `version`, `createdAt`, `updatedAt`, `coverColor`,
-`featured`, `agentDescription`. Most are inferred: `version` and `agentDescription` fall back to
-the package manifest, and `authorGithub` is derived from an `authorUrl` that points at a GitHub
-profile.
+`featured`, `agentDescription`. `authorGithub` is derived from an `authorUrl` that points at a
+GitHub profile when it is not supplied explicitly.
 
-**Adding a new industry?** Add it to `INDUSTRIES` and `INDUSTRY_COLORS` in
-[`src/lib/templates.ts`](src/lib/templates.ts). The filter row renders only industries that have
-at least one template, so it grows as the gallery does.
+**Adding a new industry?** Add it to `INDUSTRIES` in
+[`scripts/import-submissions.ts`](scripts/import-submissions.ts).
 
-## What visitors see
+## Human documentation
 
-Two things you write for them:
+Two files explain the package to reviewers:
 
-- The **catalog description** (`metadata.json`'s `description`) — the one-liner on your card.
-- Your **`README.md`** — this becomes the main content on the detail page, in your own voice.
-  The "Skills in this package" list and the install steps are appended automatically from the
-  real payload, so don't hand-write those; they can never drift that way.
-
-A good README covers: who it's for, how the skill chain works, one concrete case that shows why
-the template earns its place, what the user has to bring, and where the boundaries are.
+- `metadata.json` provides the package name, description, industry, platforms, tags and author.
+- `README.md` explains who the package is for, how the skill chain works, one concrete case,
+  required inputs and boundaries.
 
 ## What makes a good template
 
@@ -88,7 +82,7 @@ the template earns its place, what the user has to bring, and where the boundari
 
 ## Your skills also land in the catalog feed
 
-Each `skills/<name>/` folder in your package is a canonical Agent Skill, so CI
+Each `skills/<name>/` folder in your package is a canonical Agent Skill, so the publish workflow
 also copies it — unpacked, one folder per skill — onto the generated `catalog`
 branch, which any agent platform that adds skills from a public GitHub folder can
 read from a single URL. Two consequences worth knowing:
@@ -106,21 +100,25 @@ read from a single URL. Two consequences worth knowing:
 ```bash
 npm install
 npm run check:submissions   # validate metadata only, writes nothing
-npm run import:submissions  # generate the page(s) + bundle(s)
-npm run dev                 # preview at http://localhost:4321/industry-templates
-npm run build               # runs the same content validation as CI
+npm run build               # recreate public/bundles/
 ```
 
 ## What CI does
 
 On a pull request, [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 
-1. Imports your submission, failing with an itemised message if any required metadata is
-   missing or invalid.
-2. Generates `src/content/templates/<slug>.md`, `src/content/guides/<slug>.md` and
-   `public/bundles/<slug>.zip`.
-3. Builds the site.
+1. Validates every submission and fails with an itemised message if metadata or package layout
+   is invalid.
+2. Recreates `public/bundles/<slug>.zip` for every submission.
+3. Exercises the flattened catalog export and uploads the bundles as a workflow artifact.
 
-Merges to `main` deploy to GitHub Pages.
+Merges to `main` also refresh the generated `catalog` branch.
+
+## Evaluate a release candidate
+
+Before treating a plugin as publishable, follow the
+[Cowork evaluation workflow](docs/evaluation-workflow.md). It defines how to freeze the exact ZIP,
+run the manual Cowork task, archive the three required HTML reports, preserve failed runs, and
+complete the independent human-review gate.
 
 By contributing you agree your template is shared under the repository's [MIT license](LICENSE).

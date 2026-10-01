@@ -3,26 +3,21 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
-  "description": "A gallery of industry templates — ready-to-install agent plugins for Microsoft 365 Copilot Cowork, Copilot Studio, and Scout.",
+  "description": "Build ready-to-install industry template bundles for Microsoft 365 Copilot Cowork, Copilot Studio, and Scout.",
   "scripts": {
-    "dev": "astro dev",
-    "start": "astro dev",
-    "build": "astro build",
-    "preview": "astro preview",
-    "astro": "astro",
-    "import:submissions": "tsx scripts/import-submissions.ts",
-    "check:submissions": "tsx scripts/import-submissions.ts --check"
+    "build": "tsx scripts/import-submissions.ts",
+    "import:submissions": "npm run build",
+    "check:submissions": "tsx scripts/import-submissions.ts --check",
+    "evaluation:prepare": "tsx scripts/prepare-evaluation.ts",
+    "evaluation:archive": "tsx scripts/archive-evaluation.ts",
+    "evaluation:watch": "tsx scripts/watch-evaluation.ts",
+    "test:evaluation": "tsx --test scripts/evaluation-workflow.test.ts"
   },
-  "dependencies": {
-    "astro": "^7.1.0"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@tailwindcss/typography": "^0.5.16",
-    "@tailwindcss/vite": "^4.1.4",
     "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.10.0",
     "adm-zip": "^0.5.16",
-    "tailwindcss": "^4.1.4",
     "tsx": "^4.22.4"
   }
 }

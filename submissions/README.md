@@ -1,8 +1,7 @@
 # Submissions
 
-This folder is the **only** place a contributor edits. Everything the site publishes —
-`src/content/templates/`, `src/content/guides/` and `public/bundles/` — is generated from here
-by [`scripts/import-submissions.ts`](../scripts/import-submissions.ts).
+This folder is the **only** place a contributor edits. Every archive under `public/bundles/` is
+generated from here by [`scripts/import-submissions.ts`](../scripts/import-submissions.ts).
 
 Start by copying [`_template/`](_template) to `submissions/<industry>/<your-slug>/`. The industry folder must match `metadata.json`'s `industry` — the importer checks.
 
@@ -10,8 +9,8 @@ Start by copying [`_template/`](_template) to `submissions/<industry>/<your-slug
 
 ```
 submissions/<industry>/<slug>/
-├── metadata.json                  # catalog details — NEVER bundled
-├── README.md                      # the detail page's main content — NEVER bundled
+├── metadata.json                  # package metadata — NEVER bundled
+├── README.md                      # human-facing package documentation — NEVER bundled
 ├── tests/                         # test report, sample prompts — NEVER bundled
 ├── PACKAGE-NOTES.md               # engineering shorthand, optional — NEVER bundled
 │
@@ -34,8 +33,8 @@ submissions/<industry>/<slug>/
         └── templates/             # output document templates
 ```
 
-The `<slug>` is the folder name: lowercase, hyphenated, and it becomes the page URL
-(`quality-inspection` → `/templates/quality-inspection`).
+The `<slug>` is the folder name: lowercase and hyphenated. It also becomes the bundle filename
+(`quality-inspection` → `public/bundles/quality-inspection.zip`).
 
 ## What gets bundled
 
@@ -47,16 +46,15 @@ Everything else goes in verbatim — the bundle *is* the package the agent loads
 
 Bundles are **not** committed to the repository (`public/bundles/` is gitignored): zip entry
 metadata is platform-specific, so a Windows-built archive never matches a Linux-built one
-byte-for-byte. CI rebuilds them from your submission before every deploy. The generated pages
-under `src/content/` *are* committed, so a reviewer can see exactly what your submission will
-publish.
+byte-for-byte. CI rebuilds them from every submission and uploads the directory as a workflow
+artifact.
 
 ## `metadata.json`
 
 ```json
 {
   "name": "Quality Inspection & Nonconformance",
-  "description": "One human-friendly sentence — the card summary and the top of the page.",
+  "description": "One human-friendly sentence describing the package.",
   "industry": "Manufacturing",
   "platforms": ["Cowork"],
   "tags": ["quality", "inspection", "ncr"],
@@ -68,39 +66,21 @@ publish.
 }
 ```
 
-`name`, `description`, `industry`, `platforms`, `tags` and `author` are required. Everything else
-is optional or inferred:
-
-- `version` and `agentDescription` fall back to `.claude-plugin/plugin.json`.
-- `authorGithub` is derived from an `authorUrl` pointing at a GitHub profile.
-- `skills` is read from your `skills/*/SKILL.md` folders — never hand-write it.
-- `bundle` is set automatically.
-- `featured: true` pins the template to the top of the default sort. Use sparingly.
+`name`, `description`, `industry`, `platforms`, `tags` and `author` are required. `authorGithub`
+is derived from an `authorUrl` pointing at a GitHub profile when it is not supplied explicitly.
 
 `industry` must be one of the values in `INDUSTRIES` in
-[`src/lib/templates.ts`](../src/lib/templates.ts). Adding a new industry means adding it there
-plus a colour in `INDUSTRY_COLORS`; the gallery's filter row renders only industries that have at
-least one template.
-
-Don't put the industry in `tags` — it already has its own filter.
+[`scripts/import-submissions.ts`](../scripts/import-submissions.ts).
 
 ## `README.md`
 
-Your README becomes the detail page's main content, in your own voice. The
-**"Skills in this package"** list, the **Demo data** note, the **Install** steps and the **Test
-evidence** link are appended automatically from the real payload, so don't write those yourself —
-generated boilerplate can't drift from the files that actually ship.
-
-Write the part only you can write: who it's for, how the chain works, the one concrete case that
-shows why the template earns its place, what the user brings, and where the boundaries are.
-
-If you omit the README entirely, the page falls back to your catalog description plus that same
-generated boilerplate.
+Use the README to explain who the package is for, how the chain works, the concrete case that
+shows why it exists, what the user brings, and where the boundaries are. It is for reviewers and
+contributors and is not included in the bundle.
 
 ## Validate before you open the PR
 
 ```bash
 npm run check:submissions   # metadata only, writes nothing
-npm run import:submissions  # regenerate pages + bundles
-npm run dev                 # look at it
+npm run build               # recreate public/bundles/
 ```
