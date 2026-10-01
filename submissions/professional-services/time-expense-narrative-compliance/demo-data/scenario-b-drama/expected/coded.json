@@ -8,7 +8,7 @@
     "source": "connector:engagement-workspace",
     "confidence": 0.99,
     "citations": [
-      "engagement-letter-extract.md #billing-terms"
+      "raw/engagement-letter-extract.md #engagement"
     ]
   },
   "period": {
@@ -18,21 +18,49 @@
   "signal_config": {
     "config_version": "ps.time-expense-narrative-compliance.signal-sources.v1",
     "default_posture": "narrowest_range_that_still_works",
+    "purpose": "Limit activity grounding to engagement-scoped signals unless the firm explicitly enables broader sources.",
     "sources": {
       "calendar": {
         "enabled": true,
-        "scope": "engagement_calendar_only"
+        "scope": "engagement_calendar_only",
+        "content": "title_organizer_attendees_start_end_location_only",
+        "lookback_days_default": 7,
+        "requires_engagement_id": true
       },
       "document_activity": {
         "enabled": true,
-        "scope": "engagement_workspace_only"
+        "scope": "engagement_workspace_only",
+        "content": "file_name_activity_type_timestamp_duration_no_document_body",
+        "requires_engagement_workspace": true
       },
       "mailbox_content": {
         "enabled": false,
-        "scope": "off_by_default"
+        "scope": "off_by_default",
+        "content": "disabled",
+        "enablement_requires": [
+          "firm_policy_approval",
+          "matter_scope_filter",
+          "user_notice"
+        ]
+      },
+      "mailbox_metadata": {
+        "enabled": false,
+        "scope": "off_by_default",
+        "content": "sender_recipient_subject_timestamp_only_when_enabled",
+        "enablement_requires": [
+          "firm_policy_approval",
+          "matter_scope_filter",
+          "user_notice"
+        ]
       }
     },
-    "citation": "client-billing-guidelines.md #10.1"
+    "redaction": {
+      "default": "summarize_signals_before_drafting",
+      "store_raw_mail": false,
+      "store_document_body": false
+    },
+    "citation": "client-billing-guidelines.md #10.1",
+    "enforcement": "Every engine (activity_pull, narrative_draft, code_map, guideline_check, exception_report) applies this file via signal_policy.py; most restrictive of this file and the packet's signal_config wins; disabled or unknown sources are dropped and recorded in provenance.excluded_signals."
   },
   "guidelines": {
     "guidelines_id": "OCG-SYNTH-2026-09",
@@ -66,97 +94,21 @@
       "duration_hours": 1.5,
       "subject": "billing controls kickoff meeting",
       "purpose": "align implementation assumptions and next steps",
+      "deliverable": "Implementation Plan",
       "meeting_id": "MTG-ORION-201",
       "billable_signal": true,
+      "organizer": "Morgan Lee",
+      "attendees": [
+        "Orion team",
+        "Morgan Lee",
+        "Priya Shah",
+        "Jordan Kim"
+      ],
       "source": "connector:m365-calendar",
       "confidence": 0.96,
       "citations": [
         "raw/calendar-export.csv row 2",
-        "client-billing-guidelines.md #10.1"
-      ]
-    },
-    {
-      "activity_id": "B-DOC-001",
-      "person": "Morgan Lee",
-      "date": "2026-09-14",
-      "activity_class": "document_analysis",
-      "duration_hours": 1.7,
-      "subject": "integration design memo",
-      "purpose": "identify implementation questions for client decision",
-      "meeting_id": null,
-      "billable_signal": true,
-      "source": "connector:engagement-document-activity",
-      "confidence": 0.93,
-      "citations": [
-        "raw/document-activity-log.csv row 2",
-        "client-billing-guidelines.md #10.1"
-      ]
-    },
-    {
-      "activity_id": "B-DOC-002",
-      "person": "Morgan Lee",
-      "date": "2026-09-15",
-      "activity_class": "research",
-      "duration_hours": 1.1,
-      "subject": "security exceptions matrix",
-      "purpose": "prepare options for billing control implementation",
-      "meeting_id": null,
-      "billable_signal": true,
-      "source": "connector:engagement-document-activity",
-      "confidence": 0.92,
-      "citations": [
-        "raw/document-activity-log.csv row 3",
-        "client-billing-guidelines.md #10.1"
-      ]
-    },
-    {
-      "activity_id": "B-MAIL-001",
-      "person": "Morgan Lee",
-      "date": "2026-09-15",
-      "activity_class": "client_meeting",
-      "duration_hours": 0.6,
-      "subject": "client implementation questions",
-      "purpose": "respond to project-control questions",
-      "meeting_id": null,
-      "billable_signal": true,
-      "source": "connector:mailbox-metadata-disabled-demo",
-      "confidence": 0.76,
-      "citations": [
-        "raw/mailbox-summary.txt line 3",
-        "client-billing-guidelines.md #10.1"
-      ]
-    },
-    {
-      "activity_id": "B-DOC-003",
-      "person": "Morgan Lee",
-      "date": "2026-09-16",
-      "activity_class": "deliverable_drafting",
-      "duration_hours": 2.0,
-      "subject": "API mapping appendix",
-      "purpose": "document billing-system integration decisions",
-      "meeting_id": null,
-      "billable_signal": true,
-      "source": "connector:engagement-document-activity",
-      "confidence": 0.94,
-      "citations": [
-        "raw/document-activity-log.csv row 4",
-        "client-billing-guidelines.md #10.1"
-      ]
-    },
-    {
-      "activity_id": "B-DOC-004",
-      "person": "Morgan Lee",
-      "date": "2026-09-17",
-      "activity_class": "document_analysis",
-      "duration_hours": 1.0,
-      "subject": "migration worksheet",
-      "purpose": "validate billing-control assumptions",
-      "meeting_id": null,
-      "billable_signal": true,
-      "source": "connector:engagement-document-activity",
-      "confidence": 0.94,
-      "citations": [
-        "raw/document-activity-log.csv row 5",
+        "raw/engagement-workplan.csv row 2",
         "client-billing-guidelines.md #10.1"
       ]
     },
@@ -168,12 +120,21 @@
       "duration_hours": 1.5,
       "subject": "billing controls kickoff meeting",
       "purpose": "align implementation assumptions and next steps",
+      "deliverable": "Implementation Plan",
       "meeting_id": "MTG-ORION-201",
       "billable_signal": true,
+      "organizer": "Morgan Lee",
+      "attendees": [
+        "Orion team",
+        "Morgan Lee",
+        "Priya Shah",
+        "Jordan Kim"
+      ],
       "source": "connector:m365-calendar",
       "confidence": 0.96,
       "citations": [
         "raw/calendar-export.csv row 3",
+        "raw/engagement-workplan.csv row 2",
         "client-billing-guidelines.md #10.1"
       ]
     },
@@ -185,12 +146,21 @@
       "duration_hours": 1.5,
       "subject": "billing controls kickoff meeting",
       "purpose": "align implementation assumptions and next steps",
+      "deliverable": "Implementation Plan",
       "meeting_id": "MTG-ORION-201",
       "billable_signal": true,
+      "organizer": "Morgan Lee",
+      "attendees": [
+        "Orion team",
+        "Morgan Lee",
+        "Priya Shah",
+        "Jordan Kim"
+      ],
       "source": "connector:m365-calendar",
       "confidence": 0.96,
       "citations": [
         "raw/calendar-export.csv row 4",
+        "raw/engagement-workplan.csv row 2",
         "client-billing-guidelines.md #10.1"
       ]
     },
@@ -202,13 +172,101 @@
       "duration_hours": 0.3,
       "subject": "internal staffing coverage call",
       "purpose": "coordinate team availability",
+      "deliverable": null,
       "meeting_id": "INT-STAFF-7",
       "billable_signal": false,
+      "organizer": "staffing lead",
+      "attendees": [
+        "Morgan Lee",
+        "staffing lead"
+      ],
       "source": "connector:m365-calendar",
-      "confidence": 0.97,
+      "confidence": 0.96,
       "citations": [
         "raw/calendar-export.csv row 5",
+        "raw/engagement-workplan.csv row 7",
+        "client-billing-guidelines.md #10.1",
         "client-billing-guidelines.md #5.1"
+      ]
+    },
+    {
+      "activity_id": "B-DOC-001",
+      "person": "Morgan Lee",
+      "date": "2026-09-14",
+      "activity_class": "document_analysis",
+      "duration_hours": 1.7,
+      "subject": "integration design memo",
+      "purpose": "identify implementation questions for client decision",
+      "deliverable": "Integration Design",
+      "meeting_id": null,
+      "billable_signal": true,
+      "file_name": "integration-design-memo.docx",
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.94,
+      "citations": [
+        "raw/document-activity-log.csv row 2",
+        "raw/engagement-workplan.csv row 3",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-DOC-002",
+      "person": "Morgan Lee",
+      "date": "2026-09-15",
+      "activity_class": "research",
+      "duration_hours": 1.1,
+      "subject": "security exceptions matrix",
+      "purpose": "prepare options for billing control implementation",
+      "deliverable": "Security Exceptions Options Paper",
+      "meeting_id": null,
+      "billable_signal": true,
+      "file_name": "security-exceptions-matrix.xlsx",
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.94,
+      "citations": [
+        "raw/document-activity-log.csv row 3",
+        "raw/engagement-workplan.csv row 4",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-DOC-003",
+      "person": "Morgan Lee",
+      "date": "2026-09-16",
+      "activity_class": "deliverable_drafting",
+      "duration_hours": 2.0,
+      "subject": "api mapping appendix",
+      "purpose": "document billing-system integration decisions",
+      "deliverable": "Integration Design",
+      "meeting_id": null,
+      "billable_signal": true,
+      "file_name": "api-mapping-appendix.docx",
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.94,
+      "citations": [
+        "raw/document-activity-log.csv row 4",
+        "raw/engagement-workplan.csv row 5",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "B-DOC-004",
+      "person": "Morgan Lee",
+      "date": "2026-09-17",
+      "activity_class": "document_analysis",
+      "duration_hours": 1.0,
+      "subject": "migration worksheet",
+      "purpose": "validate billing-control assumptions",
+      "deliverable": "Migration Plan",
+      "meeting_id": null,
+      "billable_signal": true,
+      "file_name": "migration-worksheet.xlsx",
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.94,
+      "citations": [
+        "raw/document-activity-log.csv row 5",
+        "raw/engagement-workplan.csv row 6",
+        "client-billing-guidelines.md #10.1"
       ]
     }
   ],
@@ -222,29 +280,33 @@
       "activity_ids": [
         "B-CAL-001",
         "B-DOC-001",
-        "B-DOC-002",
-        "B-MAIL-001"
+        "B-DOC-002"
       ],
       "submitted_phase_code": "DL",
       "submitted_task_code": "DL300",
       "source": "connector:timesheet",
-      "confidence": 0.96,
+      "confidence": 0.97,
       "citations": [
         "raw/timesheet.csv row 2"
+      ],
+      "excluded_activity_ids": [
+        "B-MAIL-001"
       ],
       "draft": {
         "narrative": "Attention to various matters, including kickoff meeting, review and revise integration memo, follow up on security exceptions, and work on client implementation questions.",
         "status": "existing_timesheet_narrative",
+        "needs_review": true,
+        "review_reasons": [
+          "linked signal(s) from a disabled or unresolvable source were excluded from evidence: B-MAIL-001 (client-billing-guidelines.md #10.1)"
+        ],
         "word_count": 23,
-        "required_elements": {
-          "actor": true,
-          "subject": true,
-          "purpose": true
-        },
+        "sufficiency": "determined_by_guideline_check (client-billing-guidelines.md #1.3)",
         "linked_activity_ids": [
           "B-CAL-001",
           "B-DOC-001",
-          "B-DOC-002",
+          "B-DOC-002"
+        ],
+        "excluded_activity_ids": [
           "B-MAIL-001"
         ],
         "confidence": 0.94,
@@ -254,21 +316,82 @@
           "raw/calendar-export.csv row 2",
           "raw/document-activity-log.csv row 2",
           "raw/document-activity-log.csv row 3",
-          "raw/mailbox-summary.txt line 3"
+          "raw/engagement-workplan.csv row 2",
+          "raw/engagement-workplan.csv row 3",
+          "raw/engagement-workplan.csv row 4"
+        ],
+        "suggested_rewrites": [
+          {
+            "narrative": "Led billing controls kickoff meeting with Orion team, Priya Shah and Jordan Kim to align implementation assumptions and next steps for the Implementation Plan.",
+            "status": "engine_generated_from_activity",
+            "review_reasons": [],
+            "linked_activity_ids": [
+              "B-CAL-001"
+            ],
+            "confidence": 0.9,
+            "source": "engine:narrative_draft",
+            "citations": [
+              "client-billing-guidelines.md #10.1",
+              "raw/calendar-export.csv row 2",
+              "raw/engagement-workplan.csv row 2"
+            ]
+          },
+          {
+            "narrative": "Analyzed integration design memo to identify implementation questions for client decision for the Integration Design.",
+            "status": "engine_generated_from_activity",
+            "review_reasons": [],
+            "linked_activity_ids": [
+              "B-DOC-001"
+            ],
+            "confidence": 0.9,
+            "source": "engine:narrative_draft",
+            "citations": [
+              "client-billing-guidelines.md #10.1",
+              "raw/document-activity-log.csv row 2",
+              "raw/engagement-workplan.csv row 3"
+            ]
+          },
+          {
+            "narrative": "Researched security exceptions matrix to prepare options for billing control implementation for the Security Exceptions Options Paper.",
+            "status": "engine_generated_from_activity",
+            "review_reasons": [],
+            "linked_activity_ids": [
+              "B-DOC-002"
+            ],
+            "confidence": 0.9,
+            "source": "engine:narrative_draft",
+            "citations": [
+              "client-billing-guidelines.md #10.1",
+              "raw/document-activity-log.csv row 3",
+              "raw/engagement-workplan.csv row 4"
+            ]
+          }
         ]
       },
       "code_mapping": {
-        "recommended_phase_code": "DL",
-        "recommended_task_code": "DL300",
-        "recommended_label": "Client meeting or working session",
+        "recommended_phase_code": "UNMAPPED",
+        "recommended_task_code": "UNMAPPED",
+        "recommended_label": "Unknown or conflicting activity",
         "submitted_phase_code": "DL",
         "submitted_task_code": "DL300",
-        "basis": "direct_activity_class",
-        "flags": [],
-        "confidence": 0.92,
+        "basis": "conflicting_activity_classes",
+        "flags": [
+          {
+            "flag": "unmapped_code",
+            "detail": "linked signals point to different codes (client_meeting->DL300, document_analysis->AN200, research->AN220); no code is recommended; submitted DL300 cannot be confirmed",
+            "severity": "hold_for_review",
+            "source": "engine:code_map",
+            "confidence": 0.4,
+            "citations": [
+              "task-phase-codes.md #5.3",
+              "client-billing-guidelines.md #4.1"
+            ]
+          }
+        ],
+        "confidence": 0.4,
         "source": "engine:code_map",
         "citations": [
-          "task-phase-codes.md #3.1"
+          "task-phase-codes.md #5.3"
         ]
       }
     },
@@ -284,27 +407,44 @@
       "submitted_phase_code": "DL",
       "submitted_task_code": "DL300",
       "source": "connector:timesheet",
-      "confidence": 0.96,
+      "confidence": 0.97,
       "citations": [
         "raw/timesheet.csv row 3"
       ],
       "draft": {
         "narrative": "Attended billing controls kickoff meeting with client team to discuss implementation assumptions and next steps.",
         "status": "existing_timesheet_narrative",
+        "needs_review": false,
+        "review_reasons": [],
         "word_count": 15,
-        "required_elements": {
-          "actor": true,
-          "subject": true,
-          "purpose": true
-        },
+        "sufficiency": "determined_by_guideline_check (client-billing-guidelines.md #1.3)",
         "linked_activity_ids": [
           "B-CAL-002"
         ],
+        "excluded_activity_ids": [],
         "confidence": 0.94,
         "source": "engine:narrative_draft",
         "citations": [
           "client-billing-guidelines.md #10.1",
-          "raw/calendar-export.csv row 3"
+          "raw/calendar-export.csv row 3",
+          "raw/engagement-workplan.csv row 2"
+        ],
+        "suggested_rewrites": [
+          {
+            "narrative": "Attended billing controls kickoff meeting with Orion team, Morgan Lee and Jordan Kim to align implementation assumptions and next steps for the Implementation Plan.",
+            "status": "engine_generated_from_activity",
+            "review_reasons": [],
+            "linked_activity_ids": [
+              "B-CAL-002"
+            ],
+            "confidence": 0.9,
+            "source": "engine:narrative_draft",
+            "citations": [
+              "client-billing-guidelines.md #10.1",
+              "raw/calendar-export.csv row 3",
+              "raw/engagement-workplan.csv row 2"
+            ]
+          }
         ]
       },
       "code_mapping": {
@@ -334,27 +474,44 @@
       "submitted_phase_code": "AN",
       "submitted_task_code": "AN220",
       "source": "connector:timesheet",
-      "confidence": 0.96,
+      "confidence": 0.97,
       "citations": [
         "raw/timesheet.csv row 4"
       ],
       "draft": {
         "narrative": "Attended billing controls kickoff meeting with client team to discuss implementation assumptions and next steps.",
         "status": "existing_timesheet_narrative",
+        "needs_review": false,
+        "review_reasons": [],
         "word_count": 15,
-        "required_elements": {
-          "actor": true,
-          "subject": true,
-          "purpose": true
-        },
+        "sufficiency": "determined_by_guideline_check (client-billing-guidelines.md #1.3)",
         "linked_activity_ids": [
           "B-CAL-003"
         ],
+        "excluded_activity_ids": [],
         "confidence": 0.94,
         "source": "engine:narrative_draft",
         "citations": [
           "client-billing-guidelines.md #10.1",
-          "raw/calendar-export.csv row 4"
+          "raw/calendar-export.csv row 4",
+          "raw/engagement-workplan.csv row 2"
+        ],
+        "suggested_rewrites": [
+          {
+            "narrative": "Attended billing controls kickoff meeting with Orion team, Morgan Lee and Priya Shah to align implementation assumptions and next steps for the Implementation Plan.",
+            "status": "engine_generated_from_activity",
+            "review_reasons": [],
+            "linked_activity_ids": [
+              "B-CAL-003"
+            ],
+            "confidence": 0.9,
+            "source": "engine:narrative_draft",
+            "citations": [
+              "client-billing-guidelines.md #10.1",
+              "raw/calendar-export.csv row 4",
+              "raw/engagement-workplan.csv row 2"
+            ]
+          }
         ]
       },
       "code_mapping": {
@@ -397,27 +554,46 @@
       "submitted_phase_code": "NB",
       "submitted_task_code": "NB900",
       "source": "connector:timesheet",
-      "confidence": 0.96,
+      "confidence": 0.97,
       "citations": [
         "raw/timesheet.csv row 5"
       ],
       "draft": {
         "narrative": "Coordinated internal staffing coverage for next week.",
         "status": "existing_timesheet_narrative",
+        "needs_review": false,
+        "review_reasons": [],
         "word_count": 7,
-        "required_elements": {
-          "actor": true,
-          "subject": true,
-          "purpose": true
-        },
+        "sufficiency": "determined_by_guideline_check (client-billing-guidelines.md #1.3)",
         "linked_activity_ids": [
           "B-CAL-004"
         ],
+        "excluded_activity_ids": [],
         "confidence": 0.94,
         "source": "engine:narrative_draft",
         "citations": [
+          "client-billing-guidelines.md #10.1",
           "client-billing-guidelines.md #5.1",
-          "raw/calendar-export.csv row 5"
+          "raw/calendar-export.csv row 5",
+          "raw/engagement-workplan.csv row 7"
+        ],
+        "suggested_rewrites": [
+          {
+            "narrative": "Coordinated internal staffing coverage call with staffing lead to coordinate team availability.",
+            "status": "engine_generated_from_activity",
+            "review_reasons": [],
+            "linked_activity_ids": [
+              "B-CAL-004"
+            ],
+            "confidence": 0.9,
+            "source": "engine:narrative_draft",
+            "citations": [
+              "client-billing-guidelines.md #10.1",
+              "client-billing-guidelines.md #5.1",
+              "raw/calendar-export.csv row 5",
+              "raw/engagement-workplan.csv row 7"
+            ]
+          }
         ]
       },
       "code_mapping": {
@@ -440,8 +616,68 @@
     "demo_scenario": "scenario-b-drama",
     "generated_at": "2026-09-23T00:00:00Z",
     "engines": [
-      "narrative_draft/1.0",
-      "code_map/1.0"
-    ]
+      "activity_pull/1.0.2",
+      "narrative_draft/1.0.2",
+      "code_map/1.0.2"
+    ],
+    "sources_read": [
+      "calendar",
+      "document_activity"
+    ],
+    "skipped_sources": [
+      {
+        "policy_key": "mailbox_metadata",
+        "file": "raw/mailbox-summary.txt",
+        "reason": "source disabled; file not opened",
+        "citations": [
+          "client-billing-guidelines.md #10.1"
+        ]
+      },
+      {
+        "policy_key": "mailbox_content",
+        "file": "raw/mailbox-summary.txt",
+        "reason": "source disabled; file not opened",
+        "citations": [
+          "client-billing-guidelines.md #10.1"
+        ]
+      }
+    ],
+    "out_of_scope_rows": [],
+    "excluded_signals": [
+      {
+        "activity_id": "B-MAIL-001",
+        "source": null,
+        "policy_key": "mailbox_metadata",
+        "reason": "linked from TE-B-001 (raw/timesheet.csv row 2); the ID belongs to the 'mailbox_metadata' source, which is disabled in config/signal-sources.json, so that source was not read and the link is not evidence",
+        "excluded_by": "engine:activity_pull",
+        "citations": [
+          "raw/timesheet.csv row 2",
+          "client-billing-guidelines.md #10.1"
+        ]
+      }
+    ],
+    "timekeeper_scope": {
+      "mode": "all_timekeepers",
+      "people": null
+    },
+    "signal_policy": {
+      "enabled_sources": [
+        "calendar",
+        "document_activity"
+      ],
+      "disabled_sources": [
+        "mailbox_content",
+        "mailbox_metadata"
+      ],
+      "policies_applied": [
+        "config/signal-sources.json",
+        "packet signal_config"
+      ],
+      "rule": "most_restrictive_wins",
+      "engine": "signal_policy/1.0.2",
+      "citations": [
+        "client-billing-guidelines.md #10.1"
+      ]
+    }
   }
 }

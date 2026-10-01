@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "ps.time-expense-narrative-compliance.v1",
   "title": "Time & Expense Narrative Compliance contract v1",
-  "description": "Chains activity-pull -> narrative-draft -> code-map -> guideline-check (Govern) -> exception-report. Every hop carries data, confidence, provenance and citations.",
+  "description": "Chains activity-pull -> narrative-draft -> code-map -> guideline-check (Govern) -> exception-report. Every hop carries data, confidence, provenance and citations. v1.0.2 remains backward compatible: existing narratives stay unchanged while optional suggested_rewrites are separately labeled; purpose may be null; optional organizer, attendees, deliverable, excluded_activity_ids and provenance.excluded_signals / signal_policy record signal-privacy exclusions (client-billing-guidelines.md #10.1).",
   "type": "object",
   "required": [
     "contract_version",
@@ -100,7 +100,11 @@
             "type": "string"
           },
           "purpose": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Client-facing purpose from a controlled source (engagement workplan); null when none is recorded - never invented."
           },
           "meeting_id": {
             "type": [
@@ -123,6 +127,25 @@
             "items": {
               "type": "string"
             }
+          },
+          "organizer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Meeting organizer from calendar metadata; drives Led vs Attended."
+          },
+          "attendees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deliverable": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }
@@ -195,6 +218,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "excluded_activity_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Links removed because the signal came from a disabled, unknown or unresolvable source (client-billing-guidelines.md #10.1)."
           }
         }
       }
@@ -234,6 +264,58 @@
         },
         "demo_scenario": {
           "type": "string"
+        },
+        "excluded_signals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "activity_id",
+              "reason",
+              "citations"
+            ],
+            "properties": {
+              "activity_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "policy_key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "excluded_by": {
+                "type": "string"
+              },
+              "citations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "signal_policy": {
+          "type": "object"
+        },
+        "skipped_sources": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         }
       }
     }

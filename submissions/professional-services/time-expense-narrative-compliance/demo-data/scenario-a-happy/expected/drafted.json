@@ -8,7 +8,7 @@
     "source": "connector:engagement-workspace",
     "confidence": 0.99,
     "citations": [
-      "engagement-letter-extract.md #billing-terms"
+      "raw/engagement-letter-extract.md #engagement"
     ]
   },
   "period": {
@@ -18,21 +18,49 @@
   "signal_config": {
     "config_version": "ps.time-expense-narrative-compliance.signal-sources.v1",
     "default_posture": "narrowest_range_that_still_works",
+    "purpose": "Limit activity grounding to engagement-scoped signals unless the firm explicitly enables broader sources.",
     "sources": {
       "calendar": {
         "enabled": true,
-        "scope": "engagement_calendar_only"
+        "scope": "engagement_calendar_only",
+        "content": "title_organizer_attendees_start_end_location_only",
+        "lookback_days_default": 7,
+        "requires_engagement_id": true
       },
       "document_activity": {
         "enabled": true,
-        "scope": "engagement_workspace_only"
+        "scope": "engagement_workspace_only",
+        "content": "file_name_activity_type_timestamp_duration_no_document_body",
+        "requires_engagement_workspace": true
       },
       "mailbox_content": {
         "enabled": false,
-        "scope": "off_by_default"
+        "scope": "off_by_default",
+        "content": "disabled",
+        "enablement_requires": [
+          "firm_policy_approval",
+          "matter_scope_filter",
+          "user_notice"
+        ]
+      },
+      "mailbox_metadata": {
+        "enabled": false,
+        "scope": "off_by_default",
+        "content": "sender_recipient_subject_timestamp_only_when_enabled",
+        "enablement_requires": [
+          "firm_policy_approval",
+          "matter_scope_filter",
+          "user_notice"
+        ]
       }
     },
-    "citation": "client-billing-guidelines.md #10.1"
+    "redaction": {
+      "default": "summarize_signals_before_drafting",
+      "store_raw_mail": false,
+      "store_document_body": false
+    },
+    "citation": "client-billing-guidelines.md #10.1",
+    "enforcement": "Every engine (activity_pull, narrative_draft, code_map, guideline_check, exception_report) applies this file via signal_policy.py; most restrictive of this file and the packet's signal_config wins; disabled or unknown sources are dropped and recorded in provenance.excluded_signals."
   },
   "guidelines": {
     "guidelines_id": "OCG-SYNTH-2026-09",
@@ -66,12 +94,19 @@
       "duration_hours": 1.2,
       "subject": "billing workflow discovery session",
       "purpose": "confirm implementation requirements",
+      "deliverable": "Billing Workflow Requirements Specification",
       "meeting_id": "MTG-ORION-101",
       "billable_signal": true,
+      "organizer": "Orion product lead",
+      "attendees": [
+        "Orion product lead",
+        "Alex Rivera"
+      ],
       "source": "connector:m365-calendar",
       "confidence": 0.96,
       "citations": [
         "raw/calendar-export.csv row 2",
+        "raw/engagement-workplan.csv row 2",
         "client-billing-guidelines.md #10.1"
       ]
     },
@@ -83,12 +118,15 @@
       "duration_hours": 1.4,
       "subject": "service catalog draft",
       "purpose": "identify billing workflow requirements",
+      "deliverable": "Billing Workflow Requirements Specification",
       "meeting_id": null,
       "billable_signal": true,
+      "file_name": "service-catalog-draft.docx",
       "source": "connector:engagement-document-activity",
       "confidence": 0.94,
       "citations": [
         "raw/document-activity-log.csv row 2",
+        "raw/engagement-workplan.csv row 3",
         "client-billing-guidelines.md #10.1"
       ]
     },
@@ -100,12 +138,15 @@
       "duration_hours": 0.8,
       "subject": "implementation decision log",
       "purpose": "summarize approved billing workflow assumptions",
+      "deliverable": "Implementation Decision Record",
       "meeting_id": null,
       "billable_signal": true,
+      "file_name": "implementation-decision-log.docx",
       "source": "connector:engagement-document-activity",
-      "confidence": 0.95,
+      "confidence": 0.94,
       "citations": [
         "raw/document-activity-log.csv row 3",
+        "raw/engagement-workplan.csv row 4",
         "client-billing-guidelines.md #10.1"
       ]
     }
@@ -128,22 +169,22 @@
         "raw/timesheet.csv row 2"
       ],
       "draft": {
-        "narrative": "Led billing workflow discovery session for confirm implementation requirements with cited engagement activity support.",
+        "narrative": "Attended billing workflow discovery session with Orion product lead to confirm implementation requirements for the Billing Workflow Requirements Specification.",
         "status": "engine_generated_from_activity",
-        "word_count": 14,
-        "required_elements": {
-          "actor": true,
-          "subject": true,
-          "purpose": true
-        },
+        "needs_review": false,
+        "review_reasons": [],
+        "word_count": 19,
+        "sufficiency": "determined_by_guideline_check (client-billing-guidelines.md #1.3)",
         "linked_activity_ids": [
           "A-CAL-001"
         ],
+        "excluded_activity_ids": [],
         "confidence": 0.9,
         "source": "engine:narrative_draft",
         "citations": [
           "client-billing-guidelines.md #10.1",
-          "raw/calendar-export.csv row 2"
+          "raw/calendar-export.csv row 2",
+          "raw/engagement-workplan.csv row 2"
         ]
       }
     },
@@ -164,22 +205,22 @@
         "raw/timesheet.csv row 3"
       ],
       "draft": {
-        "narrative": "Analyzed service catalog draft for identify billing workflow requirements with cited engagement activity support.",
+        "narrative": "Analyzed service catalog draft to identify billing workflow requirements for the Billing Workflow Requirements Specification.",
         "status": "engine_generated_from_activity",
-        "word_count": 14,
-        "required_elements": {
-          "actor": true,
-          "subject": true,
-          "purpose": true
-        },
+        "needs_review": false,
+        "review_reasons": [],
+        "word_count": 15,
+        "sufficiency": "determined_by_guideline_check (client-billing-guidelines.md #1.3)",
         "linked_activity_ids": [
           "A-DOC-001"
         ],
+        "excluded_activity_ids": [],
         "confidence": 0.9,
         "source": "engine:narrative_draft",
         "citations": [
           "client-billing-guidelines.md #10.1",
-          "raw/document-activity-log.csv row 2"
+          "raw/document-activity-log.csv row 2",
+          "raw/engagement-workplan.csv row 3"
         ]
       }
     },
@@ -200,22 +241,22 @@
         "raw/timesheet.csv row 4"
       ],
       "draft": {
-        "narrative": "Drafted implementation decision log for summarize approved billing workflow assumptions with cited engagement activity support.",
+        "narrative": "Drafted implementation decision log to summarize approved billing workflow assumptions for the Implementation Decision Record.",
         "status": "engine_generated_from_activity",
+        "needs_review": false,
+        "review_reasons": [],
         "word_count": 15,
-        "required_elements": {
-          "actor": true,
-          "subject": true,
-          "purpose": true
-        },
+        "sufficiency": "determined_by_guideline_check (client-billing-guidelines.md #1.3)",
         "linked_activity_ids": [
           "A-DOC-002"
         ],
+        "excluded_activity_ids": [],
         "confidence": 0.9,
         "source": "engine:narrative_draft",
         "citations": [
           "client-billing-guidelines.md #10.1",
-          "raw/document-activity-log.csv row 3"
+          "raw/document-activity-log.csv row 3",
+          "raw/engagement-workplan.csv row 4"
         ]
       }
     }
@@ -224,7 +265,57 @@
     "demo_scenario": "scenario-a-happy",
     "generated_at": "2026-09-23T00:00:00Z",
     "engines": [
-      "narrative_draft/1.0"
-    ]
+      "activity_pull/1.0.2",
+      "narrative_draft/1.0.2"
+    ],
+    "sources_read": [
+      "calendar",
+      "document_activity"
+    ],
+    "skipped_sources": [
+      {
+        "policy_key": "mailbox_metadata",
+        "file": "raw/mailbox-summary.txt",
+        "reason": "source disabled; file not opened",
+        "citations": [
+          "client-billing-guidelines.md #10.1"
+        ]
+      },
+      {
+        "policy_key": "mailbox_content",
+        "file": "raw/mailbox-summary.txt",
+        "reason": "source disabled; file not opened",
+        "citations": [
+          "client-billing-guidelines.md #10.1"
+        ]
+      }
+    ],
+    "out_of_scope_rows": [],
+    "excluded_signals": [],
+    "timekeeper_scope": {
+      "mode": "named",
+      "people": [
+        "Alex Rivera"
+      ]
+    },
+    "signal_policy": {
+      "enabled_sources": [
+        "calendar",
+        "document_activity"
+      ],
+      "disabled_sources": [
+        "mailbox_content",
+        "mailbox_metadata"
+      ],
+      "policies_applied": [
+        "config/signal-sources.json",
+        "packet signal_config"
+      ],
+      "rule": "most_restrictive_wins",
+      "engine": "signal_policy/1.0.2",
+      "citations": [
+        "client-billing-guidelines.md #10.1"
+      ]
+    }
   }
 }
