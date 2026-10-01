@@ -3,7 +3,7 @@ name: assertion-map
 description: "Maps deliverable assertions to the support pack with deterministic assertion_map. Use when the user asks \"what is not substantiated?\", \"check the claims\", \"trace this saving\", \"which assertions lack evidence?\" or \"map assertions to evidence\". Do NOT use to ingest documents (use deliverable-ingest), choose criteria (use criteria-retrieve), make gate findings or review status (use gate-check), or draft the partner packet (use review-packet). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or generic citation search outside this plugin."
 license: Proprietary
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
   author: Microsoft Professional Services Skills
   category: analysis
 ---

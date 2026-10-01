@@ -3,7 +3,7 @@ name: criteria-retrieve
 description: "Retrieves the applicable QRM quality framework, gate criteria, required language, brand rules and prior-review findings. Use when the user asks \"which checklist applies?\", \"retrieve the gate criteria\", \"what disclaimer is required?\", \"what did QRM ask us to fix?\" or \"load the review rules\". Do NOT use to ingest documents (use deliverable-ingest), map evidence (use assertion-map), determine findings (use gate-check), or draft the review packet (use review-packet). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or generic policy search outside this plugin."
 license: Proprietary
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
   author: Microsoft Professional Services Skills
   category: analysis
 ---

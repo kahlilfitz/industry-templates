@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 
 ENGINE = "engine:assertion_map"
-ENGINE_VERSION = "1.0.2"
+ENGINE_VERSION = "1.0.3"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 EVIDENCE_CONFIDENCE_FLOOR = 0.70  # severity-rules.md #2.2
 QUANTIFIED_CONFIDENCE_FLOOR = 0.80  # severity-rules.md #2.3; quality-gate-criteria.md #1.2
@@ -215,6 +215,9 @@ def main():
         return 0
     except InputError as exc:
         print(f"assertion_map input error: {exc}", file=sys.stderr)
+        return 1
+    except (KeyError, TypeError, AttributeError, ValueError, IndexError) as exc:
+        print(f"assertion_map input error: malformed input ({type(exc).__name__}: {exc})", file=sys.stderr)
         return 1
 
 if __name__ == "__main__":

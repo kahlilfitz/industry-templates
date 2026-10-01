@@ -18,6 +18,8 @@ Engines compute; the model drafts. Evidence-support verdicts, gate pass/fail, se
 
 Version 1.0.2 closes the v1.0.1 automated-evaluation blockers: review packets no longer append raw contract payloads or accept unconfirmed external routing, assertion mapping selects best evidence by relevance and cites every linked evidence item, definitive unsupported conclusions become release blockers, scope alignment and missing registers hold deterministically, and gate locations come from the deliverable payload instead of hard-coded defaults.
 
+Version 1.0.3 closes the v1.0.2 automated-evaluation blockers. Null or absent registers and any client-data value other than `ok` now hold and escalate. The G8 tripwire folds Cyrillic/Greek look-alikes, catches reviewer- and assistant-addressed paraphrases, scans evidence citations, ignores ordinary "pre-approved" business prose and cannot be suppressed by upstream findings that reuse engine IDs. severity_rank returns a clean error for non-numeric page labels. The review packet is headed `DRAFT - HUMAN REVIEW REQUIRED`.
+
 ## The case that shows why it exists
 
 In the second demo scenario, the deliverable looks excellent. It is polished, branded, client-confidential, and has a disclaimer. A skim review would likely move it forward.

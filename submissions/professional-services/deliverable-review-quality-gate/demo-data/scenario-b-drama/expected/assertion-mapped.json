@@ -263,7 +263,7 @@
   "provenance": {
     "generated_at": "2026-10-01T00:00:00Z",
     "engines": [
-      "assertion_map/1.0.2"
+      "assertion_map/1.0.3"
     ],
     "demo_scenario": "scenario-b-drama"
   },

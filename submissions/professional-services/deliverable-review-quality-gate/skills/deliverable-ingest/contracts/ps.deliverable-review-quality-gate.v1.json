@@ -20,13 +20,13 @@
         "intended_recipients": { "type": "array", "items": { "type": "string" } },
         "third_party_recipient_named": { "type": "boolean" },
         "confidentiality_marking": { "type": "string" },
-        "client_data_handling": { "enum": ["ok", "attention", "breach", "unknown"], "default": "unknown", "description": "Set by deliverable-ingest from the source/client-data register; use unknown when the register cannot confirm safe handling. Missing is not equivalent to ok." },
+        "client_data_handling": { "enum": ["ok", "attention", "breach", "unknown"], "default": "unknown", "description": "Set by deliverable-ingest from the source/client-data register; use unknown when the register cannot confirm safe handling. Missing is not equivalent to ok. Only ok is clean; attention is a G4 must-fix; breach, unknown, blank, null or any unrecognised value is a G4 release blocker; every non-ok value is escalated." },
         "required_disclaimer_type": { "enum": ["general_advice", "reliance_restriction"] },
         "present_disclaimer_types": { "type": "array", "items": { "type": "string" } },
-        "required_language": { "type": "array", "items": { "type": "string" } },
+        "required_language": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error." },
         "present_language": { "type": "array", "items": { "type": "string" } },
-        "brand_checks": { "type": "array", "items": { "type": "object" } },
-        "licensed_content": { "type": "array", "items": { "type": "object" } },
+        "brand_checks": { "type": ["array", "null"], "items": { "type": "object" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error." },
+        "licensed_content": { "type": ["array", "null"], "items": { "type": "object" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error." },
         "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
         "citation": { "type": "string" },
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
@@ -56,8 +56,8 @@
         }
       }
     },
-    "evidence_set": { "type": "array", "items": { "type": "object" } },
-    "prior_findings": { "type": "array", "items": { "type": "object" } },
+    "evidence_set": { "type": ["array", "null"], "items": { "type": "object" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error. Every string, including citation, is scanned by the G8 tripwire." },
+    "prior_findings": { "type": ["array", "null"], "items": { "type": "object" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error." },
     "assertion_mappings": { "type": "array", "items": { "type": "object" } },
     "gate_results": { "type": "array", "items": { "type": "object" } },
     "findings": {
@@ -66,7 +66,7 @@
         "type": "object",
         "required": ["finding_id", "gate_id", "severity", "location", "criteria_section", "confidence", "source", "citation"],
         "properties": {
-          "finding_id": { "type": "string" },
+          "finding_id": { "type": "string", "description": "Prefixes GC- (gate_check) and AM- (assertion_map, source engine:assertion_map) are engine-owned. Upstream findings that reuse them are ignored and raise a G8 spoof hold; a duplicate finding_id never lowers severity." },
           "gate_id": { "type": "string" },
           "severity": { "enum": ["release_blocker", "must_fix", "advisory"] },
           "title": { "type": "string" },
@@ -90,8 +90,8 @@
       "required": ["section", "page", "paragraph"],
       "properties": {
         "section": { "type": "string" },
-        "page": { "type": "integer" },
-        "paragraph": { "type": "integer" },
+        "page": { "type": ["integer", "null"], "description": "Physical page number. Null only for register-level findings with no page (for example a register that was not supplied). Printed labels such as roman numerals go in label; any other type is an input error." },
+        "paragraph": { "type": ["integer", "null"], "description": "Paragraph number on the page; null only for register-level findings." },
         "label": { "type": "string" }
       }
     }

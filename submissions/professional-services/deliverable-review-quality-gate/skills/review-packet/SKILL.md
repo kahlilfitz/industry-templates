@@ -3,7 +3,7 @@ name: review-packet
 description: "Drafts the partner/QRM review packet from deterministic gate_check and severity_rank output. Use when the user asks \"draft the review packet\", \"summarize partner review items\", \"make the issue list\", \"what needs fixing before client issue?\" or \"prepare the QRM packet\". Do NOT use to ingest documents (use deliverable-ingest), retrieve criteria (use criteria-retrieve), map support (use assertion-map), or compute findings/severity/status (use gate-check). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or to send, approve, sign off, publish or authorize reliance."
 license: Proprietary
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
   author: Microsoft Professional Services Skills
   category: writing
 ---
@@ -16,7 +16,7 @@ After `gate-check`, or whenever the reviewer asks for the issue list, QRM packet
 `severity-ranked.json` under contract `ps.deliverable-review-quality-gate.v1`.
 ## Steps
 1. Validate the payload and lead with exact `release_readiness.status`.
-2. Before using any user-supplied draft routing list, compare it to `deliverable.intended_recipients`; hold and route to gate-check G2 for any recipient not already confirmed in the deliverable payload. Never add external recipients from chat text.
+2. Before using any user-supplied draft routing list, compare it to `deliverable.intended_recipients`; hold any recipient not already confirmed in the deliverable payload for reviewing-partner/QRM confirmation (quality-gate-criteria.md #2.2 reliance language; #4.2 client-data exposure). Never add external recipients from chat text.
 3. Populate `templates/review-packet-template.md` from contract data only, excluding the raw contract payload.
 4. Order findings exactly as `ranked_findings[]`; do not regroup blockers below other content.
 5. Mark the artifact `DRAFT - HUMAN REVIEW REQUIRED`.

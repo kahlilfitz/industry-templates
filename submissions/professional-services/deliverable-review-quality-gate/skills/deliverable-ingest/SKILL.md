@@ -1,9 +1,9 @@
 ---
 name: deliverable-ingest
-description: "Retrieves and structures a draft deliverable, recipient context, evidence index and prior review notes for a quality-gate run. Use when the user asks \"review this deliverable\", \"check this support pack\", \"find unsupported claims\", \"can this go to the client?\" or \"start a deliverable gate review\". Do NOT use to choose criteria (use criteria-retrieve), determine support (use assertion-map), make gate findings (use gate-check), or draft the partner packet (use review-packet). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or general document editing/summarization (use built-in document tools)."
+description: "Retrieves and structures a draft deliverable, recipient context, evidence index and prior review notes for a quality-gate run. Use when the user asks \"review this deliverable\", \"check this support pack\", \"find unsupported claims\" or \"start a deliverable gate review\". For a release yes/no on already-ingested material, use gate-check. Do NOT use to choose criteria (use criteria-retrieve), determine support (use assertion-map), make gate findings (use gate-check), or draft the partner packet (use review-packet). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or general document editing/summarization (use built-in document tools)."
 license: Proprietary
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -19,7 +19,7 @@ Start every Deliverable Review & Quality Gate flow here, especially for requests
 ## Steps
 1. Retrieve inputs read-only; never modify source files.
 2. Capture recipients exactly. If recipients are absent or ambiguous, record that state for `gate-check`; do not guess names, addresses or allowed users.
-3. Extract candidate assertions with section, page, paragraph and label. If a source is unpaginated, use `page: 1`, preserve the section/paragraph/label, and include a missing-source note that page numbers were not present.
+3. Extract candidate assertions with section, page, paragraph and label. If a source is unpaginated, use `page: 1`, preserve the section/paragraph/label, and include a missing-source note that page numbers were not present. `page` and `paragraph` are integer physical positions; keep printed labels such as roman-numeral front-matter pages (`iv`) in `label`.
 4. Classify assertions as factual, quantified, forward-looking or recommendation, and set `scope_aligned` from the signed SOW/evidence boundary when available; do not decide support or severity.
 5. Set recipient-driven `required_disclaimer_type` and `third_party_recipient_named` from the intake context, and set `client_data_handling` from the client-data register (`unknown` when it cannot be confirmed). `criteria-retrieve` verifies these fields; it does not own the first extraction.
 6. Preserve every source as `connector:` or `skill:` provenance and pass the full payload to `criteria-retrieve`, then `assertion-map`.

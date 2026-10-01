@@ -13,7 +13,7 @@ Deterministic rules consumed by assertion_map.py, gate_check.py and severity_ran
 
 ## 3. Ranking and downgrade controls
 3.1 A release blocker can never be auto-downgraded by the model, by narrative polish, by schedule pressure or by the existence of a disclaimer.
-3.2 Findings rank first by severity, then by confidence, then by page and paragraph so a reviewing partner starts with the highest-risk issue.
+3.2 Findings rank first by severity, then by confidence, then by page and paragraph so a reviewing partner starts with the highest-risk issue. `location.page` and `location.paragraph` must be integers or null; null (a register-level finding with no page) ranks after page-located findings of the same severity and confidence. Printed page labels such as roman numerals belong in `location.label`; any other page or paragraph value is a clean input error, never a guessed order.
 3.3 The review-status verdict is `not_ready_for_release` if any release blocker exists, `partner_review_required_must_fix` if must-fix items exist without blockers, `partner_review_required_advisories_only` when only advisories remain and `partner_review_required_no_engine_findings` when no engine findings exist.
 
 ## 4. Human judgement boundary
