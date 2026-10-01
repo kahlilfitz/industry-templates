@@ -11,10 +11,12 @@ docs/operator-runbook.md, "Held-out scoring" and "Creating a held-out set"). Its
 Without --heldout, the path comes from the STEERING_HELDOUT environment variable. Without
 --target, the shared module's is_steering is scored. A target function is called with one text
 and counts as a hit when its result is truthy. Exits 1 when any target is below --min-recall or
-has any benign false positive. --check-overlap instead exits 1 when a held-out line duplicates a
-corpus line after normalisation. Lines are printed only with --show, so reports stay shareable.
+has any benign false positive. --check-overlap instead exits 1 when a held-out line, after
+normalisation, duplicates a corpus line or appears in repository text a build agent reads (docs,
+READMEs, shared/ and plugin tests). Lines are printed only with --show, so reports stay shareable.
 """
 import argparse
+import glob
 import importlib
 import json
 import os
@@ -44,16 +46,37 @@ def load_target(spec):
         sys.path.pop(0)
 
 
+def repo_texts(root):
+    """Normalised text of the places a build agent reads: docs, READMEs, shared/ and plugin tests."""
+    patterns = ["docs/**/*.md", "*.md", "shared/**/*", "submissions/*/*/tests/**/*", "submissions/*/*/**/*.md"]
+    seen_paths, texts = set(), []
+    for pattern in patterns:
+        for path in glob.glob(os.path.join(root, pattern), recursive=True):
+            if path in seen_paths or not os.path.isfile(path) or not path.endswith((".md", ".json", ".py", ".csv", ".txt")):
+                continue
+            seen_paths.add(path)
+            with open(path, encoding="utf-8", errors="ignore") as handle:
+                texts.append((os.path.relpath(path, root), norm(handle.read())))
+    return texts
+
+
 def check_overlap(held, corpus_path, show):
     with open(corpus_path, encoding="utf-8") as handle:
         corpus = json.load(handle)
     seen = {norm(e["text"]) for key in ("attack", "benign") for e in entries(corpus.get(key, []))}
-    overlaps = [(key, e["text"]) for key in ("attack", "benign") for e in entries(held[key]) if norm(e["text"]) in seen]
+    texts = repo_texts(os.path.dirname(os.path.dirname(HERE)))
+    overlaps = []
+    for key in ("attack", "benign"):
+        for e in entries(held[key]):
+            line = norm(e["text"])
+            where = "corpus" if line in seen else next((path for path, text in texts if line and line in text), None)
+            if where:
+                overlaps.append((key, e["text"], where))
     total = len(held["attack"]) + len(held["benign"])
-    print(f"{'FAIL' if overlaps else 'PASS'}  {len(overlaps)}/{total} held-out lines duplicate a line in {corpus_path}")
+    print(f"{'FAIL' if overlaps else 'PASS'}  {len(overlaps)}/{total} held-out lines appear in the corpus or in repository text")
     if show:
-        for key, text in overlaps:
-            print(f"    {key.upper():6} {text}")
+        for key, text, where in overlaps:
+            print(f"    {key.upper():6} {where}: {text}")
     return 1 if overlaps else 0
 
 

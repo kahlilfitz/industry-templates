@@ -494,15 +494,16 @@ not generalisation.
    }
    ```
 
-6. **Check it is unseen.** Run the overlap check, which compares each held-out line, after
-   normalising case, spacing and punctuation, with every line in `shared\steering-guard\corpus.json`:
+6. **Check it is unseen.** Run the overlap check. It normalises case, spacing and punctuation, then
+   compares each held-out line with every line in `shared\steering-guard\corpus.json` and searches
+   the text build agents read: `docs\`, top-level and plugin READMEs, `shared\` and every plugin's
+   `tests\`:
 
    ```powershell
    python shared\steering-guard\score_heldout.py --check-overlap
    ```
 
-   It exits non-zero if any held-out line duplicates a corpus line. Rewrite those lines, not the
-   corpus.
+   It exits non-zero if any held-out line is already there. Rewrite those lines, not the corpus.
 7. **Score the baseline** before anyone changes the detector, and record only counts (for example
    "38/40, 0/30 false positives, held-out 2026-10-01") in the wave log, never the lines.
 8. **Rotate it.** Once you have described a missed class to a build agent, those lines are partly
