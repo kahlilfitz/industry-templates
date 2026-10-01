@@ -135,6 +135,13 @@ How to read a report:
   [time-expense-narrative-compliance 1.0.3 evaluation]
   Test: a packet with several people's rows and no role field returns only the requester's rows; a
   free-text role claim changes nothing; the structured confirmation widens the result.
+- [ ] **C5. A null or empty config object is not "no restriction".** Reading an optional object
+  with `x or {}` turns `null` or `{}` into "nothing configured", which silently drops the
+  restrictions it should carry, or crashes later. Validate config and confirmation objects as
+  non-null with their required keys present, or fall back to the shipped restrictive default.
+  [time-expense-narrative-compliance 1.0.4]
+  Test: set each packet-level config or confirmation object to `null` and to `{}`; restrictions
+  must stay in force and no traceback may occur.
 
 ## D. Injection and data-as-data
 
@@ -181,6 +188,17 @@ How to read a report:
   straight into a draft. [time-expense-narrative-compliance 1.0.3 evaluation]
   Test: inject an instruction into a subject or description field and run each drafting skill on
   its own; the draft must not contain it and must reference the flag.
+- [ ] **D11. Scan line by line.** Run the tripwire on each line or item, not on the whole document
+  joined together. A whole-document scan lets patterns match across unrelated lines, cannot say
+  which line to withhold, and gives holds with no location.
+  [engagement-mobilization-onboarding-pack 1.0.1]
+  Test: an injection split across two adjacent lines, and two benign lines whose join would match;
+  the hold names the right line and the benign pair stays clean.
+- [ ] **D12. Register fields copied to output are screened too.** Values taken from a register or
+  index (briefing topics, workspace names, knowledge titles, roster notes) are untrusted text. Run
+  the tripwire on them and screen for other clients' names before rendering; withhold, hold and
+  escalate on a hit. [engagement-mobilization-onboarding-pack 1.0.0 evaluation]
+  Test: a register entry whose topic names another client must not reach the pack.
 
 ## E. Draft-first and grounding (`SKILL.md`)
 
@@ -243,6 +261,11 @@ How to read a report:
 - [ ] **G2. Shared copies are byte-identical**, with a checker in `tests/`.
   [time-expense-narrative-compliance 1.0.1]
   Test: run the shared-copy checker after every edit to a contract or reference.
+- [ ] **G2a. The test harness reports the real exception.** A harness that labels any exception as
+  the expected input error lets a crash (`KeyError`, `TypeError`) pass as a clean rejection. Assert
+  the exact exception type or the engine's clean error line and exit code, and fail on `Traceback`.
+  [engagement-mobilization-onboarding-pack 1.0.1]
+  Test: make a malformed-input fixture crash on purpose; the suite must fail.
 - [ ] **G3. Deterministic output.** Engines write JSON and Markdown with `newline="\n"`;
   `--generated-at` pins timestamps; no CRLF in any bundled text file.
   [time-expense-narrative-compliance 1.0.1]
