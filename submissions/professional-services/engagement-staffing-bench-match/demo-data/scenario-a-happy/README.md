@@ -1,9 +1,9 @@
 # Scenario A - happy path
-The engagement has two open roles and a clean bench/conflicts extract. The engines should produce a ranked slate with eligible candidates for both roles and no Govern refusals.
+The engagement has two open roles and a clean bench/conflicts extract. The engines should produce a ranked slate with an eligible first choice for both roles and no top-candidate Govern refusals.
 
 Expected:
 - `PSS-001` client delivery manager: Ava Morgan ranks first and remains eligible.
 - `PSS-002` data migration consultant: Leo Brooks ranks first and remains eligible.
-- No candidate is blocked by independence, ethical-wall, prior-role or availability constraints.
+- Lower-ranked alternatives can still be held by availability: Ava needs review for the 80% data-migration role, and Mara is ineligible for that role. Those dispositions do not affect the two expected first-choice recommendations.
 
-Start from `raw/` to exercise Connect, or from the structured `roles.json`, `bench.json` and `constraints.json` to exercise the deterministic engines.
+Start from `raw/` to exercise Connect, or from the structured `roles.json`, `bench.json` and `constraints.json` to exercise the deterministic engines. `expected/validated.json` is the slate-draft input after the secondary safety check.

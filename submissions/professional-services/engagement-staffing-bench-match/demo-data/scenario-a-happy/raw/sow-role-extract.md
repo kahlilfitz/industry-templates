@@ -2,6 +2,11 @@
 Synthetic client: Orchard Ridge Clinics
 Practice: Customer Operations
 Lifecycle stage: Mobilisation - Resourcing
+Internal engagement code: ENG-PS-2026-1042 · Working language: English
+Client industry: health operations
+Known client affiliate: Orchard Ridge Health Holdings
+
+## 3.2 Roles
 
 | Role ID | Role | Start | Duration | Allocation | Seniority | Required skills | Preferred skills | Location | Rate band |
 |---|---|---:|---:|---:|---|---|---|---|---|

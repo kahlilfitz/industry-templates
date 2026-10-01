@@ -29,15 +29,19 @@ Deterministic rules consumed by `fit_score.py` and `slate_rank.py`. Engine const
 ## 4. Availability and utilisation scoring
 | Rule | Condition | Score treatment |
 |---|---|---|
-| 4.1 | Effective available capacity is `100 - current allocation - approved leave overlap - soft-booked allocation overlap` | Availability component is capped at `effective available capacity / requested allocation` |
-| 4.2 | Approved leave and soft-booked pursuits count even when the base resource system allocation is 0% | Count both in effective capacity; do not let a nominally open allocation overstate availability |
+| 4.1 | Effective available capacity is `100 - current allocation - time-weighted approved leave overlap - time-weighted soft-booked allocation overlap` across the full role duration | Availability component is capped at `effective available capacity / requested allocation` |
+| 4.2 | Approved leave and soft-booked pursuits are weighted by the days they overlap the role duration, even when the base resource system allocation is 0% | Add concurrent overlap, but do not charge a short or non-concurrent block against the entire engagement |
 | 4.3 | Utilisation after staffing is `current allocation + requested allocation` | Engine records the figure for review; it is not computed in prose |
+| 4.4 | `target_utilization_pct` is the firm's planning target | Carry it as context only; it does not change effective available capacity or fit score |
+| 4.5 | `duration_weeks` is missing or invalid | Use a conservative 52-week calculation window, add an escalation and mark availability evidence incomplete so the candidate cannot be recommended without review |
+| 4.6 | An availability block is missing a usable start or end date | Treat the missing boundary conservatively, add an escalation and mark availability evidence incomplete |
 
 ## 5. Location and language scoring
 | Rule | Condition | Score treatment |
 |---|---|---|
 | 5.1 | Required location match or role marked remote-friendly | 60% of location/language component |
 | 5.2 | Required language coverage | 40% of location/language component; no required languages means full credit |
+| 5.3 | Equivalent city forms differ only by punctuation or a state suffix, such as `Denver` and `Denver, CO` | Normalize to the city name before comparison; do not infer broader geographic equivalence |
 
 ## 6. Rate-band scoring
 | Rule | Condition | Score |
@@ -46,6 +50,7 @@ Deterministic rules consumed by `fit_score.py` and `slate_rank.py`. Engine const
 | 6.2 | Candidate rate is up to 10% above the role maximum | 0.60 |
 | 6.3 | Candidate rate is more than 10% above the role maximum | 0.20 |
 | 6.4 | Candidate rate is below the role minimum | 0.90 |
+| 6.5 | Candidate rate is missing | 0.00 and add an escalation; confirm the rate before relying on the score |
 
 ## 7. Ranking and recommendation threshold
 | Rule | Condition | Effect |

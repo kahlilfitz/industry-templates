@@ -3,6 +3,9 @@
   "engagement": {
     "engagement_id": "ENG-PS-2026-1042",
     "client_name": "Orchard Ridge Clinics",
+    "affiliates": [
+      "Orchard Ridge Health Holdings"
+    ],
     "practice": "Customer Operations",
     "stage": "Mobilisation - Resourcing",
     "source": "skill:role-intake",
@@ -80,8 +83,8 @@
     "generated_at": "2026-09-23T21:20:34Z",
     "demo_scenario": "scenario-a-happy",
     "engines": [
-      "fit_score/1.0",
-      "slate_rank/1.0"
+      "fit_score/1.1.4",
+      "slate_rank/1.1.4"
     ]
   },
   "bench_candidates": [
@@ -188,14 +191,26 @@
             "rate_band": 1.0,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 16,
+            "duration_assumed": false,
             "current_allocation_pct": 25.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 75.0,
             "requested_allocation_pct": 50.0,
             "utilization_after_staffing_pct": 75.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "mobilisation planning",
@@ -208,7 +223,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-101; profile Ava Morgan",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan",
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -225,14 +240,26 @@
             "rate_band": 0.9,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.4",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 16,
+            "duration_assumed": false,
             "current_allocation_pct": 10.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 90.0,
             "requested_allocation_pct": 50.0,
             "utilization_after_staffing_pct": 60.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [],
           "matched_preferred_skills": [
@@ -241,7 +268,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-102; profile Leo Brooks",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks",
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -258,14 +285,26 @@
             "rate_band": 1.0,
             "continuity": 0.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 16,
+            "duration_assumed": false,
             "current_allocation_pct": 40.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 60.0,
             "requested_allocation_pct": 50.0,
             "utilization_after_staffing_pct": 90.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "risk management",
@@ -274,7 +313,7 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-103; profile Mara Singh",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh",
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -300,14 +339,26 @@
             "rate_band": 0.2,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.3",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 12,
+            "duration_assumed": false,
             "current_allocation_pct": 25.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 75.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 105.0,
-            "component_score": 0.938
+            "component_score": 0.938,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [],
           "matched_preferred_skills": [
@@ -316,7 +367,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-101; profile Ava Morgan",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan",
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -333,14 +384,26 @@
             "rate_band": 1.0,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 12,
+            "duration_assumed": false,
             "current_allocation_pct": 10.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 90.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 90.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "SQL",
@@ -353,7 +416,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-102; profile Leo Brooks",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks",
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -370,14 +433,26 @@
             "rate_band": 0.6,
             "continuity": 0.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.2",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 12,
+            "duration_assumed": false,
             "current_allocation_pct": 40.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 60.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 120.0,
-            "component_score": 0.75
+            "component_score": 0.75,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "data reconciliation"
@@ -385,7 +460,7 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-103; profile Mara Singh",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh",
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -413,14 +488,26 @@
             "rate_band": 1.0,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 16,
+            "duration_assumed": false,
             "current_allocation_pct": 25.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 75.0,
             "requested_allocation_pct": 50.0,
             "utilization_after_staffing_pct": 75.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "mobilisation planning",
@@ -433,7 +520,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-101; profile Ava Morgan",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan",
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -450,14 +537,26 @@
             "rate_band": 1.0,
             "continuity": 0.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 16,
+            "duration_assumed": false,
             "current_allocation_pct": 40.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 60.0,
             "requested_allocation_pct": 50.0,
             "utilization_after_staffing_pct": 90.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "risk management",
@@ -466,7 +565,7 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-103; profile Mara Singh",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh",
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -483,14 +582,26 @@
             "rate_band": 0.9,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.4",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 16,
+            "duration_assumed": false,
             "current_allocation_pct": 10.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 90.0,
             "requested_allocation_pct": 50.0,
             "utilization_after_staffing_pct": 60.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [],
           "matched_preferred_skills": [
@@ -499,7 +610,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-102; profile Leo Brooks",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks",
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -525,14 +636,26 @@
             "rate_band": 1.0,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 12,
+            "duration_assumed": false,
             "current_allocation_pct": 10.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 90.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 90.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "SQL",
@@ -545,7 +668,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-102; profile Leo Brooks",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks",
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -562,14 +685,26 @@
             "rate_band": 0.2,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.3",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 12,
+            "duration_assumed": false,
             "current_allocation_pct": 25.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 75.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 105.0,
-            "component_score": 0.938
+            "component_score": 0.938,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [],
           "matched_preferred_skills": [
@@ -578,7 +713,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-101; profile Ava Morgan",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan",
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -595,14 +730,26 @@
             "rate_band": 0.6,
             "continuity": 0.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.2",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 12,
+            "duration_assumed": false,
             "current_allocation_pct": 40.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 60.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 120.0,
-            "component_score": 0.75
+            "component_score": 0.75,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "data reconciliation"
@@ -610,7 +757,7 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-103; profile Mara Singh",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh",
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"

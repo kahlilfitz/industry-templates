@@ -5,12 +5,12 @@ Illustrative summaries for demo grounding. They are not reproduced standards or 
 | Rule | Condition | Effect |
 |---|---|---|
 | 1.1 | Every candidate-role pair receives `eligible`, `ineligible` or `needs_review` | The model quotes the engine verdict and never substitutes its own |
-| 1.2 | Any ineligible verdict is a refusal for that role | The candidate cannot be recommended, assigned or manually cleared by the model |
+| 1.2 | Any `ineligible` or `needs_review` verdict is not recommendable for that role | `ineligible` is a refusal; `needs_review` is withheld pending authorized human review. Neither can be assigned or manually cleared by the model |
 
 ## 2. Cooling-off period for prior client roles
 | Rule | Condition | Effect |
 |---|---|---|
-| 2.1 | Candidate was an employee, officer or board member of the client within 365 days before the role start date | Ineligible for the engagement role |
+| 2.1 | Candidate was an employee, officer, director or board member of the client within 365 days before the role start date | Ineligible for the engagement role; normalize `director`, `board member` and `board-member` as governance roles |
 | 2.2 | Candidate held a non-governance client role ending 366-730 days before the role start date | Needs independence review before recommendation |
 
 ## 3. Financial-interest restrictions
@@ -34,8 +34,9 @@ Illustrative summaries for demo grounding. They are not reproduced standards or 
 ## 6. Availability eligibility
 | Rule | Condition | Effect |
 |---|---|---|
-| 6.1 | Effective available capacity is below requested allocation after approved leave and soft-booked pursuits are counted | Ineligible for that role's requested start and allocation |
-| 6.2 | Effective capacity is within 10 percentage points of requested allocation | Needs review by the resource manager before recommendation |
+| 6.1 | Effective available capacity is more than 10 percentage points below requested allocation after time-weighted approved leave and soft-booked pursuits across the role duration are counted | Ineligible for that role's requested start and allocation |
+| 6.2 | Effective available capacity is below requested allocation by 10 percentage points or fewer | Needs review by the resource manager before recommendation |
+| 6.3 | Role duration or an availability-block boundary is missing or invalid | Use the documented conservative assumption, record an escalation and hold for resource-manager review |
 
 ## 7. Refusal and gap handling
 | Rule | Condition | Effect |
@@ -47,3 +48,12 @@ Illustrative summaries for demo grounding. They are not reproduced standards or 
 | Rule | Condition | Effect |
 |---|---|---|
 | 8.1 | Extraction or rules confidence is below 0.75 | Hold for human review; do not recommend as cleared |
+
+## 9. Fail-closed conflict handling
+| Rule | Condition | Effect |
+|---|---|---|
+| 9.1 | A conflict record type, status, materiality, scope or required date is missing or unrecognised | Needs independence review; never infer clearance |
+| 9.2 | A conflict names the client, a declared parent, subsidiary or affiliate, including punctuation or corporate-suffix variants | Match normalized whole words; never use raw substring matching. If either entity normalizes to empty, hold for review |
+| 9.3 | A financial-interest status is anything other than `divested`, `resolved` or `cleared` | Treat it as unresolved; material interests are ineligible and blank materiality needs review |
+| 9.4 | A candidate has no conflicts-register row | Needs independence review; absence of a record is not evidence of clearance |
+| 9.5 | Candidate IDs differ only by case or surrounding whitespace, or a register row names an unknown candidate | Match known IDs using trim + casefold; escalate unknown or blank IDs for mapping review |

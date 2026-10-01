@@ -2,6 +2,11 @@
 Synthetic client: Aster Foods Cooperative
 Practice: Finance Transformation
 Lifecycle stage: Mobilisation - Resourcing
+Internal engagement code: ENG-PS-2026-2077 · Working language: English
+Client industry: food distribution
+Known client affiliate: Aster Foods Holdings
+
+## 4.1 Roles
 
 | Role ID | Role | Start | Duration | Allocation | Seniority | Required skills | Preferred skills | Location | Rate band |
 |---|---|---:|---:|---:|---|---|---|---|---|

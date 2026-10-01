@@ -3,9 +3,12 @@
   "engagement": {
     "engagement_id": "ENG-PS-2026-1042",
     "client_name": "Orchard Ridge Clinics",
-    "source": "skill:bench-query",
+    "affiliates": ["Orchard Ridge Health Holdings"],
+    "practice": "Customer Operations",
+    "stage": "Mobilisation - Resourcing",
+    "source": "skill:role-intake",
     "confidence": 0.96,
-    "citation": "bench export RM-2026-09-23"
+    "citation": "SOW extract ORC-1042, header and staffing request email"
   },
   "roles": [],
   "bench_candidates": [

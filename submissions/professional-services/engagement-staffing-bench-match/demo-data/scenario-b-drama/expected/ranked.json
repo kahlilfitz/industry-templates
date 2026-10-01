@@ -3,6 +3,9 @@
   "engagement": {
     "engagement_id": "ENG-PS-2026-2077",
     "client_name": "Aster Foods Cooperative",
+    "affiliates": [
+      "Aster Foods Holdings"
+    ],
     "practice": "Finance Transformation",
     "stage": "Mobilisation - Resourcing",
     "source": "skill:role-intake",
@@ -78,13 +81,16 @@
       "citation": "SOW AFC-2077 section 4.1 role 2"
     }
   ],
-  "escalations": [],
+  "escalations": [
+    "PSS-101: staffing request names Mina as a preferred candidate; recorded as context only and excluded from scoring and eligibility (role-intake step 4)",
+    "bench_input.bench_candidates[0].citation: instruction-like text redacted; review source record"
+  ],
   "provenance": {
     "generated_at": "2026-09-23T21:20:34Z",
     "demo_scenario": "scenario-b-drama",
     "engines": [
-      "fit_score/1.0",
-      "slate_rank/1.0"
+      "fit_score/1.1.4",
+      "slate_rank/1.1.4"
     ]
   },
   "bench_candidates": [
@@ -117,7 +123,7 @@
       "soft_bookings": [],
       "source": "connector:resource-management-system",
       "confidence": 0.98,
-      "citation": "bench export row C-201; profile Mina Patel"
+      "citation": "[FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]"
     },
     {
       "candidate_id": "C-202",
@@ -237,14 +243,26 @@
             "rate_band": 1.0,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 20,
+            "duration_assumed": false,
             "current_allocation_pct": 10.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 90.0,
             "requested_allocation_pct": 60.0,
             "utilization_after_staffing_pct": 70.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "ERP advisory",
@@ -257,7 +275,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-201; profile Mina Patel",
+          "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -274,14 +292,26 @@
             "rate_band": 1.0,
             "continuity": 0.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 20,
+            "duration_assumed": false,
             "current_allocation_pct": 30.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 70.0,
             "requested_allocation_pct": 60.0,
             "utilization_after_staffing_pct": 90.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "ERP advisory",
@@ -293,7 +323,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-202; profile Owen Ramos",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -301,23 +331,35 @@
         {
           "candidate_id": "C-203",
           "candidate_name": "Nico Stone",
-          "fit_score": 49.3,
+          "fit_score": 59.2,
           "component_scores": {
             "skills": 0.1,
             "seniority": 0.75,
-            "availability": 0.5,
+            "availability": 1.0,
             "location_language": 1.0,
             "rate_band": 0.9,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.4",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 20,
+            "duration_assumed": false,
             "current_allocation_pct": 0.0,
-            "approved_leave_overlap_pct": 40.0,
-            "soft_booking_overlap_pct": 30.0,
-            "effective_available_pct": 30.0,
+            "approved_leave_overlap_pct": 3.7,
+            "soft_booking_overlap_pct": 7.5,
+            "effective_available_pct": 88.8,
             "requested_allocation_pct": 60.0,
             "utilization_after_staffing_pct": 60.0,
-            "component_score": 0.5
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [],
           "matched_preferred_skills": [
@@ -325,7 +367,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
           "provisional_rank": 4,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -342,14 +384,26 @@
             "rate_band": 0.9,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.4",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 20,
+            "duration_assumed": false,
             "current_allocation_pct": 20.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 80.0,
             "requested_allocation_pct": 60.0,
             "utilization_after_staffing_pct": 80.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "ERP advisory",
@@ -358,7 +412,7 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-204; profile Priya Desai",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -384,14 +438,26 @@
             "rate_band": 0.2,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.3",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 10,
+            "duration_assumed": false,
             "current_allocation_pct": 10.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 90.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 90.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [],
           "matched_preferred_skills": [
@@ -399,7 +465,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-201; profile Mina Patel",
+          "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -416,20 +482,32 @@
             "rate_band": 0.2,
             "continuity": 0.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.3",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 10,
+            "duration_assumed": false,
             "current_allocation_pct": 30.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 70.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 110.0,
-            "component_score": 0.875
+            "component_score": 0.875,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [],
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-202; profile Owen Ramos",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
           "provisional_rank": 4,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -437,23 +515,35 @@
         {
           "candidate_id": "C-203",
           "candidate_name": "Nico Stone",
-          "fit_score": 87.5,
+          "fit_score": 99.4,
           "component_scores": {
             "skills": 1.0,
             "seniority": 1.0,
-            "availability": 0.375,
+            "availability": 0.97,
             "location_language": 1.0,
             "rate_band": 1.0,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 10,
+            "duration_assumed": false,
             "current_allocation_pct": 0.0,
-            "approved_leave_overlap_pct": 40.0,
-            "soft_booking_overlap_pct": 30.0,
-            "effective_available_pct": 30.0,
+            "approved_leave_overlap_pct": 7.4,
+            "soft_booking_overlap_pct": 15.0,
+            "effective_available_pct": 77.6,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 80.0,
-            "component_score": 0.375
+            "component_score": 0.97,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "SQL",
@@ -466,7 +556,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -483,14 +573,26 @@
             "rate_band": 1.0,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 10,
+            "duration_assumed": false,
             "current_allocation_pct": 20.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 80.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 100.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "SQL",
@@ -499,7 +601,7 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-204; profile Priya Desai",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -527,14 +629,26 @@
             "rate_band": 1.0,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 20,
+            "duration_assumed": false,
             "current_allocation_pct": 10.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 90.0,
             "requested_allocation_pct": 60.0,
             "utilization_after_staffing_pct": 70.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "ERP advisory",
@@ -547,7 +661,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-201; profile Mina Patel",
+          "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -564,14 +678,26 @@
             "rate_band": 1.0,
             "continuity": 0.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 20,
+            "duration_assumed": false,
             "current_allocation_pct": 30.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 70.0,
             "requested_allocation_pct": 60.0,
             "utilization_after_staffing_pct": 90.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "ERP advisory",
@@ -583,7 +709,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-202; profile Owen Ramos",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -600,14 +726,26 @@
             "rate_band": 0.9,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.4",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 20,
+            "duration_assumed": false,
             "current_allocation_pct": 20.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 80.0,
             "requested_allocation_pct": 60.0,
             "utilization_after_staffing_pct": 80.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "ERP advisory",
@@ -616,7 +754,7 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-204; profile Priya Desai",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -624,23 +762,35 @@
         {
           "candidate_id": "C-203",
           "candidate_name": "Nico Stone",
-          "fit_score": 49.3,
+          "fit_score": 59.2,
           "component_scores": {
             "skills": 0.1,
             "seniority": 0.75,
-            "availability": 0.5,
+            "availability": 1.0,
             "location_language": 1.0,
             "rate_band": 0.9,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.4",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 20,
+            "duration_assumed": false,
             "current_allocation_pct": 0.0,
-            "approved_leave_overlap_pct": 40.0,
-            "soft_booking_overlap_pct": 30.0,
-            "effective_available_pct": 30.0,
+            "approved_leave_overlap_pct": 3.7,
+            "soft_booking_overlap_pct": 7.5,
+            "effective_available_pct": 88.8,
             "requested_allocation_pct": 60.0,
             "utilization_after_staffing_pct": 60.0,
-            "component_score": 0.5
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [],
           "matched_preferred_skills": [
@@ -648,7 +798,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
           "provisional_rank": 4,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -665,23 +815,35 @@
         {
           "candidate_id": "C-203",
           "candidate_name": "Nico Stone",
-          "fit_score": 87.5,
+          "fit_score": 99.4,
           "component_scores": {
             "skills": 1.0,
             "seniority": 1.0,
-            "availability": 0.375,
+            "availability": 0.97,
             "location_language": 1.0,
             "rate_band": 1.0,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 10,
+            "duration_assumed": false,
             "current_allocation_pct": 0.0,
-            "approved_leave_overlap_pct": 40.0,
-            "soft_booking_overlap_pct": 30.0,
-            "effective_available_pct": 30.0,
+            "approved_leave_overlap_pct": 7.4,
+            "soft_booking_overlap_pct": 15.0,
+            "effective_available_pct": 77.6,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 80.0,
-            "component_score": 0.375
+            "component_score": 0.97,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "SQL",
@@ -694,7 +856,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -711,14 +873,26 @@
             "rate_band": 1.0,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.1",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.1",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 10,
+            "duration_assumed": false,
             "current_allocation_pct": 20.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 80.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 100.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [
             "SQL",
@@ -727,7 +901,7 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-204; profile Priya Desai",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -744,14 +918,26 @@
             "rate_band": 0.2,
             "continuity": 1.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.3",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 10,
+            "duration_assumed": false,
             "current_allocation_pct": 10.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 90.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 90.0,
-            "component_score": 1.0
+            "component_score": 1.0,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [],
           "matched_preferred_skills": [
@@ -759,7 +945,7 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-201; profile Mina Patel",
+          "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -776,20 +962,32 @@
             "rate_band": 0.2,
             "continuity": 0.0
           },
+          "component_citations": {
+            "skills": "fit-scoring-rubric.md #1.1,#2.1,#2.2,#2.3",
+            "seniority": "fit-scoring-rubric.md #3.2",
+            "availability": "fit-scoring-rubric.md #1.3,#4.1,#4.2,#4.3",
+            "location_language": "fit-scoring-rubric.md #1.4,#5.1,#5.2",
+            "rate_band": "fit-scoring-rubric.md #6.3",
+            "continuity": "fit-scoring-rubric.md #1.6"
+          },
           "availability_context": {
+            "duration_weeks_used": 10,
+            "duration_assumed": false,
             "current_allocation_pct": 30.0,
             "approved_leave_overlap_pct": 0.0,
             "soft_booking_overlap_pct": 0.0,
             "effective_available_pct": 70.0,
             "requested_allocation_pct": 80.0,
             "utilization_after_staffing_pct": 110.0,
-            "component_score": 0.875
+            "component_score": 0.875,
+            "evidence_complete": true,
+            "calculation_warnings": []
           },
           "matched_required_skills": [],
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #1.1-#7.3; bench export row C-202; profile Owen Ramos",
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
           "provisional_rank": 4,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"

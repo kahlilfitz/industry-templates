@@ -3,6 +3,7 @@
   "engagement": {
     "engagement_id": "ENG-PS-2026-1042",
     "client_name": "Orchard Ridge Clinics",
+    "affiliates": ["Orchard Ridge Health Holdings"],
     "practice": "Customer Operations",
     "stage": "Mobilisation - Resourcing",
     "source": "skill:role-intake",

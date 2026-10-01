@@ -5,6 +5,16 @@ import json
 import sys
 
 ENGINE = "engine:slate_rank"
+ENGINE_VERSION = "slate_rank/1.1.4"
+CONTRACT = "ps.engagement-staffing-bench-match.v1"
+
+def append_engine(provenance, engine_version):
+    engines = [
+        engine for engine in provenance.get("engines", [])
+        if not engine.startswith("slate_rank/")
+    ]
+    engines.append(engine_version)
+    provenance["engines"] = list(dict.fromkeys(engines))
 
 def main():
     ap = argparse.ArgumentParser()
@@ -14,7 +24,8 @@ def main():
 
     with open(args.scored, encoding="utf-8") as f:
         payload = json.load(f)
-    assert payload["contract_version"] == "ps.engagement-staffing-bench-match.v1", "wrong contract version"
+    if payload.get("contract_version") != CONTRACT:
+        sys.exit("wrong contract version")
 
     ranked_roles = []
     for role in payload.get("scored_roles", []):
@@ -36,7 +47,7 @@ def main():
         })
 
     payload["ranked_roles"] = ranked_roles
-    payload.setdefault("provenance", {}).setdefault("engines", []).append("slate_rank/1.0")
+    append_engine(payload.setdefault("provenance", {}), ENGINE_VERSION)
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
     print(f"slate_rank: {len(ranked_roles)} role(s) ranked -> {args.out}")
