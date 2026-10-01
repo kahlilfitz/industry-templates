@@ -403,6 +403,15 @@ INTERNAL_TEXT_PATTERNS = (
     ),
 )
 
+# The label must be a line of its own. Testing for the word "draft" anywhere passed a pack
+# with no label at all, because an action title read "Send draft data-mapping workbook".
+# Markdown emphasis, a heading or quote marker, and typographic dashes are tolerated.
+DRAFT_LABEL = re.compile(
+    r"^[ \t]*(?:#{1,6}[ \t]+|>[ \t]*)?[*_]{0,3}DRAFT[ \t]+[-\u2013\u2014][ \t]+"
+    r"pending engagement manager review[*_]{0,3}[ \t]*$",
+    re.MULTILINE,
+)
+
 # Name parts that are also ordinary words in a status pack. Matching these on a word
 # boundary would fail every pack that mentions a dev environment or a design lead,
 # and a lint that cries wolf gets switched off. Surnames are the real signal, so
@@ -501,10 +510,11 @@ def lint_client_pack(text, payload, contract, errors, internal_sources=()):
             "attributions belong in the internal review sheet, not the client document"
         )
 
-    if "draft" not in lowered:
+    if not DRAFT_LABEL.search(text):
         errors.append(
             "client pack: no DRAFT label. Every pack this skill produces is a draft for human "
-            "review and must say so before it is shared (status-reporting-rules.md #7.1)"
+            "review and must carry the line 'DRAFT - pending engagement manager review' "
+            "before it is shared (status-reporting-rules.md #7.1)"
         )
 
     for pattern, label in INTERNAL_TEXT_PATTERNS:
@@ -544,6 +554,12 @@ def lint_client_pack(text, payload, contract, errors, internal_sources=()):
             )
 
     for source_path in internal_sources or ():
+        if not os.path.isfile(source_path):
+            errors.append(
+                f"--internal-source: no such file {source_path}. The commentary check cannot "
+                "run against a source it cannot read - pass the path the run actually used"
+            )
+            continue
         overlap = shared_phrase(source_path, text, allowed=payload_vocabulary(payload))
         if overlap:
             errors.append(
@@ -641,7 +657,16 @@ def main():
         default=[],
         help=(
             "an internal source file (e.g. raw/pm-email.txt). Fails if the client pack "
-            "reproduces six or more consecutive words from it. Repeatable."
+            "reproduces five or more consecutive words from it. Repeatable. With "
+            "--client-pack, give at least one, or --no-internal-source."
+        ),
+    )
+    parser.add_argument(
+        "--no-internal-source",
+        action="store_true",
+        help=(
+            "affirm that the run read no internal commentary (PM email, notes, chat), so "
+            "the verbatim-commentary check has nothing to compare against"
         ),
     )
     args = parser.parse_args()
@@ -719,6 +744,19 @@ def main():
     check_escalations(payload, args.hop, errors)
     lint_personal_data(payload, errors)
 
+    if args.internal_source and args.no_internal_source:
+        errors.append(
+            "--no-internal-source contradicts the --internal-source files given - pass one "
+            "or the other"
+        )
+    if args.client_pack and not args.internal_source and not args.no_internal_source:
+        # Fail closed: an optional check that the documented flow forgot to pass let a
+        # PM's "keep it green if possible" through to the client pack (#7.3).
+        errors.append(
+            "--client-pack: no --internal-source given. Pass every internal source the run "
+            "read (e.g. --internal-source \"$RUN_DIR/raw/pm-email.txt\"), or "
+            "--no-internal-source if it read none (status-reporting-rules.md #7.2, #7.3)"
+        )
     if args.client_pack:
         try:
             with open(args.client_pack, encoding="utf-8") as handle:

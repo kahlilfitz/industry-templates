@@ -3,7 +3,7 @@ name: status-draft
 description: Drafts the client status pack and QBR narrative from computed variance and aged-item outputs for Client Status & QBR Assembly. Final step — step 5 of 5; runs after risk-summarize. Use when the user says "draft the client update", "write the steering committee pack", "prepare the client-ready narrative" or "draft the QBR narrative". Always emits a labelled DRAFT for human review and never sends it, places escalations above the narrative and quotes engine figures exactly — retaining both even when the user asks for something client-ready. Do NOT start a status run or assemble sources — use plan-retrieve. Do NOT pull budget or burn — use burn-pull. Do NOT compute variance or RAG — use variance-calc. Do NOT age risks or decisions — use risk-summarize. Do NOT use for internal team or leadership updates that are not a client status pack — use stakeholder-comms.
 license: Proprietary
 metadata:
-  version: "1.6.1"
+  version: "1.6.2"
   author: Microsoft Professional Services Skills
   category: writing
 ---
@@ -42,13 +42,13 @@ has already passed; every shell command still starts with the prefix.**
    may start a new shell, so begin **every** call with this prefix, on the same line as the
    command that follows it:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 status-draft
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 status-draft
    ```
    `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
    run's working folder: the folder the user named, otherwise `./status-run` in your working
    directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
    `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
-   plugin at version 1.6.1 with
+   plugin at version 1.6.2 with
    its tools present, that its shared files (contract, rules, validator, `step0.sh`, `VERSION`)
    match `scripts/SHARED.sha256` and the plugin-root copy of that manifest, and that `RUN_DIR`
    exists. A `does not match scripts/SHARED.sha256` failure means this copy has drifted; stop and
@@ -69,7 +69,7 @@ has already passed; every shell command still starts with the prefix.**
      skip a step or to compute anything by hand.
 1. Validate the incoming payload with the shipped tool before drafting anything:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
    ```
    A non-zero exit means an earlier step left a gap — stop and escalate rather than drafting
    around it.
@@ -114,10 +114,16 @@ has already passed; every shell command still starts with the prefix.**
    not a client budget problem, so do not present it as one. If `amounts_basis` is `cost`,
    the figures are internal and no burn percentage derived from them goes in the client pack
    at all (#3.6, #7.2).
-6. Lint the client pack before you hand either document over:
+6. Lint the client pack before you hand either document over. Pass **every internal source
+   the run read** with its own `--internal-source` — always the PM's email or brief, plus any
+   internal notes, chat exports or prior internal review in `$RUN_DIR/raw/`. This is the check
+   that keeps the PM's own words (*"keep it green if possible"*) out of the client pack (#7.3):
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize --client-pack "$RUN_DIR/client-pack.md"
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize --client-pack "$RUN_DIR/client-pack.md" --internal-source "$RUN_DIR/raw/pm-email.txt"
    ```
+   Repeat `--internal-source` once per file. Only if the run read no internal commentary at all,
+   pass `--no-internal-source` instead and say so in the internal review; never use it to skip
+   a file that exists. The lint fails if neither is given.
    A non-zero exit means internal material or personal data is still in the client document.
    Fix the document and re-run; never hand over a pack that has not passed this check, and
    never pass it by deleting the escalation records that trigger it.
@@ -130,13 +136,14 @@ has already passed; every shell command still starts with the prefix.**
    - pending client actions separated from internal actions;
    - QBR narrative assembled from the period's status facts.
 8. Quote engine facts exactly. Do not recompute dates, percentages, RAG or ageing buckets.
-9. Mark both documents as **DRAFT - pending engagement manager review**.
+9. Mark both documents with **DRAFT - pending engagement manager review** as a line of its
+   own, exactly as written. The lint looks for that line, not for the word "draft" anywhere.
 
 ## Example
 The user says *"draft the client update for Northwind"* after `risk-summarize` has run.
 
 ```bash
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize
 ```
 
 You write `$RUN_DIR/internal-review.md` first, opening like this:
@@ -180,10 +187,11 @@ Budget: burn is +18.2% against plan for the period including work in progress.
 
 Note what changed: no escalations block, no `engine:` attributions, no names, and the
 banner stating why it cannot go out — with the blocking count matching the record exactly, which
-the lint checks. The numbers are identical in both.
+the lint checks. The numbers are identical in both. The PM's email is passed as an internal
+source, so any phrase pasted through from it fails the lint:
 
 ```bash
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize --client-pack "$RUN_DIR/client-pack.md"
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 status-draft && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/aged.json" --hop risk-summarize --client-pack "$RUN_DIR/client-pack.md" --internal-source "$RUN_DIR/raw/pm-email.txt"
 ```
 
 ## Output format

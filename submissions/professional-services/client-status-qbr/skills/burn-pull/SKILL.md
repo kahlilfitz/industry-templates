@@ -3,7 +3,7 @@ name: burn-pull
 description: Pulls and normalizes time, budget, billed burn, unbilled WIP, accrual and forecast-at-completion (EAC) records for Client Status & QBR Assembly. Step 2 of 5; runs after plan-retrieve. Use when the user says "where are we on budget?" (the raw figures), "why did burn change?" (tracing a burn, WIP or forecast movement to its source rows), "get the burn numbers into the payload" or "pull the finance export". Keeps billed and unbilled WIP separate and cites the source row behind every figure. Do NOT start a status run — use plan-retrieve. Do NOT compute variance, RAG or period-over-period change ("is the budget red?", "what changed since last week?") — use variance-calc. Do NOT age risks — use risk-summarize. Do NOT write the client narrative — use status-draft.
 license: Proprietary
 metadata:
-  version: "1.6.1"
+  version: "1.6.2"
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -50,13 +50,13 @@ has already passed; every shell command still starts with the prefix.**
    may start a new shell, so begin **every** call with this prefix, on the same line as the
    command that follows it:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 burn-pull
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 burn-pull
    ```
    `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
    run's working folder: the folder the user named, otherwise `./status-run` in your working
    directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
    `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
-   plugin at version 1.6.1 with
+   plugin at version 1.6.2 with
    its tools present, that its shared files (contract, rules, validator, `step0.sh`, `VERSION`)
    match `scripts/SHARED.sha256` and the plugin-root copy of that manifest, and that `RUN_DIR`
    exists. A `does not match scripts/SHARED.sha256` failure means this copy has drifted; stop and
@@ -78,7 +78,7 @@ has already passed; every shell command still starts with the prefix.**
 1. Validate the payload `plan-retrieve` handed you before adding anything to it. Run this tool
    from a writable working directory:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
    ```
    A non-zero exit means the upstream payload is incomplete. Stop and escalate; do not fill the
    gaps yourself.
@@ -147,10 +147,10 @@ The user says *"pull the burn numbers for the Northwind weekly"*. The finance ex
 
 ```bash
 # 1. check what plan-retrieve handed over
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop plan-retrieve
 
 # 2. after writing the budget block, confirm it is contract-valid
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 burn-pull && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/status-input.json" --hop burn-pull
 ```
 
 The `budget` object written into `$RUN_DIR/status-input.json`:

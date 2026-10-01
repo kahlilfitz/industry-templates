@@ -15,6 +15,8 @@ the same holes cannot reopen quietly. Run it from anywhere:
 It exits non-zero if any case regresses. Cases deliberately still open are listed in
 KNOWN_OPEN with the reason; they are reported as open rather than deleted, so the
 numbers cannot be improved by quietly dropping a case.
+
+Later Cowork evaluations add their reproductions here too (the CW cases, 2026-10-01).
 """
 
 import copy
@@ -95,7 +97,8 @@ def run_engine(engine, payload=None, raw=None):
     return Run(proc.returncode, proc.stderr, out)
 
 
-def run_validator(payload=None, raw=None, client_pack=None):
+def run_validator(payload=None, raw=None, client_pack=None, internal_sources=None):
+    """internal_sources=None affirms --no-internal-source; pass [] to give neither flag."""
     work = tempfile.mkdtemp()
     src = os.path.join(work, "in.json")
     _write(payload, raw, src)
@@ -105,6 +108,10 @@ def run_validator(payload=None, raw=None, client_pack=None):
         with open(pack, "w", encoding="utf-8") as handle:
             handle.write(client_pack)
         command += ["--client-pack", pack]
+        if internal_sources is None:
+            command.append("--no-internal-source")
+        for source in internal_sources or ():
+            command += ["--internal-source", source]
     proc = subprocess.run(command, capture_output=True, text=True)
     return Run(proc.returncode, proc.stderr + proc.stdout, None)
 
@@ -337,14 +344,14 @@ def h5b():
 def h5c():
     payload = load(SCENARIO_A)
     manager = payload["engagement"]["manager"]
-    pack = f"# Status\n{manager} confirmed the plan.\nNOT FOR ISSUE\n"
+    pack = f"**DRAFT - pending engagement manager review**\n{manager} confirmed the plan.\nNOT FOR ISSUE\n"
     return run_validator(payload, client_pack=pack).returncode != 0
 
 
 @case("H5d", "validate_payload", "client pack citing an engine is refused")
 def h5d():
     payload = load(SCENARIO_A)
-    pack = "# Status\nOverall green (engine:variance_calc).\nNOT FOR ISSUE\n"
+    pack = "**DRAFT - pending engagement manager review**\nOverall green (engine:variance_calc).\nNOT FOR ISSUE\n"
     return run_validator(payload, client_pack=pack).returncode != 0
 
 
@@ -592,7 +599,7 @@ def ld4d():
 @case("LD5a", "validator", "the lint catches a surname on its own")
 def ld5a():
     payload = run_engine(VARIANCE, load(SCENARIO_B)).output
-    pack = "# DRAFT pack\n\nMr Bell confirmed the recovery plan.\n"
+    pack = "**DRAFT - pending engagement manager review**\n\nMr Bell confirmed the recovery plan.\n"
     return run_validator(payload, client_pack=pack).returncode != 0
 
 
@@ -600,8 +607,8 @@ def ld5a():
 def ld5b():
     payload = run_engine(VARIANCE, load(SCENARIO_B)).output
     for body in (
-        "# DRAFT pack\n\nInternal cost 410,000; margin 18%.\n",
-        "# DRAFT pack\n\nSchedule RAG confidence 0.97.\n",
+        "**DRAFT - pending engagement manager review**\n\nInternal cost 410,000; margin 18%.\n",
+        "**DRAFT - pending engagement manager review**\n\nSchedule RAG confidence 0.97.\n",
     ):
         if run_validator(payload, client_pack=body).returncode == 0:
             return False
@@ -625,7 +632,7 @@ def ld5d():
     ]
     wrong = len(blocking) + 1
     pack = (
-        "# DRAFT pack\n\n> NOT FOR ISSUE - %d blocking items outstanding\n\n"
+        "**DRAFT - pending engagement manager review**\n\n> NOT FOR ISSUE - %d blocking items outstanding\n\n"
         "Overall status is Red this period.\n" % wrong
     )
     return run_validator(payload, client_pack=pack).returncode != 0
@@ -640,7 +647,7 @@ def ld5e():
         if r.get("type") == "blocking" and not r.get("resolved_at")
     ]
     pack = (
-        "# DRAFT status pack\n\n> NOT FOR ISSUE - %d blocking items outstanding\n\n"
+        "**DRAFT - pending engagement manager review**\n\n> NOT FOR ISSUE - %d blocking items outstanding\n\n"
         "Schedule is red against the original baseline. The dev environment refresh "
         "completed and the design lead confirmed readiness.\n" % len(blocking)
     )
@@ -698,6 +705,115 @@ def v28():
     payload = load(SCENARIO_A)
     payload["plan"]["milestones"] = []
     return run_engine(VARIANCE, payload).rag("schedule") != "green"
+
+
+# --- Cowork evaluation of 1.6.1, 2026-10-01 ----------------------------------------
+# Two client-pack guard defects that blocked release. Each case is the report's own
+# reproduction, run against the plugin's demo data.
+
+LABEL = "**DRAFT - pending engagement manager review**"
+PM_EMAIL_B = os.path.join(ROOT, "demo-data", "scenario-b-drama", "raw", "pm-email.txt")
+STATUS_DRAFT_SKILL = os.path.join(ROOT, "skills", "status-draft", "SKILL.md")
+
+
+def _chain(path):
+    return run_engine(ITEM_AGE, run_engine(VARIANCE, load(path)).output).output
+
+
+def _clean_b_pack():
+    payload = _chain(SCENARIO_B)
+    blocking = [
+        r
+        for r in payload.get("escalation_records", [])
+        if r.get("type") == "blocking" and not r.get("resolved_at")
+    ]
+    pack = (
+        f"{LABEL}\n\n> **NOT FOR ISSUE — {len(blocking)} blocking escalations open, see "
+        "internal-review.md**\n\nOverall status is Red this period. Schedule is red "
+        "against the original baseline.\n"
+    )
+    return payload, pack
+
+
+@case("CW1a", "validator", "the word 'draft' in an action title is not a DRAFT label")
+def cw1a():
+    payload = _chain(SCENARIO_A)
+    pack = (
+        "# Orchid Health Group - final status pack\n\n"
+        "A-301 Send draft data-mapping workbook is open with the client.\n"
+    )
+    return "no DRAFT label" in run_validator(payload, client_pack=pack).stderr
+
+
+@case("CW1b", "validator", "'our team drafted this' is not a DRAFT label")
+def cw1b():
+    payload = _chain(SCENARIO_A)
+    pack = "# Status pack\n\nOur team drafted this update for the steering group.\n"
+    return "no DRAFT label" in run_validator(payload, client_pack=pack).stderr
+
+
+@case("CW1c", "validator", "the label buried inside a sentence is not the label line")
+def cw1c():
+    payload = _chain(SCENARIO_A)
+    pack = "# Status\n\nThis is a DRAFT - pending engagement manager review copy.\n"
+    return "no DRAFT label" in run_validator(payload, client_pack=pack).stderr
+
+
+@case("CW1d", "validator", "the exact label line passes in plain, bold and heading form")
+def cw1d():
+    payload = _chain(SCENARIO_A)
+    for label in (
+        "DRAFT - pending engagement manager review",
+        LABEL,
+        "## DRAFT \u2013 pending engagement manager review",
+    ):
+        pack = f"{label}\n\nOverall status is Green this period.\n"
+        if run_validator(payload, client_pack=pack).returncode != 0:
+            return False
+    return True
+
+
+@case("CW2a", "validator", "'keep it green if possible' is caught from the PM email")
+def cw2a():
+    payload, pack = _clean_b_pack()
+    pack += "\nWe will keep it green if possible while the broker workflow settles.\n"
+    run = run_validator(payload, client_pack=pack, internal_sources=[PM_EMAIL_B])
+    return "keep it green if possible" in run.stderr
+
+
+@case("CW2b", "validator", "a client-pack lint with no internal source fails closed")
+def cw2b():
+    payload, pack = _clean_b_pack()
+    run = run_validator(payload, client_pack=pack, internal_sources=[])
+    return run.returncode != 0 and "--internal-source" in run.stderr
+
+
+@case("CW2c", "validator", "an unreadable internal source fails rather than passing")
+def cw2c():
+    payload, pack = _clean_b_pack()
+    missing = os.path.join(tempfile.mkdtemp(), "pm-email.txt")
+    run = run_validator(payload, client_pack=pack, internal_sources=[missing])
+    return run.returncode != 0 and "no such file" in run.stderr
+
+
+@case("CW2d", "validator", "a clean Verdant pack passes with the PM email supplied")
+def cw2d():
+    payload, pack = _clean_b_pack()
+    return run_validator(payload, client_pack=pack, internal_sources=[PM_EMAIL_B]).returncode == 0
+
+
+@case("CW2e", "status-draft", "every documented lint command passes --internal-source")
+def cw2e():
+    with open(STATUS_DRAFT_SKILL, encoding="utf-8") as handle:
+        lines = [line for line in handle if "--client-pack" in line and "python" in line]
+    return bool(lines) and all("--internal-source" in line for line in lines)
+
+
+@case("CW2f", "validator", "--internal-source help states the five-word window it uses")
+def cw2f():
+    proc = subprocess.run([sys.executable, VALIDATOR, "--help"], capture_output=True, text=True)
+    text = " ".join(proc.stdout.split())
+    return "five or more consecutive words" in text and "six or more" not in text
 
 
 def main():

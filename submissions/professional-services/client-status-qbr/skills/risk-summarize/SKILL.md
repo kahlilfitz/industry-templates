@@ -3,7 +3,7 @@ name: risk-summarize
 description: Ages risks, decisions and actions and separates pending client actions for Client Status & QBR Assembly. Step 4 of 5; runs after variance-calc. Use when the user says "show open risks", "what decisions are pending?", "what is waiting on the client?" or "summarize actions with ageing". Delegates ageing to scripts/item_age.py and quotes it verbatim; buckets every open item by its own opened or due date rather than the label on the register, so a risk marked "monitoring" still surfaces as stale or critical, and reclassifies an action blocked by a client decision as a pending client action. Do NOT start a status run — use plan-retrieve. Do NOT pull budget or burn — use burn-pull. Do NOT compute variance or RAG — use variance-calc. Do NOT write the client narrative — use status-draft. Do NOT create blank risk registers or templates — use xlsx.
 license: Proprietary
 metadata:
-  version: "1.6.1"
+  version: "1.6.2"
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -41,13 +41,13 @@ has already passed; every shell command still starts with the prefix.**
    may start a new shell, so begin **every** call with this prefix, on the same line as the
    command that follows it:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 risk-summarize
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 risk-summarize
    ```
    `SKILL_DIR` is the base directory your loader reported for this `SKILL.md`. `RUN_DIR` is the
    run's working folder: the folder the user named, otherwise `./status-run` in your working
    directory. Every step of one run uses the same `RUN_DIR`, and each hand-off names it.
    `step0.sh` checks that `SKILL_DIR` is an absolute path to this skill's own folder in this
-   plugin at version 1.6.1 with
+   plugin at version 1.6.2 with
    its tools present, that its shared files (contract, rules, validator, `step0.sh`, `VERSION`)
    match `scripts/SHARED.sha256` and the plugin-root copy of that manifest, and that `RUN_DIR`
    exists. A `does not match scripts/SHARED.sha256` failure means this copy has drifted; stop and
@@ -68,7 +68,7 @@ has already passed; every shell command still starts with the prefix.**
      skip a step or to compute anything by hand.
 1. Validate the incoming payload with the shipped tool before ageing anything:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 risk-summarize && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/variance.json" --hop raid-ready
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 risk-summarize && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/variance.json" --hop raid-ready
    ```
    A non-zero exit means an earlier step left a gap. Stop and escalate.
 2. **Apply any ageing threshold the user asked for — and only those.** If the user, in this
@@ -88,7 +88,7 @@ has already passed; every shell command still starts with the prefix.**
 3. Run the ageing engine. Call both tools through `$SKILL_DIR` (set in step 0) and write
    outputs into your writable working directory:
    ```bash
-   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 risk-summarize && python "$SKILL_DIR/scripts/item_age.py" --input "$RUN_DIR/variance.json" --out "$RUN_DIR/aged.json"
+   export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 risk-summarize && python "$SKILL_DIR/scripts/item_age.py" --input "$RUN_DIR/variance.json" --out "$RUN_DIR/aged.json"
    ```
    The skill folder is read-only and is not the working directory, so a bare
    `scripts/item_age.py` will not resolve. Always use the `$SKILL_DIR` form.
@@ -101,9 +101,9 @@ has already passed; every shell command still starts with the prefix.**
 The user says *"what's waiting on the client for Northwind?"* after `variance-calc` has run.
 
 ```bash
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 risk-summarize && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/variance.json" --hop raid-ready
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 risk-summarize && python "$SKILL_DIR/scripts/validate_payload.py" --input "$RUN_DIR/variance.json" --hop raid-ready
 
-export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.1 risk-summarize && python "$SKILL_DIR/scripts/item_age.py" --input "$RUN_DIR/variance.json" --out "$RUN_DIR/aged.json"
+export SKILL_DIR="<base directory your loader reported>" RUN_DIR="<working folder>" && sh "$SKILL_DIR/scripts/step0.sh" 1.6.2 risk-summarize && python "$SKILL_DIR/scripts/item_age.py" --input "$RUN_DIR/variance.json" --out "$RUN_DIR/aged.json"
 ```
 
 The engine writes `aged_items` into `$RUN_DIR/aged.json`. You quote it — you never
