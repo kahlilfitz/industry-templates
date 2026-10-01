@@ -441,7 +441,8 @@ This is the report's request, not a description of the 1.0.4 change.
 ### Next action
 
 1. Done: 1.0.3 findings folded into 1.0.4 (`2454b3a`). Vendor the shared steering detector once
-   it scores at least 90% with no false positives on the operator's held-out set.
+   it scores at least 90% with no false positives on the operator's held-out set (2026-10-01b:
+   1.1.0 scored 34/40, so 1.1.1 must close the gap first).
 2. Run an executing QA review round, repeating until it reproduces nothing.
 3. Run `evaluation:prepare` (never in parallel with another prepare), check the ZIP for CRLF and
    bytecode, and evaluate it in a **new** Cowork task.
@@ -470,6 +471,7 @@ Each lesson below came from a specific Wave 1 finding. The resulting checks are 
 | Commit before freezing. | Every receipt so far records `gitDirty: true`. | Commit the plugin first; freeze from a clean worktree when possible so the receipt commit identifies the source. |
 | Guardrails and data minimisation must hold in every skill, not only the main one. | T&E 1.0.3: four of five skills lacked the no-external-recipient rule, an engine returned colleagues' rows, and a drafting step ran before the tripwire. | Checklist items C4, D8, D10, E7 and E9. Probe each skill on its own before freezing. |
 | Fix agents fix what is reported; adversarial reviewers find the next layer. | DRQG 1.0.3 needed three independent review rounds after its fix agent reported green tests; each round reproduced new fail-open inputs (wrong types, trusted self-declared sources, default-clean missing fields, denylists, poisoned aliases). | Run an executing adversarial code review on every candidate before `evaluation:prepare`, and repeat until a round reproduces nothing. Checklist items A5a, B1a, C5, D11, D12 and G2a. |
+| Phrase-list detectors don't generalise, and a held-out set leaks easily. | Each QA round found new instruction-like paraphrases the three plugins' detectors missed (7, 16 and 13 of 40 held-out lines caught). The shared detector then scored 38/40 on the first held-out set (2026-10-01a), but an overlap check found 16 of its 70 lines in the detector's corpus, via examples in the operator's own brief and benign lines taken from plugin tests. On the clean set (2026-10-01b, 0/70 overlap) detector 1.1.0 scored 34/40 (85%) with 0/30 false positives, below the 90% bar. | One shared detector (`shared/steering-guard/`, checklist D14 and D15), scored against a private held-out set that is checked for overlap and never used as examples (runbook "Creating a held-out set"). |
 
 ## Wave 2 queue and substitute
 
