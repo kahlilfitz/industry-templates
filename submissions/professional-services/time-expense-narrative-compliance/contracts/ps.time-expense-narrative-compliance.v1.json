@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "ps.time-expense-narrative-compliance.v1",
   "title": "Time & Expense Narrative Compliance contract v1",
-  "description": "Chains activity-pull -> narrative-draft -> code-map -> guideline-check (Govern) -> exception-report. Every hop carries data, confidence, provenance and citations. v1.0.4 remains backward compatible: existing narratives stay unchanged while optional suggested_rewrites are separately labeled; compliance flags may include no_linked_evidence and recommended_task_code may be BH910; purpose may be null; optional organizer, attendees, deliverable, excluded_activity_ids and provenance.excluded_signals / signal_policy record signal-privacy exclusions (client-billing-guidelines.md #10.1). v1.0.4 adds optional engagement.engagement_manager, provenance.timekeeper_scope (requester, mode self|team, engagement-manager team_view confirmation, withheld rows; client-billing-guidelines.md #12.1) and provenance.period_check, draft.covered_activity_ids, and embedded_instruction markers on signals, entries and missing-time items; flagged text is withheld from drafts, rewrites and missing-time listings (#11.1, #11.2).",
+  "description": "Chains activity-pull -> narrative-draft -> code-map -> guideline-check (Govern) -> exception-report. Every hop carries data, confidence, provenance and citations. v1.0.4 remains backward compatible: existing narratives stay unchanged while optional suggested_rewrites are separately labeled; compliance flags may include no_linked_evidence and recommended_task_code may be BH910; purpose may be null; optional organizer, attendees, deliverable, excluded_activity_ids and provenance.excluded_signals / signal_policy record signal-privacy exclusions (client-billing-guidelines.md #10.1). v1.0.4 adds optional engagement.engagement_manager, provenance.timekeeper_scope (requester, mode self|team, engagement-manager team_view confirmation, withheld rows; client-billing-guidelines.md #12.1) and provenance.period_check, draft.covered_activity_ids, and embedded_instruction markers on signals, entries and missing-time items; flagged text is withheld from drafts, rewrites and missing-time listings (#11.1, #11.2). Every engine validates every field it reads (signal_policy.validate_packet): a wrong JSON type, a missing required field or an unrecognised enum value is an input error with no output, never coerced.",
   "type": "object",
   "required": [
     "contract_version",
@@ -360,7 +360,27 @@
               "type": [
                 "object",
                 "null"
-              ]
+              ],
+              "description": "Set only by activity_pull. confirmed must be a JSON boolean (a string such as \"true\" or \"yes\" is an input error, never a confirmation); role and confirmation are closed values.",
+              "required": [
+                "confirmed",
+                "role",
+                "confirmation"
+              ],
+              "properties": {
+                "confirmed": {
+                  "type": "boolean"
+                },
+                "role": {
+                  "enum": [
+                    "engagement_manager"
+                  ]
+                },
+                "confirmation": {
+                  "type": "string",
+                  "pattern": "^engagement-manager:[A-Za-z0-9._-]+$"
+                }
+              }
             },
             "withheld": {
               "type": [

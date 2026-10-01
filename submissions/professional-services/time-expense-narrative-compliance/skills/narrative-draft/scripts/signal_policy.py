@@ -13,7 +13,11 @@
    timekeeper's rows unless it carries a valid engagement-manager team view: the requester is
    the engagement manager recorded in the engagement letter AND the explicit confirmation
    token "engagement-manager:<engagement_id>" was supplied. Role is never inferred from text.
-3. Embedded-instruction tripwire (client-billing-guidelines.md #11.1). Free text is data.
+3. Strict input validation. validate_packet() checks every field an engine reads: wrong JSON types
+   (a "true" string for a boolean, {} or 123 in a list of strings, null where a value is required)
+   and unrecognised enum values raise SchemaError - nothing is coerced through truthiness, and a
+   string can never stand in for the boolean team-view confirmation.
+4. Embedded-instruction tripwire (client-billing-guidelines.md #11.1). Free text is data.
    embedded_instruction() normalises (NFKC, strip Unicode Cf, fold Cyrillic/Greek look-alikes,
    fold punctuation and case) and flags text that steers the reviewer, claims an approval or
    waiver, asks for forwarding, or carries an e-mail address or URL.
@@ -21,7 +25,9 @@
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
 """
+import datetime
 import json
+import math
 import os
 import re
 import unicodedata
@@ -89,6 +95,7 @@ def load_policy_file(path):
     sources = data.get("sources") if isinstance(data, dict) else None
     if not isinstance(sources, dict):
         raise PolicyError(f"signal policy {os.path.basename(path)} has no 'sources' object")
+    check_sources(sources, f"signal policy {os.path.basename(path)} sources")
     return sources
 
 
@@ -432,3 +439,256 @@ def signal_texts(signal):
 def redact(text):
     """Return WITHHELD_TEXT when text trips the wire; otherwise the text unchanged (#11.2)."""
     return WITHHELD_TEXT if embedded_instruction(text) else text
+
+
+# --- Strict input validation (wrong JSON types and unknown enum values fail closed) --------
+
+DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+SCOPE_MODES = ("self", "team")
+TEAM_VIEW_ROLES = ("engagement_manager",)
+SEVERITY_RANK = {"compliant": 0, "needs_review": 1, "hold_for_review": 2, "reject": 3}
+SEVERITIES = ("needs_review", "hold_for_review", "reject")
+VERDICTS = tuple(SEVERITY_RANK)
+EXCEPTION_VERDICTS = VERDICTS + ("missing_time",)
+DRAFT_STATUSES = ("engine_generated_from_activity", "existing_timesheet_narrative", "needs_review",
+                  "needs_review_insufficient_detail", "needs_review_embedded_instruction", "needs_activity_evidence")
+REWRITE_STATUSES = ("engine_generated_from_activity", "needs_review", "needs_review_insufficient_detail",
+                    "withheld_embedded_instruction")
+MAPPING_BASES = ("direct_activity_class", "conflicting_activity_classes", "unknown_activity_class",
+                 "keyword_inference", "unmapped")
+STAGES = ("activity", "drafted", "coded", "governed")
+STAGE_HINT = {"draft": "run narrative_draft.py first", "code_mapping": "run code_map.py first",
+              "compliance": "run guideline_check.py first"}
+JSON_TYPES = {bool: "boolean", str: "string", int: "number", float: "number", dict: "object", list: "array",
+              type(None): "null"}
+
+
+class SchemaError(PolicyError):
+    """A field has the wrong JSON type or an unrecognised enum value (fail closed; never coerced)."""
+
+
+def _type(value):
+    return JSON_TYPES.get(type(value), type(value).__name__)
+
+
+def _bad(where, rule, value):
+    # Only the JSON type is echoed, never the value: field text is untrusted (#11.1).
+    raise SchemaError(f"invalid input: {where} must be {rule}, got {_type(value)} "
+                      "(wrong types and unknown values are rejected, never coerced)")
+
+
+def check_text(value, where, null=True):
+    if not (isinstance(value, str) or (null and value is None)):
+        _bad(where, "a string" + (" or null" if null else ""), value)
+
+
+def check_id(value, where):
+    if not isinstance(value, str) or not value.strip():
+        _bad(where, "a non-empty string", value)
+
+
+def check_bool(value, where):
+    if type(value) is not bool:
+        _bad(where, "a JSON boolean (true or false; strings such as \"true\" or \"yes\" are rejected)", value)
+
+
+def check_number(value, where, low=None, high=None, integer=False):
+    kinds = (int,) if integer else (int, float)
+    if (type(value) not in kinds or not math.isfinite(value)
+            or (low is not None and value < low) or (high is not None and value > high)):
+        span = f" in [{low if low is not None else '-inf'}, {high if high is not None else 'inf'}]"
+        _bad(where, ("an integer" if integer else "a finite number") + span, value)
+
+
+def check_date(value, where, null=False):
+    if null and value is None:
+        return
+    ok = isinstance(value, str) and DATE_RE.fullmatch(value)
+    if ok:
+        try:
+            datetime.date.fromisoformat(value)
+        except ValueError:
+            ok = False
+    if not ok:
+        _bad(where, "a YYYY-MM-DD date" + (" or null" if null else ""), value)
+
+
+def check_strings(value, where, null=False):
+    if null and value is None:
+        return
+    if not isinstance(value, list):
+        _bad(where, "an array of strings", value)
+    for i, item in enumerate(value):
+        check_text(item, f"{where}[{i}]", null=False)
+
+
+def check_enum(value, allowed, where):
+    if not isinstance(value, str) or value not in allowed:
+        raise SchemaError(f"invalid input: {where} must be one of {', '.join(allowed)}; an unrecognised "
+                          f"{_type(value)} value is rejected (fail closed)")
+
+
+def check_object(value, where, null=False):
+    if null and value is None:
+        return {}
+    if not isinstance(value, dict):
+        _bad(where, "an object" + (" or null" if null else ""), value)
+    return value
+
+
+KINDS = {
+    "text": check_text,
+    "str": lambda v, w: check_text(v, w, null=False),
+    "id": check_id,
+    "bool": check_bool,
+    "hours": lambda v, w: check_number(v, w, low=0),
+    "confidence": lambda v, w: check_number(v, w, low=0, high=1),
+    "count": lambda v, w: check_number(v, w, low=0, integer=True),
+    "date": check_date,
+    "date?": lambda v, w: check_date(v, w, null=True),
+    "strings": check_strings,
+    "strings?": lambda v, w: check_strings(v, w, null=True),
+    "object": check_object,
+    "object?": lambda v, w: check_object(v, w, null=True),
+}
+
+
+def check_fields(obj, where, spec):
+    """spec: (key, kind or enum tuple, required). Absent optional keys are fine; present ones are typed."""
+    obj = check_object(obj, where)
+    for key, kind, required in spec:
+        if key not in obj:
+            if required:
+                hint = f"; {STAGE_HINT[key]}" if key in STAGE_HINT else ""
+                raise SchemaError(f"invalid input: {where} is missing required field '{key}'{hint}")
+            continue
+        if isinstance(kind, tuple):
+            check_enum(obj[key], kind, f"{where}.{key}")
+        else:
+            KINDS[kind](obj[key], f"{where}.{key}")
+    return obj
+
+
+def check_list(value, where, spec):
+    if not isinstance(value, list):
+        _bad(where, "an array of objects", value)
+    return [check_fields(item, f"{where}[{i}]", spec) for i, item in enumerate(value)]
+
+
+def check_sources(sources, where):
+    check_object(sources, where)
+    for key, value in sources.items():
+        check_fields(value, f"{where}.{key}", (("enabled", "bool", True),))
+
+
+ENGAGEMENT_SPEC = (("engagement_id", "id", True), ("client_name", "text", False), ("matter_name", "text", False),
+                   ("billing_guidelines_id", "text", False), ("engagement_manager", "text", False))
+PERIOD_SPEC = (("start", "date?", False), ("end", "date?", False))
+SCOPE_SPEC = (("mode", SCOPE_MODES, True), ("requester", "text", False), ("people", "strings?", False),
+              ("team_view", "object?", False), ("withheld", "object?", False))
+TEAM_VIEW_SPEC = (("confirmed", "bool", True), ("role", TEAM_VIEW_ROLES, True), ("confirmation", "str", True))
+EXCLUDED_SPEC = (("activity_id", "text", False), ("source", "text", False), ("policy_key", "text", False),
+                 ("reason", "text", False), ("citations", "strings", False))
+SIGNAL_SPEC = (("activity_id", "id", True), ("person", "id", True), ("date", "date", True),
+               ("duration_hours", "hours", True), ("source", "str", True), ("billable_signal", "bool", True),
+               ("activity_class", "text", False), ("subject", "text", False), ("purpose", "text", False),
+               ("deliverable", "text", False), ("meeting_id", "text", False), ("organizer", "text", False),
+               ("file_name", "text", False), ("attendees", "strings", False), ("confidence", "confidence", False),
+               ("citations", "strings", False), ("embedded_instruction", "bool", False),
+               ("needs_review", "bool", False), ("review_reason", "text", False))
+ENTRY_SPEC = (("entry_id", "id", True), ("person", "id", True), ("date", "date", True),
+              ("duration_hours", "hours", True), ("narrative", "text", False), ("notes", "text", False),
+              ("activity_ids", "strings", False), ("excluded_activity_ids", "strings", False),
+              ("submitted_phase_code", "text", False), ("submitted_task_code", "text", False),
+              ("embedded_instruction", "bool", False), ("source", "str", False),
+              ("confidence", "confidence", False), ("citations", "strings", False))
+DRAFT_SPEC = (("narrative", "str", True), ("status", DRAFT_STATUSES, True), ("needs_review", "bool", True),
+              ("confidence", "confidence", True), ("citations", "strings", True), ("review_reasons", "strings", False),
+              ("linked_activity_ids", "strings", False), ("covered_activity_ids", "strings", False),
+              ("excluded_activity_ids", "strings", False))
+REWRITE_SPEC = (("narrative", "str", True), ("status", REWRITE_STATUSES, True), ("review_reasons", "strings", False),
+                ("linked_activity_ids", "strings", False), ("confidence", "confidence", False),
+                ("citations", "strings", False))
+FLAG_SPEC = (("flag", "id", True), ("severity", SEVERITIES, True), ("detail", "str", True),
+             ("confidence", "confidence", False), ("citations", "strings", False), ("source", "text", False))
+MAPPING_SPEC = (("recommended_phase_code", "id", True), ("recommended_task_code", "id", True),
+                ("recommended_label", "text", False), ("submitted_phase_code", "text", False),
+                ("submitted_task_code", "text", False), ("basis", MAPPING_BASES, True),
+                ("confidence", "confidence", True), ("citations", "strings", False))
+COMPLIANCE_SPEC = (("verdict", VERDICTS, True), ("confidence", "confidence", True), ("citations", "strings", False),
+                   ("evidence_hours_same_date", "hours", False), ("required_elements", "object?", False))
+MISSING_SPEC = (("activity_id", "id", True), ("person", "id", True), ("date", "date", True),
+                ("duration_hours", "hours", True), ("activity_class", "text", False), ("subject", "text", False),
+                ("finding", "text", False), ("confidence", "confidence", False), ("citations", "strings", False),
+                ("embedded_instruction", "bool", False))
+EXCEPTION_SPEC = (("verdict", EXCEPTION_VERDICTS, True), ("flags", "strings", True))
+SUMMARY_SPEC = (("total_entries", "count", True), ("total_hours", "hours", True), ("verdict_counts", "object", True),
+                ("missing_time_hours", "hours", True), ("excluded_signal_ids", "strings", False),
+                ("exception_count", "count", False), ("period", "object?", False))
+
+
+def _check_flags(value, where):
+    flags = check_list(value, where, FLAG_SPEC)
+    return max([SEVERITY_RANK[f["severity"]] for f in flags] + [0])
+
+
+def validate_packet(packet, stage):
+    """Validate every field the engines read, for a packet at `stage` (activity, drafted, coded, governed).
+
+    Raises SchemaError on a wrong JSON type, a missing required field, an unrecognised enum value, or a
+    governed verdict that does not match the severity of its flags. Returns the packet unchanged.
+    """
+    level = STAGES.index(stage)
+    check_object(packet, "packet")
+    check_text(packet.get("contract_version"), "contract_version", null=False)
+    check_fields(packet.get("engagement"), "engagement", ENGAGEMENT_SPEC)
+    if "period" in packet:
+        check_fields(check_object(packet["period"], "period", null=True), "period", PERIOD_SPEC)
+    if "signal_config" in packet:
+        # Present means a real policy: null or a policy without sources would silently lift its restrictions.
+        config = check_fields(packet["signal_config"], "signal_config", (("sources", "object", True),))
+        check_sources(config["sources"], "signal_config.sources")
+    provenance = check_fields(packet.get("provenance"), "provenance", ())
+    if "timekeeper_scope" in provenance:
+        scope = check_fields(provenance["timekeeper_scope"], "provenance.timekeeper_scope", SCOPE_SPEC)
+        if scope.get("team_view") is not None:
+            view = check_fields(scope["team_view"], "provenance.timekeeper_scope.team_view", TEAM_VIEW_SPEC)
+            if not TEAM_VIEW_TOKEN_RE.fullmatch(view["confirmation"]):
+                raise SchemaError("invalid input: provenance.timekeeper_scope.team_view.confirmation must be "
+                                  "exactly 'engagement-manager:<engagement_id>'")
+        if "withheld_by_engines" in scope:
+            check_list(scope["withheld_by_engines"], "provenance.timekeeper_scope.withheld_by_engines", ())
+    if "excluded_signals" in provenance:
+        check_list(provenance["excluded_signals"], "provenance.excluded_signals", EXCLUDED_SPEC)
+    if "engines" in provenance:
+        check_strings(provenance["engines"], "provenance.engines")
+    check_list(packet.get("activity_signals"), "activity_signals", SIGNAL_SPEC)
+    for i, entry in enumerate(check_list(packet.get("time_entries"), "time_entries", ENTRY_SPEC)):
+        where = f"time_entries[{i}]"
+        if level >= 1:
+            check_fields(entry, where, (("draft", "object?", True),))
+            draft = check_fields(entry["draft"], f"{where}.draft", DRAFT_SPEC)
+            if "suggested_rewrites" in draft:
+                check_list(draft["suggested_rewrites"], f"{where}.draft.suggested_rewrites", REWRITE_SPEC)
+        if level >= 2:
+            check_fields(entry, where, (("code_mapping", "object?", True),))
+            mapping = check_fields(entry["code_mapping"], f"{where}.code_mapping", MAPPING_SPEC)
+            _check_flags(mapping.get("flags", []), f"{where}.code_mapping.flags")
+        if level >= 3:
+            check_fields(entry, where, (("compliance", "object?", True),))
+            compliance = check_fields(entry["compliance"], f"{where}.compliance", COMPLIANCE_SPEC)
+            worst = _check_flags(compliance.get("flags", []), f"{where}.compliance.flags")
+            if SEVERITY_RANK[compliance["verdict"]] != worst:
+                raise SchemaError(f"invalid input: {where}.compliance.verdict does not match the most severe of its "
+                                  "flags; re-run guideline_check.py (fail closed)")
+    if level >= 3:
+        for key in ("missing_time_report", "exception_list", "prebill_summary"):
+            if key not in packet:
+                raise SchemaError(f"invalid input: '{key}' missing; {STAGE_HINT['compliance']}")
+        check_list(packet["missing_time_report"], "missing_time_report", MISSING_SPEC)
+        check_list(packet["exception_list"], "exception_list", EXCEPTION_SPEC)
+        summary = check_fields(packet["prebill_summary"], "prebill_summary", SUMMARY_SPEC)
+        for verdict, count in summary["verdict_counts"].items():
+            check_enum(verdict, VERDICTS, "prebill_summary.verdict_counts key")
+            check_number(count, f"prebill_summary.verdict_counts.{verdict}", low=0, integer=True)
+    return packet

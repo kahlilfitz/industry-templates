@@ -75,14 +75,7 @@ def load_packet(path):
         raise InputError("input is not a JSON object")
     if payload.get("contract_version") != CONTRACT:
         raise InputError(f"expected contract {CONTRACT}, got {payload.get('contract_version')!r}")
-    for key in ("activity_signals", "time_entries"):
-        if not isinstance(payload.get(key), list):
-            raise InputError(f"'{key}' must be a list")
-    for entry in payload["time_entries"]:
-        if "entry_id" not in entry:
-            raise InputError("a time entry is missing 'entry_id'")
-        if "draft" not in entry:
-            raise InputError(f"time entry {entry['entry_id']} has no draft; run narrative_draft.py first")
+    signal_policy.validate_packet(payload, "drafted")
     return payload
 
 

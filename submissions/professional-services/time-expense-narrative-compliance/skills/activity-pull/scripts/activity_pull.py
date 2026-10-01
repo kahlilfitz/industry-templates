@@ -83,7 +83,49 @@ def read_csv(path, required):
         missing = [c for c in required if c not in rows[0]]
         if missing:
             raise InputError(f"{os.path.basename(path)} is missing column(s): {', '.join(missing)}")
+    for idx, row in enumerate(rows, start=2):
+        # csv.DictReader stores surplus cells under None and fills short rows with None: never guess.
+        if None in row or any(row.get(c) is None for c in required):
+            raise InputError(f"{os.path.basename(path)} row {idx} does not have one cell per header column")
     return rows
+
+
+DECIMAL_RE = re.compile(r"\d+(?:\.\d+)?")
+TIME_RE = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
+
+
+def cli_date(value, flag):
+    if value is None:
+        return None
+    try:
+        signal_policy.check_date(value, flag)
+    except signal_policy.SchemaError as exc:
+        raise InputError(str(exc)) from exc
+    return value
+
+
+def cell_date(row, key, cite):
+    value = row[key].strip()
+    try:
+        signal_policy.check_date(value, f"{cite} {key}")
+    except signal_policy.SchemaError as exc:
+        raise InputError(str(exc)) from exc
+    return value
+
+
+def cell_hours(row, key, cite):
+    """A plain non-negative decimal; 'nan', 'inf', '1e3', '-1' and '' are rejected, never coerced."""
+    value = row[key].strip()
+    if not DECIMAL_RE.fullmatch(value):
+        raise InputError(f"{cite} {key} must be a non-negative decimal number of hours")
+    return float(value)
+
+
+def cell_id(row, key, cite):
+    value = row[key].strip()
+    if not value:
+        raise InputError(f"{cite} {key} must not be empty")
+    return value
 
 
 def read_engagement(path):
@@ -101,9 +143,14 @@ def read_engagement(path):
     return fields
 
 
-def hours_between(start, end):
+def hours_between(start, end, cite="calendar row"):
+    start, end = start.strip(), end.strip()
+    if not (TIME_RE.fullmatch(start) and TIME_RE.fullmatch(end)):
+        raise InputError(f"{cite} start and end must be HH:MM (24-hour)")
     fmt = "%H:%M"
     delta = datetime.datetime.strptime(end, fmt) - datetime.datetime.strptime(start, fmt)
+    if delta.total_seconds() < 0:
+        raise InputError(f"{cite} ends before it starts")
     return round(delta.total_seconds() / 3600.0, 1)
 
 
@@ -225,6 +272,10 @@ def main():
         timesheet_rows = read_csv(os.path.join(args.raw_dir, "timesheet.csv"),
                                   ("entry_id", "date", "person", "hours", "narrative", "activity_ids", "phase_code", "task_code"))
         people, timekeeper_scope = resolve_scope(args, engagement)
+        cli_date(args.period_start, "--period-start")
+        cli_date(args.period_end, "--period-end")
+        if args.period_start and args.period_end and args.period_start > args.period_end:
+            raise InputError("--period-start is after --period-end")
     except (InputError, signal_policy.PolicyError, OSError, json.JSONDecodeError) as exc:
         sys.exit(f"activity_pull: {exc}")
 
@@ -264,6 +315,12 @@ def main():
             cite = f"raw/{filename} row {idx}"
             if not allowed(row["person"]):
                 continue  # #12.1: other timekeepers' rows are never read into the packet
+            try:
+                cell_id(row, "activity_id", cite)
+                cell_id(row, "person", cite)
+                row["date"] = cell_date(row, "date", cite)
+            except InputError as exc:
+                sys.exit(f"activity_pull: {exc}")
             if row["engagement_id"] != eng_id:
                 out_of_scope.append({"activity_id": row["activity_id"], "reason": "outside engagement scope", "citations": [cite]})
                 continue
@@ -275,7 +332,10 @@ def main():
                 match = workplan.get(("calendar_event", row["event_id"]))
                 activity_class = (match[1]["activity_class"] if match else "") or "unclassified_meeting"
                 subject = row["subject"].strip()
-                duration = hours_between(row["start"], row["end"])
+                try:
+                    duration = hours_between(row["start"], row["end"], cite)
+                except InputError as exc:
+                    sys.exit(f"activity_pull: {exc}")
                 meeting_id = row["event_id"]
                 extra = {"organizer": row["organizer"].strip() or None,
                          "attendees": [a.strip() for a in row["attendees"].split(";") if a.strip()]}
@@ -284,9 +344,9 @@ def main():
                 activity_class = DOCUMENT_CLASS.get(row["activity_type"].strip().lower(), "unclassified_document_activity")
                 subject = subject_from_file(row["file_name"])
                 try:
-                    duration = round(float(row["duration_hours"]), 2)
-                except ValueError:
-                    sys.exit(f"activity_pull: {cite} has a non-numeric duration_hours")
+                    duration = round(cell_hours(row, "duration_hours", cite), 2)
+                except InputError as exc:
+                    sys.exit(f"activity_pull: {exc}")
                 meeting_id = None
                 extra = {"file_name": row["file_name"]}
             citations = [cite]
@@ -335,15 +395,18 @@ def main():
     for idx, row in enumerate(timesheet_rows, start=2):
         if not allowed(row["person"]):
             continue
+        cite = f"raw/timesheet.csv row {idx}"
+        try:
+            cell_id(row, "entry_id", cite)
+            cell_id(row, "person", cite)
+            row["date"] = cell_date(row, "date", cite)
+            hours = cell_hours(row, "hours", cite)
+        except InputError as exc:
+            sys.exit(f"activity_pull: {exc}")
         dates_available.add(row["date"])
         if not in_period(row["date"], period):
             continue
         dates_in_period.add(row["date"])
-        cite = f"raw/timesheet.csv row {idx}"
-        try:
-            hours = float(row["hours"])
-        except ValueError:
-            sys.exit(f"activity_pull: {cite} has a non-numeric hours value")
         links = [a.strip() for a in (row["activity_ids"] or "").split(";") if a.strip()]
         kept_links, dropped = [], []
         for activity_id in links:
@@ -424,6 +487,10 @@ def main():
     if not args.scenario:
         packet["provenance"].pop("demo_scenario")
     signal_policy.filter_packet(packet, config_path=args.signal_config, script_dir=script_dir, engine=ENGINE)
+    try:
+        signal_policy.validate_packet(packet, "activity")  # never emit a packet the next engine would reject
+    except signal_policy.SchemaError as exc:
+        sys.exit(f"activity_pull: {exc}")
     try:
         with open(args.out, "w", encoding="utf-8", newline="\n") as fh:
             json.dump(packet, fh, indent=2)

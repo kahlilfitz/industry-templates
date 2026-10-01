@@ -48,9 +48,7 @@ def load_governed(path):
         raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
     if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT:
         raise InputError(f"expected a {CONTRACT} object")
-    for key in ("time_entries", "exception_list", "missing_time_report", "prebill_summary"):
-        if key not in payload:
-            raise InputError(f"'{key}' missing - run guideline_check.py first")
+    signal_policy.validate_packet(payload, "governed")
     return payload
 
 
@@ -83,6 +81,10 @@ def main():
 
     try:
         stamp = generated_at(args.generated_at)
+        signal_policy.check_date(args.requested_start, "--requested-start", null=True)
+        signal_policy.check_date(args.requested_end, "--requested-end", null=True)
+        if args.requested_start and args.requested_end and args.requested_start > args.requested_end:
+            raise InputError("--requested-start is after --requested-end")
         data = deepcopy(load_governed(args.governed))
         signal_policy.enforce_timekeeper_scope(data, engine=ENGINE, strict=True)
         signal_policy.filter_packet(data, config_path=args.signal_config,
@@ -100,13 +102,16 @@ def main():
     by_flag_severity = {}
     for entry in data["time_entries"]:
         compliance = entry.get("compliance", {})
-        verdict = compliance.get("verdict", "unknown")
+        verdict = compliance.get("verdict")
+        if verdict not in signal_policy.VERDICTS:
+            verdict = "hold_for_review"  # unrecognised verdicts fail closed (validate_packet rejects them first)
         if verdict == "compliant" and (compliance.get("flags")
                                        or signal_policy.embedded_instruction(entry.get("draft", {}).get("narrative"))):
             verdict = "needs_review"  # a flagged entry is never listed as a compliant draft
         by_verdict.setdefault(verdict, []).append(entry)
         for flag in compliance.get("flags", []):
-            by_flag_severity.setdefault(flag.get("severity", "needs_review"), []).append((entry, flag))
+            severity = flag.get("severity") if flag.get("severity") in signal_policy.SEVERITIES else "hold_for_review"
+            by_flag_severity.setdefault(severity, []).append((entry, flag))
 
     lines = [
         "# DRAFT - not sent, not approved",

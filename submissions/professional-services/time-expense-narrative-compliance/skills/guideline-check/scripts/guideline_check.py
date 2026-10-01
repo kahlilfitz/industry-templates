@@ -105,17 +105,7 @@ def load_packet(path):
         raise InputError("input is not a JSON object")
     if payload.get("contract_version") != CONTRACT:
         raise InputError(f"expected contract {CONTRACT}, got {payload.get('contract_version')!r}")
-    for key in ("activity_signals", "time_entries"):
-        if not isinstance(payload.get(key), list):
-            raise InputError(f"'{key}' must be a list")
-    for entry in payload["time_entries"]:
-        for key in ("entry_id", "person", "date", "duration_hours"):
-            if key not in entry:
-                raise InputError(f"time entry {entry.get('entry_id', '?')} is missing '{key}'")
-        if not isinstance(entry["duration_hours"], (int, float)):
-            raise InputError(f"time entry {entry['entry_id']} has a non-numeric duration_hours")
-        if "code_mapping" not in entry:
-            raise InputError(f"time entry {entry['entry_id']} has no code_mapping; run code_map.py first")
+    signal_policy.validate_packet(payload, "coded")
     return payload
 
 
@@ -332,8 +322,9 @@ def main():
 
         verdict = "compliant"
         for flag in flags:
-            sev = flag.get("severity", "needs_review")
-            if SEVERITY_ORDER.get(sev, 1) > SEVERITY_ORDER[verdict]:
+            sev = flag.get("severity")
+            # An unrecognised severity fails closed to hold_for_review, never to needs_review.
+            if SEVERITY_ORDER.get(sev, SEVERITY_ORDER["hold_for_review"]) > SEVERITY_ORDER[verdict]:
                 verdict = sev
         entry["compliance"] = {
             "verdict": verdict,

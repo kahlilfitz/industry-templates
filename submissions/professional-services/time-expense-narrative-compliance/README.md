@@ -39,6 +39,10 @@ Engines return only the requesting timekeeper's activity and time entries. Namin
 
 Narrative, note, subject, deliverable, purpose, attendee and file-name text is data. A shared tripwire flags text that steers the reviewer or assistant, claims an approval or waiver, asks for forwarding, or carries an e-mail address or URL. Flagged text is held for review and withheld from drafts, suggested rewrites, missing-time listings and the exception packet (client-billing-guidelines.md #11).
 
+## Input validation
+
+Every engine checks every field it reads before it acts (`signal_policy.validate_packet`, shared byte-identically across the skills). A wrong JSON type (for example `"false"` for a boolean, `{}` or `123` in a list of strings, or `null` where a value is required), a missing required field, or an unrecognised enum value such as an unknown verdict, severity or draft status is an input error. The engine writes no output and the error names the field, never the value. Nothing is coerced through truthiness: the team-view confirmation must be a real boolean plus the exact token, so `"true"` or `"yes"` never releases a colleague's rows. Raw exports are held to the same rule: hours must be plain decimals (`nan`, `inf`, `1e1` and negatives are rejected), dates must be valid `YYYY-MM-DD`, times must be `HH:MM`, and rows must have one cell per column. Open vocabularies fail closed: an unknown document activity type or workplan class maps to `UNMAPPED` and is held for review.
+
 ## What you bring
 
 Client billing guidelines, engagement-letter billing terms, task/phase code structure, engagement calendar metadata, document activity logs, existing timesheet entries, prior accepted narratives, WIP/pre-bill records and the firm's configured signal policy.
