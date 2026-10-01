@@ -56,7 +56,7 @@ Status: ready
 ## First-week plan
 1. Review SOW scope and exclusions
 2. meet delivery manager and data lead
-3. read cleared onboarding checklist
+3. read the onboarding checklist from the knowledge digest (pending practice review)
 4. request viewer/member access only
 5. attend first governance huddle
 

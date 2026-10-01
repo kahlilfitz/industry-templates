@@ -65,7 +65,7 @@
     "first_week_focus": [
       "Review SOW scope and exclusions",
       "meet delivery manager and data lead",
-      "read cleared onboarding checklist",
+      "read the onboarding checklist from the knowledge digest (pending practice review)",
       "request viewer/member access only",
       "attend first governance huddle"
     ],
@@ -135,9 +135,9 @@
   "holds": [],
   "provenance": {
     "engines": [
-      "scope_digest/1.0.0",
-      "knowledge_match/1.0.0",
-      "wall_check/1.0.0"
+      "scope_digest/1.0.1",
+      "knowledge_match/1.0.1",
+      "wall_check/1.0.1"
     ],
     "generated_at": "2026-10-01T00:00:00Z",
     "sources": [
@@ -251,6 +251,7 @@
     "denied_knowledge_ids": [],
     "denied_workspace_ids": [],
     "held_workspace_ids": [],
+    "name_withheld_workspace_ids": [],
     "may_not_access_discuss": [],
     "source": "engine:wall_check",
     "confidence": 0.98,

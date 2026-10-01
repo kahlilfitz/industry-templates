@@ -1,6 +1,6 @@
 {
   "name": "engagement-mobilization-onboarding-pack",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Professional Services Cowork plugin: drafts a governed engagement mobilization and onboarding pack. It digests SOW scope, treats Scenario 02 staffing as recommendations until confirmed by roster, consumes Scenario 01 closeout records through a narrow fail-closed adapter, applies ethical-wall and role-access determinations, and remains draft-first.",
   "author": {
     "name": "Microsoft Professional Services Skills"

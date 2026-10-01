@@ -18,6 +18,8 @@ Scenario 02 names are proposed unless confirmed by roster.
 Ineligible or conflicted candidates from Scenario 02 are excluded, using the verdict for the confirmed role (otherwise the most restrictive verdict across roles). Independence and conflict reasons stay in the staffing record; only the verdict and rule citation travel.
 ### 3.3 Needs-review candidates escalate
 A confirmed roster member with a `needs_review` Scenario 02 verdict stays on the roster with an escalation to the engagement manager.
+### 3.4 Unrecognised verdicts hold
+A Scenario 02 verdict that is blank, null or not one of `eligible`, `ineligible`, `conflicted`, `blocked` or `needs_review` is unrecognised: the confirmed roster member stays on the roster flagged for staffing review and the run holds.
 ## 4. Roster evidence
 ### 4.1 Confirmed roster controls
 The onboarding roster is built from `raw/confirmed-roster.csv`. Only rows with `assignment_status` = `confirmed` are assigned; blank or other values are not.
@@ -25,3 +27,5 @@ The onboarding roster is built from `raw/confirmed-roster.csv`. Only rows with `
 The first joining roster member is the pack subject; additional joiners are escalated for a separate run.
 ### 4.3 Unknown roles hold
 A joiner role absent from section 1 requests no access and raises a hold.
+### 4.4 Unknown onboarding status holds
+`onboarding_status` must be `active`, `joining`, `mid-engagement joiner` or `new_joiner`. A blank or other value raises a hold and an escalation; the person is not treated as the joiner. The roster must have `person`, `role`, `assignment_status` and `onboarding_status` columns, and rows with more fields than the header stop the run.

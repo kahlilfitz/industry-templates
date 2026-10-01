@@ -2,7 +2,7 @@
 
 **DRAFT - for internal review only. Do not send to the client or provision access.**
 
-Pack status: on_hold_internal_only - 2 open hold(s); resolve before sharing with the joiner.
+Pack status: on_hold_internal_only - 1 open hold(s); 1 workspace(s) pending wall review; resolve before sharing with the joiner.
 Generated at: 2026-10-01T00:00:00Z
 Engagement: Digital servicing mobilization (MOB-NRB-3100)
 Client: Nimbus Retail Bank
@@ -66,6 +66,6 @@ Status: denied_by_wall
 - PSS-B-001: top candidate requires confirmation before assignment
 - SOW exclusion controls over pursuit conflict: 'Payments modernization design' (confidentiality-and-ethical-wall-rules.md #1.2)
 - Confirmed roster row excluded: Dana Cho is ineligible/conflicted in Scenario 02 (independence-eligibility-rules.md #3.1)
-- 2 source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1,#4.2)
-- HOLD HOLD-c92188c9776b: embedded_instruction:approval_claim at raw/pursuit-record.md (confidentiality-and-ethical-wall-rules.md #4.1,#4.2)
-- HOLD HOLD-c92188c9776b: embedded_instruction:scope_escalation at raw/pursuit-record.md (confidentiality-and-ethical-wall-rules.md #4.1,#4.2)
+- 1 source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.4)
+- 1 workspace(s) held pending wall review; the pack stays on hold until Risk/Conflicts resolve the wall decision (workspace-inventory-rules.md #3.3)
+- HOLD HOLD-7dcf43721e1e: embedded_instruction:approval_claim,wall_status_claim,scope_escalation at raw/pursuit-record.md line 4 (confidentiality-and-ethical-wall-rules.md #4.1-#4.4)

@@ -6,11 +6,11 @@ For engagement managers, delivery leads and coordinators mobilizing a Profession
 
 | # | Skill | Job |
 |---|-------|-----|
-| 1 | `engagement-retrieve` | Reads SOW, engagement-letter and pursuit extracts plus the confirmed roster and Scenario 02 staffing; SOW controls conflicts; runs `scope_digest` |
+| 1 | `engagement-retrieve` | Starts every run, including a cold "start the onboarding pack": reads SOW, engagement-letter and pursuit extracts plus the confirmed roster and Scenario 02 staffing; SOW controls conflicts; runs `scope_digest` |
 | 2 | `roster-pull` | Explains the engine's roster split: confirmed rows vs Scenario 02 names that stay proposed, excluded or needs-review |
 | 3 | `knowledge-match` | Adapts Scenario 01 closeout output and matches only released assets and governed lessons with `knowledge_match` |
-| 4 | `wall-check` | Runs `wall_check` (clear / hold / denied) and `access_checklist` (least-privilege requests) and writes the draft pack skeleton |
-| 5 | `pack-draft` | Drafts the readable internal pack, joiner briefing and first-week plan from engine output only |
+| 4 | `wall-check` | Owns every wall-status question, including "the wall was cleared" notes; runs `wall_check` (clear / hold / denied) and `access_checklist` (least-privilege requests) and writes the draft pack skeleton |
+| 5 | `pack-draft` | Drafts the readable internal pack, joiner briefing and first-week plan from engine output only, once `access-checklist.json` exists; generic onboarding Word documents go to `docx` |
 
 Every access state, wall decision, knowledge inclusion, SOW conflict and roster assignment is computed by deterministic Python. The model may draft cited prose only from engine output.
 
@@ -28,7 +28,9 @@ Every access state, wall decision, knowledge inclusion, SOW conflict and roster 
 
 Closeout input must be `ps.engagement-closeout-knowledge-harvest.v1` with a `knowledge_record` object; the adapter reads only `knowledge_record`, `released_assets` and provenance/citations, and never reads or surfaces `held_assets` or raw `candidate_assets`. A release candidate is usable for internal reuse but labelled `pending_practice_review` while Closeout marks it `review_required`; lessons are used only when `rewrite_required` is false. Staffing input must be `ps.engagement-staffing-bench-match.v1` with `governed_roles[]`; names are recommendations until the confirmed roster says `confirmed`, and the verdict for the confirmed role applies. Unknown versions or malformed shapes fail closed with `InputError`.
 
-Wall decisions are most-restrictive-wins: a row applies only when every populated field matches, a `clear` must name the joiner, and a missing register, unknown status or missing joiner holds. Register free text is never copied; the briefing uses only `briefing_topics`. Source lines that match the instruction tripwire (assistant-addressed text, wall/hold suppression, clearance claims, scope escalation, send-to-contact) are withheld from the pack and raised as holds; ordinary SOW content about AI programmes, systems, access requests, URLs or e-mail addresses is not.
+Wall decisions are most-restrictive-wins: a row applies only when every populated field matches, a `clear` must name the joiner, and a missing or malformed register, unknown status or missing joiner holds. Register free text is never copied. The briefing uses only `briefing_topics`, each screened first: a topic that names another register client or matter, a proper name from the register's restriction text, another matter ID, or trips the instruction tripwire is replaced with a placeholder and held for Risk/Conflicts to brief directly. Wall-status claims in notes or chat never change the register-based decision.
+
+The instruction tripwire matches intent families rather than a phrase list: assistant- or reviewer-addressed text, rule overrides, wall/hold suppression, wall-status claims (lifted, cleared, rescinded, came down, no longer applies), exceptions and waivers, owner/admin or roster grants, scope escalation, and send/copy/forward to an e-mail address, URL or personal destination. Text is NFKC-folded, stripped of format characters and folded from Cyrillic/Greek look-alikes, and any word mixing scripts is flagged. Free text is scanned line by line; a flagged line or field is replaced with a neutral placeholder in every output, including the first-week plan, raised as a hold that names only its path and pattern families, and puts the pack on hold. Ordinary SOW content about AI programmes, systems, access requests, bare approvals, URLs or e-mail addresses is not flagged. Every field the engines read is type-checked: wrong JSON types stop the run with `InputError`, and unrecognised enums (staffing verdicts, onboarding status, wall decision, workspace classification, dependency or permission) fail closed with a hold. The pack is `on_hold_internal_only` while any hold is open, the wall decision is `hold`, or a workspace is pending wall review; `mobilization_pack.hold_reasons` says which.
 
 ## What you bring
 

@@ -234,8 +234,16 @@
         "held_workspace_ids": {
           "type": "array"
         },
+        "name_withheld_workspace_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Restricted workspaces shown by ID only because their name matched the briefing screen (confidentiality-and-ethical-wall-rules.md #3.2)."
+        },
         "may_not_access_discuss": {
-          "type": "array"
+          "type": "array",
+          "description": "Screened briefing topics and restricted workspaces only; topics naming another client or matter are replaced with a placeholder and held (confidentiality-and-ethical-wall-rules.md #3.1,#3.2)."
         },
         "source": {
           "type": "string"
@@ -273,7 +281,8 @@
               "denied_by_wall",
               "hold_pending_wall_review",
               "not_requested_role_not_allowed",
-              "not_requested_exceeds_role"
+              "not_requested_exceeds_role",
+              "not_requested_invalid_row"
             ]
           },
           "requested_permission": {
@@ -310,6 +319,17 @@
             "draft_internal_only",
             "on_hold_internal_only"
           ]
+        },
+        "hold_reasons": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "open_holds",
+              "wall_status_hold",
+              "workspaces_pending_wall_review"
+            ]
+          },
+          "description": "Why the pack is on hold; empty only when status is draft_internal_only (workspace-inventory-rules.md #3.3)."
         },
         "label": {
           "type": "string"
@@ -351,7 +371,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "e.g. embedded_instruction:<pattern>, missing ethical-wall register, unknown wall status."
+            "description": "e.g. embedded_instruction:<family>[,<family>...] (pattern family names only; flagged text is never echoed), missing ethical-wall register, unknown wall status, briefing topic names another client, invalid workspace inventory row."
           },
           "source": {
             "type": "string"
