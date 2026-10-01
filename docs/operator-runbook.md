@@ -159,7 +159,9 @@ overlap across plugins.
    ```
 
    Never run two prepares (or a prepare and a `npm run build`) at once: each deletes and rebuilds
-   `public\bundles\`. Note the printed task name, SHA-256 and prompt path. Optionally inspect the
+   `public\bundles\`. Prepare also runs the shipped tests from an extracted copy of the built ZIP
+   and refuses to freeze if they fail there (usually a test reading a source-only file such as
+   `metadata.json`). Note the printed task name, SHA-256 and prompt path. Optionally inspect the
    frozen ZIP (see [Inspecting a frozen ZIP](#inspecting-a-frozen-zip)).
 5. **Launch Cowork** by hand, following [Cowork operating rules](#cowork-operating-rules): a new
    task named with `coworkTaskName` from `evaluation-run.json`, the frozen ZIP from

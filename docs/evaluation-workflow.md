@@ -67,10 +67,13 @@ The command:
 1. Validates every submission.
 2. Rebuilds all reproducible bundles.
 3. Confirms the submission and plugin-manifest versions agree.
-4. Copies the generated bundle into an immutable local run folder.
-5. Records the SHA-256, Git commit, dirty-worktree state, artifact version, and Cowork task name.
-6. Generates a ready-to-paste Cowork prompt.
-7. Refuses to replace an existing candidate for the same plugin version.
+4. Extracts the built ZIP to a temporary folder and runs any shipped `tests/run_tests.py`,
+   `tests/test_engines.py` and `tests/check_shared_copies.py` there with `python`, so tests that
+   depend on source-only files (such as `metadata.json`) fail before freezing, not in Cowork.
+5. Copies the generated bundle into an immutable local run folder.
+6. Records the SHA-256, Git commit, dirty-worktree state, artifact version, and Cowork task name.
+7. Generates a ready-to-paste Cowork prompt.
+8. Refuses to replace an existing candidate for the same plugin version.
 
 The result is:
 

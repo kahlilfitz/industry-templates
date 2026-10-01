@@ -108,7 +108,7 @@ human testers).
 | 02 | `engagement-staffing-bench-match` | 1.1.4 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.1.4 tracker tab | reviewers |
 | 03 | `engagement-mobilization-onboarding-pack` | 1.0.0 evaluated; 1.0.1 committed | 1.0.0 Blocked (trust-and-safety gate); 1.0.1 committed (`a0505b5`), under independent code review | No | No | No | No | No | Close the review, freeze 1.0.1, evaluate in a new Cowork task | operator |
 | 04 | `time-expense-narrative-compliance` | 1.0.3 evaluated; 1.0.4 committed | 1.0.3 Blocked (trust-and-safety gate); 1.0.4 committed (`ddfa366`, `b5f064d`), under independent code review | No | No | No | No | No | Close the review, freeze 1.0.4, evaluate in a new Cowork task | operator |
-| 05 | `deliverable-review-quality-gate` | 1.0.3 in evaluation; 1.0.4 in progress | 1.0.2 Blocked; 1.0.3 in Cowork evaluation; 1.0.4 detector rework being built in parallel | No | No | No | No | No | Archive the 1.0.3 result (watcher running), fold its findings into 1.0.4, then review and freeze | Cowork, then operator |
+| 05 | `deliverable-review-quality-gate` | 1.0.3 evaluated; 1.0.4 committed | 1.0.3 Blocked (B1 demo inputs not derivable from raw packs; B2 shipped tests read `metadata.json`), every measured gate met; 1.0.4 committed (`756cc1e`) | No | No | No | No | No | Fold the 1.0.3 findings and shared detector into 1.0.4, QA review, freeze, evaluate in a new Cowork task | operator |
 
 Notes on the board:
 
@@ -393,7 +393,8 @@ to a system of record.
 | 1.0.0 | `9d77f91` (portfolio import) | None | **Never evaluated** | No CHANGELOG and no shipped regression tests. | None |
 | 1.0.1 | `94a6192` (receipt dirty) | `7F487D5D…49BC` | **No-ship** | Trust-and-safety hard stop in `review-packet` (94/95 held): a user-supplied external recipient was accepted for routing with no hold, and the packet appended the full contract payload. Engine defects L1 to L5: `scope_aligned=false` ignored; unsupported definitive conclusions not ranked as release blockers; best-evidence selection; hard-coded finding locations; missing registers treated as clean. Skills 86 to 91; behavioral 15/15 (35 runs), 4.5/5; security 0 findings. | `Evaluation\1.0.1` |
 | 1.0.2 | `25c2a63` (receipt records pre-rewrite `2ba4145`, dirty) | `29B431EC…B869` | **Blocked** | 42/50 behavioral cases (84%). 2 FAIL (fail-open logic defects in the gate engine): a null `required_language` register is treated as empty instead of holding; unrecognised `client_data_handling` values pass clean with no finding. 6 WEAK: `severity_rank` traceback on a non-numeric page label; look-alike letter evasion; paraphrased steering text; instruction text in citation fields not scanned; false positive on ordinary "pre-approved"; an upstream finding reusing a G8 finding ID can suppress the blocker. Skills 85 to 93; 4.57/5; trust and safety 75/75 held; security 0 findings. | `Evaluation\1.0.2` |
-| 1.0.3 | `bd7b029`, `ded75a8`, `0476ce8`, `581a144` | `99699BDD…F9D2` | **In Cowork evaluation**. Post-freeze QA found the detector misses assistant-addressed and verdict-steering text without a fixed noun; 1.0.4 is being built in parallel | Fixes the 1.0.2 blockers (`bd7b029`, 103 tests). Three independent review rounds then found further fail-open paths, each fixed in a new commit with no version bump: wrong-type recipients and booleans, unvalidated register entries, AM findings trusted by self-declared source (`ded75a8`, 179 tests); a missing required disclaimer, keyword-only recipient classification, an omitted `scope_aligned`, evidence with no or unknown type supporting a fact, and deep-nesting tracebacks (`0476ce8`, 241 tests); and a client alias or name containing external-party vocabulary hiding an external recipient (`581a144`, 254 tests). | None |
+| 1.0.3 | `bd7b029`, `ded75a8`, `0476ce8`, `581a144` | `99699BDD…F9D2` | **Blocked** (evaluated 2026-10-01). Every measured gate met: skills 85 to 93, behavioral 20/20, quality 4.7/5, trust and safety 60/60 held, security pass. Blocked on two release-mechanics findings: **B1** the scenario A `review-input.json` sets `client_data_handling='ok'` although its raw pack has no client-data register, so ingest step 5 would produce `unknown` (a G4 blocker) and the golden, README and critical-path prompt 1 contradict the sources; other fixture values (page numbers, A's `population_size` 1100, B's board recipient and brand `pass`) are not in the raw packs either. **B2** shipped `tests/run_tests.py` crashes from the ZIP because it reads `metadata.json`, which the bundler excludes. Advisories: document `criteria_sections` seeding and paragraph numbering for unpaginated sources; QRM supplies the reliance clause; drop the duplicated "Rule:" line and define empty-section wording; rename `extra` in the test harness; add a ground-every-statement sentence. | Fixes the 1.0.2 blockers (`bd7b029`, 103 tests). Three independent review rounds then found further fail-open paths, each fixed in a new commit with no version bump: wrong-type recipients and booleans, unvalidated register entries, AM findings trusted by self-declared source (`ded75a8`, 179 tests); a missing required disclaimer, keyword-only recipient classification, an omitted `scope_aligned`, evidence with no or unknown type supporting a fact, and deep-nesting tracebacks (`0476ce8`, 241 tests); and a client alias or name containing external-party vocabulary hiding an external recipient (`581a144`, 254 tests). | `Evaluation\1.0.3` |
+| 1.0.4 | `756cc1e` | Not yet frozen | **Committed; 1.0.3 findings being folded in** | Structural G8 tripwire (addressee, verdict-steering and suppression patterns rather than fixed nouns); 269 tests. Still to land before freezing: the 1.0.3 B1 and B2 fixes and advisories, the shared steering detector, and an executing QA review round. | None |
 
 Commit 2ba4145 was rewritten to 25c2a63 before first push (history scrub of an internal URL; plugin
 files identical). Frozen receipts and archived reports cite the pre-rewrite SHA.
@@ -420,30 +421,31 @@ files identical). Frozen receipts and archived reports cite the pre-rewrite SHA.
   resolved by two-way deferrals (3 of 3 runs reached the correct outcome) but suggested keeping it
   in one skill only.
 
-### Open backlog: what the 1.0.2 report asks of 1.0.3
+### Open backlog: what the 1.0.3 report asks of 1.0.4
 
-This is the report's request, not a description of the 1.0.3 change. Check the 1.0.3 commit
-(`bd7b029`) and its CHANGELOG entry against it during the review.
+This is the report's request, not a description of the 1.0.4 change.
 
-- Required: hold with the G2 register-missing blocker when `required_language` is null, and hold
-  and escalate (G4) on any `client_data_handling` value other than the known ones. Add regression
-  cases for null and blank registers and unrecognised enum values.
-- Hardening: scan citation fields; fold look-alike letters; catch paraphrased steering; stop
-  upstream findings from suppressing an engine G8 blocker by reusing its ID; stop flagging ordinary
-  "pre-approved" prose; handle non-numeric page labels in `severity_rank`.
-- Polish: exact `DRAFT - HUMAN REVIEW REQUIRED` label in the packet template; correct the
-  routing-hold citation; remove the double-counted G8 note and placeholder page-1 location; add an
-  `escalations[]` entry for missing registers; keep the shared trigger phrase in one skill.
+- Required (B1): make every structured demo input derivable from its raw pack, either by adding the
+  missing evidence (client-data register, page or paragraph references, population size,
+  distribution list, brand check) or by changing the inputs to what ingest produces; regenerate the
+  goldens, README and `tests/sample-test-prompts.csv`; add a test that re-derives each input from
+  its raw pack. Checklist item G4b.
+- Required (B2): shipped tests must pass from the extracted ZIP with no `metadata.json`.
+  `evaluation:prepare` now runs the shipped tests from an extracted copy and refuses to freeze on
+  failure. Checklist item G4a.
+- Advisories: `criteria_sections` seeding and paragraph numbering for unpaginated sources; QRM
+  supplies the reliance clause and the plugin never drafts it; drop the duplicated "Rule:" line and
+  define empty-section wording in the review packet; rename `extra` in the test harness (or
+  `# nosec B610`); add a ground-every-statement sentence.
 
 ### Next action
 
-1. Done: alias fix committed (`581a144`) and 1.0.3 frozen. Watch the over-escalation calls
-   recorded in the 1.0.3 CHANGELOG (unrecognised recipients and a missing `client_name` hold;
-   interview summaries no longer support factual claims; a client whose own name contains
-   external-party vocabulary, such as a bank, is always held).
-2. Run `evaluation:prepare` (never in parallel with another prepare), check the ZIP for CRLF and
+1. Fold the 1.0.3 findings into 1.0.4 as new commits, and vendor the shared steering detector once
+   it scores at least 90% with no false positives on the operator's held-out set.
+2. Run an executing QA review round, repeating until it reproduces nothing.
+3. Run `evaluation:prepare` (never in parallel with another prepare), check the ZIP for CRLF and
    bytecode, and evaluate it in a **new** Cowork task.
-3. Archive to `Evaluation\1.0.3\` and update this file and the industry README.
+4. Archive to `Evaluation\1.0.4\` and update this file and the industry README.
 
 ## Lessons that changed the process
 
@@ -523,7 +525,7 @@ and matched; T&E 1.0.3 relies on the hash check `evaluation:archive` performs be
 | T&E | 1.0.3 | `evaluate-time-expense-narrative-compliance-v1.0.3-2026-10-01` | `53A5C7EC29C4F4803AAD922BA04DBACA41C30576B6464B8460E0C55E0183E652` | `88b5b41` (dirty) | Blocked |
 | DRQG | 1.0.1 | `evaluate-deliverable-review-quality-gate-v1.0.1-2026-10-01` | `7F487D5D85324022655EC3A444E70B74CEEF19B3C9C2CE3003EFAF122D8849BC` | `94a6192` (dirty) | No-ship |
 | DRQG | 1.0.2 | `evaluate-deliverable-review-quality-gate-v1.0.2-2026-10-01` | `29B431EC62455E68E53AAD236698BFADA2518DA8BDA0F65EC2624D9852E5B869` | `2ba4145` (dirty; rewritten to `25c2a63`, see note) | Blocked |
-| DRQG | 1.0.3 | `evaluate-deliverable-review-quality-gate-v1.0.3-2026-10-01` | `99699BDDDA3407FC6720AE57FD47116D0F2E9A9A94D60ABD5217B130FED0F9D2` | `581a144` (dirty: docs only) | Pending |
+| DRQG | 1.0.3 | `evaluate-deliverable-review-quality-gate-v1.0.3-2026-10-01` | `99699BDDDA3407FC6720AE57FD47116D0F2E9A9A94D60ABD5217B130FED0F9D2` | `581a144` (dirty: docs only) | Blocked |
 
 The task name is the one `evaluation:prepare` suggested. Some Cowork tasks were created under
 different display names; the watcher matches by SHA-256, so this does not affect the evidence.

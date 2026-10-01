@@ -287,6 +287,17 @@ How to read a report:
   is `true` (`scripts/import-submissions.ts`). Those are source-only: no bundled file may link to
   or depend on them.
   Test: list the built ZIP and resolve every relative link in every bundled file.
+- [ ] **G4a. Shipped tests pass from the extracted ZIP.** Tests must not read source-only files
+  (`metadata.json`, top-level `README.md`, `PACKAGE-NOTES.md`); fall back to `plugin.json` for the
+  version, or skip the check when the file is absent. [deliverable-review-quality-gate 1.0.3]
+  Test: `npm run evaluation:prepare` runs the shipped tests from an extracted copy and refuses to
+  freeze on failure; run the same by hand before committing.
+- [ ] **G4b. Demo inputs are derivable from the raw demo sources.** Every value in a scenario's
+  structured input (page numbers, populations, recipients, register states such as
+  `client_data_handling`) must appear in, or follow by the documented ingest rule from, that
+  scenario's raw pack. Otherwise the golden contradicts the plugin's own ingest step.
+  [deliverable-review-quality-gate 1.0.3]
+  Test: a test re-derives each structured input from its raw pack and diffs it.
 - [ ] **G5. Current-version declarations agree.** `plugin.json`, `metadata.json`, every `SKILL.md`
   metadata version, engine version constants, contract and shared copies, generated goldens and
   current-version README text all carry the new version, and `CHANGELOG.md` has a new entry. Leave

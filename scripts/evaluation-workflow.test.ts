@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import AdmZip from "adm-zip";
 import {
   containsDigest,
   confirmsArtifactMatch,
@@ -11,6 +12,7 @@ import {
   parseArgs,
   resolveSharepointRoot,
   sha256,
+  verifyShippedTests,
 } from "./evaluation-workflow.js";
 
 test("parseArgs reads named values", () => {
@@ -122,6 +124,30 @@ test("resolveSharepointRoot prefers flag, then env, then a link; refuses plain f
     rmSync(library, { recursive: true });
     symlinkSync(join(dir, "gone"), linkPath, "junction");
     assert.throws(() => resolveSharepointRoot({ env: "", linkPath }), /broken link/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("verifyShippedTests runs bundled tests from the extracted ZIP", () => {
+  const dir = mkdtempSync(join(tmpdir(), "verify-shipped-"));
+  try {
+    const bundle = (name: string, runner: string) => {
+      const zip = new AdmZip();
+      zip.addFile("demo-plugin/tests/run_tests.py", Buffer.from(runner));
+      const path = join(dir, name);
+      zip.writeZip(path);
+      return path;
+    };
+    verifyShippedTests(bundle("ok.zip", "import sys\nsys.exit(0)\n"), "demo-plugin");
+    assert.throws(
+      () => verifyShippedTests(bundle("bad.zip", "open('metadata.json').read()\n"), "demo-plugin"),
+      /fails when run from the built ZIP/,
+    );
+    const empty = new AdmZip();
+    empty.addFile("demo-plugin/README.md", Buffer.from("x"));
+    empty.writeZip(join(dir, "none.zip"));
+    verifyShippedTests(join(dir, "none.zip"), "demo-plugin");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

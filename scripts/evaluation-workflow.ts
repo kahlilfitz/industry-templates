@@ -1,11 +1,15 @@
 import {
   existsSync,
   lstatSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -257,4 +261,43 @@ export function assertNonEmptyFile(path: string, label = path): void {
 
 export function relativeToRoot(path: string): string {
   return relative(ROOT, path);
+}
+
+const SHIPPED_TEST_RUNNERS = ["run_tests.py", "test_engines.py", "check_shared_copies.py"];
+
+// Cowork runs the shipped tests from the ZIP, where source-only files such as metadata.json are absent.
+export function verifyShippedTests(bundlePath: string, slug: string): void {
+  const workDir = mkdtempSync(join(tmpdir(), `bundle-${slug}-`));
+  try {
+    execFileSync(
+      "python",
+      ["-c", "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])", bundlePath, workDir],
+      { stdio: "inherit" },
+    );
+    const roots = readdirSync(workDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+    const pluginRoot = roots.length === 1 ? join(workDir, roots[0].name) : workDir;
+    const runners = SHIPPED_TEST_RUNNERS.filter((name) => existsSync(join(pluginRoot, "tests", name)));
+    if (runners.length === 0) {
+      console.log("No shipped tests in the bundle; skipping the from-ZIP test run.");
+      return;
+    }
+    for (const runner of runners) {
+      console.log(`Running shipped tests/${runner} from the extracted bundle...`);
+      try {
+        execFileSync("python", [join("tests", runner)], {
+          cwd: pluginRoot,
+          stdio: ["ignore", "ignore", "inherit"],
+          env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1" },
+        });
+      } catch {
+        throw new Error(
+          `shipped tests/${runner} fails when run from the built ZIP; ` +
+            "run it from an extracted copy of public\\bundles\\" + `${slug}.zip to see why ` +
+            "(often a test reads a source-only file such as metadata.json or README.md)",
+        );
+      }
+    }
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
 }

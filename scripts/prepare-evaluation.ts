@@ -2,10 +2,13 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import {
@@ -62,6 +65,7 @@ function main(): void {
 
   const bundlePath = join(ROOT, "public", "bundles", `${slug}.zip`);
   assertNonEmptyFile(bundlePath, `generated bundle public\\bundles\\${slug}.zip`);
+  verifyShippedTests(bundlePath, slug);
 
   const runDir = join(inboxRoot, slug, submission.version);
   const artifactPath = join(runDir, `${slug}.zip`);
