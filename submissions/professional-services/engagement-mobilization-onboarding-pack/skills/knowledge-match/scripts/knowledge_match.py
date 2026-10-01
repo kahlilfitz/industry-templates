@@ -28,14 +28,16 @@ def adapt(p):
     for i,r in enumerate(ra): check_asset(r,f"{W}.released_assets[{i}]",True)
     for i,r in enumerate(kr.get("reusable_assets",[])): check_asset(r,f"{W}.knowledge_record.reusable_assets[{i}]")
     for i,r in enumerate(kr.get("lessons",[])): check_lesson(r,f"{W}.knowledge_record.lessons[{i}]")
-    return {"knowledge_record":kr,"released_assets":ra,"provenance":x.get("provenance",x.get("run_metadata",{}))}
+    ce=field(x,"engagement","obj",W,nullable=True,default={})
+    for k in ("engagement_id","client_name","title"): field(ce,k,"str",W+".engagement",nullable=True)
+    return {"knowledge_record":kr,"released_assets":ra,"engagement":ce,"provenance":x.get("provenance",x.get("run_metadata",{}))}
 def check_scope(s):
     need(isinstance(s,dict),f"scope input must be a JSON object, got {type(s).__name__}; fail closed")
     if s.get("contract_version")!=CONTRACT_VERSION: raise InputError(f"expected contract {CONTRACT_VERSION} in scope input")
-    W="scope"; ss=field(s,"scope_summary","obj",W,required=True)
-    for k in ("objectives","in_scope","deliverables","exclusions","first_week_focus"): field(ss,k,"strlist",W+".scope_summary")
-    j=field(s,"joiner","obj",W,nullable=True,default={}); field(j,"role","str",W+".joiner",nullable=True)
-    field(s,"holds","objlist",W); field(s,"escalations","list",W)
+    field(s,"scope_summary","obj","scope",required=True); check_contract(s,"scope")  # confidentiality-and-ethical-wall-rules.md #1.3
+def own_words(s):
+    e=s.get("engagement") or {}; j=s.get("joiner") or {}
+    return words(e.get("client_name"),e.get("matter_id"),e.get("engagement_id"),e.get("title"),*(e.get("affiliates") or []),j.get("person"),*[r.get("person") for r in s.get("team_roster",[])],*(s.get("scope_summary") or {}).get("systems",[]))
 def rel(scope,item):
     ss=scope["scope_summary"]
     over=sorted(toks(item.get("title") or "",item.get("description") or ""," ".join(item.get("tags") or []),item.get("category") or "") & toks((scope.get("joiner") or {}).get("role") or ""," ".join(ss.get("objectives",[]))," ".join(ss.get("in_scope",[]))," ".join(ss.get("deliverables",[]))))
@@ -60,6 +62,12 @@ def main():
         score,over=rel(s,{"title":lesson.get("category") or "","description":lesson.get("drafting_guidance") or "","tags":lesson.get("tags") or []})
         if score>=.5: inc.append({"knowledge_id":lesson.get("cluster_id"),"title":f"Lesson: {lesson.get('category')}","summary":lesson.get("drafting_guidance"),"relevance_score":score,"matched_terms":over,"clearance_state":"LESSON_FOR_INTERNAL_DRAFT","confidentiality_permission":lp or "closeout_governed_lesson","review_status":review_status({"review_required":lesson.get("review_candidate")}),"source":"adapter:closeout-governed.knowledge_record.lessons","confidence":lesson.get("confidence",.85),"citations":(lesson.get("evidence_citations") or [])+[lesson.get("citation") or "knowledge_record.lessons","knowledge-reuse-rules.md #2.2,#2.4,#3.2"]})
     inc=redact(inc)  # flagged Closeout text never travels (confidentiality-and-ethical-wall-rules.md #4.3)
+    # The closed engagement is usually another client: its name and IDs never reach this pack (#3.3).
+    ce=c["engagement"]; mine=s.get("engagement") or {}
+    terms=client_terms([v for k_,v in (("client_name",ce.get("client_name")),("engagement_id",ce.get("engagement_id"))) if v and norm(v)!=norm(mine.get(k_) or "")],own_words(s))
+    if terms:
+        s["prior_knowledge_candidates"]=inc; s,oh=screen_other(s,terms,ENGINE,"matched."); inc=s.pop("prior_knowledge_candidates")
+        if oh: holds=dedup_holds(holds+oh); s.setdefault("escalations",[]).append(other_escalation(len(oh)))
     status="ready" if inc and not holds else "hold" if holds else "empty"
     if not inc and not holds: s.setdefault("escalations",[]).append("No released, permissioned prior-knowledge records matched the engagement (knowledge-reuse-rules.md #2.1,#2.2,#3.1)")
     s["prior_knowledge_candidates"]=inc; s["knowledge_digest"]={"status":status,"items":inc,"excluded_items":exc,"source":ENGINE,"confidence":.92 if inc else .7,"citation":"knowledge-reuse-rules.md #1.1-#3.2"}; s["holds"]=holds; s.setdefault("provenance",{}).setdefault("engines",[]).append(f"knowledge_match/{VERSION}"); s["provenance"]["generated_at"]=ts; dump_json(a.out,s)

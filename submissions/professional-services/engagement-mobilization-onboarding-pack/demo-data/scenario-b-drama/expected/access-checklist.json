@@ -9,6 +9,9 @@
     "matter_id": "NRB-3100-MOB",
     "title": "Digital servicing mobilization",
     "client_name": "Nimbus Retail Bank",
+    "affiliates": [
+      "Nimbus Holdings"
+    ],
     "sector": "banking",
     "region": "Northeast US",
     "source": "engine:scope_digest",
@@ -141,7 +144,7 @@
     "PSS-B-001: top candidate requires confirmation before assignment",
     "SOW exclusion controls over pursuit conflict: 'Payments modernization design' (confidentiality-and-ethical-wall-rules.md #1.2)",
     "Confirmed roster row excluded: Dana Cho is ineligible/conflicted in Scenario 02 (independence-eligibility-rules.md #3.1)",
-    "1 source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.4)",
+    "1 source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)",
     "1 workspace(s) held pending wall review; the pack stays on hold until Risk/Conflicts resolve the wall decision (workspace-inventory-rules.md #3.3)"
   ],
   "holds": [
@@ -151,7 +154,7 @@
       "reason": "embedded_instruction:approval_claim,wall_status_claim,scope_escalation",
       "source": "engine:safety_text",
       "confidence": 0.99,
-      "citation": "confidentiality-and-ethical-wall-rules.md #4.1-#4.4"
+      "citation": "confidentiality-and-ethical-wall-rules.md #4.1-#4.5"
     }
   ],
   "provenance": {
@@ -266,7 +269,7 @@
       "workspace_type": "delivery-planner",
       "status": "not_requested_exceeds_role",
       "requested_permission": "none",
-      "reason": "requested admin exceeds role ceiling viewer",
+      "reason": "requested admin exceeds role ceiling viewer; admin rights are never requested",
       "source": "engine:access_checklist",
       "confidence": 0.96,
       "citation": "raw/workspace-inventory.csv row 3; role-access-matrix.md #2.1; workspace-inventory-rules.md #3.1; role-access-matrix.md #2.1,#2.2; workspace-inventory-rules.md #3.2"

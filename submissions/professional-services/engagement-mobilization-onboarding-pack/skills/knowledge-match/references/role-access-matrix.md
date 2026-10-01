@@ -11,6 +11,8 @@ Contributor access to planning trackers and viewer access to references.
 Request the lower of role ceiling and workspace default.
 ### 2.2 Admin rights excluded
 Admin, owner and site-collection rights are never requested by this template.
+### 2.3 Distinct ranks; clamp and hold
+Permissions rank none < viewer < member < contributor < admin < owner; no two permission types share a rank. The request is min(requested, workspace default, role ceiling). A requested or default permission wider than that is clamped to it and raises `HOLD-PERMISSION-CLAMPED` for engagement manager review; a wider permission is never granted silently. Admin, owner or unrecognised requests request nothing (rule 2.2).
 ## 3. Staffing slate handoff
 ### 3.1 Recommendations are not assignments
 Scenario 02 names are proposed unless confirmed by roster.

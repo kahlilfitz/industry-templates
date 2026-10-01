@@ -9,6 +9,9 @@
     "matter_id": "ORC-1042-MOB",
     "title": "Patient access operating model mobilization",
     "client_name": "Orchard Ridge Clinics",
+    "affiliates": [
+      "Orchard Ridge Health Holdings"
+    ],
     "sector": "healthcare",
     "region": "Midwest US",
     "source": "engine:scope_digest",

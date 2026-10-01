@@ -3,7 +3,8 @@ import argparse
 from safety_text import *
 ENGINE="engine:access_checklist"
 M={"delivery analyst":{"engagement-sharepoint":"viewer","delivery-planner":"viewer","client-teams-channel":"member","knowledge-repository":"viewer"},"delivery manager":{"engagement-sharepoint":"contributor","delivery-planner":"contributor","client-teams-channel":"member","knowledge-repository":"viewer"},"client delivery manager":{"engagement-sharepoint":"contributor","delivery-planner":"contributor","client-teams-channel":"member","knowledge-repository":"viewer"},"engagement coordinator":{"engagement-sharepoint":"viewer","delivery-planner":"contributor","client-teams-channel":"member","knowledge-repository":"viewer"}}  # role-access-matrix.md #1.1-#1.3
-O={"none":0,"viewer":1,"member":1,"contributor":2,"admin":3,"owner":3}  # role-access-matrix.md #2.1,#2.2
+O={"none":0,"viewer":1,"member":2,"contributor":3,"admin":4,"owner":5}  # role-access-matrix.md #2.1-#2.3: every permission has its own rank
+NAMES={v:k for k,v in O.items() if k!="owner"}
 ADMIN_EXCLUDED=True  # workspace-inventory-rules.md #3.2
 WALL_STATUSES={"clear","denied","hold"}  # confidentiality-and-ethical-wall-rules.md #2.2
 INVENTORY_COLUMNS=("workspace_id","workspace_type","default_permission","depends_on_knowledge","data_classification")  # workspace-inventory-rules.md #1.3
@@ -26,15 +27,9 @@ def pack(p):
 def check_governed(p):
     need(isinstance(p,dict),f"governed input must be a JSON object, got {type(p).__name__}; fail closed")
     if p.get("contract_version")!=CONTRACT_VERSION: raise InputError(f"expected contract {CONTRACT_VERSION} in governed input")
-    W="governed"
     if not isinstance(p.get("wall_decision"),dict): raise InputError("governed input has no wall_decision object; run wall_check first; fail closed")
-    wd=p["wall_decision"]
-    for k in ("denied_workspace_ids","held_workspace_ids","name_withheld_workspace_ids"): field(wd,k,"strlist",W+".wall_decision")
-    field(wd,"may_not_access_discuss","objlist",W+".wall_decision")
-    j=field(p,"joiner","obj",W,nullable=True,default={}); field(j,"role","str",W+".joiner",nullable=True)
-    for k in ("engagement","scope_summary","knowledge_digest"): field(p,k,"obj",W,nullable=True)
-    for k in ("holds","team_roster","proposed_staffing"): field(p,k,"objlist",W)
-    field(p,"escalations","list",W)
+    # An unrecognised wall_decision.status is held below rather than rejected (confidentiality-and-ethical-wall-rules.md #2.2).
+    check_contract(p,"governed",lenient=("wall_decision.status",))  # confidentiality-and-ethical-wall-rules.md #1.3
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--governed",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--pack-out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
     p=load_json(a.governed); check_governed(p)
@@ -60,10 +55,14 @@ def main():
             add_hold("HOLD-INVALID-WORKSPACE-ROW",f"raw/workspace-inventory.csv row {n}","invalid workspace inventory row: "+"; ".join(invalid),"workspace-inventory-rules.md #1.3,#2.3")
         elif wid in held or (wstat in {"hold","denied"} and (dep or conf)): status="hold_pending_wall_review"; reason="prior-knowledge dependent access held until wall status is clear" if dep else "client-confidential workspace held pending wall review"; perm="none"; cit+="; workspace-inventory-rules.md #2.1"
         elif not maxp: status="not_requested_role_not_allowed"; reason="role matrix does not allow this workspace type"; perm="none"; cit+="; role-access-matrix.md #1"
-        elif O.get(req,99)>O.get(maxp,0) or O.get(req,0)>=O["admin"]: status="not_requested_exceeds_role"; reason=f"requested {req} exceeds role ceiling {maxp}" if req in O else f"unrecognised requested permission exceeds role ceiling {maxp}"; perm="none"; cit+="; role-access-matrix.md #2.1,#2.2; workspace-inventory-rules.md #3.2"
-        elif O.get(default,0)<O.get(req,0): perm=default; reason="workspace default is narrower than requested permission"
+        elif req not in O or O[req]>=O["admin"]: status="not_requested_exceeds_role"; reason=f"requested {req} exceeds role ceiling {maxp}; admin rights are never requested" if req in O else f"unrecognised requested permission exceeds role ceiling {maxp}"; perm="none"; cit+="; role-access-matrix.md #2.1,#2.2; workspace-inventory-rules.md #3.2"
+        elif O[req]>min(O[default],O[maxp]):
+            # Request = min(requested, workspace default, role ceiling); anything wider is clamped and held, never granted (#2.3).
+            perm=NAMES[min(O[req],O[default],O[maxp])]; reason=f"requested {req} clamped to {perm} (workspace default {default}, role ceiling {maxp}); held for engagement manager review"; cit+="; role-access-matrix.md #2.3"
+            add_hold("HOLD-PERMISSION-CLAMPED",f"raw/workspace-inventory.csv row {n}.requested_permission",f"requested {req} is wider than min(workspace default {default}, role ceiling {maxp}); request clamped to {perm}","role-access-matrix.md #2.3")
+            if perm=="none": status="not_requested_exceeds_role"
         name=r.get("name") or wid
-        if wid in hidden or hits(name): name=wid or "(blank workspace_id)"
+        if wid in hidden or hits(name) or name==WITHHELD: name=wid or "(blank workspace_id)"
         out.append({"workspace_id":wid,"workspace_name":name,"workspace_type":wt,"status":status,"requested_permission":perm,"reason":reason,"source":ENGINE,"confidence":.96,"citation":cit})
     holds=dedup_holds(holds); pend=sum(i["status"]=="hold_pending_wall_review" for i in out)
     reasons=(["open_holds"] if holds else [])+(["wall_status_hold"] if wstat=="hold" else [])+(["workspaces_pending_wall_review"] if pend else [])  # workspace-inventory-rules.md #3.3

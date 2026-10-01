@@ -46,7 +46,7 @@ Status: denied_by_wall
 
 ## Access-request checklist
 - NRB Engagement SharePoint (WS-B-SP): denied_by_wall - none - workspace denied by wall_check
-- NRB Delivery Planner (WS-B-PLAN): not_requested_exceeds_role - none - requested admin exceeds role ceiling viewer
+- NRB Delivery Planner (WS-B-PLAN): not_requested_exceeds_role - none - requested admin exceeds role ceiling viewer; admin rights are never requested
 - NRB Team Channel (WS-B-TEAMS): hold_pending_wall_review - none - client-confidential workspace held pending wall review
 - Payments and servicing knowledge repository (WS-B-KNOW): denied_by_wall - none - workspace denied by wall_check
 
@@ -66,6 +66,6 @@ Status: denied_by_wall
 - PSS-B-001: top candidate requires confirmation before assignment
 - SOW exclusion controls over pursuit conflict: 'Payments modernization design' (confidentiality-and-ethical-wall-rules.md #1.2)
 - Confirmed roster row excluded: Dana Cho is ineligible/conflicted in Scenario 02 (independence-eligibility-rules.md #3.1)
-- 1 source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.4)
+- 1 source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)
 - 1 workspace(s) held pending wall review; the pack stays on hold until Risk/Conflicts resolve the wall decision (workspace-inventory-rules.md #3.3)
-- HOLD HOLD-7dcf43721e1e: embedded_instruction:approval_claim,wall_status_claim,scope_escalation at raw/pursuit-record.md line 4 (confidentiality-and-ethical-wall-rules.md #4.1-#4.4)
+- HOLD HOLD-7dcf43721e1e: embedded_instruction:approval_claim,wall_status_claim,scope_escalation at raw/pursuit-record.md line 4 (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)

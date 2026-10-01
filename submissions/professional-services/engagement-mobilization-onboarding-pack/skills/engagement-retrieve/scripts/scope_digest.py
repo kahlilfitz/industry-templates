@@ -12,7 +12,7 @@ ONBOARDING={"active","joining","mid-engagement joiner","new_joiner"}; JOINING={"
 ROSTER_COLUMNS=("person","role","onboarding_status","assignment_status")
 def fld(t,n):
     m=re.search(rf"^{re.escape(n)}:\s*(.*)$",t,re.I|re.M); return m.group(1).strip() if m else ""
-def lst(v): return [x.strip(" -") for x in re.split(r";|\n-", v or "") if x.strip(" -")]
+def lst(v): return split_items(v)
 def one(v): return WITHHELD if hits(v) else v
 def items(line):
     # Flagged SOW/letter text never travels (#4.3): withhold each flagged item; if the line only trips the wire as a
@@ -28,6 +28,7 @@ def validate_staffing(st):
     field(st,"governed_roles","objlist",W,required=True)
     eng=field(st,"engagement","obj",W,default={})
     for k in ("engagement_id","client_name"): field(eng,k,"str",W+".engagement",nullable=True)
+    field(eng,"affiliates","strlist",W+".engagement",nullable=True)
     for e in field(st,"escalations","list",W,default=[]): esc_text(e,W+".escalations")
     for i,r in enumerate(st["governed_roles"]):
         w=f"{W}.governed_roles[{i}]"; field(r,"role_title","str",w,nullable=True)
@@ -62,7 +63,8 @@ def main():
     if miss: raise InputError(f"confirmed roster is missing required column(s): {', '.join(miss)}; fail closed")
     if rows.malformed: raise InputError(f"confirmed roster row(s) {', '.join(map(str,rows.malformed))} have more fields than the header; fail closed")
     validate_staffing(st)
-    holds=scan_text(sow,"raw/sow-extract.md")+scan_text(letter,"raw/engagement-letter-extract.md")+scan_text(pursuit,"raw/pursuit-record.md")+scan_rows(rows,"raw/confirmed-roster.csv")+scan(st,"upstream/staffing")
+    h1,sow=scan_lines(sow,"raw/sow-extract.md"); h2,letter=scan_lines(letter,"raw/engagement-letter-extract.md"); h3,pursuit=scan_lines(pursuit,"raw/pursuit-record.md")
+    holds=h1+h2+h3+scan_rows(rows,"raw/confirmed-roster.csv")+scan(st,"upstream/staffing")
     smap,prop=statuses(st); roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]
     for i,r in enumerate(rows,2):
         name=(r.get("person") or "").strip()
@@ -94,9 +96,21 @@ def main():
     elif len(joiners)>1: esc.append(f"Multiple joiners found ({', '.join(joiners)}); this pack covers {joiners[0]} only - run again per joiner (role-access-matrix.md #4.1)")
     for x in excl: esc.append(f"Confirmed roster row excluded: {x['person']} is ineligible/conflicted in Scenario 02 ({x['citation']})")
     holds=dedup_holds(holds)
-    if any(h["reason"].startswith("embedded_instruction") for h in holds): esc.append(f"{sum(h['reason'].startswith('embedded_instruction') for h in holds)} source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.4)")
-    eng=st.get("engagement") or {}
-    body={"engagement":{"engagement_id":one(fld(sow,"Engagement ID")) or eng.get("engagement_id") or "","matter_id":one(fld(sow,"Matter ID")),"title":one(fld(sow,"Title")),"client_name":one(fld(sow,"Client")) or eng.get("client_name") or "","sector":one(fld(pursuit,"Sector")),"region":one(fld(pursuit,"Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context"},"joiner":joiner,"scope_summary":{"objectives":items(fld(sow,"Objectives")),"in_scope":items(fld(sow,"In scope")),"exclusions":exclusions,"deliverables":items(fld(sow,"Deliverables")),"key_dates":items(fld(sow,"Key dates")),"systems":items(fld(sow,"Systems")),"first_week_focus":items(fld(sow,"First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(fld(letter,"Confidentiality")),"ethical_wall_terms":items(fld(letter,"Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
-    out={"contract_version":CONTRACT_VERSION,"run_metadata":{"generated_at":ts,"demo_scenario":a.scenario},**redact(body),"holds":holds,"provenance":{"engines":[f"scope_digest/{VERSION}"],"generated_at":ts,"sources":["raw/sow-extract.md","raw/engagement-letter-extract.md","raw/pursuit-record.md","raw/confirmed-roster.csv","upstream/staffing"]}}
+    eng=st.get("engagement") or {}; sow_client=fld(sow,"Client"); sow_eid=fld(sow,"Engagement ID")
+    # A staffing file for another client or engagement is another client's data: hold it and screen its identity out
+    # of every output (confidentiality-and-ethical-wall-rules.md #3.3).
+    mism=[k_ for k_,mine in (("client_name",sow_client),("engagement_id",sow_eid)) if eng.get(k_) and mine and norm(eng[k_])!=norm(mine)]
+    if mism:
+        holds.append({"hold_id":"HOLD-STAFFING-ENGAGEMENT-MISMATCH","path":"upstream/staffing.engagement."+"/".join(mism),"reason":"staffing input names a different client or engagement than the SOW (name not repeated); staffing evidence not trusted","source":ENGINE,"confidence":.99,"citation":"confidentiality-and-ethical-wall-rules.md #3.3; role-access-matrix.md #3.1"})
+        esc.append("Staffing input is for a different client or engagement than the SOW; staffing evidence held for the engagement manager (confidentiality-and-ethical-wall-rules.md #3.3)")
+    affiliates=[x for x in (eng.get("affiliates") or []) if x.strip()] if not mism else []
+    if any(h["reason"].startswith("embedded_instruction") for h in holds): esc.append(f"{sum(h['reason'].startswith('embedded_instruction') for h in holds)} source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
+    body={"engagement":{"engagement_id":one(fld(sow,"Engagement ID")) or eng.get("engagement_id") or "","matter_id":one(fld(sow,"Matter ID")),"title":one(fld(sow,"Title")),"client_name":one(sow_client) or ("" if mism else eng.get("client_name")) or "","affiliates":affiliates,"sector":one(fld(pursuit,"Sector")),"region":one(fld(pursuit,"Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context"},"joiner":joiner,"scope_summary":{"objectives":items(fld(sow,"Objectives")),"in_scope":items(fld(sow,"In scope")),"exclusions":exclusions,"deliverables":items(fld(sow,"Deliverables")),"key_dates":items(fld(sow,"Key dates")),"systems":items(fld(sow,"Systems")),"first_week_focus":items(fld(sow,"First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(fld(letter,"Confidentiality")),"ethical_wall_terms":items(fld(letter,"Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
+    body=redact(body)
+    if mism:
+        own=words(sow_client,sow_eid,fld(sow,"Matter ID"),fld(sow,"Title"))
+        body,oh=screen_other(body,client_terms([eng.get("client_name"),eng.get("engagement_id")],own),ENGINE,"scope.")
+        if oh: holds=dedup_holds(holds+oh); body["escalations"].append(other_escalation(len(oh)))
+    out={"contract_version":CONTRACT_VERSION,"run_metadata":{"generated_at":ts,"demo_scenario":a.scenario},**body,"holds":holds,"provenance":{"engines":[f"scope_digest/{VERSION}"],"generated_at":ts,"sources":["raw/sow-extract.md","raw/engagement-letter-extract.md","raw/pursuit-record.md","raw/confirmed-roster.csv","upstream/staffing"]}}
     dump_json(a.out,out)
 if __name__=="__main__": guard(main)

@@ -10,13 +10,10 @@ FREE_TEXT_NOT_BRIEFED=True  # confidentiality-and-ethical-wall-rules.md #3.1
 BRIEFING_TOPICS_SCREENED=True  # confidentiality-and-ethical-wall-rules.md #3.2
 REGISTER_COLUMNS=("person","client_name","matter_id","status")  # confidentiality-and-ethical-wall-rules.md #2.1
 KNOWN_CLASSIFICATIONS={"client_confidential","confidential","restricted","internal","public"}  # workspace-inventory-rules.md #2.3
-TOPIC_WITHHELD="[briefing topic withheld - it names another client or matter; Risk/Conflicts brief the joiner directly]"  # #3.2
-# Words that are not, on their own, identifying (org suffixes and domain nouns); everything else in another client's
-# name is matched as a distinctive token.
-GENERIC={"the","and","for","of","bank","banks","credit","union","partners","capital","group","holdings","inc","llc","ltd","limited","corp","corporation","company","insurance","assurance","mutual","health","healthcare","clinic","clinics","hospital","financial","finance","trust","llp","plc","retail","services","systems","solutions","national","first","global","engagement","matter","migration","payments","payment","modernization","modernisation","program","programme","project","workstream","material","design","prior","walled","competitor","client","previously","staffed","restricted","restriction","risk","conflicts","register","knowledge","repository","sharepoint","teams","planner","channel","delivery","engagement","may","not","access","discuss","wall","ethical"}
+TOPIC_WITHHELD="[briefing topic withheld - it names another client or matter, Risk/Conflicts brief the joiner directly]"  # #3.2
+OTHER_CLIENTS_SCREENED=True  # confidentiality-and-ethical-wall-rules.md #3.3
 ALLOW_CAPS={"sharepoint","teams","planner","sow","gdpr","pci","pii","hipaa","api","it","risk","conflicts","knowledge","repository","channel","engagement","delivery","client","q1","q2","q3","q4","i"}
 def k(v): return (v or "").strip().lower()
-def words(*xs): return {w for x in xs for w in re.findall(r"[a-z0-9]+",norm(x or ""))}
 def applies(r,e,j):
     # Every populated field must match; blank person = engagement-wide row; a row must name this client or matter.
     p,c,m=k(r.get("person")),k(r.get("client_name")),k(r.get("matter_id"))
@@ -29,51 +26,42 @@ def topics(r): return [x.strip() for x in (r.get("briefing_topics") or "").split
 def cap_runs(text):
     for m in re.finditer(r"[A-Z][A-Za-z0-9&'.-]*(?:\s+(?:&\s+)?[A-Z][A-Za-z0-9&'.-]*)*",text or ""):
         start=m.start()==0 or bool(re.search(r"[.;:!?]\s*$",text[:m.start()])); yield m.group(0).strip(" .'-"),start
-def other_terms(rows,e,own):
-    """Names and matter IDs of every client other than this engagement's, drawn from the register itself: other rows'
-    client_name/matter_id and proper-noun runs in restriction free text (confidentiality-and-ethical-wall-rules.md #3.2)."""
-    terms=set()
+def other_names(rows,e,own):
+    """Every other client's identity in the register: other rows' client_name/matter_id and proper-noun runs in
+    restriction free text (confidentiality-and-ethical-wall-rules.md #3.2,#3.3)."""
+    names=[]
     for r in rows:
-        if r.get("client_name") and k(r.get("client_name"))!=k(e.get("client_name")): terms.add(r["client_name"].strip())
-        if r.get("matter_id") and k(r.get("matter_id"))!=k(e.get("matter_id")): terms.add(r["matter_id"].strip())
+        if r.get("client_name") and k(r.get("client_name"))!=k(e.get("client_name")): names.append(r["client_name"].strip())
+        if r.get("matter_id") and k(r.get("matter_id"))!=k(e.get("matter_id")): names.append(r["matter_id"].strip())
         for run,start in cap_runs(r.get("restriction") or ""):
             ws=words(run)
             if not ws or ws<=own|GENERIC|ALLOW_CAPS or (start and len(run.split())==1): continue
-            terms.add(run)
-    return terms
-def names_other(text,terms,own,own_ids,caps=True):
-    t=norm(text); tw=set(re.findall(r"[a-z0-9]+",t))
-    for term in terms:
-        n=norm(term)
-        if re.search(r"(?<![a-z0-9])"+re.escape(n)+r"(?![a-z0-9])",t): return True
-        if any(w in tw for w in words(term)-own-GENERIC-ALLOW_CAPS if len(w)>=3): return True
-    if any(x.lower() not in own_ids for x in re.findall(r"\b[A-Za-z]{2,}(?:-[A-Za-z0-9]+)*-\d{2,}[A-Za-z0-9-]*\b",text or "")): return True  # another matter/engagement ID
-    if caps:
-        for run,start in cap_runs(text):
-            ws=words(run)
-            if not ws or ws<=own|ALLOW_CAPS or (start and len(run.split())==1): continue
-            return True
+            names.append(run)
+    return names
+def names_other(text,terms,own,own_ids):
+    """Briefing topics get the strictest screen: known identities, any other matter-like ID and any capitalised name
+    that is not this engagement's own (#3.2)."""
+    if names_client(text,terms): return True
+    if any(x.lower() not in own_ids for x in re.findall(r"\b[A-Za-z]{2,}(?:-[A-Za-z0-9]+)*-\d{2,}[A-Za-z0-9-]*\b",text or "")): return True
+    for run,start in cap_runs(text):
+        ws=words(run)
+        if not ws or ws<=own|ALLOW_CAPS or (start and len(run.split())==1): continue
+        return True
     return False
 def check_matched(p):
     need(isinstance(p,dict),f"matched input must be a JSON object, got {type(p).__name__}; fail closed")
     if p.get("contract_version")!=CONTRACT_VERSION: raise InputError(f"expected contract {CONTRACT_VERSION} in matched input")
-    W="matched"
     if "prior_knowledge_candidates" not in p or "knowledge_digest" not in p: raise InputError("matched input has no prior_knowledge_candidates/knowledge_digest; run knowledge_match first; fail closed")
-    field(p,"prior_knowledge_candidates","objlist",W,required=True); field(p,"knowledge_digest","obj",W,required=True)
-    for k_ in ("joiner","engagement"):
-        o=field(p,k_,"obj",W,nullable=True,default={})
-        for f in (("person","role") if k_=="joiner" else ("client_name","matter_id","engagement_id","title")): field(o,f,"str",f"{W}.{k_}",nullable=True)
-    field(p,"holds","objlist",W); field(p,"escalations","list",W); field(p,"team_roster","objlist",W)
-    for i,x in enumerate(p["prior_knowledge_candidates"]): field(x,"knowledge_id","str",f"{W}.prior_knowledge_candidates[{i}]",nullable=True)
+    field(p,"knowledge_digest","obj","matched",required=True); check_contract(p,"matched")  # confidentiality-and-ethical-wall-rules.md #1.3
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--matched",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
     p=load_json(a.matched); check_matched(p)
     rows=read_csv(a.wall_register,False); ws=read_csv(a.workspace_inventory,False); holds=list(p.get("holds",[])); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
     status="clear"; reason="wall register marks joiner clear for this client/matter"; cit="confidentiality-and-ethical-wall-rules.md #2.2"
-    own=words(e.get("client_name"),e.get("matter_id"),e.get("engagement_id"),e.get("title"),j.get("person"),*[r.get("person") for r in p.get("team_roster",[])],*(p.get("scope_summary") or {}).get("systems",[])); own_ids={k(e.get("matter_id")),k(e.get("engagement_id"))}-{""}
+    own=words(e.get("client_name"),e.get("matter_id"),e.get("engagement_id"),e.get("title"),*(e.get("affiliates") or []),j.get("person"),*[r.get("person") for r in p.get("team_roster",[])],*(p.get("scope_summary") or {}).get("systems",[])); own_ids={k(e.get("matter_id")),k(e.get("engagement_id"))}-{""}
     def hold_status(hid,path,why,rule):
         holds.append({"hold_id":hid,"path":path,"reason":why,"source":ENGINE,"confidence":.99,"citation":f"confidentiality-and-ethical-wall-rules.md {rule}"}); return "hold",why,f"confidentiality-and-ethical-wall-rules.md {rule}"
-    terms=set()
+    terms=[]
     if not k(j.get("person")):
         status,reason,cit=hold_status("HOLD-NO-JOINER","scope.joiner","no joiner identified; wall status cannot be determined","#2.2")
     elif rows is None:
@@ -82,7 +70,11 @@ def main():
         status,reason,cit=hold_status("HOLD-MALFORMED-WALL-REGISTER","raw/ethical-wall-register.csv header",f"ethical-wall register is missing required column(s): {', '.join(missing_columns(rows,REGISTER_COLUMNS))}","#2.1")
     else:
         if rows.malformed: hold_status("HOLD-MALFORMED-WALL-REGISTER","raw/ethical-wall-register.csv rows "+", ".join(map(str,rows.malformed)),"ethical-wall register row(s) carry more fields than the header","#2.1")
-        holds+=scan_rows(rows,"raw/ethical-wall-register.csv"); terms=other_terms(rows,e,own); matches=[(i,r) for i,r in enumerate(rows,2) if applies(r,e,j)]
+        holds+=scan_rows(rows,"raw/ethical-wall-register.csv"); terms=client_terms(other_names(rows,e,own),own)
+        p,oh=screen_other(p,terms,ENGINE,"matched.")  # every text field, not only the briefing (#3.3)
+        if oh: holds+=oh; esc=p.setdefault("escalations",[]); esc.append(other_escalation(len(oh)))
+        j=p.get("joiner") or {}; e=p.get("engagement") or {}
+        matches=[(i,r) for i,r in enumerate(rows,2) if applies(r,e,j)]
         restricted=[(i,r) for i,r in matches if k(r.get("status")) in RESTRICT]
         unknown=[r for i,r in matches if k(r.get("status")) not in RESTRICT|CLEAR]
         named_clear=[r for i,r in matches if k(r.get("status")) in CLEAR and k(r.get("person"))]
@@ -110,6 +102,10 @@ def main():
         else: cit="; ".join(row_cite(r) for r in named_clear)
     if ws is not None:
         holds+=scan_rows(ws,"raw/workspace-inventory.csv")
+        for i,w in enumerate(ws,2):
+            nm=w.get("name") or ""
+            if names_client(nm,terms): holds.append(other_hold(f"raw/workspace-inventory.csv row {i}.name",nm,ENGINE))
+            if (hits(nm) or nm==WITHHELD or names_client(nm,terms)) and w.get("workspace_id") and w["workspace_id"] not in withheld_names: withheld_names.append(w["workspace_id"])
     holds=dedup_holds(holds)
     if holds and status=="clear": status="hold"; reason="source holds require review before knowledge/access release"; cit="confidentiality-and-ethical-wall-rules.md #4.1"
     odd=[]
@@ -117,8 +113,7 @@ def main():
         wid=w.get("workspace_id"); conf=client_confidential(w.get("data_classification")); dep=depends_on_knowledge(w.get("depends_on_knowledge"))  # blank/unknown fail closed (workspace-inventory-rules.md #2.3)
         if k(w.get("data_classification")) not in KNOWN_CLASSIFICATIONS or k(w.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES: odd.append(str(i))
         if status=="denied" and wid in deniedw:
-            name=w.get("name") or wid
-            if hits(name) or names_other(name,terms,own,own_ids,caps=False): name=wid; withheld_names.append(wid)
+            name=wid if wid in withheld_names else (w.get("name") or wid)
             may.append({"item":name,"type":"workspace","restriction":"workspace restricted by ethical-wall register","citation":f"{w.get('citation') or 'raw/workspace-inventory.csv'}; confidentiality-and-ethical-wall-rules.md #2.3; workspace-inventory-rules.md #2.2"})
         elif status in {"denied","hold"} and (conf or dep) and wid not in heldw: heldw.append(wid)
     if odd: esc.append(f"Workspace inventory row(s) {', '.join(odd)} have a blank or unrecognised data_classification/depends_on_knowledge; treated as client-confidential and knowledge-dependent (workspace-inventory-rules.md #2.3)")

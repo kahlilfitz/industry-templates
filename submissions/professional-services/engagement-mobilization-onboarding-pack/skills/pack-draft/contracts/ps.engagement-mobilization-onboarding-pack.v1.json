@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ps.engagement-mobilization-onboarding-pack.v1",
   "title": "Engagement Mobilization & Onboarding Pack v1",
-  "description": "Shared contract for the 5-skill chain engagement-retrieve -> roster-pull -> knowledge-match -> wall-check -> pack-draft. Engines own every status, verdict, score and access decision; the model drafts cited prose only. Upstream adapters: Scenario 01 closeout (ps.engagement-closeout-knowledge-harvest.v1; knowledge_record + released_assets only, never held_assets/candidate_assets) and Scenario 02 staffing (ps.engagement-staffing-bench-match.v1; slate names are proposed, never assigned).",
+  "description": "Shared contract for the 5-skill chain engagement-retrieve -> roster-pull -> knowledge-match -> wall-check -> pack-draft. Engines own every status, verdict, score and access decision; the model drafts cited prose only. Upstream adapters: Scenario 01 closeout (ps.engagement-closeout-knowledge-harvest.v1; knowledge_record + released_assets only, never held_assets/candidate_assets) and Scenario 02 staffing (ps.engagement-staffing-bench-match.v1; slate names are proposed, never assigned). Every engine validates the intermediate document it reads against this schema (nested types, list element types, enums, ranges); a violation is a clean InputError (confidentiality-and-ethical-wall-rules.md #1.3).",
   "type": "object",
   "required": [
     "contract_version",
@@ -59,53 +59,146 @@
         "citation": {
           "type": "string",
           "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
+        },
+        "affiliates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Own-client affiliates from the staffing input; treated as this engagement's identity, never as another client."
         }
       }
     },
     "joiner": {
       "type": "object",
-      "description": "First confirmed roster member with a joining onboarding_status; empty when none (wall-check then holds)."
+      "description": "First confirmed roster member with a joining onboarding_status; empty when none (wall-check then holds).",
+      "properties": {
+        "person": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "responsibilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "point_of_contact": {
+          "type": "string"
+        },
+        "onboarding_status": {
+          "type": "string"
+        },
+        "assignment_status": {
+          "type": "string"
+        },
+        "staffing_review": {
+          "type": "object",
+          "description": "Present when Scenario 02 verdict is not eligible; verdict and rule only.",
+          "properties": {
+            "verdict": {
+              "enum": [
+                "needs_review",
+                "ineligible",
+                "conflicted",
+                "blocked",
+                "unrecognised"
+              ]
+            },
+            "blocking_rule": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "citation": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "source": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string",
+          "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
+        }
+      }
     },
     "scope_summary": {
       "type": "object",
-      "description": "SOW-derived; the SOW/engagement letter controls conflicts (confidentiality-and-ethical-wall-rules.md #1.2)."
+      "description": "SOW-derived; the SOW/engagement letter controls conflicts (confidentiality-and-ethical-wall-rules.md #1.2).",
+      "properties": {
+        "objectives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "in_scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deliverables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "key_dates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "systems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "first_week_focus": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string",
+          "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
+        }
+      }
     },
     "team_roster": {
       "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "person",
-          "role",
-          "assignment_status"
-        ],
-        "properties": {
-          "person": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string"
-          },
-          "assignment_status": {
-            "const": "confirmed"
-          },
-          "staffing_review": {
-            "type": "object",
-            "description": "Present when Scenario 02 verdict is not eligible; verdict and rule only."
-          },
-          "source": {
-            "type": "string"
-          },
-          "confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
-          },
-          "citation": {
-            "type": "string",
-            "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
-          }
-        }
+        "$ref": "#/$defs/roster_member"
       }
     },
     "proposed_staffing": {
@@ -133,16 +226,59 @@
           "citation": {
             "type": "string",
             "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
+          },
+          "fit_score": {
+            "type": [
+              "number",
+              "null"
+            ]
           }
         }
       }
     },
     "staffing_exclusions": {
       "type": "array",
-      "description": "Confirmed roster rows ineligible in Scenario 02; reasons stay in the staffing record."
+      "description": "Confirmed roster rows ineligible in Scenario 02; reasons stay in the staffing record.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "person": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "blocking_rule": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "citation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
     },
     "prior_knowledge_candidates": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/knowledge_item"
+      }
     },
     "knowledge_digest": {
       "type": "object",
@@ -158,37 +294,43 @@
         "items": {
           "type": "array",
           "items": {
+            "$ref": "#/$defs/knowledge_item"
+          }
+        },
+        "excluded_items": {
+          "type": "array",
+          "items": {
             "type": "object",
             "properties": {
-              "knowledge_id": {
-                "type": "string"
-              },
-              "title": {
-                "type": "string"
-              },
-              "relevance_score": {
-                "type": "number"
-              },
-              "review_status": {
-                "enum": [
-                  "pending_practice_review",
-                  "cleared_for_internal_reuse"
+              "asset_id": {
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
-              "citations": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
+              "lesson_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "citation": {
+                "type": "string"
               }
             }
           }
         },
-        "excluded_items": {
-          "type": "array"
-        },
         "denied_items": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         },
         "source": {
           "type": "string"
@@ -223,27 +365,68 @@
           "description": "Engine wording only; register free text is never copied."
         },
         "allowed_knowledge_ids": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         },
         "denied_knowledge_ids": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         },
         "denied_workspace_ids": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "held_workspace_ids": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "name_withheld_workspace_ids": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "Restricted workspaces shown by ID only because their name matched the briefing screen (confidentiality-and-ethical-wall-rules.md #3.2)."
+          "description": "Workspaces shown by ID only because their name tripped the instruction tripwire or names another client or matter (confidentiality-and-ethical-wall-rules.md #3.2,#3.3)."
         },
         "may_not_access_discuss": {
           "type": "array",
-          "description": "Screened briefing topics and restricted workspaces only; topics naming another client or matter are replaced with a placeholder and held (confidentiality-and-ethical-wall-rules.md #3.1,#3.2)."
+          "description": "Screened briefing topics and restricted workspaces only; topics naming another client or matter are replaced with a placeholder and held (confidentiality-and-ethical-wall-rules.md #3.1,#3.2).",
+          "items": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "enum": [
+                  "client_or_matter",
+                  "workspace"
+                ]
+              },
+              "restriction": {
+                "type": "string"
+              },
+              "citation": {
+                "type": "string"
+              }
+            }
+          }
         },
         "source": {
           "type": "string"
@@ -294,7 +477,8 @@
             ]
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "description": "Engine wording; a clamped request names the requested, default and ceiling permissions (role-access-matrix.md #2.3)."
           },
           "source": {
             "type": "string"
@@ -307,6 +491,9 @@
           "citation": {
             "type": "string",
             "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
+          },
+          "workspace_type": {
+            "type": "string"
           }
         }
       }
@@ -335,7 +522,10 @@
           "type": "string"
         },
         "sections": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "source": {
           "type": "string"
@@ -371,7 +561,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "e.g. embedded_instruction:<family>[,<family>...] (pattern family names only; flagged text is never echoed), missing ethical-wall register, unknown wall status, briefing topic names another client, invalid workspace inventory row."
+            "description": "e.g. embedded_instruction:<family>[,<family>...] (pattern family names only; flagged text is never echoed), missing ethical-wall register, unknown wall status, briefing topic names another client, invalid workspace inventory row. Text naming another client or matter is withheld with reason 'text names another client or matter (name not repeated)'; permission clamps hold as HOLD-PERMISSION-CLAMPED."
           },
           "source": {
             "type": "string"
@@ -410,6 +600,176 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        }
+      }
+    },
+    "engagement_terms": {
+      "type": "object",
+      "properties": {
+        "confidentiality_terms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ethical_wall_terms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string",
+          "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "roster_member": {
+      "type": "object",
+      "properties": {
+        "person": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "responsibilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "point_of_contact": {
+          "type": "string"
+        },
+        "onboarding_status": {
+          "type": "string"
+        },
+        "assignment_status": {
+          "const": "confirmed"
+        },
+        "staffing_review": {
+          "type": "object",
+          "description": "Present when Scenario 02 verdict is not eligible; verdict and rule only.",
+          "properties": {
+            "verdict": {
+              "enum": [
+                "needs_review",
+                "ineligible",
+                "conflicted",
+                "blocked",
+                "unrecognised"
+              ]
+            },
+            "blocking_rule": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "citation": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "source": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string",
+          "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
+        }
+      },
+      "required": [
+        "person",
+        "role",
+        "assignment_status"
+      ]
+    },
+    "knowledge_item": {
+      "type": "object",
+      "properties": {
+        "knowledge_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "relevance_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "matched_terms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "clearance_state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidentiality_permission": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "review_status": {
+          "enum": [
+            "pending_practice_review",
+            "cleared_for_internal_reuse"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }
