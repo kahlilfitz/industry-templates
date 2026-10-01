@@ -391,28 +391,49 @@ def recipient_words(value):
 def contains_phrase(text, phrase):
     return bool(phrase) and re.search(r"(?:^|\s)" + re.escape(phrase) + r"(?=\s|$)", text) is not None
 
+def strip_role_phrases(text):
+    for phrase in CLIENT_ROLE_PHRASES:
+        text = re.sub(r"(?:^|\s)" + re.escape(phrase) + r"(?=\s|$)", " ", text)
+    return " ".join(text.split())
+
+def has_external_vocabulary(text):
+    return EXTERNAL_RECIPIENT_PATTERN.search(strip_role_phrases(text)) is not None
+
+def client_identity_entries(deliverable):
+    """Yield (label, raw value, normalised phrase) for client_name and every client_aliases entry."""
+    entries = []
+    if isinstance(deliverable.get("client_name"), str):
+        entries.append(("client_name", deliverable["client_name"], recipient_words(deliverable["client_name"])))
+    for index, alias in enumerate(string_list(deliverable, "client_aliases", "deliverable.client_aliases")):
+        entries.append((f"client_aliases[{index}]", alias, recipient_words(alias)))
+    return [entry for entry in entries if len(entry[2]) >= 3]
+
 def client_identities(deliverable):
-    names = [deliverable.get("client_name")] + string_list(deliverable, "client_aliases", "deliverable.client_aliases")
-    return [phrase for phrase in (recipient_words(name) for name in names if isinstance(name, str)) if len(phrase) >= 3]
+    """Client names usable for positive matching. A name or alias containing external-party vocabulary is never
+    trusted (quality-gate-criteria.md #2.5): it could otherwise relabel a lender or counsel as the client."""
+    return [phrase for _, _, phrase in client_identity_entries(deliverable) if not has_external_vocabulary(phrase)]
+
+def invalid_client_identities(deliverable):
+    return [(label, safe_token(value.strip(), label)) for label, value, phrase in client_identity_entries(deliverable) if has_external_vocabulary(phrase)]
 
 def classify_recipient(recipient, identities):
     """Return client, internal, external or unclassified (quality-gate-criteria.md #2.5).
 
-    A recipient is client-only only when it positively names the client (client_name or client_aliases) and every
-    remaining word is a client role word. External-party vocabulary anywhere outside the client's own name makes it
-    external. Anything else is unclassified; nothing is inferred from the absence of a keyword."""
+    External-party vocabulary is checked first, on the full recipient text (only the engine's fixed client-role
+    phrases such as "general counsel" are exempt); a client name or alias never neutralises it. A recipient is
+    client-only only when it positively names a trusted client identity and every remaining word is a client role
+    word. Anything else is unclassified; nothing is inferred from the absence of a keyword."""
     text = recipient_words(recipient)
     if text in INTERNAL_RECIPIENTS:
         return "internal"
+    if has_external_vocabulary(text):
+        return "external"
     matched = False
     for phrase in sorted(identities, key=len, reverse=True):
         if contains_phrase(text, phrase):
             matched = True
             text = re.sub(r"(?:^|\s)" + re.escape(phrase) + r"(?=\s|$)", " ", text)
-    for phrase in CLIENT_ROLE_PHRASES:
-        text = re.sub(r"(?:^|\s)" + re.escape(phrase) + r"(?=\s|$)", " ", text)
-    if EXTERNAL_RECIPIENT_PATTERN.search(text):
-        return "external"
+    text = strip_role_phrases(text)
     if matched and all(word in CLIENT_ROLE_WORDS for word in text.split()):
         return "client"
     return "unclassified"
@@ -650,13 +671,18 @@ def main():
             add_finding(findings, "GC-G2-recipient-ambiguity", "G2", RELEASE_BLOCKER, "Recipient list is missing or ambiguous", f"{recipient_problem}; reliance language cannot be confirmed until the allowed recipient set is explicit.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
             escalations.append(f"G2: {recipient_problem} - release blocker; reviewing partner/QRM must confirm the allowed recipients (quality-gate-criteria.md #2.2)")
         recipients = recipient_classes(deliverable)
+        invalid_identities = invalid_client_identities(deliverable)
+        if invalid_identities:
+            names = ", ".join(f"{label}={value}" for label, value in invalid_identities)
+            add_finding(findings, "GC-G2-client-identity-external", "G2", MUST_FIX, "Client name or alias contains external-party vocabulary", f"{names} contains external-party vocabulary (counsel, lender, bank, investor, regulator, auditor, buyer, outside or third party), so it is not trusted to identify the client; recipients naming it are treated as external.", disclaimer_location(payload), "quality-gate-criteria.md #2.5", 0.9, "quality-gate-criteria.md #2.5; severity-rules.md #1.2")
+            escalations.append(f"G2: confirm client aliases {names} - contains external-party vocabulary and is not trusted as the client identity; reviewing partner/QRM must confirm the client name, aliases and recipients (quality-gate-criteria.md #2.5)")
         if recipients["external"] and deliverable["third_party_recipient_named"] is False:
             names = ", ".join(recipients["external"])
             add_finding(findings, "GC-G2-recipient-third-party-conflict", "G2", RELEASE_BLOCKER, "External recipient conflicts with third_party_recipient_named=false", f"Recipient(s) {names} match external-party vocabulary (counsel, lender, investor, regulator, auditor, buyer, outside or third party) but third_party_recipient_named is false; the deliverable is treated as third-party and reliance-restriction language is required.", disclaimer_location(payload), "quality-gate-criteria.md #2.2; quality-gate-criteria.md #2.5", 0.97, "quality-gate-criteria.md #2.2, #2.5; severity-rules.md #1.1")
             escalations.append(f"G2: recipient(s) {names} look external but third_party_recipient_named is false - release blocker; reviewing partner/QRM must confirm the recipients and reliance terms (quality-gate-criteria.md #2.5)")
         if recipients["unclassified"] and not recipient_problem:
             names = ", ".join(recipients["unclassified"])
-            reason = "deliverable.client_name is not supplied, so no recipient can be positively matched to the client" if not client_identities(deliverable) else "they do not positively match the client named in deliverable.client_name/client_aliases or a defined internal role"
+            reason = "no trusted deliverable.client_name or client_aliases entry is supplied, so no recipient can be positively matched to the client" if not client_identities(deliverable) else "they do not positively match the client named in deliverable.client_name/client_aliases or a defined internal role"
             add_finding(findings, "GC-G2-recipient-unconfirmed", "G2", MUST_FIX, "Recipients not confirmed as client-only", f"Recipient(s) {names} are unclassified: {reason}. An unmatched recipient is never assumed to be client-only.", disclaimer_location(payload), "quality-gate-criteria.md #2.5", 0.9, "quality-gate-criteria.md #2.5; severity-rules.md #1.2")
             escalations.append(f"G2: confirm recipients {names} - not positively matched to the client; must-fix until the reviewing partner/QRM confirms they are client-only (quality-gate-criteria.md #2.5)")
         present_disclaimers = string_list(deliverable, "present_disclaimer_types", "deliverable.present_disclaimer_types")

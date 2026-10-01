@@ -792,12 +792,44 @@ def round3_tests(tmp):
     for label, mutate in (
         ("client roles", lambda p: p["deliverable"].__setitem__("intended_recipients", ["Aster Advisory Group board", "Aster Advisory Group CFO office", "Aster Advisory Group's audit committee", "Aster Advisory Group general counsel", "Aster Advisory Group internal audit", "Engagement team"])),
         ("alias", lambda p: p["deliverable"].update({"client_aliases": ["AAG"], "intended_recipients": ["AAG steering committee"]})),
-        ("client name with external word", lambda p: p["deliverable"].update({"client_name": "First National Bank", "intended_recipients": ["First National Bank board", "First National Bank risk committee"]})),
     ):
         ranked = ranked_with(f"client-only-{label.replace(' ', '-')}", mutate)
         check(f"T2 positively matched client-only recipients ({label}) raise no G2 finding",
               not any(item["gate_id"] == "G2" for item in ranked["findings"]) and status(ranked) == "partner_review_required_advisories_only",
               sorted(finding_ids(ranked)))
+    # Third review: a client name or alias never neutralises external-party vocabulary.
+    def identity_case(label, mutate, flag=False):
+        def apply(p):
+            mutate(p)
+            p["deliverable"]["third_party_recipient_named"] = flag
+        return ranked_with(f"identity-{label.replace(' ', '-')}", apply)
+    for label, mutate in (
+        ("reviewer repro: lender alias", lambda p: p["deliverable"].update({"client_aliases": ["Cobalt Lenders LLP"], "intended_recipients": ["Aster Advisory Group management", "Cobalt Lenders LLP"]})),
+        ("counsel alias", lambda p: p["deliverable"].update({"client_aliases": ["Outside Counsel"], "intended_recipients": ["Outside Counsel"]})),
+        ("alias plus external word", lambda p: p["deliverable"].update({"client_aliases": ["AAG"], "intended_recipients": ["AAG lenders"]})),
+        ("client_name with external vocabulary", lambda p: p["deliverable"].update({"client_name": "Cobalt Lenders LLP", "intended_recipients": ["Cobalt Lenders LLP board"]})),
+        ("bank client_name", lambda p: p["deliverable"].update({"client_name": "First National Bank", "intended_recipients": ["First National Bank board"]})),
+    ):
+        ranked = identity_case(label, mutate)
+        check(f"T7 {label} with third_party_recipient_named false is not_ready_for_release with the G2 conflict",
+              severity_of(ranked, "GC-G2-recipient-third-party-conflict") == "release_blocker" and status(ranked) == "not_ready_for_release"
+              and {"GC-G2-required-disclaimer-wrong", "GC-G2-reliance-language"}.issubset(finding_ids(ranked)),
+              (status(ranked), sorted(finding_ids(ranked))))
+        expect_identity = label != "alias plus external word"
+        check(f"T7 {label}: untrusted client identity {'is held and escalated to confirm client aliases' if expect_identity else 'is not raised for a clean alias'}",
+              (severity_of(ranked, "GC-G2-client-identity-external") == "must_fix" and escalated(ranked, "G2: confirm client aliases")) == expect_identity,
+              ranked["escalations"])
+    ranked = identity_case("lender alias declared", lambda p: p["deliverable"].update({"client_aliases": ["Cobalt Lenders LLP"], "intended_recipients": ["Aster Advisory Group management", "Cobalt Lenders LLP"], "required_disclaimer_type": "reliance_restriction", "present_disclaimer_types": ["reliance_restriction"]}), flag=True)
+    check("T7 lender alias with the third party declared has no conflict but the alias is still held",
+          "GC-G2-recipient-third-party-conflict" not in finding_ids(ranked) and severity_of(ranked, "GC-G2-client-identity-external") == "must_fix"
+          and status(ranked) == "partner_review_required_must_fix", (status(ranked), sorted(finding_ids(ranked))))
+    ranked = identity_case("unused bad alias", lambda p: p["deliverable"].update({"client_aliases": ["Cobalt Lenders LLP"]}))
+    check("T7 an untrusted alias that no recipient uses is still held and escalated, recipients stay client-only",
+          severity_of(ranked, "GC-G2-client-identity-external") == "must_fix" and escalated(ranked, "G2: confirm client aliases")
+          and not {"GC-G2-recipient-third-party-conflict", "GC-G2-recipient-unconfirmed"} & finding_ids(ranked), sorted(finding_ids(ranked)))
+    ranked = identity_case("bank client only name", lambda p: p["deliverable"].update({"client_name": "First National Bank", "client_aliases": [], "intended_recipients": ["Engagement team"]}))
+    check("T7 client_name with external vocabulary is held even when only internal recipients are named",
+          severity_of(ranked, "GC-G2-client-identity-external") == "must_fix" and escalated(ranked, "G2: confirm client aliases client_name="), ranked["escalations"])
     check("T2 scenario B declared third-party lender raises no recipient conflict",
           not {"GC-G2-recipient-third-party-conflict", "GC-G2-recipient-unconfirmed"} & finding_ids(ranked_b))
     for label, mutate, expected in (
@@ -887,6 +919,10 @@ def recipient_classifier_tests():
     external = ("Outside legal counsel", "Cobalt Lenders LLP", "Aster Advisory Group lenders", "Prospective acquirer", "External auditors", "Private equity sponsor",
                 "Rating agency", "Third-party vendor", "Aster Advisory Group investors", "independent reviewer")
     unclassified = ("Board", "Foo Holdings Ltd", "Aster Advisory Group and Foo Holdings Ltd", "Asterix Group management", "Aster Advisory")
+    check("T7 classifier: an alias never neutralises external vocabulary in the recipient",
+          classify("Cobalt Lenders LLP", identities + ["cobalt lenders llp"]) == "external"
+          and classify("Aster Advisory Group general counsel", identities) == "client"
+          and classify("Aster Advisory Group outside counsel", identities) == "external")
     check("T2 classifier: client roles and internal team are client-only/internal",
           all(classify(r, identities) in {"client", "internal"} for r in benign), {r: classify(r, identities) for r in benign})
     check("T2 classifier: external-party vocabulary is external",
