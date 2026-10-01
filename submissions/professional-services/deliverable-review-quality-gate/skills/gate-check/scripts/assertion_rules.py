@@ -13,8 +13,26 @@ QUANTIFIED_CONFIDENCE_FLOOR = 0.80  # severity-rules.md #2.3; quality-gate-crite
 FORWARD_LOOKING_CONFIDENCE_FLOOR = 0.55  # quality-gate-criteria.md #1.3
 RECOMMENDATION_CONFIDENCE_FLOOR = 0.65  # quality-gate-criteria.md #1.4
 MIN_RECOMMENDATION_SAMPLE_SIZE = 30  # quality-gate-criteria.md #1.4
+MAX_INPUT_DEPTH = 64  # nesting deeper than any contract shape is rejected before any recursive processing
+# Closed evidence-type vocabulary (contract evidence_set[].type). A missing or unrecognised type never supports an assertion.
+EVIDENCE_TYPES = {
+    "analysis_model", "financial_model", "system_export", "signed_client_data", "licensed_content_register",
+    "internal_benchmark", "statement_of_work", "disclaimer_extract", "interview_summary", "workshop_note", "stakeholder_verbal",
+}
+# Per-class allowlists: support must come from a listed type (quality-gate-criteria.md #1.1-#1.4).
 TRACEABLE_QUANTIFIED_TYPES = {"analysis_model", "financial_model", "system_export", "signed_client_data"}  # quality-gate-criteria.md #1.2
-WEAK_EVIDENCE_TYPES = {"stakeholder_verbal", "workshop_note"}  # quality-gate-criteria.md #1.1
+FACTUAL_SUPPORT_TYPES = {  # quality-gate-criteria.md #1.1: documented sources stronger than stakeholder recollection
+    "analysis_model", "financial_model", "system_export", "signed_client_data", "licensed_content_register",
+    "internal_benchmark", "statement_of_work", "disclaimer_extract",
+}
+FORWARD_LOOKING_SUPPORT_TYPES = EVIDENCE_TYPES - {"stakeholder_verbal"}  # quality-gate-criteria.md #1.3
+RECOMMENDATION_SUPPORT_TYPES = EVIDENCE_TYPES - {"stakeholder_verbal", "disclaimer_extract", "licensed_content_register"}  # quality-gate-criteria.md #1.4
+SUPPORT_TYPES_BY_CLASS = {
+    "quantified": TRACEABLE_QUANTIFIED_TYPES,
+    "factual": FACTUAL_SUPPORT_TYPES,
+    "forward_looking": FORWARD_LOOKING_SUPPORT_TYPES,
+    "recommendation": RECOMMENDATION_SUPPORT_TYPES,
+}
 RELEVANCE_BY_CLASS = {
     "quantified": {"analysis_model": 4, "financial_model": 4, "system_export": 4, "signed_client_data": 4, "stakeholder_verbal": 1},
     "factual": {"licensed_content_register": 4, "system_export": 4, "signed_client_data": 4, "analysis_model": 3, "financial_model": 3},
@@ -28,6 +46,19 @@ PAGE_LABEL_HINT = "record the physical page number and keep printed labels such 
 
 class InputError(ValueError):
     """Raised for malformed or unsafe engine input."""
+
+
+def check_depth(value, label="input", max_depth=MAX_INPUT_DEPTH):
+    """Reject nesting deeper than max_depth iteratively, so hostile input can never reach a RecursionError."""
+    stack = [(value, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, (dict, list)):
+            if depth > max_depth:
+                raise InputError(f"{label} is nested more than {max_depth} levels deep; the review contract never nests that deeply")
+            children = item.values() if isinstance(item, dict) else item
+            stack.extend((child, depth + 1) for child in children)
+    return value
 
 
 def is_number(value):
@@ -104,7 +135,11 @@ def validate_assertion(assertion, index):
         raise InputError(f"{label} missing required field: location")
     validate_location(assertion["location"], label)
     for key in ASSERTION_BOOLEANS:
-        require_boolean(assertion, key, label, required=False)
+        # scope_aligned is required for every class: G3 (quality-gate-criteria.md #3.1) applies to all claims and
+        # recommendations, so an omitted flag is never read as "aligned".
+        require_boolean(assertion, key, label, required=key == "scope_aligned")
+    if assertion["class"] == "recommendation" and "sample_size" not in assertion:
+        raise InputError(f"{label} missing required field for a recommendation: sample_size (use null only when the recommendation is not sample-based)")
     for key in ASSERTION_COUNTS:
         value = assertion.get(key)
         if value is not None and (not is_integer(value) or value < 0):
@@ -157,10 +192,18 @@ def evidence_relevance(assertion, evidence):
     return by_type.get(evidence.get("type", "unknown"), 2)
 
 
+def acceptable_support(assertion, evidence):
+    return evidence.get("type") in SUPPORT_TYPES_BY_CLASS.get(assertion.get("class"), ())
+
+
+def evidence_type_label(ev_type):
+    return ev_type if ev_type in EVIDENCE_TYPES else "a missing or unrecognised evidence type"
+
+
 def best_evidence(assertion, linked_items):
     if not linked_items:
         return None
-    return max(linked_items, key=lambda item: (evidence_relevance(assertion, item), item.get("confidence", 0.0)))
+    return max(linked_items, key=lambda item: (acceptable_support(assertion, item), evidence_relevance(assertion, item), item.get("confidence", 0.0)))
 
 
 def linked_evidence_citation(assertion, evidence_by_id):
@@ -181,34 +224,39 @@ def is_definitive_conclusion(assertion):
     text = assertion.get("text", "").lower()
     definitive_terms = (" should ", "we conclude", "will ", "all ", "full ", "estate-wide", "applies across", "national ")
     return (
-        assertion.get("hedging_present") is False
+        assertion.get("hedging_present") is not True
         or assertion.get("scope_aligned") is False
         or assertion.get("population_size") is not None
         or any(term in f" {text} " for term in definitive_terms)
     )
 
 
-def classify(assertion, evidence):
+def classify(assertion, evidence, missing_ids=()):
     klass = assertion.get("class")
     if evidence is None:
         if not assertion.get("evidence_ids"):
             return "unsupported", 0.0, "No evidence IDs were linked to the assertion", "quality-gate-criteria.md #1.1"
         return "unsupported", 0.0, "No linked evidence item was found in the evidence index", "quality-gate-criteria.md #1.1"
     confidence = min(float(assertion.get("confidence", 0.0)), float(evidence.get("confidence", 0.0)))
-    ev_type = evidence.get("type", "unknown")
+    if missing_ids:
+        # Declared support must exist: a dangling evidence reference is never ignored (quality-gate-criteria.md #1.1).
+        return "unsupported", confidence, f"{len(missing_ids)} linked evidence ID(s) are not in the evidence index, so the declared support cannot be verified", "quality-gate-criteria.md #1.1"
+    ev_type = evidence.get("type")
     if klass == "quantified":
         if ev_type not in TRACEABLE_QUANTIFIED_TYPES:
-            return "unsupported", confidence, f"Quantified claim cites {ev_type}, not traceable analysis or signed data", "quality-gate-criteria.md #1.2; severity-rules.md #2.3"
+            return "unsupported", confidence, f"Quantified claim cites {evidence_type_label(ev_type)}, not traceable analysis or signed data", "quality-gate-criteria.md #1.2; severity-rules.md #2.3"
         if confidence < QUANTIFIED_CONFIDENCE_FLOOR:
             return "unsupported", confidence, f"Quantified support confidence {confidence:.2f} below {QUANTIFIED_CONFIDENCE_FLOOR:.2f}", "severity-rules.md #2.3"
         return "supported", confidence, "Quantified claim supported by traceable analytical evidence", "quality-gate-criteria.md #1.2"
     if klass == "factual":
-        if ev_type in WEAK_EVIDENCE_TYPES or confidence < EVIDENCE_CONFIDENCE_FLOOR:
-            return "unsupported", confidence, f"Factual claim support is {ev_type} at confidence {confidence:.2f}", "quality-gate-criteria.md #1.1; severity-rules.md #2.2"
+        if ev_type not in FACTUAL_SUPPORT_TYPES or confidence < EVIDENCE_CONFIDENCE_FLOOR:
+            return "unsupported", confidence, f"Factual claim support is {evidence_type_label(ev_type)} at confidence {confidence:.2f}; factual support must be a documented source type stronger than stakeholder recollection at or above {EVIDENCE_CONFIDENCE_FLOOR:.2f}", "quality-gate-criteria.md #1.1; severity-rules.md #2.2"
         return "supported", confidence, "Factual claim has cited evidence above the support floor", "quality-gate-criteria.md #1.1"
     if klass == "forward_looking":
         if assertion.get("hedging_present") is not True or assertion.get("limitation_present") is not True:
             return "limited", confidence, "Forward-looking statement lacks required hedging or limitation", "quality-gate-criteria.md #1.3"
+        if ev_type not in FORWARD_LOOKING_SUPPORT_TYPES:
+            return "limited", confidence, f"Forward-looking statement cites {evidence_type_label(ev_type)}, which is not accepted support", "quality-gate-criteria.md #1.3"
         if confidence < FORWARD_LOOKING_CONFIDENCE_FLOOR:
             return "limited", confidence, f"Forward-looking support confidence {confidence:.2f} below {FORWARD_LOOKING_CONFIDENCE_FLOOR:.2f}", "quality-gate-criteria.md #1.3"
         return "supported", confidence, "Forward-looking statement is hedged and limitation is stated", "quality-gate-criteria.md #1.3"
@@ -216,6 +264,8 @@ def classify(assertion, evidence):
         sample_size = assertion.get("sample_size")
         if assertion.get("stated_basis") is not True:
             return "unsupported", confidence, "Recommendation has no stated basis", "quality-gate-criteria.md #1.4"
+        if ev_type not in RECOMMENDATION_SUPPORT_TYPES:
+            return "unsupported", confidence, f"Recommendation cites {evidence_type_label(ev_type)}, not evidence proportionate to a recommendation", "quality-gate-criteria.md #1.4"
         if sample_size is not None and sample_size < MIN_RECOMMENDATION_SAMPLE_SIZE and assertion.get("limitation_present") is not True:
             criteria = "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2"
             rationale = f"Recommendation uses sample size {sample_size}, below {MIN_RECOMMENDATION_SAMPLE_SIZE}, without a limitation"
@@ -232,7 +282,8 @@ def classify(assertion, evidence):
 def map_assertion(assertion, evidence_by_id):
     """Return (mapping, AM finding or None, escalation or None) exactly as assertion_map emits them."""
     evidence = best_evidence(assertion, linked_evidence(assertion, evidence_by_id))
-    status, support_score, rationale, criteria_section = classify(assertion, evidence)
+    missing_ids = [eid for eid in assertion.get("evidence_ids") or [] if eid not in evidence_by_id]
+    status, support_score, rationale, criteria_section = classify(assertion, evidence, missing_ids)
     mapping = {
         "assertion_id": assertion["assertion_id"], "class": assertion["class"], "text": assertion["text"],
         "location": assertion["location"], "evidence_ids": assertion.get("evidence_ids") or [],

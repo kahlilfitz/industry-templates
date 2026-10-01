@@ -20,11 +20,14 @@ InputError = rules.InputError
 def load_json(path):
     try:
         with open(path, encoding="utf-8") as handle:
-            return json.load(handle)
+            payload = json.load(handle)
     except OSError as exc:
         raise InputError(f"could not read input JSON: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise InputError(f"invalid JSON input: {exc}") from exc
+    except RecursionError as exc:
+        raise InputError("input JSON is nested too deeply to process safely") from exc
+    return rules.check_depth(payload)
 
 
 def validate_generated_at(value):
@@ -98,6 +101,9 @@ def main():
         return 0
     except InputError as exc:
         print(f"assertion_map input error: {exc}", file=sys.stderr)
+        return 1
+    except RecursionError:
+        print("assertion_map input error: input is nested too deeply to process safely", file=sys.stderr)
         return 1
     except (KeyError, TypeError, AttributeError, ValueError, IndexError) as exc:
         print(f"assertion_map input error: malformed input ({type(exc).__name__}: {exc})", file=sys.stderr)

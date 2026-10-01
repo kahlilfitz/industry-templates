@@ -4,6 +4,7 @@
   "scenario_id": "scenario-b-drama",
   "deliverable": {
     "deliverable_id": "DELIV-VERDANT-HELIOS-V0.9",
+    "client_name": "Verdant Arc Services",
     "title": "Helios Field Service Optimisation",
     "version": "0.9",
     "type": "board recommendations",

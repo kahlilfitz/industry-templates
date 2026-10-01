@@ -21,14 +21,32 @@ STATUS_CLEAN = "partner_review_required_no_engine_findings"  # severity-rules.md
 class InputError(ValueError):
     """Raised for malformed or unsafe engine input."""
 
+MAX_INPUT_DEPTH = 64  # mirrors assertion_rules.MAX_INPUT_DEPTH
+
+
+def check_depth(value, max_depth=MAX_INPUT_DEPTH):
+    """Reject nesting deeper than max_depth iteratively, so hostile input can never reach a RecursionError."""
+    stack = [(value, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, (dict, list)):
+            if depth > max_depth:
+                raise InputError(f"input is nested more than {max_depth} levels deep; the review contract never nests that deeply")
+            stack.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
+    return value
+
+
 def load_json(path):
     try:
         with open(path, encoding="utf-8") as handle:
-            return json.load(handle)
+            payload = json.load(handle)
     except OSError as exc:
         raise InputError(f"could not read input JSON: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise InputError(f"invalid JSON input: {exc}") from exc
+    except RecursionError as exc:
+        raise InputError("input JSON is nested too deeply to process safely") from exc
+    return check_depth(payload)
 
 def validate_generated_at(value):
     if value is None:
@@ -130,6 +148,9 @@ def main():
         return 0
     except InputError as exc:
         print(f"severity_rank input error: {exc}", file=sys.stderr)
+        return 1
+    except RecursionError:
+        print("severity_rank input error: input is nested too deeply to process safely", file=sys.stderr)
         return 1
     except (KeyError, TypeError, AttributeError, ValueError, IndexError) as exc:
         print(f"severity_rank input error: malformed input ({type(exc).__name__}: {exc})", file=sys.stderr)

@@ -4,6 +4,7 @@
   "scenario_id": "scenario-a-happy",
   "deliverable": {
     "deliverable_id": "DELIV-ASTER-ORION-V0.8",
+    "client_name": "Aster Advisory Group",
     "title": "Orion Programme Benefits Review",
     "version": "0.8",
     "type": "benefits review",

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "ps.deliverable-review-quality-gate.v1",
   "title": "Deliverable Review & Quality Gate contract v1",
-  "description": "Chains deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-check -> review-packet. Carries data plus confidence, provenance and citations on every hop so review-status escalation is mechanical. Engines treat deliverable and evidence text as untrusted data.",
+  "description": "Chains deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-check -> review-packet. Carries data plus confidence, provenance and citations on every hop so review-status escalation is mechanical. Engines treat deliverable and evidence text as untrusted data. JSON nested deeper than 64 levels anywhere in an engine input is an input error.",
   "type": "object",
   "required": ["contract_version", "engagement_id", "deliverable", "criteria", "assertions", "evidence_set"],
   "properties": {
@@ -11,18 +11,20 @@
     "scenario_id": { "type": "string" },
     "deliverable": {
       "type": "object",
-      "required": ["deliverable_id", "title", "version", "confidentiality_marking", "required_disclaimer_type", "present_disclaimer_types", "source", "citation", "confidence"],
+      "required": ["deliverable_id", "title", "version", "confidentiality_marking", "third_party_recipient_named", "required_disclaimer_type", "present_disclaimer_types", "source", "citation", "confidence"],
       "properties": {
         "deliverable_id": { "type": "string" },
         "title": { "type": "string" },
         "version": { "type": "string" },
         "type": { "type": "string" },
-        "intended_recipients": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Every entry must be a JSON string; any other entry type is an input error. Absent or null, empty, blank-entry or ambiguous lists hold under G2 (quality-gate-criteria.md #2.4)." },
-        "third_party_recipient_named": { "type": "boolean", "description": "JSON true/false only; omit when unknown. null, text or numbers are input errors." },
+        "client_name": { "type": "string", "description": "Client entity name from the deliverable cover. A recipient is client-only only when it positively contains client_name or a client_aliases entry plus client role words (board, management, CFO, general counsel, internal audit, audit committee and similar). Absent or blank means no recipient can be confirmed client-only (quality-gate-criteria.md #2.5)." },
+        "client_aliases": { "type": "array", "items": { "type": "string" }, "description": "Other names for the client entity (for example an abbreviation); every entry must be a string." },
+        "intended_recipients": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Every entry must be a JSON string; any other entry type is an input error. Absent or null, empty, blank-entry or ambiguous lists hold under G2 (quality-gate-criteria.md #2.4). Each recipient is classified per #2.5: a recipient naming external-party vocabulary (counsel, lender, investor, regulator, auditor, buyer, outside, third party and similar) while third_party_recipient_named is false is a G2 release blocker; a recipient that is not positively matched to the client or the engagement team is a G2 must-fix with a confirm-recipients escalation." },
+        "third_party_recipient_named": { "type": "boolean", "description": "Required JSON true/false; absent, null, text or numbers are input errors. Set true whenever any recipient is outside the client entity." },
         "confidentiality_marking": { "type": "string" },
         "client_data_handling": { "enum": ["ok", "attention", "breach", "unknown"], "default": "unknown", "description": "Set by deliverable-ingest from the source/client-data register; use unknown when the register cannot confirm safe handling. Missing is not equivalent to ok. Only ok is clean; attention is a G4 must-fix; breach, unknown, blank, null or any unrecognised value is a G4 release blocker; every non-ok value is escalated." },
-        "required_disclaimer_type": { "enum": ["general_advice", "reliance_restriction"], "description": "Absent, null, blank or any other value is a G2 release blocker with an escalation (quality-gate-criteria.md #2.4); a non-string is an input error." },
-        "present_disclaimer_types": { "type": "array", "items": { "type": "string" } },
+        "required_disclaimer_type": { "enum": ["general_advice", "reliance_restriction"], "description": "Absent, null, blank or any other value is a G2 release blocker with an escalation (quality-gate-criteria.md #2.4); a non-string is an input error. The declared type must also appear in present_disclaimer_types: a missing reliance_restriction is a G2 release blocker and a missing general_advice is a G2 must-fix, both escalated." },
+        "present_disclaimer_types": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Disclaimer types actually found in the draft. Absent, null or empty means none present, so the declared required type is treated as absent; a non-string entry is an input error." },
         "required_language": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error." },
         "present_language": { "type": "array", "items": { "type": "string" } },
         "brand_checks": {
@@ -73,8 +75,8 @@
       "type": "array",
       "items": {
         "type": "object",
-        "description": "Boolean flags (hedging_present, limitation_present, stated_basis, scope_aligned) must be JSON true/false when present; omit a flag when unknown. null, text such as \"false\" or numbers are input errors, never coerced.",
-        "required": ["assertion_id", "class", "text", "location", "confidence", "source", "citation"],
+        "description": "Boolean flags (hedging_present, limitation_present, stated_basis, scope_aligned) must be JSON true/false when present; null, text such as \"false\" or numbers are input errors, never coerced. scope_aligned is required on every assertion (G3 reads it for every class); an omitted hedging_present is read as not hedged. Recommendations must carry sample_size (null when not sample-based). Every evidence_ids entry must exist in evidence_set; a dangling reference makes the assertion unsupported (quality-gate-criteria.md #1.1).",
+        "required": ["assertion_id", "class", "text", "location", "scope_aligned", "confidence", "source", "citation"],
         "properties": {
           "assertion_id": { "type": "string" },
           "class": { "enum": ["factual", "quantified", "forward_looking", "recommendation"] },
@@ -101,7 +103,7 @@
         "required": ["evidence_id"],
         "properties": {
           "evidence_id": { "type": "string", "minLength": 1 },
-          "type": { "type": "string" },
+          "type": { "enum": ["analysis_model", "financial_model", "system_export", "signed_client_data", "licensed_content_register", "internal_benchmark", "statement_of_work", "disclaimer_extract", "interview_summary", "workshop_note", "stakeholder_verbal"], "description": "Closed list. Each assertion class accepts only an allowlist of types as support (quality-gate-criteria.md #1.1-#1.4): quantified claims accept analysis_model, financial_model, system_export and signed_client_data; factual claims accept analysis_model, financial_model, system_export, signed_client_data, licensed_content_register, internal_benchmark, statement_of_work and disclaimer_extract; forward-looking claims accept every type except stakeholder_verbal; recommendations accept every type except stakeholder_verbal, disclaimer_extract and licensed_content_register. An absent, blank or unrecognised type never supports any claim." },
           "title": { "type": "string" },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
           "source": { "type": "string" },

@@ -712,6 +712,189 @@ def strictness_tests(tmp):
         check(f"S4 {label} of the wrong type is a clean gate_check input error", err is not None and expected in err and "malformed input" not in err, err)
 
 
+def round3_tests(tmp):
+    """1.0.3 second code review: declared disclaimers must be present, recipients are client-only only on a positive
+    client match, scope_aligned is required, evidence types are allowlisted, and deep nesting is a clean error."""
+    base_a = read(os.path.join(ROOT, "demo-data", "scenario-a-happy", "review-input.json"))
+    mapped_a = read(os.path.join(ROOT, "demo-data", "scenario-a-happy", "expected", "assertion-mapped.json"))
+    gated_a = read(os.path.join(ROOT, "demo-data", "scenario-a-happy", "expected", "gate-checked.json"))
+    ranked_b = read(os.path.join(ROOT, "demo-data", "scenario-b-drama", "expected", "severity-ranked.json"))
+
+    def mutated(base, mutate):
+        packet = copy.deepcopy(base)
+        mutate(packet)
+        return packet
+
+    def ranked_with(label, mutate):
+        return read(chain_packet(mutated(base_a, mutate), tmp, f"r3-{label}")["ranked"])
+
+    def escalated(ranked, prefix):
+        return any(entry.startswith(prefix) for entry in ranked["escalations"])
+
+    def severity_of(ranked, finding_id):
+        return next((item["severity"] for item in ranked["findings"] if item["finding_id"] == finding_id), None)
+
+    # Item 1: a recognised required disclaimer must be present.
+    for label, present in (("empty", []), ("null", None), ("absent", ...), ("other type only", ["reliance_restriction"])):
+        def apply(p, v=present):
+            if v is ...:
+                p["deliverable"].pop("present_disclaimer_types")
+            else:
+                p["deliverable"]["present_disclaimer_types"] = v
+        ranked = ranked_with(f"general-advice-{label.replace(' ', '-')}", apply)
+        check(f"T1 required general_advice with present_disclaimer_types {label} holds and escalates",
+              severity_of(ranked, "GC-G2-general-advice-absent") == "must_fix" and status(ranked) == "partner_review_required_must_fix"
+              and escalated(ranked, "G2: required general-advice disclaimer absent"), status(ranked))
+    ranked = ranked_with("reliance-required-client-only", lambda p: p["deliverable"].__setitem__("required_disclaimer_type", "reliance_restriction"))
+    check("T1 required reliance_restriction absent without third-party context is a blocker and escalates",
+          severity_of(ranked, "GC-G2-reliance-language") == "release_blocker" and status(ranked) == "not_ready_for_release"
+          and escalated(ranked, "G2: required reliance-restriction disclaimer absent"), status(ranked))
+    ranked = ranked_with("reliance-required-present", lambda p: p["deliverable"].update({"required_disclaimer_type": "reliance_restriction", "present_disclaimer_types": ["reliance_restriction"]}))
+    check("T1 required reliance_restriction that is present stays clean",
+          not any(item["gate_id"] == "G2" for item in ranked["findings"]) and status(ranked) == "partner_review_required_advisories_only")
+
+    # Item 2: recipients are client-only only on a positive client match.
+    ranked = ranked_with("outside-counsel", lambda p: p["deliverable"].__setitem__("intended_recipients", ["Aster Advisory Group management", "Outside legal counsel"]))
+    check("T2 reviewer repro: outside legal counsel with third_party_recipient_named false is a G2 blocker",
+          severity_of(ranked, "GC-G2-recipient-third-party-conflict") == "release_blocker"
+          and {"GC-G2-required-disclaimer-wrong", "GC-G2-reliance-language"}.issubset(finding_ids(ranked))
+          and status(ranked) == "not_ready_for_release" and escalated(ranked, "G2: recipient(s) Outside legal counsel look external"),
+          sorted(finding_ids(ranked)))
+    for label, recipient in (
+        ("lender firm", "Cobalt Lenders LLP"),
+        ("client lenders", "Aster Advisory Group's lenders"),
+        ("external auditors", "Harbour & Co external auditors"),
+        ("buyer", "Prospective buyer data room"),
+        ("regulator", "Financial Conduct regulator"),
+        ("investors homoglyph", "Series A invest\u043ers"),
+        ("third party", "Third party benchmarking firm"),
+        ("counsel to client", "Counsel to Aster Advisory Group"),
+    ):
+        ranked = ranked_with(f"external-{label.replace(' ', '-')}", lambda p, r=recipient: p["deliverable"].__setitem__("intended_recipients", ["Aster Advisory Group management", r]))
+        check(f"T2 external recipient ({label}) with third_party_recipient_named false is a G2 blocker",
+              severity_of(ranked, "GC-G2-recipient-third-party-conflict") == "release_blocker" and status(ranked) == "not_ready_for_release",
+              sorted(finding_ids(ranked)))
+    for label, recipients, mutate_extra in (
+        ("unknown entity", ["Aster Advisory Group management", "Foo Holdings Ltd"], None),
+        ("bare role", ["Board"], None),
+        ("client plus other entity", ["Aster Advisory Group and Foo Holdings Ltd"], None),
+        ("no client_name", ["Aster Advisory Group management"], lambda p: p["deliverable"].pop("client_name")),
+        ("blank client_name", ["Aster Advisory Group management"], lambda p: p["deliverable"].__setitem__("client_name", " ")),
+    ):
+        def apply(p, r=recipients, extra=mutate_extra):
+            p["deliverable"]["intended_recipients"] = r
+            if extra:
+                extra(p)
+        ranked = ranked_with(f"unclassified-{label.replace(' ', '-')}", apply)
+        check(f"T2 unclassified recipient ({label}) is a G2 must-fix with a confirm-recipients escalation",
+              severity_of(ranked, "GC-G2-recipient-unconfirmed") == "must_fix" and status(ranked) == "partner_review_required_must_fix"
+              and escalated(ranked, "G2: confirm recipients"), (status(ranked), sorted(finding_ids(ranked))))
+    for label, mutate in (
+        ("client roles", lambda p: p["deliverable"].__setitem__("intended_recipients", ["Aster Advisory Group board", "Aster Advisory Group CFO office", "Aster Advisory Group's audit committee", "Aster Advisory Group general counsel", "Aster Advisory Group internal audit", "Engagement team"])),
+        ("alias", lambda p: p["deliverable"].update({"client_aliases": ["AAG"], "intended_recipients": ["AAG steering committee"]})),
+        ("client name with external word", lambda p: p["deliverable"].update({"client_name": "First National Bank", "intended_recipients": ["First National Bank board", "First National Bank risk committee"]})),
+    ):
+        ranked = ranked_with(f"client-only-{label.replace(' ', '-')}", mutate)
+        check(f"T2 positively matched client-only recipients ({label}) raise no G2 finding",
+              not any(item["gate_id"] == "G2" for item in ranked["findings"]) and status(ranked) == "partner_review_required_advisories_only",
+              sorted(finding_ids(ranked)))
+    check("T2 scenario B declared third-party lender raises no recipient conflict",
+          not {"GC-G2-recipient-third-party-conflict", "GC-G2-recipient-unconfirmed"} & finding_ids(ranked_b))
+    for label, mutate, expected in (
+        ("third_party_recipient_named absent", lambda p: p["deliverable"].pop("third_party_recipient_named"), "missing required boolean: third_party_recipient_named"),
+        ("client_name non-string", lambda p: p["deliverable"].__setitem__("client_name", 7), "client_name must be a string"),
+        ("client_aliases item", lambda p: p["deliverable"].__setitem__("client_aliases", [1]), "client_aliases[0] must be a string"),
+    ):
+        engine, err = chain_error(mutated(base_a, mutate), tmp, f"r3-{label.replace(' ', '-')}")
+        check(f"T2 {label} is a clean input error", engine == "gate_check" and expected in err, (engine, err))
+
+    # Item 3: scope_aligned is required for every assertion class.
+    for index, assertion in enumerate(base_a["assertions"]):
+        engine, err = chain_error(mutated(base_a, lambda p, i=index: p["assertions"][i].pop("scope_aligned")), tmp, f"r3-scope-missing-{index}")
+        check(f"T3 omitted scope_aligned on a {assertion['class']} assertion is a clean input error end to end",
+              engine == "assertion_map" and "missing required boolean: scope_aligned" in err, (engine, err))
+    err = gate_error(mutated(mapped_a, lambda p: p["assertions"][2].pop("scope_aligned")), tmp, "r3-scope-missing-gate")
+    check("T3 omitted scope_aligned is a clean gate_check input error when mapping is bypassed", err is not None and "scope_aligned" in err, err)
+    engine, err = chain_error(mutated(base_a, lambda p: p["assertions"][2].pop("sample_size")), tmp, "r3-sample-missing")
+    check("T3 recommendation without a sample_size key is a clean input error", engine == "assertion_map" and "sample_size" in err, (engine, err))
+
+    # Item 4: evidence types are allowlisted per class; gate_check recomputation agrees (no spoof hold).
+    def factual_a001(ev_type):
+        def apply(p):
+            p["assertions"][0]["class"] = "factual"
+            if ev_type is ...:
+                p["evidence_set"][0].pop("type")
+            else:
+                p["evidence_set"][0]["type"] = ev_type
+        return apply
+    for label, ev_type, supported in (
+        ("missing type", ..., False), ("blank type", "", False), ("unknown type", "blog_post", False),
+        ("stakeholder_verbal", "stakeholder_verbal", False), ("workshop_note", "workshop_note", False),
+        ("interview_summary", "interview_summary", False), ("signed_client_data", "signed_client_data", True),
+    ):
+        ranked = ranked_with(f"factual-{label.replace(' ', '-')}", factual_a001(ev_type))
+        mapping = next(item for item in ranked["assertion_mappings"] if item["assertion_id"] == "A-001")
+        check(f"T4 factual claim backed by {label} is {'supported' if supported else 'unsupported'}",
+              (mapping["support_status"] == "supported") == supported and ("AM-A-001" in finding_ids(ranked)) != supported
+              and "GC-G8-engine-id-spoof" not in finding_ids(ranked), (mapping["support_status"], mapping["rationale"]))
+    ranked = ranked_with("forward-missing-type", lambda p: p["evidence_set"][2].pop("type"))
+    a004 = next(item for item in ranked["assertion_mappings"] if item["assertion_id"] == "A-004")
+    check("T4 forward-looking claim backed only by an untyped item is limited",
+          a004["support_status"] == "limited" and "AM-A-004" in finding_ids(ranked) and "GC-G8-engine-id-spoof" not in finding_ids(ranked), a004["rationale"])
+    ranked = ranked_with("recommendation-mixed", lambda p: p["evidence_set"][2].__setitem__("type", "blog_post"))
+    a003 = next(item for item in ranked["assertion_mappings"] if item["assertion_id"] == "A-003")
+    check("T4 recommendation keeps its accepted evidence when another linked item is untyped",
+          a003["support_status"] == "supported" and a003["best_evidence_id"] == "EV-A2", a003)
+    ranked = ranked_with("recommendation-verbal", lambda p: (p["assertions"][2].__setitem__("evidence_ids", ["EV-A3"]), p["evidence_set"][2].__setitem__("type", "stakeholder_verbal")))
+    check("T4 recommendation backed only by stakeholder_verbal is unsupported", "AM-A-003" in finding_ids(ranked), sorted(finding_ids(ranked)))
+    ranked = ranked_with("dangling-evidence", lambda p: p["assertions"][0].__setitem__("evidence_ids", ["EV-A1", "EV-Z9"]))
+    check("T4 sweep: a dangling evidence reference makes the assertion unsupported",
+          "AM-A-001" in finding_ids(ranked) and status(ranked) == "not_ready_for_release" and "GC-G8-engine-id-spoof" not in finding_ids(ranked))
+    is_definitive = MODULES["assertion_map"].rules.is_definitive_conclusion
+    check("T4 sweep: an omitted hedging flag is not read as hedged",
+          is_definitive({"text": "x", "scope_aligned": True}) and not is_definitive({"text": "x", "scope_aligned": True, "hedging_present": True}))
+
+    # Item 5: bounded nesting depth is a clean input error in every engine.
+    def write_deep(base, path, depth, kind="list"):
+        packet = copy.deepcopy(base)
+        packet["deep_probe"] = "__DEEP__"
+        text = json.dumps(packet, ensure_ascii=False)
+        deep = ("[" * depth + "]" * depth) if kind == "list" else ('{"a":' * depth + "1" + "}" * depth)
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text.replace('"__DEEP__"', deep))
+        return path
+    for depth, kind in ((70, "list"), (1100, "list"), (1100, "dict"), (100000, "list")):
+        for engine, flag, base in (("assertion_map", "--input", base_a), ("gate_check", "--mapped", mapped_a), ("severity_rank", "--gates", gated_a)):
+            path = write_deep(base, os.path.join(tmp, f"deep-{engine}-{kind}-{depth}.json"), depth, kind)
+            code, out, err = run(engine, flag, path, "--out", os.path.join(tmp, f"deep-{engine}-{kind}-{depth}-out.json"))
+            check(f"T5 {depth}-deep nested {kind} is a clean {engine} input error",
+                  code == 1 and "nested" in err and "Traceback" not in err + out, err[-200:])
+
+    # Sweep: duplicate register entry IDs cannot mask each other.
+    for label, mutate, expected in (
+        ("brand check_id", lambda p: p["deliverable"]["brand_checks"].append(dict(p["deliverable"]["brand_checks"][0], status="pass")), "duplicate check_id"),
+        ("prior finding_id", lambda p: p["prior_findings"].append(dict(p["prior_findings"][0])), "duplicate finding_id"),
+    ):
+        engine, err = chain_error(mutated(base_a, mutate), tmp, f"r3-dup-{label.replace(' ', '-')}")
+        check(f"T6 duplicate {label} is a clean input error", engine == "gate_check" and expected in err, (engine, err))
+
+
+def recipient_classifier_tests():
+    classify = MODULES["gate_check"].classify_recipient
+    identities = ["aster advisory group"]
+    benign = ("Aster Advisory Group management", "Aster Advisory Group board", "Aster Advisory Group CFO", "Aster Advisory Group programme steering committee",
+              "Aster Advisory Group's executive team", "Aster Advisory Group general counsel", "Aster Advisory Group internal audit", "engagement team")
+    external = ("Outside legal counsel", "Cobalt Lenders LLP", "Aster Advisory Group lenders", "Prospective acquirer", "External auditors", "Private equity sponsor",
+                "Rating agency", "Third-party vendor", "Aster Advisory Group investors", "independent reviewer")
+    unclassified = ("Board", "Foo Holdings Ltd", "Aster Advisory Group and Foo Holdings Ltd", "Asterix Group management", "Aster Advisory")
+    check("T2 classifier: client roles and internal team are client-only/internal",
+          all(classify(r, identities) in {"client", "internal"} for r in benign), {r: classify(r, identities) for r in benign})
+    check("T2 classifier: external-party vocabulary is external",
+          all(classify(r, identities) == "external" for r in external), {r: classify(r, identities) for r in external})
+    check("T2 classifier: anything not positively matched is unclassified, never client-only",
+          all(classify(r, identities) == "unclassified" for r in unclassified), {r: classify(r, identities) for r in unclassified})
+
+
 def tripwire_tests():
     tripwire = MODULES["gate_check"].suspicious_instruction
     attacks = (
@@ -890,6 +1073,8 @@ def main():
         page_label_tests(tmp)
         g8_tests(tmp)
         strictness_tests(tmp)
+        round3_tests(tmp)
+    recipient_classifier_tests()
     tripwire_tests()
     packet_template_tests()
     skill_doc_tests()

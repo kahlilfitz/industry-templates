@@ -35,7 +35,25 @@ VALID_SEVERITIES = set(SEVERITY_RANK)
 # quality-gate-criteria.md #8.4: finding-ID prefixes and source tags only the engines may emit.
 ENGINE_OWNED_PREFIXES = {"GC-": ENGINE, "AM-": rules.AM_ENGINE}
 GATES = {"G1": "Evidence support and substantiation", "G2": "Required disclaimer, limitation and reliance language", "G3": "Scope-of-work alignment", "G4": "Confidentiality marking and client-data handling", "G5": "Brand and formatting standards", "G6": "Third-party and licensed content attribution", "G7": "Prior-findings closure", "G8": "Data-as-data and embedded-instruction handling"}
-THIRD_PARTY_TERMS = ("lender", "lenders", "regulator", "acquirer", "vendor", "bank", "auditor", "investor", "insurer", "rating agency")
+# Recipient classification (quality-gate-criteria.md #2.5): client-only requires a positive client-name match.
+EXTERNAL_RECIPIENT_PATTERN = re.compile(r"\b(?:" + "|".join((
+    r"counsel", r"lawyers?", r"solicitors?", r"attorneys?", r"law firms?", r"lenders?", r"lending", r"banks?", r"bankers?",
+    r"financiers?", r"creditors?", r"bondholders?", r"noteholders?", r"investors?", r"shareholders?", r"private equity",
+    r"regulators?", r"regulatory", r"auditors?", r"external audit", r"buyers?", r"bidders?", r"acquirers?", r"purchasers?",
+    r"vendors?", r"suppliers?", r"insurers?", r"underwriters?", r"rating agenc(?:y|ies)", r"trustees?", r"brokers?",
+    r"arrangers?", r"counterpart(?:y|ies)", r"consultants?", r"advisers?", r"advisors?", r"outside", r"external",
+    r"third party", r"third parties", r"independent", r"public", r"press", r"media", r"government",
+)) + r")\b")
+CLIENT_ROLE_PHRASES = ("general counsel", "in house counsel", "in house legal", "internal audit", "audit committee")
+CLIENT_ROLE_WORDS = {
+    "s", "the", "of", "and", "&", "for", "management", "manager", "managers", "board", "directors", "director",
+    "executive", "executives", "leadership", "committee", "steering", "sponsor", "sponsors", "team", "teams", "office",
+    "pmo", "programme", "program", "project", "cfo", "ceo", "coo", "cio", "cto", "cro", "chro", "chief", "officer",
+    "officers", "finance", "operations", "procurement", "hr", "people", "it", "technology", "digital", "strategy", "legal",
+    "risk", "compliance", "head", "heads", "function", "department", "division", "unit", "owner", "owners", "staff",
+    "members", "chair", "president", "vp", "vice", "senior", "group",
+}
+INTERNAL_RECIPIENTS = {"engagement team", "engagement partner", "engagement manager", "reviewing partner", "engagement quality reviewer", "qrm"}
 AMBIGUOUS_RECIPIENT_TERMS = ("tbd", "to be confirmed", "external parties", "third parties", "stakeholders", "interested parties", "advisors", "advisers", "allowed users", "distribution list")
 # Untrusted sections scanned verbatim. Every other section (assertion_mappings, findings, escalations,
 # provenance) is derived from them and is scanned only for text that is not a copy of a primary field.
@@ -147,11 +165,14 @@ InputError = rules.InputError
 def load_json(path):
     try:
         with open(path, encoding="utf-8") as handle:
-            return json.load(handle)
+            payload = json.load(handle)
     except OSError as exc:
         raise InputError(f"could not read input JSON: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise InputError(f"invalid JSON input: {exc}") from exc
+    except RecursionError as exc:
+        raise InputError("input JSON is nested too deeply to process safely") from exc
+    return rules.check_depth(payload)
 
 def validate_generated_at(value):
     if value is None:
@@ -364,11 +385,48 @@ def recipients_of(deliverable):
     recipients = deliverable.get("intended_recipients")
     return recipients if isinstance(recipients, list) else []
 
+def recipient_words(value):
+    return " ".join(re.sub(r"[^a-z0-9&]+", " ", normalize_text(value)).split())
+
+def contains_phrase(text, phrase):
+    return bool(phrase) and re.search(r"(?:^|\s)" + re.escape(phrase) + r"(?=\s|$)", text) is not None
+
+def client_identities(deliverable):
+    names = [deliverable.get("client_name")] + string_list(deliverable, "client_aliases", "deliverable.client_aliases")
+    return [phrase for phrase in (recipient_words(name) for name in names if isinstance(name, str)) if len(phrase) >= 3]
+
+def classify_recipient(recipient, identities):
+    """Return client, internal, external or unclassified (quality-gate-criteria.md #2.5).
+
+    A recipient is client-only only when it positively names the client (client_name or client_aliases) and every
+    remaining word is a client role word. External-party vocabulary anywhere outside the client's own name makes it
+    external. Anything else is unclassified; nothing is inferred from the absence of a keyword."""
+    text = recipient_words(recipient)
+    if text in INTERNAL_RECIPIENTS:
+        return "internal"
+    matched = False
+    for phrase in sorted(identities, key=len, reverse=True):
+        if contains_phrase(text, phrase):
+            matched = True
+            text = re.sub(r"(?:^|\s)" + re.escape(phrase) + r"(?=\s|$)", " ", text)
+    for phrase in CLIENT_ROLE_PHRASES:
+        text = re.sub(r"(?:^|\s)" + re.escape(phrase) + r"(?=\s|$)", " ", text)
+    if EXTERNAL_RECIPIENT_PATTERN.search(text):
+        return "external"
+    if matched and all(word in CLIENT_ROLE_WORDS for word in text.split()):
+        return "client"
+    return "unclassified"
+
+def recipient_classes(deliverable):
+    identities = client_identities(deliverable)
+    classes = {"client": [], "internal": [], "external": [], "unclassified": []}
+    for index, recipient in enumerate(recipients_of(deliverable)):
+        if recipient.strip():
+            classes[classify_recipient(recipient, identities)].append(safe_token(recipient.strip(), f"recipient {index + 1}"))
+    return classes
+
 def is_third_party_context(deliverable):
-    if deliverable.get("third_party_recipient_named") is True:
-        return True
-    recipients = " ".join(recipients_of(deliverable)).lower()
-    return any(term in recipients for term in THIRD_PARTY_TERMS)
+    return deliverable.get("third_party_recipient_named") is True or bool(recipient_classes(deliverable)["external"])
 
 def recipient_list_problem(deliverable):
     recipients = deliverable.get("intended_recipients")
@@ -399,11 +457,19 @@ def validate_deliverable(deliverable):
     """Type-check every deliverable field a gate reads. Wrong JSON types are input errors; enum values are judged by the gates."""
     if deliverable.get("intended_recipients") is not None:
         string_list(deliverable, "intended_recipients", "deliverable.intended_recipients")
-    rules.require_boolean(deliverable, "third_party_recipient_named", "deliverable", required=False)
-    for key in ("required_disclaimer_type", "confidentiality_marking", "client_data_handling"):
+    # Required: the declared flag is cross-checked against the classified recipients (quality-gate-criteria.md #2.5).
+    rules.require_boolean(deliverable, "third_party_recipient_named", "deliverable")
+    for key in ("required_disclaimer_type", "confidentiality_marking", "client_data_handling", "client_name"):
         rules.require_text(deliverable, key, "deliverable", required=False, allow_blank=True)
-    for key in ("present_disclaimer_types", "present_language"):
+    for key in ("present_disclaimer_types", "present_language", "client_aliases"):
         string_list(deliverable, key, f"deliverable.{key}")
+
+def require_unique_ids(items, label, id_key):
+    seen = set()
+    for index, item in enumerate(items):
+        if item[id_key] in seen:
+            raise InputError(f"{label}[{index}]: duplicate {id_key} {item[id_key]!r}; each register entry must be unique so no entry can mask another")
+        seen.add(item[id_key])
 
 def require_entry_basics(item, label, id_key):
     if not isinstance(item, dict):
@@ -420,6 +486,7 @@ def validate_brand_checks(items):
         require_entry_basics(item, label, "check_id")
         rules.require_text(item, "status", label, required=False, allow_blank=True)
         rules.require_boolean(item, "legal_or_release_control", label)
+    require_unique_ids(items, "deliverable.brand_checks", "check_id")
 
 def validate_licensed_content(items):
     for index, item in enumerate(items):
@@ -427,6 +494,7 @@ def validate_licensed_content(items):
         require_entry_basics(item, label, "content_id")
         rules.require_boolean(item, "attribution_present", label)
         rules.require_text(item, "license_status", label, required=False, allow_blank=True)
+    require_unique_ids(items, "deliverable.licensed_content", "content_id")
 
 def validate_prior_findings(items):
     for index, item in enumerate(items):
@@ -434,6 +502,7 @@ def validate_prior_findings(items):
         require_entry_basics(item, label, "finding_id")
         rules.require_boolean(item, "claimed_closed", label)
         rules.require_boolean(item, "document_fix_present", label)
+    require_unique_ids(items, "prior_findings", "finding_id")
 
 def entry_location(item, section, label):
     return item.get("location") or unplaced(section, label)
@@ -580,17 +649,34 @@ def main():
         if recipient_problem:
             add_finding(findings, "GC-G2-recipient-ambiguity", "G2", RELEASE_BLOCKER, "Recipient list is missing or ambiguous", f"{recipient_problem}; reliance language cannot be confirmed until the allowed recipient set is explicit.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
             escalations.append(f"G2: {recipient_problem} - release blocker; reviewing partner/QRM must confirm the allowed recipients (quality-gate-criteria.md #2.2)")
+        recipients = recipient_classes(deliverable)
+        if recipients["external"] and deliverable["third_party_recipient_named"] is False:
+            names = ", ".join(recipients["external"])
+            add_finding(findings, "GC-G2-recipient-third-party-conflict", "G2", RELEASE_BLOCKER, "External recipient conflicts with third_party_recipient_named=false", f"Recipient(s) {names} match external-party vocabulary (counsel, lender, investor, regulator, auditor, buyer, outside or third party) but third_party_recipient_named is false; the deliverable is treated as third-party and reliance-restriction language is required.", disclaimer_location(payload), "quality-gate-criteria.md #2.2; quality-gate-criteria.md #2.5", 0.97, "quality-gate-criteria.md #2.2, #2.5; severity-rules.md #1.1")
+            escalations.append(f"G2: recipient(s) {names} look external but third_party_recipient_named is false - release blocker; reviewing partner/QRM must confirm the recipients and reliance terms (quality-gate-criteria.md #2.5)")
+        if recipients["unclassified"] and not recipient_problem:
+            names = ", ".join(recipients["unclassified"])
+            reason = "deliverable.client_name is not supplied, so no recipient can be positively matched to the client" if not client_identities(deliverable) else "they do not positively match the client named in deliverable.client_name/client_aliases or a defined internal role"
+            add_finding(findings, "GC-G2-recipient-unconfirmed", "G2", MUST_FIX, "Recipients not confirmed as client-only", f"Recipient(s) {names} are unclassified: {reason}. An unmatched recipient is never assumed to be client-only.", disclaimer_location(payload), "quality-gate-criteria.md #2.5", 0.9, "quality-gate-criteria.md #2.5; severity-rules.md #1.2")
+            escalations.append(f"G2: confirm recipients {names} - not positively matched to the client; must-fix until the reviewing partner/QRM confirms they are client-only (quality-gate-criteria.md #2.5)")
         present_disclaimers = string_list(deliverable, "present_disclaimer_types", "deliverable.present_disclaimer_types")
         disclaimer_type = deliverable.get("required_disclaimer_type")
+        third_party = is_third_party_context(deliverable)
         if disclaimer_type not in DISCLAIMER_TYPES:
             add_finding(findings, "GC-G2-disclaimer-type-unrecognised", "G2", RELEASE_BLOCKER, "Required disclaimer type is not determined", "required_disclaimer_type is absent, blank or not one of general_advice or reliance_restriction, so the required disclaimer cannot be confirmed; an unrecognised value is never treated as clean.", disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.2; quality-gate-criteria.md #2.4", 0.97, "quality-gate-criteria.md #2.1-#2.2, #2.4; severity-rules.md #1.1")
             escalations.append("G2: required_disclaimer_type is absent, blank or unrecognised - release blocker; reviewing partner/QRM must confirm the required disclaimer (quality-gate-criteria.md #2.4)")
-        if is_third_party_context(deliverable) and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY:
-            if disclaimer_type in DISCLAIMER_TYPES and disclaimer_type != "reliance_restriction":
-                add_finding(findings, "GC-G2-required-disclaimer-wrong", "G2", RELEASE_BLOCKER, "Required disclaimer type is wrong for third-party context", "A third-party recipient or allowed user requires reliance-restriction language.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
-            if "reliance_restriction" not in present_disclaimers:
+        if third_party and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY and disclaimer_type in DISCLAIMER_TYPES and disclaimer_type != "reliance_restriction":
+            add_finding(findings, "GC-G2-required-disclaimer-wrong", "G2", RELEASE_BLOCKER, "Required disclaimer type is wrong for third-party context", "A third-party recipient or allowed user requires reliance-restriction language.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
+        if (disclaimer_type == "reliance_restriction" or (third_party and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY)) and "reliance_restriction" not in present_disclaimers:
+            if third_party:
                 add_finding(findings, "GC-G2-reliance-language", "G2", RELEASE_BLOCKER, "Wrong disclaimer for third-party recipient", "A third-party recipient or allowed user is named but reliance-restriction language is absent; a general-advice disclaimer does not satisfy this gate.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
                 escalations.append("G2: third-party recipient context and reliance-restriction language absent - release blocker (quality-gate-criteria.md #2.2)")
+            else:
+                add_finding(findings, "GC-G2-reliance-language", "G2", RELEASE_BLOCKER, "Required reliance-restriction disclaimer is absent", "required_disclaimer_type is reliance_restriction but reliance-restriction language is not in present_disclaimer_types.", disclaimer_location(payload), "quality-gate-criteria.md #2.2; quality-gate-criteria.md #2.4", 0.97, "quality-gate-criteria.md #2.2, #2.4; severity-rules.md #1.1")
+                escalations.append("G2: required reliance-restriction disclaimer absent from the deliverable - release blocker (quality-gate-criteria.md #2.4)")
+        if disclaimer_type == "general_advice" and "general_advice" not in present_disclaimers:
+            add_finding(findings, "GC-G2-general-advice-absent", "G2", MUST_FIX, "Required general-advice disclaimer is absent", "required_disclaimer_type is general_advice but general-advice language is not in present_disclaimer_types; a declared disclaimer requirement is only met when the disclaimer is present.", disclaimer_location(payload), "quality-gate-criteria.md #2.1; quality-gate-criteria.md #2.4", 0.95, "quality-gate-criteria.md #2.1, #2.4; severity-rules.md #1.2")
+            escalations.append("G2: required general-advice disclaimer absent from the deliverable - must-fix; reviewing partner/QRM must confirm the disclaimer before release (quality-gate-criteria.md #2.4)")
         present_language = string_list(deliverable, "present_language", "deliverable.present_language")
         for required in required_language:
             if required not in present_language:
@@ -599,8 +685,8 @@ def main():
         if CONFIDENTIALITY_MARK_REQUIRED and deliverable.get("confidentiality_marking") != "client confidential":
             add_finding(findings, "GC-G4-confidentiality", "G4", RELEASE_BLOCKER, "Missing client-confidential marking", "Required client-confidential marking is absent from cover/footer.", loc("Cover", 1, 1, "Confidentiality mark"), "quality-gate-criteria.md #4.1", 0.97, "quality-gate-criteria.md #4.1; severity-rules.md #1.1")
         check_client_data_value(deliverable, findings, escalations)
-        for check in brand_checks:
-            check_id = safe_token(check["check_id"], "brand-check")
+        for index, check in enumerate(brand_checks):
+            check_id = safe_token(check["check_id"], f"brand-check-{index + 1}")
             location = entry_location(check, "Brand-check register", f"Brand check {check_id}")
             legal = check["legal_or_release_control"] and LEGAL_MARK_DEFECT_BLOCKS
             status_value = check.get("status")
@@ -610,21 +696,21 @@ def main():
                 severity = RELEASE_BLOCKER if legal else MUST_FIX
                 add_finding(findings, f"GC-G5-{check_id}", "G5", severity, "Brand or release-control check not verified", f"Brand check {check_id} has status {safe_token(status_value, 'blank/unrecognised') if status_value else 'blank/missing'}; only pass or fail are recognised, so the check is treated as not verified{' for a legal, confidentiality or release-control mark' if legal else ''}.", location, "quality-gate-criteria.md #5.2-#5.3", 0.95, "quality-gate-criteria.md #5.2-#5.3")
                 escalations.append(f"G5: brand check {check_id} status is not pass or fail - {severity}; hold for reviewing partner/QRM (quality-gate-criteria.md #5.3)")
-        for item in licensed_content:
-            content_id = safe_token(item["content_id"], "licensed-content")
+        for index, item in enumerate(licensed_content):
+            content_id = safe_token(item["content_id"], f"licensed-content-{index + 1}")
             license_known = item.get("license_status") == LICENSE_STATUS_KNOWN
             if LICENSED_ATTRIBUTION_REQUIRED and item["attribution_present"] is not True:
                 severity = MUST_FIX if license_known else RELEASE_BLOCKER
                 add_finding(findings, f"GC-G6-{content_id}", "G6", severity, "Licensed content lacks attribution", item.get("detail", "Third-party content requires attribution."), entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.2", item.get("confidence", 0.93), item.get("citation", "quality-gate-criteria.md #6.1-#6.2"))
                 if not license_known:
                     escalations.append(f"G6: unattributed licensed content {content_id} with license_status not known (unknown, blank or unrecognised) - release blocker; hold for reviewing partner/QRM (quality-gate-criteria.md #6.2-#6.3)")
-        for prior in prior_findings:
+        for index, prior in enumerate(prior_findings):
             if prior["claimed_closed"] is True and prior["document_fix_present"] is not True and PRIOR_FIX_MUST_LAND:
-                prior_id = safe_token(prior["finding_id"], "prior-finding")
+                prior_id = safe_token(prior["finding_id"], f"prior-finding-{index + 1}")
                 add_finding(findings, f"GC-G7-{prior_id}", "G7", MUST_FIX, "Prior finding marked closed but fix is absent", prior.get("detail", "Tracker closure is not supported by the current document."), entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2", prior.get("confidence", 0.96), prior.get("citation", "quality-gate-criteria.md #7.1-#7.2"))
-        for assertion in payload["assertions"]:
-            if assertion.get("scope_aligned") is False:
-                assertion_id = safe_token(assertion["assertion_id"], "assertion")
+        for index, assertion in enumerate(payload["assertions"]):
+            if assertion["scope_aligned"] is not True:
+                assertion_id = safe_token(assertion["assertion_id"], f"assertion-{index + 1}")
                 add_finding(findings, f"GC-G3-scope-{assertion_id}", "G3", RELEASE_BLOCKER, "Claim or recommendation falls outside signed scope", "Assertion is marked scope_aligned=false; claims and recommendations must stay inside the signed statement of work and documented evidence set.", assertion["location"], "quality-gate-criteria.md #3.1", assertion.get("confidence", 0.9), f"{assertion['citation']}; quality-gate-criteria.md #3.1; severity-rules.md #1.1")
         verified_am = {item["finding_id"] for item in findings if item["finding_id"].startswith("AM-")}
         for mapping in payload["assertion_mappings"]:
@@ -662,6 +748,9 @@ def main():
         return 0
     except InputError as exc:
         print(f"gate_check input error: {exc}", file=sys.stderr)
+        return 1
+    except RecursionError:
+        print("gate_check input error: input is nested too deeply to process safely", file=sys.stderr)
         return 1
     except (KeyError, TypeError, AttributeError, ValueError, IndexError) as exc:
         print(f"gate_check input error: malformed input ({type(exc).__name__}: {exc})", file=sys.stderr)
