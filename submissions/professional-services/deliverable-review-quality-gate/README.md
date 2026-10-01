@@ -16,7 +16,7 @@ The package does **not** review the deliverable. It checks the mechanical layer 
 
 Engines compute; the model drafts. Evidence-support verdicts, gate pass/fail, severity ranking and review status come from Python. The model extracts candidate assertions from prose, orchestrates the steps and writes the cited packet narrative. It never signs off a gate, downgrades a blocker or decides that an unsupported claim is acceptable.
 
-Version 1.0.1 hardens the first evaluation path: missing required registers fail closed or produce a blocker, no linked evidence is unsupported, ambiguous recipients hold for human clarification, embedded approval/waiver/forwarding instructions in deliverable or evidence text are treated as untrusted data, and outputs avoid positive sign-off wording.
+Version 1.0.2 closes the v1.0.1 automated-evaluation blockers: review packets no longer append raw contract payloads or accept unconfirmed external routing, assertion mapping selects best evidence by relevance and cites every linked evidence item, definitive unsupported conclusions become release blockers, scope alignment and missing registers hold deterministically, and gate locations come from the deliverable payload instead of hard-coded defaults.
 
 ## The case that shows why it exists
 

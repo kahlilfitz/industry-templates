@@ -50,7 +50,7 @@
   "criteria": {
     "criteria_set_id": "PS-QRM-DG-2026-demo",
     "criteria_sections": [
-      "quality-gate-criteria.md #1-#7",
+      "quality-gate-criteria.md #1-#8",
       "severity-rules.md #1-#4"
     ],
     "source": "skill:criteria-retrieve",
@@ -223,7 +223,7 @@
   "provenance": {
     "generated_at": "2026-10-01T00:00:00Z",
     "engines": [
-      "assertion_map/1.0.1"
+      "assertion_map/1.0.2"
     ],
     "demo_scenario": "scenario-a-happy"
   },
@@ -293,7 +293,7 @@
       "criteria_section": "quality-gate-criteria.md #1.4",
       "confidence": 0.84,
       "source": "engine:assertion_map",
-      "citation": "draft-deliverable.md p5 para1; supporting-evidence-index.md EV-A2; quality-gate-criteria.md #1.4"
+      "citation": "draft-deliverable.md p5 para1; supporting-evidence-index.md EV-A2; supporting-evidence-index.md EV-A3; quality-gate-criteria.md #1.4"
     },
     {
       "assertion_id": "A-004",

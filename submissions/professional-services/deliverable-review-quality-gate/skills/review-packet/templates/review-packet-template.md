@@ -7,16 +7,16 @@ Produced by deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-che
 ## Review status
 **{{release_readiness.status}}** - {{release_readiness.summary}}
 
-## Gate checklist
-| Gate | Status | Highest severity | Evidence |
-|---|---|---|---|
-{{for each gate_result}}| {{gate_id}} - {{name}} | {{status}} | {{highest_severity}} | {{citation}} |
-{{end}}
-
 ## Ranked findings for partner review
 | Rank | Severity | Gate | Location | Issue | Criteria |
 |---|---|---|---|---|---|
 {{for each ranked_finding}}| {{rank}} | {{severity}} | {{gate_id}} | p{{location.page}} / {{location.section}} / para {{location.paragraph}} | {{title}} - {{detail}} | {{criteria_section}} |
+{{end}}
+
+## Gate checklist
+| Gate | Status | Highest severity | Evidence |
+|---|---|---|---|
+{{for each gate_result}}| {{gate_id}} - {{name}} | {{status}} | {{highest_severity}} | {{citation}} |
 {{end}}
 
 ## Unsupported and limited assertions
@@ -26,10 +26,11 @@ Produced by deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-che
   - Rule: {{criteria_section}}; {{citation}}
 {{end}}
 
+## Draft routing hold
+Do not add user-supplied external recipients. Any recipient not already confirmed in `deliverable.intended_recipients` must be held for gate-check G2 / QRM confirmation before routing.
+
 ## Required human decision
 The reviewing partner/QRM owner decides whether fixes are sufficient. The engine can flag or block; it cannot sign off the gate or authorize client issue.
 
-## Appendix - contract payload
-```json
-{{contract_payload}}
-```
+## Provenance and redaction notes
+Engine provenance: {{provenance.engines}}; generated at {{provenance.generated_at}}. Raw contract payload intentionally omitted to avoid duplicating client data or untrusted source text.

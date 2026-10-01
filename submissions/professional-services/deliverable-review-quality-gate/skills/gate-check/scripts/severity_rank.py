@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 
 ENGINE = "engine:severity_rank"
-ENGINE_VERSION = "1.0.1"
+ENGINE_VERSION = "1.0.2"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 SEVERITY_ORDER = {"release_blocker": 0, "must_fix": 1, "advisory": 2}  # severity-rules.md #1.1-#1.3
 CONFIDENCE_FLOOR = 0.72  # severity-rules.md #2.1

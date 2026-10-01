@@ -67,7 +67,7 @@
   "criteria": {
     "criteria_set_id": "PS-QRM-DG-2026-demo",
     "criteria_sections": [
-      "quality-gate-criteria.md #1-#7",
+      "quality-gate-criteria.md #1-#8",
       "severity-rules.md #1-#4"
     ],
     "source": "skill:criteria-retrieve",
@@ -241,29 +241,29 @@
     {
       "finding_id": "AM-B-002",
       "gate_id": "G1",
-      "severity": "must_fix",
+      "severity": "release_blocker",
       "title": "Recommendation assertion is unsupported",
-      "detail": "Recommendation uses sample size 8, below 30, without a limitation",
+      "detail": "Recommendation uses sample size 8, below 30, without a limitation and is framed as a definitive conclusion",
       "location": {
         "section": "Recommendation",
         "page": 6,
         "paragraph": 1,
         "label": "Definitive centralization recommendation"
       },
-      "criteria_section": "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2",
-      "confidence": 0.86,
+      "criteria_section": "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2; severity-rules.md #1.1",
+      "confidence": 0.64,
       "source": "engine:assertion_map",
-      "citation": "draft-deliverable.md p6 para1; supporting-evidence-index.md EV-B3; quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2"
+      "citation": "draft-deliverable.md p6 para1; supporting-evidence-index.md EV-B2; supporting-evidence-index.md EV-B3; quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2; severity-rules.md #1.1"
     }
   ],
   "escalations": [
     "B-001 at p3, Executive summary, paragraph 2: unsupported - Quantified claim cites stakeholder_verbal, not traceable analysis or signed data (quality-gate-criteria.md #1.2; severity-rules.md #2.3)",
-    "B-002 at p6, Recommendation, paragraph 1: unsupported - Recommendation uses sample size 8, below 30, without a limitation (quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2)"
+    "B-002 at p6, Recommendation, paragraph 1: unsupported - Recommendation uses sample size 8, below 30, without a limitation and is framed as a definitive conclusion (quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2; severity-rules.md #1.1)"
   ],
   "provenance": {
     "generated_at": "2026-10-01T00:00:00Z",
     "engines": [
-      "assertion_map/1.0.1"
+      "assertion_map/1.0.2"
     ],
     "demo_scenario": "scenario-b-drama"
   },
@@ -304,14 +304,14 @@
         "EV-B2",
         "EV-B3"
       ],
-      "best_evidence_id": "EV-B3",
+      "best_evidence_id": "EV-B2",
       "support_status": "unsupported",
-      "support_score": 0.86,
-      "rationale": "Recommendation uses sample size 8, below 30, without a limitation",
-      "criteria_section": "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2",
-      "confidence": 0.86,
+      "support_score": 0.64,
+      "rationale": "Recommendation uses sample size 8, below 30, without a limitation and is framed as a definitive conclusion",
+      "criteria_section": "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2; severity-rules.md #1.1",
+      "confidence": 0.64,
       "source": "engine:assertion_map",
-      "citation": "draft-deliverable.md p6 para1; supporting-evidence-index.md EV-B3; quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2"
+      "citation": "draft-deliverable.md p6 para1; supporting-evidence-index.md EV-B2; supporting-evidence-index.md EV-B3; quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2; severity-rules.md #1.1"
     },
     {
       "assertion_id": "B-003",

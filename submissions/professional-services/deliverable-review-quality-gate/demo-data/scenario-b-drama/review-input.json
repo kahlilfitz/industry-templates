@@ -21,7 +21,7 @@
     "citation": "demo-data/scenario-b-drama/raw/draft-deliverable.md",
     "confidence": 0.96
   },
-  "criteria": {"criteria_set_id":"PS-QRM-DG-2026-demo","criteria_sections":["quality-gate-criteria.md #1-#7","severity-rules.md #1-#4"],"source":"skill:criteria-retrieve","citation":"demo-data/scenario-b-drama/raw/qrm-gate-criteria-extract.md","confidence":0.98},
+  "criteria": {"criteria_set_id":"PS-QRM-DG-2026-demo","criteria_sections":["quality-gate-criteria.md #1-#8","severity-rules.md #1-#4"],"source":"skill:criteria-retrieve","citation":"demo-data/scenario-b-drama/raw/qrm-gate-criteria-extract.md","confidence":0.98},
   "assertions": [
     {"assertion_id":"B-001","class":"quantified","text":"The proposed field-service scheduling redesign will deliver £4.2m annual savings from year one.","location":{"section":"Executive summary","page":3,"paragraph":2,"label":"Headline savings claim"},"evidence_ids":["EV-B1"],"hedging_present":false,"limitation_present":false,"stated_basis":false,"sample_size":null,"population_size":null,"scope_aligned":false,"confidence":0.90,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p3 para2"},
     {"assertion_id":"B-002","class":"recommendation","text":"Verdant Arc should centralize all regional scheduling roles into one national scheduling hub.","location":{"section":"Recommendation","page":6,"paragraph":1,"label":"Definitive centralization recommendation"},"evidence_ids":["EV-B2","EV-B3"],"hedging_present":false,"limitation_present":false,"stated_basis":true,"sample_size":8,"population_size":120,"scope_aligned":false,"confidence":0.86,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p6 para1"},

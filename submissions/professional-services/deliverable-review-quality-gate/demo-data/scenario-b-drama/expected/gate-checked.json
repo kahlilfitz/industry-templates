@@ -67,7 +67,7 @@
   "criteria": {
     "criteria_set_id": "PS-QRM-DG-2026-demo",
     "criteria_sections": [
-      "quality-gate-criteria.md #1-#7",
+      "quality-gate-criteria.md #1-#8",
       "severity-rules.md #1-#4"
     ],
     "source": "skill:criteria-retrieve",
@@ -241,19 +241,19 @@
     {
       "finding_id": "AM-B-002",
       "gate_id": "G1",
-      "severity": "must_fix",
+      "severity": "release_blocker",
       "title": "Recommendation assertion is unsupported",
-      "detail": "Recommendation uses sample size 8, below 30, without a limitation",
+      "detail": "Recommendation uses sample size 8, below 30, without a limitation and is framed as a definitive conclusion",
       "location": {
         "section": "Recommendation",
         "page": 6,
         "paragraph": 1,
         "label": "Definitive centralization recommendation"
       },
-      "criteria_section": "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2",
-      "confidence": 0.86,
+      "criteria_section": "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2; severity-rules.md #1.1",
+      "confidence": 0.64,
       "source": "engine:assertion_map",
-      "citation": "draft-deliverable.md p6 para1; supporting-evidence-index.md EV-B3; quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2"
+      "citation": "draft-deliverable.md p6 para1; supporting-evidence-index.md EV-B2; supporting-evidence-index.md EV-B3; quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2; severity-rules.md #1.1"
     },
     {
       "finding_id": "GC-G2-reliance-language",
@@ -262,10 +262,10 @@
       "title": "Wrong disclaimer for third-party recipient",
       "detail": "A third-party recipient or allowed user is named but reliance-restriction language is absent; a general-advice disclaimer does not satisfy this gate.",
       "location": {
-        "section": "Limitations and reliance",
-        "page": 2,
-        "paragraph": 4,
-        "label": "Disclaimer block"
+        "section": "Disclaimer",
+        "page": 12,
+        "paragraph": 1,
+        "label": "Disclaimer"
       },
       "criteria_section": "quality-gate-criteria.md #2.2",
       "confidence": 0.98,
@@ -279,10 +279,10 @@
       "title": "Missing required language: reliance_restriction",
       "detail": "Required language `reliance_restriction` is not present in the deliverable.",
       "location": {
-        "section": "Limitations and reliance",
-        "page": 2,
-        "paragraph": 4,
-        "label": "Required language"
+        "section": "Disclaimer",
+        "page": 12,
+        "paragraph": 1,
+        "label": "Disclaimer"
       },
       "criteria_section": "quality-gate-criteria.md #2.1-#2.3",
       "confidence": 0.94,
@@ -341,33 +341,50 @@
       "citation": "prior-review-findings.md PR-B2; quality-gate-criteria.md #7.1-#7.2"
     },
     {
-      "finding_id": "GC-G3-B-002",
+      "finding_id": "GC-G3-scope-B-001",
       "gate_id": "G3",
-      "severity": "must_fix",
-      "title": "Scope or sample limitation missing at point of recommendation",
-      "detail": "Recommendation uses sample size 8, below 30, without a limitation",
+      "severity": "release_blocker",
+      "title": "Claim or recommendation falls outside signed scope",
+      "detail": "Assertion is marked scope_aligned=false; claims and recommendations must stay inside the signed statement of work and documented evidence set.",
+      "location": {
+        "section": "Executive summary",
+        "page": 3,
+        "paragraph": 2,
+        "label": "Headline savings claim"
+      },
+      "criteria_section": "quality-gate-criteria.md #3.1",
+      "confidence": 0.9,
+      "source": "engine:gate_check",
+      "citation": "draft-deliverable.md p3 para2; quality-gate-criteria.md #3.1; severity-rules.md #1.1"
+    },
+    {
+      "finding_id": "GC-G3-scope-B-002",
+      "gate_id": "G3",
+      "severity": "release_blocker",
+      "title": "Claim or recommendation falls outside signed scope",
+      "detail": "Assertion is marked scope_aligned=false; claims and recommendations must stay inside the signed statement of work and documented evidence set.",
       "location": {
         "section": "Recommendation",
         "page": 6,
         "paragraph": 1,
         "label": "Definitive centralization recommendation"
       },
-      "criteria_section": "quality-gate-criteria.md #3.2",
+      "criteria_section": "quality-gate-criteria.md #3.1",
       "confidence": 0.86,
       "source": "engine:gate_check",
-      "citation": "draft-deliverable.md p6 para1; supporting-evidence-index.md EV-B3; quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2"
+      "citation": "draft-deliverable.md p6 para1; quality-gate-criteria.md #3.1; severity-rules.md #1.1"
     }
   ],
   "escalations": [
     "B-001 at p3, Executive summary, paragraph 2: unsupported - Quantified claim cites stakeholder_verbal, not traceable analysis or signed data (quality-gate-criteria.md #1.2; severity-rules.md #2.3)",
-    "B-002 at p6, Recommendation, paragraph 1: unsupported - Recommendation uses sample size 8, below 30, without a limitation (quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2)",
+    "B-002 at p6, Recommendation, paragraph 1: unsupported - Recommendation uses sample size 8, below 30, without a limitation and is framed as a definitive conclusion (quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2; severity-rules.md #1.1)",
     "G2: third-party recipient context and reliance-restriction language absent - release blocker (quality-gate-criteria.md #2.2)"
   ],
   "provenance": {
     "generated_at": "2026-10-01T00:00:00Z",
     "engines": [
-      "assertion_map/1.0.1",
-      "gate_check/1.0.1"
+      "assertion_map/1.0.2",
+      "gate_check/1.0.2"
     ],
     "demo_scenario": "scenario-b-drama"
   },
@@ -408,14 +425,14 @@
         "EV-B2",
         "EV-B3"
       ],
-      "best_evidence_id": "EV-B3",
+      "best_evidence_id": "EV-B2",
       "support_status": "unsupported",
-      "support_score": 0.86,
-      "rationale": "Recommendation uses sample size 8, below 30, without a limitation",
-      "criteria_section": "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2",
-      "confidence": 0.86,
+      "support_score": 0.64,
+      "rationale": "Recommendation uses sample size 8, below 30, without a limitation and is framed as a definitive conclusion",
+      "criteria_section": "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2; severity-rules.md #1.1",
+      "confidence": 0.64,
       "source": "engine:assertion_map",
-      "citation": "draft-deliverable.md p6 para1; supporting-evidence-index.md EV-B3; quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2"
+      "citation": "draft-deliverable.md p6 para1; supporting-evidence-index.md EV-B2; supporting-evidence-index.md EV-B3; quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2; severity-rules.md #1.1"
     },
     {
       "assertion_id": "B-003",
@@ -464,9 +481,9 @@
     {
       "gate_id": "G3",
       "name": "Scope-of-work alignment",
-      "status": "attention_required",
-      "highest_severity": "must_fix",
-      "finding_count": 1,
+      "status": "blocked",
+      "highest_severity": "release_blocker",
+      "finding_count": 2,
       "confidence": 0.95,
       "source": "engine:gate_check",
       "citation": "quality-gate-criteria.md #3"

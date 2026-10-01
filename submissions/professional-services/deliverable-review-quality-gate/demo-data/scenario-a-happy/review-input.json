@@ -21,7 +21,7 @@
     "citation": "demo-data/scenario-a-happy/raw/draft-deliverable.md",
     "confidence": 0.95
   },
-  "criteria": {"criteria_set_id":"PS-QRM-DG-2026-demo","criteria_sections":["quality-gate-criteria.md #1-#7","severity-rules.md #1-#4"],"source":"skill:criteria-retrieve","citation":"demo-data/scenario-a-happy/raw/qrm-gate-criteria-extract.md","confidence":0.98},
+  "criteria": {"criteria_set_id":"PS-QRM-DG-2026-demo","criteria_sections":["quality-gate-criteria.md #1-#8","severity-rules.md #1-#4"],"source":"skill:criteria-retrieve","citation":"demo-data/scenario-a-happy/raw/qrm-gate-criteria-extract.md","confidence":0.98},
   "assertions": [
     {"assertion_id":"A-001","class":"quantified","text":"The invoice-cycle redesign pilot reduced average approval cycle time by 8.1%.","location":{"section":"Executive summary","page":3,"paragraph":1,"label":"Cycle-time claim"},"evidence_ids":["EV-A1"],"hedging_present":false,"limitation_present":true,"stated_basis":true,"sample_size":942,"population_size":942,"scope_aligned":true,"confidence":0.94,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p3 para1"},
     {"assertion_id":"A-002","class":"quantified","text":"The approved benefits model estimates GBP 1.1m annual run-rate opportunity.","location":{"section":"Executive summary","page":3,"paragraph":2,"label":"Benefits estimate"},"evidence_ids":["EV-A2"],"hedging_present":true,"limitation_present":true,"stated_basis":true,"sample_size":942,"population_size":942,"scope_aligned":true,"confidence":0.91,"source":"skill:deliverable-ingest","citation":"draft-deliverable.md p3 para2"},

@@ -20,7 +20,7 @@
         "intended_recipients": { "type": "array", "items": { "type": "string" } },
         "third_party_recipient_named": { "type": "boolean" },
         "confidentiality_marking": { "type": "string" },
-        "client_data_handling": { "enum": ["ok", "attention", "breach", "unknown"] },
+        "client_data_handling": { "enum": ["ok", "attention", "breach", "unknown"], "default": "unknown", "description": "Set by deliverable-ingest from the source/client-data register; use unknown when the register cannot confirm safe handling. Missing is not equivalent to ok." },
         "required_disclaimer_type": { "enum": ["general_advice", "reliance_restriction"] },
         "present_disclaimer_types": { "type": "array", "items": { "type": "string" } },
         "required_language": { "type": "array", "items": { "type": "string" } },

@@ -3,7 +3,7 @@ name: criteria-retrieve
 description: "Retrieves the applicable QRM quality framework, gate criteria, required language, brand rules and prior-review findings. Use when the user asks \"which checklist applies?\", \"retrieve the gate criteria\", \"what disclaimer is required?\", \"what did QRM ask us to fix?\" or \"load the review rules\". Do NOT use to ingest documents (use deliverable-ingest), map evidence (use assertion-map), determine findings (use gate-check), or draft the review packet (use review-packet). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or generic policy search outside this plugin."
 license: Proprietary
 metadata:
-  version: "1.0.1"
+  version: "1.0.2"
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -18,25 +18,24 @@ After `deliverable-ingest` in every run, and whenever a reviewer asks which chec
 - Brand/formatting standards and prior review finding tracker.
 ## Steps
 1. Retrieve the criteria set that applies to deliverable type, audience and intended recipients.
-2. Preserve `criteria.criteria_sections` as an explicit list; missing is not equivalent to empty.
+2. Preserve `criteria.criteria_sections` as an explicit list and compare any engagement extract against the shipped floor: `quality-gate-criteria.md #1-#8` plus `severity-rules.md #1-#4`. If the extract omits a shipped section such as #8, keep the shipped floor and escalate the mismatch.
 3. Identify whether third-party reliance language is required, including named lenders, regulators, acquirers, vendors or other allowed users.
 4. Normalize prior findings, closure status and required fixes without accepting tracker closure as proof.
-5. Pass the complete criteria payload to `assertion-map` and `gate-check`.
+5. Verify intake-owned `required_disclaimer_type`, `scope_aligned` and `client_data_handling` against the criteria and source extracts; correct only with cited evidence, otherwise leave the field and escalate uncertainty.
+6. Pass the complete criteria payload to `assertion-map` and `gate-check`.
 ## Output
 Contract payload with `criteria`, `prior_findings`, required language and citations to `quality-gate-criteria.md` and `severity-rules.md`.
 ## Output format
 Markdown table: criteria_set_id, section, purpose, source citation, required language and downstream engine that consumes it; then a prior-findings table.
 ## Example
 Criteria retrieval prepares inputs; it does not run a verdict.
-```bash
-python skills/assertion-map/scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at 2026-10-01T00:00:00Z
-```
+Example output: `criteria.criteria_sections = ["quality-gate-criteria.md #1-#8", "severity-rules.md #1-#4"]`, with a note if the engagement extract was narrower than the shipped floor.
 ## Grounding requirements
 Every criterion used by an engine must cite a numbered section in copied `references/`. Engine constants mirror those section numbers.
 ## Constraints
 - Retrieve criteria only; do not decide assertion support, severity, ranking or review status.
 - Reference excerpts are illustrative summaries, not copied standards or firm policies.
-- A CLI/user packet override may narrow the applied criteria, but never widen or replace the shipped criteria floor.
+- A CLI/user packet override may add stricter engagement criteria, but it must never remove, narrow or replace the shipped criteria floor.
 ## When NOT to Use
 - Raw deliverable/evidence intake: use `deliverable-ingest`.
 - Support mapping: use `assertion-map`.

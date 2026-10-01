@@ -3,7 +3,7 @@ name: assertion-map
 description: "Maps deliverable assertions to the support pack with deterministic assertion_map. Use when the user asks \"what is not substantiated?\", \"check the claims\", \"trace this saving\", \"which assertions lack evidence?\" or \"map assertions to evidence\". Do NOT use to ingest documents (use deliverable-ingest), choose criteria (use criteria-retrieve), make gate findings or review status (use gate-check), or draft the partner packet (use review-packet). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or generic citation search outside this plugin."
 license: Proprietary
 metadata:
-  version: "1.0.1"
+  version: "1.0.2"
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -17,7 +17,7 @@ After `deliverable-ingest` and `criteria-retrieve`, before `gate-check`; also fo
 ## Steps
 1. Run `python skills/assertion-map/scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at <ISO timestamp>`.
 2. If the engine exits non-zero, stop and report the input error; never hand-compute support.
-3. Quote `support_status`, `support_score`, linked evidence IDs, rationale and citations verbatim.
+3. Quote `support_status`, `support_score`, linked evidence IDs, best evidence ID, rationale and citations verbatim. Citations include every linked evidence item, not just the best evidence item.
 4. Pass unsupported and limited assertion findings to `gate-check`.
 ## Output
 `assertion-mapped.json` with `assertion_mappings[]`, evidence-support findings, escalations and provenance.
@@ -28,7 +28,7 @@ Markdown table: assertion_id, class, location, evidence_ids, best_evidence_id, s
 python skills/assertion-map/scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at 2026-10-01T00:00:00Z
 ```
 ## Grounding requirements
-Every support verdict, score and escalation comes from the engine. Quantified claims require traceable analytical evidence; stakeholder verbal support is insufficient. No linked evidence means unsupported, never supported.
+Every support verdict, score and escalation comes from the engine. Best evidence is selected for relevance to the assertion class before confidence, so scope documents do not outrank the actual support sample. Quantified claims require traceable analytical evidence; stakeholder verbal support is insufficient. No linked evidence means unsupported, never supported.
 ## Constraints
 - Evidence-support verdicts are engine-only; the model never rounds verbal support into substantiation.
 - Missing evidence index or criteria list is malformed input and must fail closed.

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2 - 2026-10-01
+
+- T&S `review-packet/ps-third-party`: removed the raw `{{contract_payload}}` appendix from the packet template and added an external-recipient hold so user-supplied recipients outside `deliverable.intended_recipients` cannot be accepted for draft routing.
+- L1: `gate_check.py` now evaluates assertion-level `scope_aligned=false` against `quality-gate-criteria.md #3.1` instead of ignoring the contract field.
+- L2: `assertion_map.py` now ranks unsupported definitive conclusions as `release_blocker` under `severity-rules.md #1.1`, covering scenario B B-002.
+- L3: `assertion_map.py` now selects best evidence by assertion-class relevance before confidence and cites every linked evidence item, so B-002 uses EV-B2 as the support sample while still citing EV-B3.
+- L4: `gate_check.py` now derives G2 disclaimer and G8 embedded-instruction locations from payload/prior-finding/assertion locations rather than hard-coded p2/p1 defaults.
+- L5: `gate_check.py` now holds when `client_data_handling`, `brand_checks`, `licensed_content` or `prior_findings` registers are missing instead of treating absence as clean.
+- Non-blocking report items: documented unpaginated-source handling, clarified ingest ownership for `required_disclaimer_type`, `scope_aligned` and `client_data_handling` (default `unknown`), corrected criteria-retrieve's retrieve-only example and shipped §8 floor check, documented how gate-check creates `assertion-mapped.json` when available upstream, reordered the packet template to ranked findings before gate summary, removed the duplicate G3 sample-limitation finding, and moved scenario B disclaimer findings to PR-B1's p12 location.
+
 ## 1.0.1 - 2026-10-01
 
 - Fail closed for missing `evidence_set`, missing `criteria.criteria_sections` and missing `deliverable.required_language`; missing is no longer treated as an empty clean register.

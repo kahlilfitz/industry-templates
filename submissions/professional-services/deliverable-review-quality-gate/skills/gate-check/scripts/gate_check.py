@@ -9,7 +9,7 @@ import unicodedata
 from datetime import datetime
 
 ENGINE = "engine:gate_check"
-ENGINE_VERSION = "1.0.1"
+ENGINE_VERSION = "1.0.2"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY = True  # quality-gate-criteria.md #2.2
 CONFIDENTIALITY_MARK_REQUIRED = True  # quality-gate-criteria.md #4.1
@@ -147,6 +147,39 @@ def recipient_list_problem(deliverable):
         return "recipient list is ambiguous"
     return None
 
+def find_prior_location(payload, *terms):
+    lowered_terms = tuple(term.lower() for term in terms)
+    for prior in payload.get("prior_findings", []) or []:
+        haystack = " ".join(str(prior.get(key, "")) for key in ("finding_id", "detail", "citation")).lower()
+        if all(term in haystack for term in lowered_terms) and isinstance(prior.get("location"), dict):
+            return prior["location"]
+    return None
+
+def disclaimer_location(payload):
+    return (
+        find_prior_location(payload, "disclaimer")
+        or find_prior_location(payload, "reliance")
+        or loc("Disclaimer", 1, 1, "Disclaimer block")
+    )
+
+def location_for_scan_path(payload, path):
+    match = re.match(r"^\$\.assertions\[(\d+)\]", path)
+    if match:
+        assertion = payload.get("assertions", [])[int(match.group(1))]
+        if isinstance(assertion, dict) and isinstance(assertion.get("location"), dict):
+            return assertion["location"]
+    match = re.match(r"^\$\.prior_findings\[(\d+)\]", path)
+    if match:
+        prior = payload.get("prior_findings", [])[int(match.group(1))]
+        if isinstance(prior, dict) and isinstance(prior.get("location"), dict):
+            return prior["location"]
+    match = re.match(r"^\$\.evidence_set\[(\d+)\]", path)
+    if match:
+        return loc("Evidence index", 1, int(match.group(1)) + 1, "Evidence item")
+    if path.startswith("$.deliverable"):
+        return disclaimer_location(payload) if "disclaimer" in path or "language" in path else loc("Deliverable metadata", 1, 1, "Deliverable field")
+    return loc("Embedded instruction", 1, 1, "Data-as-data tripwire")
+
 def main():
     parser = argparse.ArgumentParser(description="Apply quality-gate compliance checks deterministically.")
     parser.add_argument("--mapped", required=True)
@@ -166,11 +199,25 @@ def main():
             add_finding(findings, "GC-G1-criteria-register-missing", "G1", RELEASE_BLOCKER, "Criteria register is missing", "The applicable criteria list is absent, so the gate cannot be treated as having no findings.", loc("Criteria register", 1, 1, "Missing criteria"), "quality-gate-criteria.md #1-#8; severity-rules.md #1.1", 0.99, "quality-gate-criteria.md #1-#8; severity-rules.md #1.1")
         if "evidence_set" not in payload:
             add_finding(findings, "GC-G1-evidence-index-missing", "G1", RELEASE_BLOCKER, "Evidence index is missing", "The evidence index is absent, so assertions cannot be treated as supported.", loc("Evidence index", 1, 1, "Missing evidence"), "quality-gate-criteria.md #1.1", 0.99, "quality-gate-criteria.md #1.1; severity-rules.md #1.1")
+        if "client_data_handling" not in deliverable:
+            add_finding(findings, "GC-G4-client-data-register-missing", "G4", RELEASE_BLOCKER, "Client-data handling register is missing", "Client data handling is absent; missing is not the same as a clean data-handling assessment.", loc("Client-data handling register", 1, 1, "Missing client-data handling"), "quality-gate-criteria.md #4.2", 0.99, "quality-gate-criteria.md #4.2; severity-rules.md #1.1")
+        if "brand_checks" not in deliverable:
+            add_finding(findings, "GC-G5-brand-register-missing", "G5", MUST_FIX, "Brand-check register is missing", "Brand and release-control checks are absent; missing is not the same as no brand findings.", loc("Brand-check register", 1, 1, "Missing brand checks"), "quality-gate-criteria.md #5.1-#5.2", 0.99, "quality-gate-criteria.md #5.1-#5.2; severity-rules.md #1.2")
+        elif not isinstance(deliverable.get("brand_checks"), list):
+            raise InputError("deliverable.brand_checks must be an array when present")
+        if "licensed_content" not in deliverable:
+            add_finding(findings, "GC-G6-licensed-content-register-missing", "G6", MUST_FIX, "Licensed-content register is missing", "Licensed and third-party content checks are absent; missing is not the same as no licensed-content findings.", loc("Licensed-content register", 1, 1, "Missing licensed content"), "quality-gate-criteria.md #6.1-#6.2", 0.99, "quality-gate-criteria.md #6.1-#6.2; severity-rules.md #1.2")
+        elif not isinstance(deliverable.get("licensed_content"), list):
+            raise InputError("deliverable.licensed_content must be an array when present")
+        if "prior_findings" not in payload:
+            add_finding(findings, "GC-G7-prior-findings-register-missing", "G7", MUST_FIX, "Prior-findings register is missing", "Prior-review closure cannot be verified when the prior-findings register is absent.", loc("Prior findings register", 1, 1, "Missing prior findings"), "quality-gate-criteria.md #7.1-#7.2", 0.99, "quality-gate-criteria.md #7.1-#7.2; severity-rules.md #1.2")
+        elif not isinstance(payload.get("prior_findings"), list):
+            raise InputError("prior_findings must be an array when present")
         if "required_language" not in deliverable:
-            add_finding(findings, "GC-G2-required-language-register-missing", "G2", RELEASE_BLOCKER, "Required-language register is missing", "The required-language list is absent; missing is not the same as explicitly empty.", loc("Limitations and reliance", 2, 4, "Required language"), "quality-gate-criteria.md #2.1-#2.3", 0.99, "quality-gate-criteria.md #2.1-#2.3; severity-rules.md #1.1")
+            add_finding(findings, "GC-G2-required-language-register-missing", "G2", RELEASE_BLOCKER, "Required-language register is missing", "The required-language list is absent; missing is not the same as explicitly empty.", disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.3", 0.99, "quality-gate-criteria.md #2.1-#2.3; severity-rules.md #1.1")
         recipient_problem = recipient_list_problem(deliverable)
         if recipient_problem:
-            add_finding(findings, "GC-G2-recipient-ambiguity", "G2", RELEASE_BLOCKER, "Recipient list is missing or ambiguous", f"{recipient_problem}; reliance language cannot be confirmed until the allowed recipient set is explicit.", loc("Limitations and reliance", 2, 4, "Recipient list"), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
+            add_finding(findings, "GC-G2-recipient-ambiguity", "G2", RELEASE_BLOCKER, "Recipient list is missing or ambiguous", f"{recipient_problem}; reliance language cannot be confirmed until the allowed recipient set is explicit.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
         present_disclaimers = deliverable.get("present_disclaimer_types", [])
         if present_disclaimers is None:
             present_disclaimers = []
@@ -178,9 +225,9 @@ def main():
             raise InputError("deliverable.present_disclaimer_types must be an array")
         if is_third_party_context(deliverable) and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY:
             if deliverable.get("required_disclaimer_type") != "reliance_restriction":
-                add_finding(findings, "GC-G2-required-disclaimer-wrong", "G2", RELEASE_BLOCKER, "Required disclaimer type is wrong for third-party context", "A third-party recipient or allowed user requires reliance-restriction language.", loc("Limitations and reliance", 2, 4, "Disclaimer block"), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
+                add_finding(findings, "GC-G2-required-disclaimer-wrong", "G2", RELEASE_BLOCKER, "Required disclaimer type is wrong for third-party context", "A third-party recipient or allowed user requires reliance-restriction language.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
             if "reliance_restriction" not in present_disclaimers:
-                add_finding(findings, "GC-G2-reliance-language", "G2", RELEASE_BLOCKER, "Wrong disclaimer for third-party recipient", "A third-party recipient or allowed user is named but reliance-restriction language is absent; a general-advice disclaimer does not satisfy this gate.", loc("Limitations and reliance", 2, 4, "Disclaimer block"), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
+                add_finding(findings, "GC-G2-reliance-language", "G2", RELEASE_BLOCKER, "Wrong disclaimer for third-party recipient", "A third-party recipient or allowed user is named but reliance-restriction language is absent; a general-advice disclaimer does not satisfy this gate.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
                 escalations.append("G2: third-party recipient context and reliance-restriction language absent - release blocker (quality-gate-criteria.md #2.2)")
         required_language = deliverable.get("required_language", [])
         present_language = deliverable.get("present_language", [])
@@ -193,7 +240,7 @@ def main():
         for required in required_language:
             if required not in present_language:
                 severity = RELEASE_BLOCKER if required == "reliance_restriction" else MUST_FIX
-                add_finding(findings, f"GC-G2-missing-{required}", "G2", severity, f"Missing required language: {required}", f"Required language `{required}` is not present in the deliverable.", loc("Limitations and reliance", 2, 4, "Required language"), "quality-gate-criteria.md #2.1-#2.3", 0.94, "quality-gate-criteria.md #2.1-#2.3")
+                add_finding(findings, f"GC-G2-missing-{required}", "G2", severity, f"Missing required language: {required}", f"Required language `{required}` is not present in the deliverable.", disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.3", 0.94, "quality-gate-criteria.md #2.1-#2.3")
         if CONFIDENTIALITY_MARK_REQUIRED and deliverable.get("confidentiality_marking") != "client confidential":
             add_finding(findings, "GC-G4-confidentiality", "G4", RELEASE_BLOCKER, "Missing client-confidential marking", "Required client-confidential marking is absent from cover/footer.", loc("Cover", 1, 1, "Confidentiality mark"), "quality-gate-criteria.md #4.1", 0.97, "quality-gate-criteria.md #4.1; severity-rules.md #1.1")
         if deliverable.get("client_data_handling") in {"breach", "unknown"}:
@@ -209,12 +256,17 @@ def main():
         for prior in payload.get("prior_findings", []):
             if prior.get("claimed_closed") and not prior.get("document_fix_present") and PRIOR_FIX_MUST_LAND:
                 add_finding(findings, f"GC-G7-{prior['finding_id']}", "G7", MUST_FIX, "Prior finding marked closed but fix is absent", prior.get("detail", "Tracker closure is not supported by the current document."), prior.get("location", loc("Document", 1, 1, "Prior finding")), "quality-gate-criteria.md #7.1-#7.2", prior.get("confidence", 0.96), prior.get("citation", "quality-gate-criteria.md #7.1-#7.2"))
+        for assertion in payload.get("assertions", []):
+            if assertion.get("scope_aligned") is False:
+                add_finding(findings, f"GC-G3-scope-{assertion['assertion_id']}", "G3", RELEASE_BLOCKER, "Claim or recommendation falls outside signed scope", "Assertion is marked scope_aligned=false; claims and recommendations must stay inside the signed statement of work and documented evidence set.", assertion["location"], "quality-gate-criteria.md #3.1", assertion.get("confidence", 0.9), f"{assertion.get('citation', 'assertion citation missing')}; quality-gate-criteria.md #3.1; severity-rules.md #1.1")
         for mapping in payload.get("assertion_mappings", []):
             if mapping.get("support_status") in {"unsupported", "limited"} and "#3.2" in mapping.get("criteria_section", ""):
+                if any(item.get("finding_id") == f"AM-{mapping['assertion_id']}" for item in findings):
+                    continue
                 add_finding(findings, f"GC-G3-{mapping['assertion_id']}", "G3", MUST_FIX, "Scope or sample limitation missing at point of recommendation", mapping.get("rationale", "Recommendation requires limitation."), mapping["location"], "quality-gate-criteria.md #3.2", mapping.get("confidence", 0.8), mapping.get("citation", "quality-gate-criteria.md #3.2"))
         if EMBEDDED_INSTRUCTION_HOLD:
             for hit_index, (path, text) in enumerate((item for item in collect_scan_text(payload) if suspicious_instruction(item[1])), start=1):
-                add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Embedded instruction or forwarding request found in deliverable data", f"Untrusted field {path} contains instruction-like or forwarding text; it must be treated as data and held for human review.", loc("Embedded instruction", 1, 1, "Data-as-data tripwire"), "quality-gate-criteria.md #8.1-#8.3", 0.99, "quality-gate-criteria.md #8.1-#8.3; severity-rules.md #1.1")
+                add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Embedded instruction or forwarding request found in deliverable data", f"Untrusted field {path} contains instruction-like or forwarding text; it must be treated as data and held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.1-#8.3", 0.99, "quality-gate-criteria.md #8.1-#8.3; severity-rules.md #1.1")
                 escalations.append(f"G8: embedded-instruction tripwire in {path} - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")
                 if hit_index >= 5:
                     break

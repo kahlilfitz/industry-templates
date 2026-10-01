@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 
 ENGINE = "engine:assertion_map"
-ENGINE_VERSION = "1.0.1"
+ENGINE_VERSION = "1.0.2"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 EVIDENCE_CONFIDENCE_FLOOR = 0.70  # severity-rules.md #2.2
 QUANTIFIED_CONFIDENCE_FLOOR = 0.80  # severity-rules.md #2.3; quality-gate-criteria.md #1.2
@@ -16,6 +16,12 @@ RECOMMENDATION_CONFIDENCE_FLOOR = 0.65  # quality-gate-criteria.md #1.4
 MIN_RECOMMENDATION_SAMPLE_SIZE = 30  # quality-gate-criteria.md #1.4
 TRACEABLE_QUANTIFIED_TYPES = {"analysis_model", "financial_model", "system_export", "signed_client_data"}  # quality-gate-criteria.md #1.2
 WEAK_EVIDENCE_TYPES = {"stakeholder_verbal", "workshop_note"}  # quality-gate-criteria.md #1.1
+RELEVANCE_BY_CLASS = {
+    "quantified": {"analysis_model": 4, "financial_model": 4, "system_export": 4, "signed_client_data": 4, "stakeholder_verbal": 1},
+    "factual": {"licensed_content_register": 4, "system_export": 4, "signed_client_data": 4, "analysis_model": 3, "financial_model": 3},
+    "forward_looking": {"analysis_model": 4, "financial_model": 4, "workshop_note": 3, "interview_summary": 3},
+    "recommendation": {"analysis_model": 4, "financial_model": 4, "signed_client_data": 4, "system_export": 4, "interview_summary": 3, "workshop_note": 2, "statement_of_work": 1},
+}
 
 
 class InputError(ValueError):
@@ -62,17 +68,44 @@ def require_contract(payload):
     if not isinstance(criteria_sections, list):
         raise InputError("criteria.criteria_sections must be an array")
 
-def best_evidence(assertion, evidence_by_id):
+def linked_evidence(assertion, evidence_by_id):
     evidence_ids = assertion.get("evidence_ids", [])
     if evidence_ids is None:
         evidence_ids = []
     if not isinstance(evidence_ids, list):
         raise InputError(f"{assertion.get('assertion_id', '<unknown>')}: evidence_ids must be an array when present")
-    candidates = [evidence_by_id[eid] for eid in evidence_ids if eid in evidence_by_id]
-    return max(candidates, key=lambda item: item.get("confidence", 0.0)) if candidates else None
+    return [evidence_by_id[eid] for eid in evidence_ids if eid in evidence_by_id]
+
+def evidence_relevance(assertion, evidence):
+    by_type = RELEVANCE_BY_CLASS.get(assertion.get("class"), {})
+    return by_type.get(evidence.get("type", "unknown"), 2)
+
+def best_evidence(assertion, linked_items):
+    if not linked_items:
+        return None
+    return max(linked_items, key=lambda item: (evidence_relevance(assertion, item), item.get("confidence", 0.0)))
+
+def linked_evidence_citation(assertion, evidence_by_id):
+    citations = []
+    for evidence_id in assertion.get("evidence_ids") or []:
+        evidence = evidence_by_id.get(evidence_id)
+        citations.append(evidence.get("citation", f"evidence {evidence_id}") if evidence else f"missing linked evidence {evidence_id}")
+    return "; ".join(citations) if citations else "no linked evidence found"
 
 def location_label(location):
     return f"p{location.get('page')}, {location.get('section')}, paragraph {location.get('paragraph')}"
+
+def is_definitive_conclusion(assertion):
+    if assertion.get("limitation_present"):
+        return False
+    text = assertion.get("text", "").lower()
+    definitive_terms = (" should ", "we conclude", "will ", "all ", "full ", "estate-wide", "applies across", "national ")
+    return (
+        assertion.get("hedging_present") is False
+        or assertion.get("scope_aligned") is False
+        or assertion.get("population_size") is not None
+        or any(term in f" {text} " for term in definitive_terms)
+    )
 
 def classify(assertion, evidence):
     klass = assertion.get("class")
@@ -103,7 +136,12 @@ def classify(assertion, evidence):
         if not assertion.get("stated_basis"):
             return "unsupported", confidence, "Recommendation has no stated basis", "quality-gate-criteria.md #1.4"
         if sample_size is not None and sample_size < MIN_RECOMMENDATION_SAMPLE_SIZE and not assertion.get("limitation_present"):
-            return "unsupported", confidence, f"Recommendation uses sample size {sample_size}, below {MIN_RECOMMENDATION_SAMPLE_SIZE}, without a limitation", "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2"
+            criteria = "quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2"
+            rationale = f"Recommendation uses sample size {sample_size}, below {MIN_RECOMMENDATION_SAMPLE_SIZE}, without a limitation"
+            if is_definitive_conclusion(assertion):
+                criteria += "; severity-rules.md #1.1"
+                rationale += " and is framed as a definitive conclusion"
+            return "unsupported", confidence, rationale, criteria
         if confidence < RECOMMENDATION_CONFIDENCE_FLOOR:
             return "limited", confidence, f"Recommendation support confidence {confidence:.2f} below {RECOMMENDATION_CONFIDENCE_FLOOR:.2f}", "quality-gate-criteria.md #1.4"
         return "supported", confidence, "Recommendation has a stated basis and proportionate support", "quality-gate-criteria.md #1.4"
@@ -139,20 +177,25 @@ def main():
         mappings = []
         for index, assertion in enumerate(payload["assertions"]):
             ensure_assertion_shape(assertion, index)
-            evidence = best_evidence(assertion, evidence_by_id)
+            linked_items = linked_evidence(assertion, evidence_by_id)
+            evidence = best_evidence(assertion, linked_items)
             status, support_score, rationale, criteria_section = classify(assertion, evidence)
             evidence_ids = assertion.get("evidence_ids") or []
+            evidence_citation = linked_evidence_citation(assertion, evidence_by_id)
             mapping = {
                 "assertion_id": assertion["assertion_id"], "class": assertion["class"], "text": assertion["text"],
                 "location": assertion["location"], "evidence_ids": evidence_ids,
                 "best_evidence_id": evidence.get("evidence_id") if evidence else None, "support_status": status,
                 "support_score": round(support_score, 2), "rationale": rationale, "criteria_section": criteria_section,
                 "confidence": round(support_score, 2), "source": ENGINE,
-                "citation": f"{assertion['citation']}; {evidence.get('citation') if evidence else 'no linked evidence found'}; {criteria_section}"
+                "citation": f"{assertion['citation']}; {evidence_citation}; {criteria_section}"
             }
             mappings.append(mapping)
             if status in {"unsupported", "limited"}:
-                severity = "release_blocker" if assertion["class"] == "quantified" and status == "unsupported" else "must_fix" if status == "unsupported" else "advisory"
+                severity = "release_blocker" if (
+                    status == "unsupported"
+                    and (assertion["class"] == "quantified" or is_definitive_conclusion(assertion))
+                ) else "must_fix" if status == "unsupported" else "advisory"
                 findings.append({"finding_id": f"AM-{assertion['assertion_id']}", "gate_id": "G1", "severity": severity,
                     "title": f"{assertion['class'].replace('_', ' ').title()} assertion is {status}", "detail": rationale,
                     "location": assertion["location"], "criteria_section": criteria_section, "confidence": round(support_score, 2),
