@@ -5,6 +5,11 @@ Reads governed.json from guideline_check and writes a Markdown review packet for
 engagement manager and billing coordinator. It only writes a local draft file: it has no
 e-mail, chat or network code and never sends, submits, approves or alters WIP balances.
 Engine flags are quoted verbatim; nothing is dropped or softened.
+
+v1.0.4: governed data that holds rows outside the recorded timekeeper scope is refused
+(client-billing-guidelines.md #12.1). Every data-derived cell (person, subject, narrative,
+flag detail, exclusion reason, engagement names) passes the shared embedded-instruction
+tripwire; flagged text is replaced by a withheld marker and never printed (#11.2).
 """
 import argparse
 import datetime
@@ -17,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:exception_report"
-ENGINE_VERSION = "exception_report/1.0.3"
+ENGINE_VERSION = "exception_report/1.0.4"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 
 
@@ -50,12 +55,20 @@ def load_governed(path):
 
 
 def cell(text):
-    return str(text if text is not None else "").replace("|", "\\|").replace("\n", " ")
+    text = str(text if text is not None else "")
+    return signal_policy.redact(text).replace("|", "\\|").replace("\n", " ")
+
+
+def cells(values):
+    """Join a list of data-derived values, each passed through cell(); a non-list is treated as one value."""
+    if values is None:
+        return ""
+    return ", ".join(cell(v) for v in (values if isinstance(values, list) else [values]))
 
 
 def flag_lines(flags):
-    return "<br>".join(f"`{f['flag']}` ({f['severity']}): {cell(f['detail'])} [{', '.join(f.get('citations', []))}]"
-                       for f in flags)
+    return "<br>".join(f"`{cell(f.get('flag'))}` ({cell(f.get('severity'))}): {cell(f.get('detail'))} [{cells(f.get('citations', []))}]"
+                       for f in flags if isinstance(f, dict))
 
 
 def main():
@@ -71,6 +84,7 @@ def main():
     try:
         stamp = generated_at(args.generated_at)
         data = deepcopy(load_governed(args.governed))
+        signal_policy.enforce_timekeeper_scope(data, engine=ENGINE, strict=True)
         signal_policy.filter_packet(data, config_path=args.signal_config,
                                     script_dir=os.path.dirname(os.path.abspath(__file__)), engine=ENGINE)
     except (InputError, signal_policy.PolicyError) as exc:
@@ -87,7 +101,8 @@ def main():
     for entry in data["time_entries"]:
         compliance = entry.get("compliance", {})
         verdict = compliance.get("verdict", "unknown")
-        if verdict == "compliant" and compliance.get("flags"):
+        if verdict == "compliant" and (compliance.get("flags")
+                                       or signal_policy.embedded_instruction(entry.get("draft", {}).get("narrative"))):
             verdict = "needs_review"  # a flagged entry is never listed as a compliant draft
         by_verdict.setdefault(verdict, []).append(entry)
         for flag in compliance.get("flags", []):
@@ -96,11 +111,12 @@ def main():
     lines = [
         "# DRAFT - not sent, not approved",
         "",
-        f"**Pre-bill exception packet** - {eng.get('client_name')} / {eng.get('matter_name')} ({eng.get('engagement_id')})",
+        f"**Pre-bill exception packet** - {cell(eng.get('client_name'))} / {cell(eng.get('matter_name'))} "
+        f"({cell(eng.get('engagement_id'))})",
         "",
         f"- Prepared for: engagement manager and billing coordinator (review only)",
-        f"- Period covered by the governed data: {period.get('start')} to {period.get('end')} "
-        f"(entries and activity actually dated {actual[0]} to {actual[1]})",
+        f"- Period covered by the governed data: {cell(period.get('start'))} to {cell(period.get('end'))} "
+        f"(entries and activity actually dated {cell(actual[0])} to {cell(actual[1])})",
     ]
     if args.requested_start or args.requested_end:
         req = (args.requested_start or period.get("start") or actual[0], args.requested_end or period.get("end") or actual[1])
@@ -123,9 +139,9 @@ def main():
         "## Summary",
         "",
         f"- Entries: {summary.get('total_entries')} ({summary.get('total_hours')} h)",
-        "- Verdicts: " + ", ".join(f"{k} {v}" for k, v in sorted(summary.get("verdict_counts", {}).items())),
+        "- Verdicts: " + ", ".join(f"{cell(k)} {cell(v)}" for k, v in sorted(summary.get("verdict_counts", {}).items())),
         f"- Missing time: {summary.get('missing_time_hours')} h across {len(data['missing_time_report'])} activity signal(s)",
-        f"- Excluded by signal policy: {', '.join(summary.get('excluded_signal_ids') or []) or 'none'}",
+        f"- Excluded by signal policy: {cells(summary.get('excluded_signal_ids') or []) or 'none'}",
         "",
     ]
     sections = (("hold_for_review", "Held for review"),
@@ -137,7 +153,7 @@ def main():
     else:
         lines += ["| Entry | Person | Date | Hours | Engine flags (verbatim) |", "|---|---|---|---|---|"]
         for e in reject_rows:
-            lines.append(f"| {e['entry_id']} | {cell(e.get('person'))} | {e.get('date')} | {e.get('duration_hours')} | "
+            lines.append(f"| {cell(e.get('entry_id'))} | {cell(e.get('person'))} | {cell(e.get('date'))} | {cell(e.get('duration_hours'))} | "
                          f"{flag_lines(e['compliance']['flags'])} |")
         lines.append("")
     for severity, title in sections:
@@ -148,27 +164,27 @@ def main():
             continue
         lines += ["| Entry | Person | Date | Hours | Flag (verbatim) |", "|---|---|---|---|---|"]
         for e, flag in rows:
-            lines.append(f"| {e['entry_id']} | {cell(e.get('person'))} | {e.get('date')} | {e.get('duration_hours')} | "
+            lines.append(f"| {cell(e.get('entry_id'))} | {cell(e.get('person'))} | {cell(e.get('date'))} | {cell(e.get('duration_hours'))} | "
                          f"{flag_lines([flag])} |")
         lines.append("")
     lines += ["## Missing time", ""]
     if data["missing_time_report"]:
         lines += ["| Activity | Person | Date | Hours | Subject | Citations |", "|---|---|---|---|---|---|"]
         for m in data["missing_time_report"]:
-            lines.append(f"| {m['activity_id']} | {cell(m.get('person'))} | {m.get('date')} | {m.get('duration_hours')} | "
-                         f"{cell(m.get('subject'))} | {', '.join(m.get('citations', []))} |")
+            lines.append(f"| {cell(m.get('activity_id'))} | {cell(m.get('person'))} | {cell(m.get('date'))} | {cell(m.get('duration_hours'))} | "
+                         f"{cell(m.get('subject'))} | {cells(m.get('citations', []))} |")
     else:
         lines.append("None.")
     lines += ["", "## Privacy exclusions", ""]
     excluded = data.get("provenance", {}).get("excluded_signals", [])
     if excluded:
         for x in excluded:
-            lines.append(f"- {x.get('activity_id')}: {cell(x.get('reason'))} [{', '.join(x.get('citations', []))}]")
+            lines.append(f"- {cell(x.get('activity_id'))}: {cell(x.get('reason'))} [{cells(x.get('citations', []))}]")
     else:
         lines.append("- None. Only enabled sources were used.")
     compliant = by_verdict.get("compliant", [])
     lines += ["", "## Compliant drafts", ""]
-    lines += [f"- {e['entry_id']} ({cell(e.get('person'))}, {e.get('date')}, {e.get('duration_hours')} h): "
+    lines += [f"- {cell(e.get('entry_id'))} ({cell(e.get('person'))}, {cell(e.get('date'))}, {cell(e.get('duration_hours'))} h): "
               f"{cell(e.get('draft', {}).get('narrative'))}" for e in compliant] or ["None."]
     lines += [
         "",

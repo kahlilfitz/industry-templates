@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "ps.time-expense-narrative-compliance.v1",
   "title": "Time & Expense Narrative Compliance contract v1",
-  "description": "Chains activity-pull -> narrative-draft -> code-map -> guideline-check (Govern) -> exception-report. Every hop carries data, confidence, provenance and citations. v1.0.3 remains backward compatible: existing narratives stay unchanged while optional suggested_rewrites are separately labeled; compliance flags may include no_linked_evidence and recommended_task_code may be BH910; purpose may be null; optional organizer, attendees, deliverable, excluded_activity_ids and provenance.excluded_signals / signal_policy record signal-privacy exclusions (client-billing-guidelines.md #10.1).",
+  "description": "Chains activity-pull -> narrative-draft -> code-map -> guideline-check (Govern) -> exception-report. Every hop carries data, confidence, provenance and citations. v1.0.4 remains backward compatible: existing narratives stay unchanged while optional suggested_rewrites are separately labeled; compliance flags may include no_linked_evidence and recommended_task_code may be BH910; purpose may be null; optional organizer, attendees, deliverable, excluded_activity_ids and provenance.excluded_signals / signal_policy record signal-privacy exclusions (client-billing-guidelines.md #10.1). v1.0.4 adds optional engagement.engagement_manager, provenance.timekeeper_scope (requester, mode self|team, engagement-manager team_view confirmation, withheld rows; client-billing-guidelines.md #12.1) and provenance.period_check, draft.covered_activity_ids, and embedded_instruction markers on signals, entries and missing-time items; flagged text is withheld from drafts, rewrites and missing-time listings (#11.1, #11.2).",
   "type": "object",
   "required": [
     "contract_version",
@@ -47,6 +47,13 @@
           "items": {
             "type": "string"
           }
+        },
+        "engagement_manager": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Engagement manager recorded in the engagement letter; the only requester who can be granted the team view (client-billing-guidelines.md #12.1)."
         }
       }
     },
@@ -146,6 +153,10 @@
               "string",
               "null"
             ]
+          },
+          "embedded_instruction": {
+            "type": "boolean",
+            "description": "True when free text in the signal trips the embedded-instruction tripwire; the text is never drafted from or displayed (client-billing-guidelines.md #11.1, #11.2)."
           }
         }
       }
@@ -198,7 +209,8 @@
             ]
           },
           "draft": {
-            "type": "object"
+            "type": "object",
+            "description": "narrative_draft output: narrative, status (engine_generated_from_activity, needs_review, needs_review_insufficient_detail, needs_review_embedded_instruction, needs_activity_evidence, existing_timesheet_narrative), review_reasons, linked_activity_ids, covered_activity_ids (every linked activity the draft or rewrites describe), excluded_activity_ids, optional suggested_rewrites[] (status withheld_embedded_instruction when guideline_check withholds one), confidence, source, citations."
           },
           "code_mapping": {
             "type": "object"
@@ -225,6 +237,10 @@
               "type": "string"
             },
             "description": "Links removed because the signal came from a disabled, unknown or unresolvable source (client-billing-guidelines.md #10.1)."
+          },
+          "embedded_instruction": {
+            "type": "boolean",
+            "description": "True when the existing narrative or notes trip the embedded-instruction tripwire (client-billing-guidelines.md #11.1)."
           }
         }
       }
@@ -238,7 +254,8 @@
     "missing_time_report": {
       "type": "array",
       "items": {
-        "type": "object"
+        "type": "object",
+        "description": "Unrecorded billable activity; a subject that trips the tripwire is replaced by the withheld marker and the item carries embedded_instruction: true (client-billing-guidelines.md #8.1, #11.2)."
       }
     },
     "exception_list": {
@@ -315,6 +332,73 @@
           "type": "array",
           "items": {
             "type": "object"
+          }
+        },
+        "timekeeper_scope": {
+          "type": "object",
+          "description": "Recorded by activity_pull and enforced by every engine: only the requester's rows unless a confirmed engagement-manager team view is recorded (client-billing-guidelines.md #12.1).",
+          "properties": {
+            "mode": {
+              "enum": [
+                "self",
+                "team"
+              ]
+            },
+            "requester": {
+              "type": "string"
+            },
+            "people": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "team_view": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "withheld": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "withheld_by_engines": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "citations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "period_check": {
+          "type": "object",
+          "description": "Whether the requested period holds any data (status data_found, no_data_in_period or no_period_requested) with a warning naming the dates that do.",
+          "properties": {
+            "status": {
+              "enum": [
+                "data_found",
+                "no_data_in_period",
+                "no_period_requested"
+              ]
+            },
+            "warning": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         }
       }

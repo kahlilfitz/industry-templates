@@ -5,6 +5,7 @@
     "client_name": "Orion Advisory Cooperative",
     "matter_name": "Billing Controls Implementation",
     "billing_guidelines_id": "OCG-SYNTH-2026-09",
+    "engagement_manager": "Dana Whitfield",
     "source": "connector:engagement-workspace",
     "confidence": 0.99,
     "citations": [
@@ -306,6 +307,11 @@
           "B-DOC-001",
           "B-DOC-002"
         ],
+        "covered_activity_ids": [
+          "B-CAL-001",
+          "B-DOC-001",
+          "B-DOC-002"
+        ],
         "excluded_activity_ids": [
           "B-MAIL-001"
         ],
@@ -323,8 +329,10 @@
         "suggested_rewrites": [
           {
             "narrative": "Led billing controls kickoff meeting with Orion team, Priya Shah and Jordan Kim to align implementation assumptions and next steps for the Implementation Plan.",
-            "status": "engine_generated_from_activity",
-            "review_reasons": [],
+            "status": "needs_review",
+            "review_reasons": [
+              "covers B-CAL-001 only; this entry also links B-DOC-001, B-DOC-002 - use with the other rewrites or split the entry (client-billing-guidelines.md #2.1 / #2.2)"
+            ],
             "linked_activity_ids": [
               "B-CAL-001"
             ],
@@ -337,9 +345,11 @@
             ]
           },
           {
-            "narrative": "Analyzed integration design memo to identify implementation questions for client decision for the Integration Design.",
-            "status": "engine_generated_from_activity",
-            "review_reasons": [],
+            "narrative": "Analyzed integration design memo for the Integration Design to identify implementation questions for client decision.",
+            "status": "needs_review",
+            "review_reasons": [
+              "covers B-DOC-001 only; this entry also links B-CAL-001, B-DOC-002 - use with the other rewrites or split the entry (client-billing-guidelines.md #2.1 / #2.2)"
+            ],
             "linked_activity_ids": [
               "B-DOC-001"
             ],
@@ -352,9 +362,11 @@
             ]
           },
           {
-            "narrative": "Researched security exceptions matrix to prepare options for billing control implementation for the Security Exceptions Options Paper.",
-            "status": "engine_generated_from_activity",
-            "review_reasons": [],
+            "narrative": "Researched security exceptions matrix for the Security Exceptions Options Paper to prepare options for billing control implementation.",
+            "status": "needs_review",
+            "review_reasons": [
+              "covers B-DOC-002 only; this entry also links B-CAL-001, B-DOC-001 - use with the other rewrites or split the entry (client-billing-guidelines.md #2.1 / #2.2)"
+            ],
             "linked_activity_ids": [
               "B-DOC-002"
             ],
@@ -419,6 +431,9 @@
         "word_count": 15,
         "sufficiency": "determined_by_guideline_check (client-billing-guidelines.md #1.3)",
         "linked_activity_ids": [
+          "B-CAL-002"
+        ],
+        "covered_activity_ids": [
           "B-CAL-002"
         ],
         "excluded_activity_ids": [],
@@ -486,6 +501,9 @@
         "word_count": 15,
         "sufficiency": "determined_by_guideline_check (client-billing-guidelines.md #1.3)",
         "linked_activity_ids": [
+          "B-CAL-003"
+        ],
+        "covered_activity_ids": [
           "B-CAL-003"
         ],
         "excluded_activity_ids": [],
@@ -568,6 +586,9 @@
         "linked_activity_ids": [
           "B-CAL-004"
         ],
+        "covered_activity_ids": [
+          "B-CAL-004"
+        ],
         "excluded_activity_ids": [],
         "confidence": 0.94,
         "source": "engine:narrative_draft",
@@ -579,7 +600,7 @@
         ],
         "suggested_rewrites": [
           {
-            "narrative": "Coordinated internal staffing coverage call with staffing lead to coordinate team availability.",
+            "narrative": "Attended internal staffing coverage call with staffing lead to coordinate team availability.",
             "status": "engine_generated_from_activity",
             "review_reasons": [],
             "linked_activity_ids": [
@@ -616,9 +637,9 @@
     "demo_scenario": "scenario-b-drama",
     "generated_at": "2026-09-23T00:00:00Z",
     "engines": [
-      "activity_pull/1.0.3",
-      "narrative_draft/1.0.3",
-      "code_map/1.0.3"
+      "activity_pull/1.0.4",
+      "narrative_draft/1.0.4",
+      "code_map/1.0.4"
     ],
     "sources_read": [
       "calendar",
@@ -657,8 +678,38 @@
       }
     ],
     "timekeeper_scope": {
-      "mode": "all_timekeepers",
-      "people": null
+      "mode": "team",
+      "requester": "Dana Whitfield",
+      "people": null,
+      "team_view": {
+        "confirmed": true,
+        "role": "engagement_manager",
+        "confirmation": "engagement-manager:ENG-SYN-042",
+        "verified_against": "raw/engagement-letter-extract.md #engagement (engagement_manager)",
+        "citations": [
+          "client-billing-guidelines.md #12.1"
+        ]
+      },
+      "withheld": null,
+      "citations": [
+        "client-billing-guidelines.md #12.1"
+      ]
+    },
+    "period_check": {
+      "requested": {
+        "start": "2026-09-14",
+        "end": "2026-09-18"
+      },
+      "data_dates_in_period": [
+        "2026-09-14",
+        "2026-09-18"
+      ],
+      "data_dates_available": [
+        "2026-09-14",
+        "2026-09-18"
+      ],
+      "status": "data_found",
+      "warning": null
     },
     "signal_policy": {
       "enabled_sources": [
@@ -674,7 +725,7 @@
         "packet signal_config"
       ],
       "rule": "most_restrictive_wins",
-      "engine": "signal_policy/1.0.3",
+      "engine": "signal_policy/1.0.4",
       "citations": [
         "client-billing-guidelines.md #10.1"
       ]

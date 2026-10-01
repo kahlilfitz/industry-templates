@@ -5,6 +5,7 @@
     "client_name": "Orion Advisory Cooperative",
     "matter_name": "Billing Controls Implementation",
     "billing_guidelines_id": "OCG-SYNTH-2026-09",
+    "engagement_manager": "Dana Whitfield",
     "source": "connector:engagement-workspace",
     "confidence": 0.99,
     "citations": [
@@ -208,7 +209,7 @@
     "demo_scenario": "scenario-a-happy",
     "generated_at": "2026-09-23T00:00:00Z",
     "engines": [
-      "activity_pull/1.0.3"
+      "activity_pull/1.0.4"
     ],
     "sources_read": [
       "calendar",
@@ -235,10 +236,32 @@
     "out_of_scope_rows": [],
     "excluded_signals": [],
     "timekeeper_scope": {
-      "mode": "named",
+      "mode": "self",
+      "requester": "Alex Rivera",
       "people": [
         "Alex Rivera"
+      ],
+      "team_view": null,
+      "withheld": null,
+      "citations": [
+        "client-billing-guidelines.md #12.1"
       ]
+    },
+    "period_check": {
+      "requested": {
+        "start": "2026-09-14",
+        "end": "2026-09-18"
+      },
+      "data_dates_in_period": [
+        "2026-09-14",
+        "2026-09-16"
+      ],
+      "data_dates_available": [
+        "2026-09-14",
+        "2026-09-16"
+      ],
+      "status": "data_found",
+      "warning": null
     },
     "signal_policy": {
       "enabled_sources": [
@@ -254,7 +277,7 @@
         "packet signal_config"
       ],
       "rule": "most_restrictive_wins",
-      "engine": "signal_policy/1.0.3",
+      "engine": "signal_policy/1.0.4",
       "citations": [
         "client-billing-guidelines.md #10.1"
       ]

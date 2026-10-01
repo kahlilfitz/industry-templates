@@ -10,7 +10,7 @@ What to notice:
 
 Run order (from this folder; `S` = the plugin's `skills` folder; `--generated-at` pins the timestamp so the files below reproduce exactly - omit it in real use to record the real UTC time):
 
-1. `python3 $S/activity-pull/scripts/activity_pull.py --raw-dir raw --person "Alex Rivera" --period-start 2026-09-14 --period-end 2026-09-18 --scenario scenario-a-happy --out activity.json --generated-at 2026-09-23T00:00:00Z`
+1. `python3 $S/activity-pull/scripts/activity_pull.py --raw-dir raw --requester "Alex Rivera" --period-start 2026-09-14 --period-end 2026-09-18 --scenario scenario-a-happy --out activity.json --generated-at 2026-09-23T00:00:00Z`
 2. `python3 $S/narrative-draft/scripts/narrative_draft.py --activity activity.json --out expected/drafted.json --generated-at 2026-09-23T00:00:00Z`
 3. `python3 $S/code-map/scripts/code_map.py --drafted expected/drafted.json --out expected/coded.json --generated-at 2026-09-23T00:00:00Z`
 4. `python3 $S/guideline-check/scripts/guideline_check.py --coded expected/coded.json --out expected/governed.json --generated-at 2026-09-23T00:00:00Z`

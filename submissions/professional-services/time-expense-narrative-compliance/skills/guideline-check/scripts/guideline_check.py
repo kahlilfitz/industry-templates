@@ -4,9 +4,10 @@
 Constants mirror references/client-billing-guidelines.md section by section. The model
 reports these flags; it never decides, suppresses or downgrades compliance verdicts.
 
-v1.0.3 rules:
+v1.0.4 rules:
 - Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1); an
   entry that linked one gets a hold_for_review flag and the signal never counts as evidence.
+- Rows outside the recorded timekeeper scope are withheld before any check (#12.1).
 - #1.1 under 12 words = reject. #1.2 actor's work / subject / purpose are checked on the
   narrative text itself for every entry (1 missing = needs_review, 2+ = reject).
 - #2.1 >2.0 h with more than one class = reject; #2.2 <=2.0 h may combine at most two classes,
@@ -16,9 +17,12 @@ v1.0.3 rules:
   every packet signal).
 - #6.2 evidence counts only linked activity on the entry's own date; off-date links are flagged.
   An entry over 0.2 h with NO linked evidence gets a no_linked_evidence hold (never compliant).
-- #1.3 embedded_instruction hold: reviewer/AI-addressed notes, approval/waiver claims,
-  forward/send instructions, or any e-mail address or URL in narrative or linked signal text
-  (Unicode format characters stripped first).
+- #11.1 embedded_instruction hold (shared tripwire in signal_policy.py): reviewer/AI-addressed
+  notes, approval/waiver/sign-off claims and paraphrased steering, forward/send instructions, or
+  any e-mail address or URL in narrative, note, suggested-rewrite or linked signal text (NFKC,
+  Unicode Cf stripped, Cyrillic/Greek look-alikes folded first).
+- #11.2 flagged text is withheld: a flagged suggested rewrite or missing-time subject is replaced
+  by a withheld marker before output.
 - #7.1 near-duplicate = SequenceMatcher ratio or token Jaccard >= 0.92 against earlier
   narratives for the same meeting.
 """
@@ -37,7 +41,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:guideline_check"
-ENGINE_VERSION = "guideline_check/1.0.3"
+ENGINE_VERSION = "guideline_check/1.0.4"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 MIN_NARRATIVE_WORDS = 12  # client-billing-guidelines.md #1.1
 BLOCK_BILLING_HOURS = 2.0  # client-billing-guidelines.md #2.1 / #2.2
@@ -73,51 +77,8 @@ PURPOSE_VERBS = (
     "support", "test", "update", "validate",
 )
 PURPOSE_RE = re.compile(r"\b(?:to|so that we can|in order to)\s+(?:" + "|".join(PURPOSE_VERBS) + r")\b")
-# Narrative fields are data. Text that tries to steer the reviewer is surfaced, never obeyed.
-INSTRUCTION_PATTERNS = (
-    r"\b(?:ignore|disregard|forget|override|bypass)\b.{0,40}\b(?:rules?|instructions?|guidelines?|policy|policies|flags?|checks?|engine)\b",
-    r"\b(?:mark|treat|record|set|classify)\b.{0,30}\b(?:compliant|approved|billable|passed|pass)\b",
-    r"\b(?:do not|don t|dont|never)\s+(?:flag|reject|review|check|hold)\b",
-    r"\b(?:skip|disable|turn off)\b.{0,30}\b(?:checks?|reviews?|rules?|guidelines?|flags?)\b",
-    r"\bapprove\b.{0,30}\b(?:entry|entries|pre ?bill|invoice|time)\b",
-    r"\b(?:assistant|ai|model|reviewer|system|engine|copilot)\s+(?:please\s+)?(?:ignore|mark|approve|skip|send|forward)\b",
-    r"\b(?:pre ?approved|already (?:cleared|approved)|no (?:review|changes?) (?:required|needed))\b",
-    r"\b(?:must|should)\s+not\s+be\s+(?:flagged|reviewed|rejected|held)\b",
-    r"\b(?:per|according to)\s+(?:the\s+)?(?:partner|client|reviewer|billing)\b.{0,60}\b"
-    r"(?:approved|cleared|do not|must not|no review)\b",
-    # 1.0.3: assistant-addressed notes, waiver/authority claims, forward/send instructions.
-    r"\b(?:note|message|instruction|instructions|reminder)s?\s+(?:to|for)\s+(?:the\s+)?"
-    r"(?:ai|assistant|reviewer|copilot|bot|llm|chatbot|claude)\b",
-    r"\b(?:hey|hi|dear|attention|attn)\s+(?:the\s+)?(?:ai|assistant|copilot|bot|llm|chatbot|claude|reviewer)\b",
-    r"\b(?:ai|copilot|llm|chatbot|claude)\s*(?:should|must|needs to|can|will|please)\b",
-    r"\b(?:waive|waived|waives|waiving|exempted|exempts)\b.{0,40}\b"
-    r"(?:guidelines?|rules?|reviews?|requirements?|polic(?:y|ies)|checks?|limits?|caps?)\b",
-    r"\b(?:guidelines?|rules?|requirements?|polic(?:y|ies)|checks?)\b.{0,30}\b"
-    r"(?:waived|suspended|(?:do not|does not|don t|doesn t) apply to (?:this|these|me|my|our))\b",
-    r"\b(?:please\s+)?(?:forward|send|e ?mail|upload|export|transmit|copy)\s+(?:this|these|the|all|a copy|copies)\b"
-    r".{0,40}\b(?:packet|entries|entry|report|data|file|files|list|time|narratives?|records?|exceptions?|prebill|wip)\b",
-)
-INSTRUCTION_RE = re.compile("|".join(INSTRUCTION_PATTERNS))
-# Any e-mail address or URL inside narrative or signal text is out of place in a time narrative.
-CONTACT_RE = re.compile(
-    r"[A-Za-z0-9._%+-]+\s*(?:@|\(at\)|\[at\])\s*[A-Za-z0-9-]+(?:\s*(?:\.|\(dot\)|\[dot\])\s*[A-Za-z0-9-]+)+"
-    r"|\b(?:https?|ftp)://\S+|\bwww\.\S+"
-    r"|\b[a-z0-9-]+\.(?:com|net|org|io|co|ai|biz|info|xyz|me|app|dev)(?:/\S*)?\b",
-    re.IGNORECASE,
-)
-
-
-def strip_format(text):
-    return "".join(ch for ch in (text or "") if unicodedata.category(ch) != "Cf")
-
-
-def embedded_instruction(*texts):
-    """True when any text steers the reviewer/engine or carries an e-mail address or URL."""
-    for text in texts:
-        raw = strip_format(text)
-        if INSTRUCTION_RE.search(normalize(raw)) or CONTACT_RE.search(raw):
-            return True
-    return False
+# Narrative fields are data. The tripwire is shared by every engine (signal_policy.py, #11.1).
+embedded_instruction = signal_policy.embedded_instruction
 
 
 class InputError(ValueError):
@@ -232,6 +193,7 @@ def main():
     try:
         stamp = generated_at(args.generated_at)
         out = deepcopy(load_packet(args.coded))
+        signal_policy.enforce_timekeeper_scope(out, engine=ENGINE)
         signal_policy.filter_packet(out, config_path=args.signal_config,
                                     script_dir=os.path.dirname(os.path.abspath(__file__)), engine=ENGINE)
     except (InputError, signal_policy.PolicyError) as exc:
@@ -307,13 +269,19 @@ def main():
                              ["client-billing-guidelines.md #3.2", "client-billing-guidelines.md #3.3"], 0.93)
 
         draft = entry.get("draft") or {}
-        rewrite_texts = [r.get("narrative") for r in draft.get("suggested_rewrites") or [] if isinstance(r, dict)]
+        rewrites = [r for r in draft.get("suggested_rewrites") or [] if isinstance(r, dict)]
+        rewrite_texts = [r.get("narrative") for r in rewrites]
         if embedded_instruction(narrative, entry.get("narrative"), entry.get("notes"), *rewrite_texts,
-                                *[a.get("subject") for a in linked], *[a.get("deliverable") for a in linked]):
+                                *[signal_policy.signal_texts(a) for a in linked]):
             add_flag(flags, "embedded_instruction", "hold_for_review",
                      "narrative or linked activity text addresses the reviewer/engine, claims an approval or waiver, "
                      "asks for forwarding, or carries an e-mail address or URL; treated as data and not followed",
-                     ["client-billing-guidelines.md #1.3"], 0.95)
+                     [signal_policy.INJECTION_CITATION], 0.95)
+        for rewrite in rewrites:
+            if embedded_instruction(rewrite.get("narrative")):
+                rewrite["narrative"] = signal_policy.WITHHELD_TEXT
+                rewrite["status"] = "withheld_embedded_instruction"
+                rewrite["citations"] = sorted(set(rewrite.get("citations", []) + [signal_policy.WITHHOLD_CITATION]))
 
         task_code = entry.get("code_mapping", {}).get("recommended_task_code")
         if any(c in NON_BILLABLE_CLASSES for c in classes) or task_code in NON_BILLABLE_TASK_CODES:
@@ -400,20 +368,26 @@ def main():
         if activity["activity_id"] in used_activity_ids:
             continue
         if activity.get("billable_signal") and activity.get("duration_hours", 0) >= MISSING_TIME_MIN_HOURS:
-            missing_time.append({
+            flagged = embedded_instruction(signal_policy.signal_texts(activity))
+            item = {
                 "activity_id": activity["activity_id"],
                 "person": activity.get("person"),
                 "date": activity.get("date"),
-                "activity_class": activity.get("activity_class"),
+                "activity_class": signal_policy.redact(activity.get("activity_class")),
                 "duration_hours": activity.get("duration_hours"),
-                "subject": activity.get("subject"),
+                "subject": signal_policy.WITHHELD_TEXT if flagged else activity.get("subject"),
                 "finding": "engagement activity has no matching time entry",
                 "source": ENGINE,
                 "confidence": activity.get("confidence", 0.9),
                 "citations": [c for c in activity.get("citations", [])
-                              if c != signal_policy.POLICY_CITATION]
+                              if c not in (signal_policy.POLICY_CITATION, signal_policy.INJECTION_CITATION)]
                 + ["client-billing-guidelines.md #8.1"],
-            })
+            }
+            if flagged:
+                item["embedded_instruction"] = True
+                item["finding"] += "; activity text flagged as embedded_instruction and withheld"
+                item["citations"] += [signal_policy.INJECTION_CITATION, signal_policy.WITHHOLD_CITATION]
+            missing_time.append(item)
     if missing_time:
         exception_list.append({
             "entry_id": None,
@@ -421,7 +395,8 @@ def main():
             "date": "multiple" if len({m["date"] for m in missing_time}) > 1 else missing_time[0]["date"],
             "duration_hours": round(sum(m["duration_hours"] for m in missing_time), 2),
             "verdict": "missing_time",
-            "flags": ["missing_time"],
+            "flags": ["missing_time"] + (["embedded_instruction"] if any(m.get("embedded_instruction")
+                                                                         for m in missing_time) else []),
             "recommended_action": "review_activity_and_create_draft_entries_if_billable",
             "source": ENGINE,
             "confidence": min(m["confidence"] for m in missing_time),

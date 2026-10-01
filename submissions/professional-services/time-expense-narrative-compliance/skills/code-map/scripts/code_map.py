@@ -3,8 +3,10 @@
 
 Constants mirror references/task-phase-codes.md and references/client-billing-guidelines.md.
 
-v1.0.3 rules:
-- Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1).
+v1.0.4 rules:
+- Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1), and rows
+  outside the recorded timekeeper scope are withheld (#12.1).
+- Activity-class text that trips the embedded-instruction tripwire is never echoed in a flag (#11.2).
 - Linked signals whose activity classes point to more than one task code are CONFLICTING:
   they map to UNMAPPED at 0.40 and are held for review (task-phase-codes.md #5.3). The engine
   never majority-votes a code. Every linked signal is mapped BEFORE any non-billable decision,
@@ -22,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:code_map"
-ENGINE_VERSION = "code_map/1.0.3"
+ENGINE_VERSION = "code_map/1.0.4"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 DIRECT_MATCH_CONFIDENCE = 0.92  # task-phase-codes.md #5.1
 KEYWORD_MATCH_CONFIDENCE = 0.78  # task-phase-codes.md #5.2
@@ -129,6 +131,7 @@ def main():
     try:
         stamp = generated_at(args.generated_at)
         out = deepcopy(load_packet(args.drafted))
+        signal_policy.enforce_timekeeper_scope(out, engine=ENGINE)
         signal_policy.filter_packet(out, config_path=args.signal_config,
                                     script_dir=os.path.dirname(os.path.abspath(__file__)), engine=ENGINE)
     except (InputError, signal_policy.PolicyError) as exc:
@@ -145,7 +148,7 @@ def main():
         if task == "UNMAPPED":
             held += 1
             detail = ("linked signals point to different codes (" + ", ".join(sorted({
-                f"{a.get('activity_class')}->{(signal_mapping(a) or ('?', '?'))[1]}" for a in linked}))
+                f"{signal_policy.redact(a.get('activity_class'))}->{(signal_mapping(a) or ('?', '?'))[1]}" for a in linked}))
                 + "); no code is recommended"
                       if basis == "conflicting_activity_classes" else "no activity class or keyword maps to a code")
             if submitted_task:

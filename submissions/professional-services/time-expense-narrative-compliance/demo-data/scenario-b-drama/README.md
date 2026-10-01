@@ -20,10 +20,10 @@ The mailbox item: `raw/timesheet.csv` row 2 still links `B-MAIL-001`, a mailbox 
 
 Run order (from this folder; `S` = the plugin's `skills` folder; `--generated-at` pins the timestamp so the files below reproduce exactly):
 
-1. `python3 $S/activity-pull/scripts/activity_pull.py --raw-dir raw --all-timekeepers --period-start 2026-09-14 --period-end 2026-09-18 --scenario scenario-b-drama --out activity.json --generated-at 2026-09-23T00:00:00Z`
+1. `python3 $S/activity-pull/scripts/activity_pull.py --raw-dir raw --requester "Dana Whitfield" --all-timekeepers --team-view-confirmation engagement-manager:ENG-SYN-042 --period-start 2026-09-14 --period-end 2026-09-18 --scenario scenario-b-drama --out activity.json --generated-at 2026-09-23T00:00:00Z`
 2. `python3 $S/narrative-draft/scripts/narrative_draft.py --activity activity.json --out expected/drafted.json --generated-at 2026-09-23T00:00:00Z`
 3. `python3 $S/code-map/scripts/code_map.py --drafted expected/drafted.json --out expected/coded.json --generated-at 2026-09-23T00:00:00Z`
 4. `python3 $S/guideline-check/scripts/guideline_check.py --coded expected/coded.json --out expected/governed.json --generated-at 2026-09-23T00:00:00Z`
 5. `python3 $S/exception-report/scripts/exception_report.py --governed expected/governed.json --out expected/exception-report.md --generated-at 2026-09-23T00:00:00Z`
 
-`--all-timekeepers` is the engagement-manager view. A single timekeeper uses `--person "Morgan Lee"` instead.
+The packet is the engagement-manager team view: Dana Whitfield is the engagement manager recorded in `raw/engagement-letter-extract.md` and the confirmation token is supplied only after the user explicitly confirms the team view (client-billing-guidelines.md #12.1). A single timekeeper uses `--requester "Morgan Lee"` instead and gets only Morgan's rows; naming colleagues with `--person` without a valid confirmation from the recorded engagement manager withholds their rows.
