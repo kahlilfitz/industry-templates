@@ -15,6 +15,8 @@ Produced by deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-che
 
 When `location.page` or `location.paragraph` is null (a register-level finding such as a register that was not supplied), render `register-level` / `{{location.section}}` / `{{location.label}}` instead of a page or paragraph number. Never substitute page 1 or any other placeholder page.
 
+If `ranked_findings[]` is empty, replace the table with exactly: "None: the engines produced no findings. This does not clear any gate; the reviewing partner/QRM owner decides release."
+
 ## Gate checklist
 | Gate | Status | Highest severity | Evidence |
 |---|---|---|---|
@@ -24,9 +26,16 @@ When `location.page` or `location.paragraph` is null (a register-level finding s
 ## Unsupported and limited assertions
 {{for each assertion_mapping where support_status != "supported"}}
 - **{{support_status}}** - {{assertion_id}} at p{{location.page}}, para {{location.paragraph}}: {{text}}
-  - Evidence: {{evidence_ids}}
-  - Rule: {{criteria_section}}; {{citation}}
+  - Evidence: {{evidence_ids}}; citation: {{citation}}
 {{end}}
+
+If every assertion mapping is `supported`, write exactly: "None: assertion-map found no unsupported or limited assertions." Do not remove the heading.
+
+## Escalations
+{{for each escalation}}- {{escalation}}
+{{end}}
+
+If `escalations[]` is empty, write exactly: "None: the engines raised no escalations. This does not clear any gate." Do not remove the heading.
 
 ## Draft routing hold
 Do not add user-supplied external recipients. Any recipient not already confirmed in `deliverable.intended_recipients` must be held for reviewing-partner/QRM confirmation before routing, because a third-party recipient changes the required reliance language (quality-gate-criteria.md #2.2) and client data must not reach unconfirmed readers (quality-gate-criteria.md #4.2).

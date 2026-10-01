@@ -24,14 +24,14 @@ After `gate-check`, or whenever the reviewer asks for the issue list, QRM packet
 ## Output
 `REVIEW-PACKET-<deliverable_id>.md` or equivalent markdown content for human review.
 ## Output format
-Required exact label: `DRAFT - HUMAN REVIEW REQUIRED`. Then review status, ranked findings table, gate summary, unsupported assertions, required-language/recipient issues, prior-finding closure issues, escalations, provenance and redaction notes.
+Required exact label: `DRAFT - HUMAN REVIEW REQUIRED`. Then review status, ranked findings table, gate summary, unsupported assertions, required-language/recipient issues, prior-finding closure issues, escalations, provenance and redaction notes. An empty section keeps its heading and uses the template's exact "None: ..." wording; never drop a section or imply that an empty section clears a gate.
 ## Example
 No engine runs here unless `severity-ranked.json` is missing; the packet quotes ranked output.
 ```bash
 python skills/gate-check/scripts/severity_rank.py --gates gate-checked.json --out severity-ranked.json --generated-at 2026-10-01T00:00:00Z
 ```
 ## Grounding requirements
-Every issue carries gate ID, severity, rank, location, criteria section and citation from the engine. Assertions quote the evidence mapping rather than re-evaluating support.
+Ground every statement in a cited source: every sentence in the packet must come from `severity-ranked.json` engine output or a confirmed internal draft-routing note, and nothing is invented to fill a section. Every issue carries gate ID, severity, rank, location, criteria section and citation from the engine. Assertions quote the evidence mapping rather than re-evaluating support.
 ## Constraints
 - Draft-first: no sign-off, approval, client send, system write-back, gate clearance or reliance authorization.
 - The model writes prose but cannot alter engine severities, counts, ranks, findings or status.

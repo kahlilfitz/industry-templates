@@ -1,5 +1,6 @@
 # Quality Gate Criteria Set - Deliverable Review & Quality Gate
 Illustrative firm-risk criteria for synthetic demo use. These are operational summaries, not reproduced firm standards. Engines cite the section number that fired.
+Criteria set ID: PS-QRM-DG-2026-demo
 
 ## 1. Evidence support and substantiation
 1.1 Factual claims require at least one cited support item from the evidence set with confidence at or above the evidence floor and a source stronger than stakeholder recollection.

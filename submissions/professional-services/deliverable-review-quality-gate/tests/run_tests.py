@@ -11,11 +11,14 @@
 Exit code 0 = all passed.
 """
 import copy
+import csv
 import filecmp
 import importlib.util
 import io
 import json
 import os
+import re
+import shutil
 import sys
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
@@ -774,17 +777,17 @@ def round3_tests(tmp):
         check(f"T2 external recipient ({label}) with third_party_recipient_named false is a G2 blocker",
               severity_of(ranked, "GC-G2-recipient-third-party-conflict") == "release_blocker" and status(ranked) == "not_ready_for_release",
               sorted(finding_ids(ranked)))
-    for label, recipients, mutate_extra in (
+    for label, recipients, packet_change in (
         ("unknown entity", ["Aster Advisory Group management", "Foo Holdings Ltd"], None),
         ("bare role", ["Board"], None),
         ("client plus other entity", ["Aster Advisory Group and Foo Holdings Ltd"], None),
         ("no client_name", ["Aster Advisory Group management"], lambda p: p["deliverable"].pop("client_name")),
         ("blank client_name", ["Aster Advisory Group management"], lambda p: p["deliverable"].__setitem__("client_name", " ")),
     ):
-        def apply(p, r=recipients, extra=mutate_extra):
+        def apply(p, r=recipients, adjust_packet=packet_change):
             p["deliverable"]["intended_recipients"] = r
-            if extra:
-                extra(p)
+            if adjust_packet:
+                adjust_packet(p)
         ranked = ranked_with(f"unclassified-{label.replace(' ', '-')}", apply)
         check(f"T2 unclassified recipient ({label}) is a G2 must-fix with a confirm-recipients escalation",
               severity_of(ranked, "GC-G2-recipient-unconfirmed") == "must_fix" and status(ranked) == "partner_review_required_must_fix"
@@ -1201,6 +1204,14 @@ def packet_template_tests():
           and "gate-check G2" not in skill and "quality-gate-criteria.md #2.2" in skill)
     check("D9 packet template never invents a page for register-level findings",
           "location.page" in template and "null" in template)
+    check("Advisory 3 packet template has no duplicated 'Rule:' line (the engine citation carries the criteria)",
+          "Rule:" not in template and "{{citation}}" in template)
+    check("Advisory 3 packet template defines exact wording for empty findings, unsupported-assertion and escalation sections",
+          all(text in template for text in (
+              "None: the engines produced no findings.",
+              "None: assertion-map found no unsupported or limited assertions.",
+              "None: the engines raised no escalations.",
+          )) and "## Escalations" in template and "exact \"None: ...\" wording" in skill)
 
 
 def frontmatter_description(text):
@@ -1222,10 +1233,86 @@ def skill_trigger_tests():
     check("D13 every skill description is 1-1024 characters", not too_long, too_long)
 
 
+def load_deriver():
+    spec = importlib.util.spec_from_file_location("drqg_derive_review_input", os.path.join(ROOT, "tests", "derive_review_input.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def demo_derivation_tests(tmp):
+    """Checklist G4b: every demo review-input.json value comes from its raw pack or a documented ingest rule."""
+    deriver = load_deriver()
+    for scenario in ("scenario-a-happy", "scenario-b-drama"):
+        base = os.path.join(ROOT, "demo-data", scenario)
+        problems = deriver.compare(base, read(os.path.join(base, "review-input.json")))
+        check(f"G4b {scenario}/review-input.json re-derives from its raw pack", not problems, problems)
+
+    def drifted(label, edit_raw=None, edit_input=None, scenario="scenario-a-happy"):
+        work = os.path.join(tmp, f"g4b-{label}", scenario)
+        shutil.copytree(os.path.join(ROOT, "demo-data", scenario), work)
+        if edit_raw:
+            name, change = edit_raw
+            path = os.path.join(work, "raw", name)
+            if change is None:
+                os.remove(path)
+            else:
+                text = read_text(path)
+                with open(path, "w", encoding="utf-8", newline="\n") as fh:
+                    fh.write(change(text))
+        payload = read(os.path.join(work, "review-input.json"))
+        if edit_input:
+            edit_input(payload)
+        return " | ".join(deriver.compare(work, payload))
+
+    def drop_section(heading):
+        return lambda text: re.sub(rf"## {re.escape(heading)}\n(?:[^#].*\n|\n)*", "", text)
+
+    report = drifted("no-client-data-register", ("release-registers.md", drop_section("Client-data handling register")))
+    check("G4b drift: client_data_handling 'ok' without a client-data register is reported (raw pack gives 'unknown')",
+          "deliverable.client_data_handling: raw pack gives 'unknown', review input has 'ok'" in report, report)
+    report = drifted("no-registers", ("release-registers.md", None))
+    check("G4b drift: brand and licensed-content entries without a register file are reported",
+          "deliverable.brand_checks: raw pack gives None" in report and "deliverable.licensed_content: raw pack gives None" in report, report)
+    report = drifted("no-page-5", ("draft-deliverable.md", lambda text: text.replace("[Page 5]\n", "")))
+    check("G4b drift: a page number with no [Page N] marker in the draft is reported",
+          "A-003: draft has no paragraph 1 on page 5" in report, report)
+    report = drifted("population", edit_input=lambda p: p["assertions"][2].__setitem__("population_size", 1200))
+    check("G4b drift: a population size absent from the paragraph and linked evidence is reported",
+          "A-003.population_size: 1200 appears in neither" in report, report)
+    report = drifted("recipient", edit_input=lambda p: p["deliverable"]["intended_recipients"].__setitem__(0, "Verdant Arc Services executive committee"), scenario="scenario-b-drama")
+    check("G4b drift: a recipient not on the draft's distribution list is reported",
+          "deliverable.intended_recipients: raw pack gives ['Verdant Arc Services board', 'Cobalt Lenders LLP']" in report, report)
+    report = drifted("brand-pass", ("release-registers.md", lambda text: text.replace("- cover-brand: pass.", "- cover-brand: fail.")), scenario="scenario-b-drama")
+    check("G4b drift: a brand check status that differs from the register is reported",
+          "deliverable.brand_checks[0].status: raw pack gives 'fail', review input has 'pass'" in report, report)
+    report = drifted("new-field", edit_input=lambda p: p["deliverable"].__setitem__("sign_off", "partner"))
+    check("G4b drift: a fixture field with no raw source or documented rule is reported",
+          "deliverable.sign_off: value 'partner' is neither derived" in report, report)
+    _, _, blocks, _ = deriver.parse_draft("# Memo\nClient: Example Client\n\n## 1. Findings\nFirst finding.\n\nSecond finding.\n\n## 2. Next steps\nAgree owners.\n")
+    check("G4b unpaginated rule: no [Page N] markers means page 1 with paragraphs counted from the top, headings not counted",
+          {key: block["section"] for key, block in blocks.items()} == {(1, 1): "Cover", (1, 2): "Findings", (1, 3): "Findings", (1, 4): "Next steps"},
+          sorted(blocks))
+
+    statuses = {scenario: status(read(os.path.join(ROOT, "demo-data", scenario, "expected", "severity-ranked.json")))
+                for scenario in ("scenario-a-happy", "scenario-b-drama")}
+    for scenario, expected in statuses.items():
+        readme = read_text(os.path.join(ROOT, "demo-data", scenario, "README.md"))
+        check(f"G4b {scenario}/README.md states the golden status `{expected}`", f"`{expected}`" in readme)
+    with open(os.path.join(ROOT, "tests", "sample-test-prompts.csv"), encoding="utf-8", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    check("G4b critical-path prompts 1 and 2 expect the golden statuses of scenarios A and B",
+          statuses["scenario-a-happy"] in rows[0]["expected_behavior"] and statuses["scenario-b-drama"] in rows[1]["expected_behavior"],
+          [row["expected_behavior"][:80] for row in rows[:2]])
+
+
 def version_tests():
     plugin = read(os.path.join(ROOT, ".claude-plugin", "plugin.json"))["version"]
-    metadata = read(os.path.join(ROOT, "metadata.json"))["version"]
-    versions = {"metadata.json": metadata}
+    versions = {}
+    # metadata.json is source-only: the bundler leaves it out of the ZIP, so compare it only when present.
+    metadata_path = os.path.join(ROOT, "metadata.json")
+    if os.path.exists(metadata_path):
+        versions["metadata.json"] = read(metadata_path)["version"]
     for name, rel in ENGINES.items():
         versions[rel] = MODULES[name].ENGINE_VERSION
     for skill in sorted(os.listdir(os.path.join(ROOT, "skills"))):
@@ -1266,25 +1353,32 @@ def skill_doc_tests():
     check("Non-blocking gate-check documents upstream assertion-map recovery",
           "If `assertion-mapped.json` is missing" in gate
           and "skills/assertion-map/scripts/assertion_map.py" in gate)
+    check("Advisory 1 deliverable-ingest documents criteria_sections seeding and paragraph numbering, including unpaginated sources",
+          "Seed `criteria` before `criteria-retrieve` runs" in ingest and "criteria_sections` starts as the shipped floor" in ingest
+          and "Number paragraphs from 1 on each page" in ingest and "number paragraphs from 1 from the top of the document" in ingest)
+    check("Advisory 2 criteria-retrieve: QRM supplies the reliance clause and the plugin never drafts it",
+          "QRM supplies the approved reliance-restriction clause" in criteria and "never drafts" in criteria)
+    ungrounded = [skill for skill in sorted(os.listdir(os.path.join(ROOT, "skills")))
+                  if "Ground every statement in a cited source" not in read_text(os.path.join(ROOT, "skills", skill, "SKILL.md"))]
+    check("Advisory 5 every skill instructs grounding every statement in a cited source", not ungrounded, ungrounded)
+
+
+def run_group(group, *args):
+    """Run one test group; an unexpected exception is recorded as a FAIL so later groups still run and report."""
+    try:
+        group(*args)
+    except Exception as exc:  # noqa: BLE001 - any crash must surface as a failed check, not abort the suite
+        check(f"{group.__name__} completed without raising", False, f"{type(exc).__name__}: {exc}")
 
 
 def main():
     with tempfile.TemporaryDirectory() as tmp:
-        golden_tests(tmp)
-        negative_tests(tmp)
-        register_tests(tmp)
-        page_label_tests(tmp)
-        g8_tests(tmp)
-        strictness_tests(tmp)
-        round3_tests(tmp)
-        g8_structural_tests(tmp)
-    recipient_classifier_tests()
-    tripwire_tests()
-    packet_template_tests()
-    skill_doc_tests()
-    skill_trigger_tests()
-    version_tests()
-    shared_copy_tests()
+        for group in (golden_tests, negative_tests, register_tests, page_label_tests, g8_tests,
+                      strictness_tests, round3_tests, g8_structural_tests, demo_derivation_tests):
+            run_group(group, tmp)
+    for group in (recipient_classifier_tests, tripwire_tests, packet_template_tests, skill_doc_tests,
+                  skill_trigger_tests, version_tests, shared_copy_tests):
+        run_group(group)
     failed = [result for result in RESULTS if not result[1]]
     for label, ok, detail in RESULTS:
         detail = str(detail).encode("ascii", "backslashreplace").decode("ascii") if detail else ""

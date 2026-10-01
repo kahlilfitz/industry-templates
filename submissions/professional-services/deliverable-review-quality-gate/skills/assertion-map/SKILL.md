@@ -28,7 +28,7 @@ Markdown table: assertion_id, class, location, evidence_ids, best_evidence_id, s
 python skills/assertion-map/scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at 2026-10-01T00:00:00Z
 ```
 ## Grounding requirements
-Every support verdict, score and escalation comes from the engine. Best evidence is selected for relevance to the assertion class before confidence, so scope documents do not outrank the actual support sample. Quantified claims require traceable analytical evidence; stakeholder verbal support is insufficient. No linked evidence means unsupported, never supported.
+Ground every statement in a cited source: every support verdict, score and escalation comes from the engine, and every explanation cites the linked evidence ID and criteria section; never invent evidence, scores or rationales. Best evidence is selected for relevance to the assertion class before confidence, so scope documents do not outrank the actual support sample. Quantified claims require traceable analytical evidence; stakeholder verbal support is insufficient. No linked evidence means unsupported, never supported.
 ## Constraints
 - Evidence-support verdicts are engine-only; the model never rounds verbal support into substantiation.
 - Missing evidence index or criteria list is malformed input and must fail closed.

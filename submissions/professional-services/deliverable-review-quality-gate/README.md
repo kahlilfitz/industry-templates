@@ -29,6 +29,8 @@ Version 1.0.4 follows 1.0.3, which was frozen and submitted for evaluation. It c
 - steering hidden in IDs or file names;
 - steering split across an assertion's text, citation, evidence titles and location label.
 
+1.0.4 also closes the Cowork 1.0.3 findings. Every value in the demo `review-input.json` files now traces to the scenario's raw pack, including a new `raw/release-registers.md` with the client-data, brand-check and licensed-content registers. `tests/derive_review_input.py` re-derives each input from its raw pack, and the shipped tests pass from the built ZIP.
+
 ## The case that shows why it exists
 
 In the second demo scenario, the deliverable looks excellent. It is polished, branded, client-confidential, and has a disclaimer. A skim review would likely move it forward.
@@ -45,7 +47,7 @@ A naive reviewer sees a professional report with a disclaimer. The engine starts
 
 ## What you bring
 
-A draft deliverable, its supporting evidence set, the applicable QRM gate criteria and required language, brand/formatting standards, and prior review findings. The demo scenarios include raw markdown drafts, evidence indexes, QRM extracts and prior-review notes alongside structured inputs so the Connect path is visible rather than assumed.
+A draft deliverable, its supporting evidence set, the applicable QRM gate criteria and required language, brand/formatting standards, and prior review findings. The demo scenarios include raw markdown drafts (with page markers and a distribution list), evidence indexes, QRM extracts, prior-review notes and release-control registers alongside structured inputs, so the Connect path is visible rather than assumed. Every structured value traces to the raw pack, and `python tests/derive_review_input.py` checks that it does.
 
 ## Boundaries
 
