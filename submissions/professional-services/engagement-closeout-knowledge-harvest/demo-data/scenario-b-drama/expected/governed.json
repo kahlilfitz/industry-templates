@@ -374,9 +374,9 @@
   ],
   "provenance": {
     "engines": [
-      "asset_identify/1.0",
-      "lesson_cluster/1.0",
-      "sanitize_check/1.0"
+      "asset_identify/1.0.2",
+      "lesson_cluster/1.0.2",
+      "sanitize_check/1.0.2"
     ],
     "generated_at": "2026-09-23T21:20:35Z",
     "demo_scenario": "scenario-b-drama"
@@ -391,38 +391,51 @@
         "DEC-201",
         "DEC-207"
       ],
-      "summary_seed": "Approved GridMesh Optimizer cutover for 2026-04-14 after integration defect burn-down. Go-live date and named product became central to the delivery story.",
-      "sensitivity_signals": [],
-      "confidence": 0.95,
-      "source": "engine:lesson_cluster",
-      "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1"
+      "evidence_citations": [
+        "raw/decision-log.csv row 4",
+        "raw/decision-log.csv row 5"
+      ],
+      "rewrite_required": false,
+      "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
+      "confidence": 0.91,
+      "source": "engine:sanitize_check",
+      "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.3; lesson-taxonomy.md #2.1,#2.2,#3.1"
     },
     {
       "cluster_id": "LC-002",
-      "category": "delivery-governance",
-      "priority_score": 80,
-      "review_candidate": false,
+      "category": "unclassified",
+      "priority_score": 65,
+      "review_candidate": true,
       "evidence_ids": [
         "RET-201",
-        "RET-202",
         "RET-203"
       ],
-      "summary_seed": "The European utility framing plus the GridMesh Optimizer date makes a strong credential story, but it may be too specific.",
-      "sensitivity_signals": [
-        {
-          "evidence_id": "RET-202",
-          "signal": "named_person",
-          "citation": "confidentiality-sanitisation-rules.md #2.1"
-        },
-        {
-          "evidence_id": "RET-202",
-          "signal": "named_person_blame",
-          "citation": "confidentiality-sanitisation-rules.md #2.2"
-        }
+      "evidence_citations": [
+        "raw/retrospective-transcript.txt lines 4-9",
+        "raw/retrospective-transcript.txt lines 16-19"
       ],
-      "confidence": 0.83,
-      "source": "engine:lesson_cluster",
-      "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1"
+      "rewrite_required": false,
+      "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
+      "confidence": 0.68,
+      "source": "engine:sanitize_check",
+      "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.5; lesson-taxonomy.md #2.1,#2.2,#3.1"
+    },
+    {
+      "cluster_id": "LC-003",
+      "category": "delivery-governance",
+      "priority_score": 60,
+      "review_candidate": false,
+      "evidence_ids": [
+        "RET-202"
+      ],
+      "evidence_citations": [
+        "raw/retrospective-transcript.txt lines 11-13"
+      ],
+      "rewrite_required": true,
+      "drafting_guidance": "Draft only at role and process level. Remove names, blame attribution, client identifiers and source wording.",
+      "confidence": 0.77,
+      "source": "engine:sanitize_check",
+      "citation": "confidentiality-sanitisation-rules.md #2.1,#2.2,#6.2; lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1"
     }
   ],
   "sanitisation_report": {
@@ -451,19 +464,19 @@
       {
         "target_type": "asset",
         "target_id": "AST-103",
-        "disposition": "release_candidate",
-        "clearance_state": "RELEASE_CANDIDATE_SANITISED",
-        "reason": "commercial figures must be banded or removed before review: implementation_date; named product/vendor contributes to aggregation review",
+        "disposition": "hold",
+        "clearance_state": "HOLD_REDACTION_REQUIRED",
+        "reason": "commercial figures require verified removal or banding before review: implementation_date",
         "confidence": 0.92,
         "source": "engine:sanitize_check",
-        "citation": "confidentiality-sanitisation-rules.md #6.2,#7.1; confidentiality-sanitisation-rules.md #3.1; confidentiality-sanitisation-rules.md #4.2"
+        "citation": "confidentiality-sanitisation-rules.md #6.2,#7.1; confidentiality-sanitisation-rules.md #3.1"
       },
       {
         "target_type": "asset",
         "target_id": "AST-104",
-        "disposition": "release_candidate",
-        "clearance_state": "RELEASE_CANDIDATE_SANITISED",
-        "reason": "commercial figures must be banded or removed before review: precise_headcount",
+        "disposition": "hold",
+        "clearance_state": "HOLD_REDACTION_REQUIRED",
+        "reason": "commercial figures require verified removal or banding before review: precise_headcount",
         "confidence": 0.9,
         "source": "engine:sanitize_check",
         "citation": "confidentiality-sanitisation-rules.md #6.2,#7.1; confidentiality-sanitisation-rules.md #3.1"
@@ -499,26 +512,6 @@
         "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
       },
       {
-        "target_type": "asset_group",
-        "target_id": "AST-103",
-        "disposition": "hold",
-        "clearance_state": "HOLD_AGGREGATION_RISK",
-        "reason": "aggregation risk: 6 identifying token categories across candidate assets (client_headcount, go_live_date, region, sector, third_party_product, unique_architecture)",
-        "confidence": 0.92,
-        "source": "engine:sanitize_check",
-        "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
-      },
-      {
-        "target_type": "asset_group",
-        "target_id": "AST-104",
-        "disposition": "hold",
-        "clearance_state": "HOLD_AGGREGATION_RISK",
-        "reason": "aggregation risk: 6 identifying token categories across candidate assets (client_headcount, go_live_date, region, sector, third_party_product, unique_architecture)",
-        "confidence": 0.9,
-        "source": "engine:sanitize_check",
-        "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
-      },
-      {
         "target_type": "lesson",
         "target_id": "RET-202",
         "disposition": "rewrite",
@@ -526,7 +519,7 @@
         "reason": "Rewrite at role/process level; remove named person and blame attribution.",
         "confidence": 0.91,
         "source": "engine:sanitize_check",
-        "citation": "confidentiality-sanitisation-rules.md #2.1,#2.2"
+        "citation": "confidentiality-sanitisation-rules.md #2.1,#2.2,#6.2"
       }
     ],
     "governance_note": "Release candidates require human practice review; the engine never clears publication or external use.",
@@ -535,6 +528,28 @@
   },
   "released_assets": [],
   "held_assets": [
+    {
+      "asset_id": "AST-103",
+      "title": "GridMesh go-live runbook",
+      "reuse_score": 89.0,
+      "clearance_state": "HOLD_REDACTION_REQUIRED",
+      "review_required": true,
+      "reason": "commercial figures require verified removal or banding before review: implementation_date",
+      "confidence": 0.92,
+      "source": "engine:sanitize_check",
+      "citation": "confidentiality-sanitisation-rules.md #6.2,#7.1; confidentiality-sanitisation-rules.md #3.1"
+    },
+    {
+      "asset_id": "AST-104",
+      "title": "Operations benefits model",
+      "reuse_score": 76.0,
+      "clearance_state": "HOLD_REDACTION_REQUIRED",
+      "review_required": true,
+      "reason": "commercial figures require verified removal or banding before review: precise_headcount",
+      "confidence": 0.9,
+      "source": "engine:sanitize_check",
+      "citation": "confidentiality-sanitisation-rules.md #6.2,#7.1; confidentiality-sanitisation-rules.md #3.1"
+    },
     {
       "asset_id": "AST-105",
       "title": "Executive steering deck",
@@ -567,66 +582,84 @@
       "confidence": 0.9,
       "source": "engine:sanitize_check",
       "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
-    },
-    {
-      "asset_id": "AST-103",
-      "title": "GridMesh go-live runbook",
-      "reuse_score": 89.0,
-      "clearance_state": "HOLD_AGGREGATION_RISK",
-      "review_required": true,
-      "reason": "aggregation risk: 6 identifying token categories across candidate assets (client_headcount, go_live_date, region, sector, third_party_product, unique_architecture)",
-      "confidence": 0.92,
-      "source": "engine:sanitize_check",
-      "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
-    },
-    {
-      "asset_id": "AST-104",
-      "title": "Operations benefits model",
-      "reuse_score": 76.0,
-      "clearance_state": "HOLD_AGGREGATION_RISK",
-      "review_required": true,
-      "reason": "aggregation risk: 6 identifying token categories across candidate assets (client_headcount, go_live_date, region, sector, third_party_product, unique_architecture)",
-      "confidence": 0.9,
-      "source": "engine:sanitize_check",
-      "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
     }
   ],
   "lessons_for_draft": [
     {
-      "input_id": "RET-201",
+      "cluster_id": "LC-001",
+      "category": "data-integration",
+      "priority_score": 75,
+      "review_candidate": false,
+      "evidence_ids": [
+        "DEC-201",
+        "DEC-207"
+      ],
+      "evidence_citations": [
+        "raw/decision-log.csv row 4",
+        "raw/decision-log.csv row 5"
+      ],
       "rewrite_required": false,
-      "rewrite_guidance": null,
-      "source_text_citation": "raw/retrospective-transcript.txt lines 4-9",
-      "confidence": 0.9,
-      "source": "engine:sanitize_check",
-      "citation": "lesson-taxonomy.md #4.1"
-    },
-    {
-      "input_id": "RET-202",
-      "rewrite_required": true,
-      "rewrite_guidance": "Rewrite at role/process level; remove named person and blame attribution.",
-      "source_text_citation": "raw/retrospective-transcript.txt lines 11-13",
+      "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.91,
       "source": "engine:sanitize_check",
-      "citation": "confidentiality-sanitisation-rules.md #2.1,#2.2"
+      "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.3; lesson-taxonomy.md #2.1,#2.2,#3.1"
     },
     {
-      "input_id": "RET-203",
+      "cluster_id": "LC-002",
+      "category": "unclassified",
+      "priority_score": 65,
+      "review_candidate": true,
+      "evidence_ids": [
+        "RET-201",
+        "RET-203"
+      ],
+      "evidence_citations": [
+        "raw/retrospective-transcript.txt lines 4-9",
+        "raw/retrospective-transcript.txt lines 16-19"
+      ],
       "rewrite_required": false,
-      "rewrite_guidance": null,
-      "source_text_citation": "raw/retrospective-transcript.txt lines 16-19",
-      "confidence": 0.89,
+      "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
+      "confidence": 0.68,
       "source": "engine:sanitize_check",
-      "citation": "lesson-taxonomy.md #4.1"
+      "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.5; lesson-taxonomy.md #2.1,#2.2,#3.1"
+    },
+    {
+      "cluster_id": "LC-003",
+      "category": "delivery-governance",
+      "priority_score": 60,
+      "review_candidate": false,
+      "evidence_ids": [
+        "RET-202"
+      ],
+      "evidence_citations": [
+        "raw/retrospective-transcript.txt lines 11-13"
+      ],
+      "rewrite_required": true,
+      "drafting_guidance": "Draft only at role and process level. Remove names, blame attribution, client identifiers and source wording.",
+      "confidence": 0.77,
+      "source": "engine:sanitize_check",
+      "citation": "confidentiality-sanitisation-rules.md #2.1,#2.2,#6.2; lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1"
     }
   ],
   "knowledge_record": {
     "record_id": "PS-CL-2099-KR-DRAFT",
     "status": "draft_pending_practice_review",
-    "title": "Knowledge record - Grid operations transformation closeout",
-    "engagement_summary_seed": "European utility client with 6,200 employees and April 2026 go-live using GridMesh Optimizer.",
+    "title": "Engagement closeout knowledge record",
+    "engagement_context_guidance": "Draft a generalized engagement context only from approved release-candidate metadata. Do not copy client names, client descriptors, sector-and-region combinations, precise scale, dates, products or other raw engagement fields.",
     "reusable_assets": [],
     "held_assets_summary": [
+      {
+        "asset_id": "AST-103",
+        "clearance_state": "HOLD_REDACTION_REQUIRED",
+        "reason": "commercial figures require verified removal or banding before review: implementation_date",
+        "citation": "confidentiality-sanitisation-rules.md #6.2,#7.1; confidentiality-sanitisation-rules.md #3.1"
+      },
+      {
+        "asset_id": "AST-104",
+        "clearance_state": "HOLD_REDACTION_REQUIRED",
+        "reason": "commercial figures require verified removal or banding before review: precise_headcount",
+        "citation": "confidentiality-sanitisation-rules.md #6.2,#7.1; confidentiality-sanitisation-rules.md #3.1"
+      },
       {
         "asset_id": "AST-105",
         "clearance_state": "HOLD_REDACTION_REQUIRED",
@@ -644,18 +677,6 @@
         "clearance_state": "HOLD_AGGREGATION_RISK",
         "reason": "aggregation risk: 6 identifying token categories across candidate assets (client_headcount, go_live_date, region, sector, third_party_product, unique_architecture)",
         "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
-      },
-      {
-        "asset_id": "AST-103",
-        "clearance_state": "HOLD_AGGREGATION_RISK",
-        "reason": "aggregation risk: 6 identifying token categories across candidate assets (client_headcount, go_live_date, region, sector, third_party_product, unique_architecture)",
-        "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
-      },
-      {
-        "asset_id": "AST-104",
-        "clearance_state": "HOLD_AGGREGATION_RISK",
-        "reason": "aggregation risk: 6 identifying token categories across candidate assets (client_headcount, go_live_date, region, sector, third_party_product, unique_architecture)",
-        "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
       }
     ],
     "lessons": [
@@ -668,38 +689,51 @@
           "DEC-201",
           "DEC-207"
         ],
-        "summary_seed": "Approved GridMesh Optimizer cutover for 2026-04-14 after integration defect burn-down. Go-live date and named product became central to the delivery story.",
-        "sensitivity_signals": [],
-        "confidence": 0.95,
-        "source": "engine:lesson_cluster",
-        "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1"
+        "evidence_citations": [
+          "raw/decision-log.csv row 4",
+          "raw/decision-log.csv row 5"
+        ],
+        "rewrite_required": false,
+        "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
+        "confidence": 0.91,
+        "source": "engine:sanitize_check",
+        "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.3; lesson-taxonomy.md #2.1,#2.2,#3.1"
       },
       {
         "cluster_id": "LC-002",
-        "category": "delivery-governance",
-        "priority_score": 80,
-        "review_candidate": false,
+        "category": "unclassified",
+        "priority_score": 65,
+        "review_candidate": true,
         "evidence_ids": [
           "RET-201",
-          "RET-202",
           "RET-203"
         ],
-        "summary_seed": "The European utility framing plus the GridMesh Optimizer date makes a strong credential story, but it may be too specific.",
-        "sensitivity_signals": [
-          {
-            "evidence_id": "RET-202",
-            "signal": "named_person",
-            "citation": "confidentiality-sanitisation-rules.md #2.1"
-          },
-          {
-            "evidence_id": "RET-202",
-            "signal": "named_person_blame",
-            "citation": "confidentiality-sanitisation-rules.md #2.2"
-          }
+        "evidence_citations": [
+          "raw/retrospective-transcript.txt lines 4-9",
+          "raw/retrospective-transcript.txt lines 16-19"
         ],
-        "confidence": 0.83,
-        "source": "engine:lesson_cluster",
-        "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1"
+        "rewrite_required": false,
+        "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
+        "confidence": 0.68,
+        "source": "engine:sanitize_check",
+        "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.5; lesson-taxonomy.md #2.1,#2.2,#3.1"
+      },
+      {
+        "cluster_id": "LC-003",
+        "category": "delivery-governance",
+        "priority_score": 60,
+        "review_candidate": false,
+        "evidence_ids": [
+          "RET-202"
+        ],
+        "evidence_citations": [
+          "raw/retrospective-transcript.txt lines 11-13"
+        ],
+        "rewrite_required": true,
+        "drafting_guidance": "Draft only at role and process level. Remove names, blame attribution, client identifiers and source wording.",
+        "confidence": 0.77,
+        "source": "engine:sanitize_check",
+        "citation": "confidentiality-sanitisation-rules.md #2.1,#2.2,#6.2; lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1"
       }
     ],
     "sanitisation_summary": "0 release candidate asset(s), 5 held asset(s), 1 lesson rewrite(s).",

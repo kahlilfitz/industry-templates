@@ -269,30 +269,14 @@
   ],
   "provenance": {
     "engines": [
-      "asset_identify/1.0",
-      "lesson_cluster/1.0"
+      "asset_identify/1.0.2",
+      "lesson_cluster/1.0.2"
     ],
     "generated_at": "2026-09-23T21:20:35Z",
     "demo_scenario": "scenario-a-happy"
   },
   "lesson_clusters": [
     {
-      "cluster_id": "LC-001",
-      "category": "adoption-change",
-      "priority_score": 65,
-      "review_candidate": false,
-      "evidence_ids": [
-        "DEC-021",
-        "RET-002"
-      ],
-      "summary_seed": "Kept training scenarios role-based instead of system-feature based. Improved manager adoption and reduced rework in readiness sessions.",
-      "sensitivity_signals": [],
-      "confidence": 0.92,
-      "source": "engine:lesson_cluster",
-      "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1"
-    },
-    {
-      "cluster_id": "LC-002",
       "category": "delivery-governance",
       "priority_score": 75,
       "review_candidate": false,
@@ -300,11 +284,35 @@
         "DEC-014",
         "RET-001"
       ],
+      "evidence_citations": [
+        "raw/decision-log.csv row 2",
+        "raw/retrospective-transcript.txt lines 8-10"
+      ],
       "summary_seed": "Moved from weekly to twice-weekly decision forum during cutover. Reduced open blocker age before go-live.",
       "sensitivity_signals": [],
       "confidence": 0.8,
       "source": "engine:lesson_cluster",
-      "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1"
+      "citation": "lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1",
+      "cluster_id": "LC-001"
+    },
+    {
+      "category": "adoption-change",
+      "priority_score": 65,
+      "review_candidate": false,
+      "evidence_ids": [
+        "DEC-021",
+        "RET-002"
+      ],
+      "evidence_citations": [
+        "raw/decision-log.csv row 3",
+        "raw/retrospective-transcript.txt lines 29-34"
+      ],
+      "summary_seed": "Kept training scenarios role-based instead of system-feature based. Improved manager adoption and reduced rework in readiness sessions.",
+      "sensitivity_signals": [],
+      "confidence": 0.92,
+      "source": "engine:lesson_cluster",
+      "citation": "lesson-taxonomy.md #1.2; lesson-taxonomy.md #2.1,#2.2,#3.1",
+      "cluster_id": "LC-002"
     }
   ]
 }

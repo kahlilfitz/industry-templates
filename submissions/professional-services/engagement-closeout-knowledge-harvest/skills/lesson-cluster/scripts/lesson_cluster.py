@@ -10,11 +10,20 @@ import re
 import sys
 
 ENGINE = "engine:lesson_cluster"
-CLUSTER_KEYWORDS = {  # lesson-taxonomy.md #1.1-#1.4
+ENGINE_VERSION = "lesson_cluster/1.0.2"
+CONTRACT = "ps.engagement-closeout-knowledge-harvest.v1"
+CLUSTER_KEYWORDS = {
     "delivery-governance": ["governance", "sign-off", "signoff", "decision", "escalation", "scope", "steerco", "owner"],
     "adoption-change": ["training", "adoption", "champion", "communications", "readiness", "change"],
     "data-integration": ["data", "migration", "integration", "environment", "api", "cutover", "defect"],
     "commercial-staffing": ["staffing", "budget", "contract", "margin", "partner", "resourcing"],
+}
+CATEGORY_CITATIONS = {
+    "delivery-governance": "lesson-taxonomy.md #1.1",
+    "adoption-change": "lesson-taxonomy.md #1.2",
+    "data-integration": "lesson-taxonomy.md #1.3",
+    "commercial-staffing": "lesson-taxonomy.md #1.4",
+    "unclassified": "lesson-taxonomy.md #1.5",
 }
 HIGH_IMPACT_TERMS = ["blocker", "critical", "delayed", "rework", "executive", "go-live", "golive"]  # lesson-taxonomy.md #2.1
 MIN_CLUSTER_CONFIDENCE = 0.70  # lesson-taxonomy.md #3.1
@@ -22,7 +31,7 @@ BLAME_PATTERN = re.compile(r"\b(failed|blamed|fault|caused|missed)\b", re.IGNORE
 
 def category_for(text):
     low = text.lower()
-    best = ("delivery-governance", 0)
+    best = ("unclassified", 0)
     for category, words in CLUSTER_KEYWORDS.items():
         hits = sum(1 for word in words if word in low)
         if hits > best[1]:
@@ -35,8 +44,13 @@ def main():
     parser.add_argument("--out", required=True, help="output JSON path")
     args = parser.parse_args()
 
-    payload = json.load(open(args.input, encoding="utf-8"))
-    assert payload["contract_version"] == "ps.engagement-closeout-knowledge-harvest.v1", "wrong contract version"
+    with open(args.input, encoding="utf-8") as input_file:
+        payload = json.load(input_file)
+    if payload.get("contract_version") != CONTRACT:
+        raise ValueError("wrong contract version")
+    for field in ("decision_log", "retrospective_inputs"):
+        if not isinstance(payload.get(field), list):
+            raise ValueError(f"missing or invalid required array: {field}")
 
     evidence = []
     for item in payload.get("decision_log", []):
@@ -66,7 +80,7 @@ def main():
         grouped.setdefault(category, []).append((ev, hits))
 
     clusters = []
-    for idx, category in enumerate(sorted(grouped), start=1):
+    for category in sorted(grouped):
         members = grouped[category]
         member_items = [m[0] for m in members]
         text_blob = " ".join(m["text"] for m in member_items).lower()
@@ -81,22 +95,30 @@ def main():
             if ev.get("named_people") and BLAME_PATTERN.search(ev["text"]):
                 sensitivity.append({"evidence_id": ev["id"], "signal": "named_person_blame", "citation": "confidentiality-sanitisation-rules.md #2.2"})
         clusters.append({
-            "cluster_id": f"LC-{idx:03d}",
             "category": category,
             "priority_score": priority,
             "review_candidate": confidence < MIN_CLUSTER_CONFIDENCE,
             "evidence_ids": [ev["id"] for ev in member_items],
+            "evidence_citations": list(dict.fromkeys(ev["citation"] for ev in member_items)),
             "summary_seed": member_items[0]["text"][:220],
             "sensitivity_signals": sensitivity,
             "confidence": confidence,
             "source": ENGINE,
-            "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1",
+            "citation": (
+                f"{CATEGORY_CITATIONS[category]}; "
+                "lesson-taxonomy.md #2.1,#2.2,#3.1"
+            ),
         })
 
+    clusters.sort(key=lambda cluster: (-cluster["priority_score"], cluster["category"]))
+    for index, cluster in enumerate(clusters, start=1):
+        cluster["cluster_id"] = f"LC-{index:03d}"
+
     payload["lesson_clusters"] = clusters
-    payload.setdefault("provenance", {})["engines"] = payload.setdefault("provenance", {}).get("engines", []) + ["lesson_cluster/1.0"]
+    payload.setdefault("provenance", {})["engines"] = payload.setdefault("provenance", {}).get("engines", []) + [ENGINE_VERSION]
     payload["provenance"]["generated_at"] = payload.get("run_metadata", {}).get("generated_at", "2026-09-23T00:00:00Z")
-    json.dump(payload, open(args.out, "w", encoding="utf-8"), indent=2)
+    with open(args.out, "w", encoding="utf-8") as output_file:
+        json.dump(payload, output_file, indent=2)
     review = sum(1 for c in clusters if c["review_candidate"])
     print(f"lesson_cluster: {len(clusters)} cluster(s), {review} review candidate(s)")
     return 0

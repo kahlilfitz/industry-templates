@@ -373,15 +373,14 @@
   ],
   "provenance": {
     "engines": [
-      "asset_identify/1.0",
-      "lesson_cluster/1.0"
+      "asset_identify/1.0.2",
+      "lesson_cluster/1.0.2"
     ],
     "generated_at": "2026-09-23T21:20:35Z",
     "demo_scenario": "scenario-b-drama"
   },
   "lesson_clusters": [
     {
-      "cluster_id": "LC-001",
       "category": "data-integration",
       "priority_score": 75,
       "review_candidate": false,
@@ -389,23 +388,47 @@
         "DEC-201",
         "DEC-207"
       ],
+      "evidence_citations": [
+        "raw/decision-log.csv row 4",
+        "raw/decision-log.csv row 5"
+      ],
       "summary_seed": "Approved GridMesh Optimizer cutover for 2026-04-14 after integration defect burn-down. Go-live date and named product became central to the delivery story.",
       "sensitivity_signals": [],
       "confidence": 0.95,
       "source": "engine:lesson_cluster",
-      "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1"
+      "citation": "lesson-taxonomy.md #1.3; lesson-taxonomy.md #2.1,#2.2,#3.1",
+      "cluster_id": "LC-001"
     },
     {
-      "cluster_id": "LC-002",
-      "category": "delivery-governance",
-      "priority_score": 80,
-      "review_candidate": false,
+      "category": "unclassified",
+      "priority_score": 65,
+      "review_candidate": true,
       "evidence_ids": [
         "RET-201",
-        "RET-202",
         "RET-203"
       ],
+      "evidence_citations": [
+        "raw/retrospective-transcript.txt lines 4-9",
+        "raw/retrospective-transcript.txt lines 16-19"
+      ],
       "summary_seed": "The European utility framing plus the GridMesh Optimizer date makes a strong credential story, but it may be too specific.",
+      "sensitivity_signals": [],
+      "confidence": 0.68,
+      "source": "engine:lesson_cluster",
+      "citation": "lesson-taxonomy.md #1.5; lesson-taxonomy.md #2.1,#2.2,#3.1",
+      "cluster_id": "LC-002"
+    },
+    {
+      "category": "delivery-governance",
+      "priority_score": 60,
+      "review_candidate": false,
+      "evidence_ids": [
+        "RET-202"
+      ],
+      "evidence_citations": [
+        "raw/retrospective-transcript.txt lines 11-13"
+      ],
+      "summary_seed": "Maya Patel failed to get operations sign-off on the migration rehearsal, which caused two days of executive escalation.",
       "sensitivity_signals": [
         {
           "evidence_id": "RET-202",
@@ -418,9 +441,10 @@
           "citation": "confidentiality-sanitisation-rules.md #2.2"
         }
       ],
-      "confidence": 0.83,
+      "confidence": 0.77,
       "source": "engine:lesson_cluster",
-      "citation": "lesson-taxonomy.md #1.1,#2.1,#2.2,#3.1"
+      "citation": "lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1",
+      "cluster_id": "LC-003"
     }
   ]
 }

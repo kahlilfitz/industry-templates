@@ -9,6 +9,8 @@ import json
 import sys
 
 ENGINE = "engine:asset_identify"
+ENGINE_VERSION = "asset_identify/1.0.2"
+CONTRACT = "ps.engagement-closeout-knowledge-harvest.v1"
 GENERALISABILITY_WEIGHT = 0.35  # reuse-asset-rubric.md #1.1
 EFFORT_WEIGHT = 0.25             # reuse-asset-rubric.md #2.1
 SHELF_LIFE_WEIGHT = 0.20         # reuse-asset-rubric.md #3.1
@@ -52,8 +54,13 @@ def main():
     parser.add_argument("--out", required=True, help="output JSON path")
     args = parser.parse_args()
 
-    payload = json.load(open(args.input, encoding="utf-8"))
-    assert payload["contract_version"] == "ps.engagement-closeout-knowledge-harvest.v1", "wrong contract version"
+    with open(args.input, encoding="utf-8") as input_file:
+        payload = json.load(input_file)
+    if payload.get("contract_version") != CONTRACT:
+        raise ValueError("wrong contract version")
+    for field in ("artifacts", "candidate_assets"):
+        if not isinstance(payload.get(field), list):
+            raise ValueError(f"missing or invalid required array: {field}")
 
     escalations = list(payload.get("escalations", []))
     deliverable_index = []
@@ -107,11 +114,12 @@ def main():
     payload["deliverable_index"] = deliverable_index
     payload["reusable_asset_shortlist"] = shortlist
     payload["escalations"] = escalations
-    payload.setdefault("provenance", {})["engines"] = payload.setdefault("provenance", {}).get("engines", []) + ["asset_identify/1.0"]
+    payload.setdefault("provenance", {})["engines"] = payload.setdefault("provenance", {}).get("engines", []) + [ENGINE_VERSION]
     payload["provenance"]["generated_at"] = payload.get("run_metadata", {}).get("generated_at", "2026-09-23T00:00:00Z")
     payload["provenance"]["demo_scenario"] = payload.get("run_metadata", {}).get("demo_scenario", "")
 
-    json.dump(payload, open(args.out, "w", encoding="utf-8"), indent=2)
+    with open(args.out, "w", encoding="utf-8") as output_file:
+        json.dump(payload, output_file, indent=2)
     gaps = sum(1 for d in deliverable_index if d["completeness_gap"])
     shortlisted = sum(1 for a in shortlist if a["recommendation"] == "shortlist")
     print(f"asset_identify: {len(shortlist)} assets scored, {shortlisted} shortlisted, {gaps} deliverable gap(s)")

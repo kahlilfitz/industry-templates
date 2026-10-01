@@ -24,7 +24,7 @@ The Govern engine catches the aggregation risk and HOLDS the package. It also ca
 
 ## Downstream handoff
 
-This is the upstream dependency for **Credential & Case Study Assembly** (`credential-case-study-assembly`). The terminal `knowledge_record` object in the contract has a stable shape for that downstream template: reusable assets carry `clearance_state`, held assets carry rule citations, lessons carry sanitisation notes, and `downstream_handoff.consumer_template` is set to `credential-case-study-assembly`.
+This is the upstream dependency for **Credential & Case Study Assembly** (`credential-case-study-assembly`). The terminal `knowledge_record` object in the contract has a stable shape for that downstream template: reusable assets carry `clearance_state`, held assets carry rule citations, and lessons contain only governed category, evidence-ID, citation and drafting-guidance fields. Raw `client_descriptor`, retrospective text and `summary_seed` values are excluded. `downstream_handoff.consumer_template` is set to `credential-case-study-assembly`.
 
 The handoff is intentionally conservative. Credential assembly may read the record, but it does not inherit permission to publish, quote a client, use a logo, disclose figures or waive terms.
 

@@ -162,12 +162,12 @@
     "held_assets": { "type": "array", "items": { "type": "object" } },
     "knowledge_record": {
       "type": "object",
-      "required": ["record_id", "status", "reusable_assets", "lessons", "sanitisation_summary", "downstream_handoff", "clearance_state", "confidence", "source", "citation"],
+      "required": ["record_id", "status", "engagement_context_guidance", "reusable_assets", "lessons", "sanitisation_summary", "downstream_handoff", "clearance_state", "confidence", "source", "citation"],
       "properties": {
         "record_id": { "type": "string" },
         "status": { "type": "string" },
         "title": { "type": "string" },
-        "engagement_summary_seed": { "type": "string" },
+        "engagement_context_guidance": { "type": "string" },
         "reusable_assets": { "type": "array", "items": { "type": "object" } },
         "lessons": { "type": "array", "items": { "type": "object" } },
         "sanitisation_summary": { "type": "string" },

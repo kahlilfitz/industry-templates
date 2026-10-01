@@ -10,6 +10,9 @@ Training, communications, champion networks, role readiness and behaviour change
 Data quality, migration, integration sequencing, environments and technical dependencies.
 ### 1.4 Commercial and staffing
 Staffing model, budget, resourcing, margin, contracting and partner dependencies.
+### 1.5 Unclassified evidence
+Evidence with no taxonomy keyword match remains `unclassified` and is a review candidate. It must
+not default to delivery governance.
 
 ## 2. Priority scoring
 ### 2.1 High-impact signals

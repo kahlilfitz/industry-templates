@@ -6,9 +6,12 @@ HOLD vs release-candidate states; the model may only draft from the governed res
 """
 import argparse
 import json
+import re
 import sys
 
 ENGINE = "engine:sanitize_check"
+ENGINE_VERSION = "sanitize_check/1.0.2"
+CONTRACT = "ps.engagement-closeout-knowledge-harvest.v1"
 DIRECT_IDENTIFIER_MARKERS = {"client_name", "client_logo", "client_domain", "site_name", "project_codename"}  # confidentiality-sanitisation-rules.md #1.1
 NAMED_PERSON_MARKERS = {"named_individual", "named_person_blame"}  # confidentiality-sanitisation-rules.md #2.1,#2.2
 COMMERCIAL_MARKERS = {"pricing", "contract_value", "revenue", "margin", "precise_headcount", "implementation_date"}  # confidentiality-sanitisation-rules.md #3.1
@@ -17,9 +20,21 @@ PRODUCT_AGGREGATION_MARKERS = {"third_party_product", "named_vendor"}  # confide
 AGGREGATION_MIN_TOKENS = 4  # confidentiality-sanitisation-rules.md #5.1
 SANITISATION_CONFIDENCE_FLOOR = 0.80  # confidentiality-sanitisation-rules.md #6.1
 DEFAULT_REVIEW_REQUIRED = True  # confidentiality-sanitisation-rules.md #6.2
+BLAME_PATTERN = re.compile(r"\b(?:failed|fault|blamed|missed|caused)\b", re.IGNORECASE)
+PERSON_NAME_PATTERN = re.compile(r"\b[A-Z][a-z]+(?:[-'][A-Z][a-z]+)?\s+[A-Z][a-z]+(?:[-'][A-Z][a-z]+)?\b")
 
 def marker_set(asset):
     return set(asset.get("confidentiality_markers", [])) | set(asset.get("aggregation_tokens", []))
+
+def contains_client_name(asset, client_name):
+    normalized_name = str(client_name or "").strip().casefold()
+    if not normalized_name:
+        return False
+    text = " ".join(
+        str(asset.get(field, ""))
+        for field in ("title", "description")
+    ).casefold()
+    return normalized_name in text
 
 def finding(target_type, target_id, disposition, clearance_state, reason, citation, confidence):
     return {
@@ -39,8 +54,15 @@ def main():
     parser.add_argument("--out", required=True, help="output JSON path")
     args = parser.parse_args()
 
-    payload = json.load(open(args.input, encoding="utf-8"))
-    assert payload["contract_version"] == "ps.engagement-closeout-knowledge-harvest.v1", "wrong contract version"
+    with open(args.input, encoding="utf-8") as input_file:
+        payload = json.load(input_file)
+    if payload.get("contract_version") != CONTRACT:
+        raise ValueError("wrong contract version")
+    for field in ("reusable_asset_shortlist", "retrospective_inputs", "lesson_clusters"):
+        if not isinstance(payload.get(field), list):
+            raise ValueError(f"missing or invalid required array: {field}")
+    if not isinstance(payload.get("engagement"), dict):
+        raise ValueError("missing or invalid required object: engagement")
 
     findings = []
     released_assets = []
@@ -58,7 +80,10 @@ def main():
 
         if asset.get("recommendation") != "shortlist":
             reasons.append("reuse score did not reach shortlist band")
-            citations.append("reuse-asset-rubric.md #5.2,#5.3")
+            citations.append(
+                "confidentiality-sanitisation-rules.md #6.2; "
+                "reuse-asset-rubric.md #5.2,#5.3"
+            )
         else:
             candidate_assets.append(asset)
             state = "RELEASE_CANDIDATE_SANITISED"
@@ -75,15 +100,28 @@ def main():
             disposition = "hold"
             reasons.append("direct client-identifying material present: " + ", ".join(sorted(markers & DIRECT_IDENTIFIER_MARKERS)))
             citations.append("confidentiality-sanitisation-rules.md #1.1")
+        if contains_client_name(asset, payload["engagement"].get("client_name")):
+            state = "HOLD_REDACTION_REQUIRED"
+            disposition = "hold"
+            reasons.append("asset title or description contains the engagement client name")
+            citations.append("confidentiality-sanitisation-rules.md #1.1")
+        if markers & NAMED_PERSON_MARKERS:
+            state = "HOLD_PERSONAL_DATA_REWRITE"
+            disposition = "hold"
+            reasons.append(
+                "named-person material requires removal and role-level rewrite: "
+                + ", ".join(sorted(markers & NAMED_PERSON_MARKERS))
+            )
+            citations.append("confidentiality-sanitisation-rules.md #2.1,#2.2")
         if markers & LICENSED_MARKERS:
             state = "HOLD_RIGHTS_UNKNOWN"
             disposition = "hold"
             reasons.append("third-party or licensed material requires rights evidence: " + ", ".join(sorted(markers & LICENSED_MARKERS)))
             citations.append("confidentiality-sanitisation-rules.md #4.1")
-        if markers & COMMERCIAL_MARKERS and disposition != "hold":
-            state = "RELEASE_CANDIDATE_SANITISED"
-            disposition = "release_candidate"
-            reasons.append("commercial figures must be banded or removed before review: " + ", ".join(sorted(markers & COMMERCIAL_MARKERS)))
+        if markers & COMMERCIAL_MARKERS:
+            state = "HOLD_REDACTION_REQUIRED"
+            disposition = "hold"
+            reasons.append("commercial figures require verified removal or banding before review: " + ", ".join(sorted(markers & COMMERCIAL_MARKERS)))
             citations.append("confidentiality-sanitisation-rules.md #3.1")
         if markers & PRODUCT_AGGREGATION_MARKERS and disposition != "hold":
             reasons.append("named product/vendor contributes to aggregation review")
@@ -136,18 +174,23 @@ def main():
         released_assets = new_released
 
     lessons_for_draft = []
+    sensitive_lesson_ids = set()
     for item in payload.get("retrospective_inputs", []):
-        named = item.get("named_people", [])
-        text_lower = item.get("text", "").lower()
-        blame = bool(named and any(term in text_lower for term in ["failed", "fault", "blamed", "missed", "caused"]))
+        text = str(item.get("text", ""))
+        named = list(item.get("named_people", []))
+        blame = bool(BLAME_PATTERN.search(text))
+        if blame and not named:
+            named = PERSON_NAME_PATTERN.findall(text)
         rewrite_required = bool(named or blame)
         guidance = None
-        citation = "confidentiality-sanitisation-rules.md #2.1"
+        citation = "confidentiality-sanitisation-rules.md #2.1,#6.2"
         if blame:
+            sensitive_lesson_ids.add(item["input_id"])
             guidance = "Rewrite at role/process level; remove named person and blame attribution."
-            citation = "confidentiality-sanitisation-rules.md #2.1,#2.2"
+            citation = "confidentiality-sanitisation-rules.md #2.1,#2.2,#6.2"
             findings.append(finding("lesson", item["input_id"], "rewrite", "HOLD_PERSONAL_DATA_REWRITE", guidance, citation, min(item.get("confidence", 0.0), 0.91)))
         elif named:
+            sensitive_lesson_ids.add(item["input_id"])
             guidance = "Remove named person; use role-level description."
             findings.append(finding("lesson", item["input_id"], "rewrite", "HOLD_PERSONAL_DATA_REWRITE", guidance, citation, min(item.get("confidence", 0.0), 0.91)))
         lessons_for_draft.append({
@@ -157,7 +200,44 @@ def main():
             "source_text_citation": item.get("citation", "UNCITED"),
             "confidence": min(item.get("confidence", 0.0), 0.91),
             "source": ENGINE,
-            "citation": citation if rewrite_required else "lesson-taxonomy.md #4.1",
+            "citation": (
+                citation
+                if rewrite_required
+                else "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #4.1"
+            ),
+        })
+
+    governed_lesson_clusters = []
+    for cluster in payload.get("lesson_clusters", []):
+        sensitivity_signals = list(cluster.get("sensitivity_signals", []))
+        rewrite_required = bool(
+            sensitivity_signals
+            or sensitive_lesson_ids.intersection(cluster.get("evidence_ids", []))
+        )
+        if rewrite_required:
+            drafting_guidance = (
+                "Draft only at role and process level. Remove names, blame attribution, "
+                "client identifiers and source wording."
+            )
+            policy_citation = "confidentiality-sanitisation-rules.md #2.1,#2.2,#6.2"
+        else:
+            drafting_guidance = (
+                "Draft a generalized lesson from the category and evidence IDs only. "
+                "Do not quote, reconstruct or paraphrase source text."
+            )
+            policy_citation = "confidentiality-sanitisation-rules.md #6.2"
+        governed_lesson_clusters.append({
+            "cluster_id": cluster["cluster_id"],
+            "category": cluster["category"],
+            "priority_score": cluster["priority_score"],
+            "review_candidate": bool(cluster.get("review_candidate")),
+            "evidence_ids": list(cluster.get("evidence_ids", [])),
+            "evidence_citations": list(cluster.get("evidence_citations", [])),
+            "rewrite_required": rewrite_required,
+            "drafting_guidance": drafting_guidance,
+            "confidence": min(float(cluster.get("confidence", 0.0)), 0.91),
+            "source": ENGINE,
+            "citation": f"{policy_citation}; {cluster.get('citation', 'lesson-taxonomy.md #3.1')}",
         })
 
     overall = "HOLD" if held_assets or any(f["disposition"] in ("hold", "rewrite") for f in findings) else "RELEASE_CANDIDATE_SANITISED"
@@ -170,16 +250,21 @@ def main():
     }
     payload["released_assets"] = released_assets
     payload["held_assets"] = held_assets
-    payload["lessons_for_draft"] = lessons_for_draft
+    payload["lesson_clusters"] = governed_lesson_clusters
+    payload["lessons_for_draft"] = governed_lesson_clusters
     payload["escalations"] = escalations
     payload["knowledge_record"] = {
         "record_id": f"{payload['engagement']['engagement_id']}-KR-DRAFT",
         "status": "draft_pending_practice_review",
-        "title": f"Knowledge record - {payload['engagement']['title']}",
-        "engagement_summary_seed": payload["engagement"].get("client_descriptor", "Engagement summary requires review."),
+        "title": "Engagement closeout knowledge record",
+        "engagement_context_guidance": (
+            "Draft a generalized engagement context only from approved release-candidate "
+            "metadata. Do not copy client names, client descriptors, sector-and-region "
+            "combinations, precise scale, dates, products or other raw engagement fields."
+        ),
         "reusable_assets": released_assets,
         "held_assets_summary": [{"asset_id": a["asset_id"], "clearance_state": a["clearance_state"], "reason": a["reason"], "citation": a["citation"]} for a in held_assets],
-        "lessons": payload.get("lesson_clusters", []),
+        "lessons": governed_lesson_clusters,
         "sanitisation_summary": f"{len(released_assets)} release candidate asset(s), {len(held_assets)} held asset(s), {sum(1 for l in lessons_for_draft if l['rewrite_required'])} lesson rewrite(s).",
         "downstream_handoff": {
             "consumer_template": "credential-case-study-assembly",
@@ -197,10 +282,11 @@ def main():
         "source": ENGINE,
         "citation": "confidentiality-sanitisation-rules.md #6.2; downstream handoff contract"
     }
-    payload.setdefault("provenance", {})["engines"] = payload.setdefault("provenance", {}).get("engines", []) + ["sanitize_check/1.0"]
+    payload.setdefault("provenance", {})["engines"] = payload.setdefault("provenance", {}).get("engines", []) + [ENGINE_VERSION]
     payload["provenance"]["generated_at"] = payload.get("run_metadata", {}).get("generated_at", "2026-09-23T00:00:00Z")
 
-    json.dump(payload, open(args.out, "w", encoding="utf-8"), indent=2)
+    with open(args.out, "w", encoding="utf-8") as output_file:
+        json.dump(payload, output_file, indent=2)
     print(f"sanitize_check: {len(released_assets)} release candidate(s), {len(held_assets)} held asset(s), overall={overall}")
     return 0
 
