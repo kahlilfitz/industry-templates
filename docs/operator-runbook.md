@@ -142,6 +142,7 @@ overlap across plugins.
    python tests\check_shared_copies.py       # where the plugin ships one
    Pop-Location
    npm run check:submissions
+   npm run check:shared                      # vendored shared modules match shared/
    ```
 
    Every check must pass. Older plugins use `unittest` files instead of `run_tests.py`; use
@@ -386,6 +387,67 @@ your own words.
   a defect before launching), say so in `CHANGELOG.md` and move on to the next number.
 - Do not modify unrelated plugins.
 
+## Shared steering detector
+
+Plugins that screen business data for instruction-like or verdict-steering text vendor one shared
+detector instead of keeping their own phrase lists. Phrase lists did not generalise: each Wave 1
+review round found new paraphrases they missed (checklist D13 to D15).
+
+**Source of truth:** `shared\steering-guard\`
+
+| File | Purpose |
+|---|---|
+| `steering_guard.py` | The detector: stdlib only, rule families rather than phrases, windowed scanning, an `oversize` hold |
+| `corpus.json` | Attack and benign lines with domain tags; the regression set every plugin ships |
+| `test_steering_guard.py` | Module tests. `STEERING_GUARD_SLOW=1` adds the timing and window-boundary sweeps |
+| `README.md` | API, families, hooks, the `oversize` contract and vendoring steps |
+| `vendor.json` | Maps each canonical file to the name plugins vendor it under |
+| `score_heldout.py` | Scores the module or a plugin call site against the private held-out set |
+
+**Vendoring rules**
+
+- Copy `steering_guard.py` byte-for-byte into each skill's `scripts\` folder that screens text,
+  and `corpus.json` as `tests\steering-corpus.json`. Never edit a vendored copy.
+- Plugin vocabulary goes through the hooks (`extra_verdict_words`, `extra_rule_nouns`,
+  `contact_is_steering`, `trusted_domains`), never into the module.
+- Multi-field records use `scan_fields`, so an instruction split across fields still trips.
+- An `oversize` hit means the text was not screened. The plugin must hold the item for human
+  review, never pass it.
+- To change the detector, edit `shared\steering-guard\`, bump `__version__`, run
+  `python shared\steering-guard\test_steering_guard.py` (with `STEERING_GUARD_SLOW=1` before a
+  release), copy the files into every plugin, and run each plugin's tests and `npm run check:shared`.
+  `evaluation:prepare` runs `check:shared` and refuses to freeze on a mismatch.
+
+### Held-out scoring
+
+The corpus tests only prove the detector catches lines it was built against. To measure whether it
+generalises, the operator keeps a **private held-out set**: a JSON file
+`{"attack": [...], "benign": [...]}` of lines no build agent has seen.
+
+- **Where it lives:** outside the repository, on the operator's machine (by convention
+  `%USERPROFILE%\industry-templates-operator\steering-heldout.json`). Never commit it, never put it
+  in `sharepoint\` or a plugin, and never paste its lines into an agent prompt. Pass it to the next
+  operator directly at handover.
+- **Scoring:**
+
+  ```powershell
+  $env:STEERING_HELDOUT = "$env:USERPROFILE\industry-templates-operator\steering-heldout.json"
+  python shared\steering-guard\score_heldout.py                       # the shared module
+  python shared\steering-guard\score_heldout.py `
+    --target "submissions\<industry>\<slug>\skills\<skill>\scripts:<module>:<function>"
+  ```
+
+  Score the shared module after every detector change, and each plugin's real call site (with its
+  hooks) before freezing. The bar is at least 90% of attack lines caught and no benign false
+  positives. The script exits non-zero below the bar and prints misses only with `--show`.
+- **Don't tune to it.** When a held-out line is missed, describe the class of evasion to the build
+  agent in general terms and have it add its own new examples to `corpus.json`; never hand over the
+  line itself. A class fixed this way is partly seen, so write fresh held-out lines for it
+  afterwards.
+- Probe the shapes the held-out set may not cover: long benign text before the instruction, an
+  instruction fused onto the previous word with no space, an instruction split across fields,
+  look-alike letters, and instruction-like text inside identifiers and file names.
+
 ## Ready path: human gate and promotion
 
 1. **Create the deployment doc** at `sharepoint\<Industry>\<slug>\PLUGIN-DETAILS-AND-DEPLOYMENT.md`
@@ -501,6 +563,43 @@ Useful skills:
 Review agent output yourself before freezing: run the tests, read the golden diffs and check the
 version bump.
 
+### Pre-freeze QA review
+
+A fix agent fixes what is reported; it rarely finds the next layer. Before every
+`evaluation:prepare`, run an independent review that executes code, and repeat it until a round
+reproduces nothing.
+
+1. Launch a `code-review` agent (a different model family from the builder) on the candidate's
+   diff since the last evaluated version.
+2. Ask for **confirmed defects only**: each finding must come with a reproducer the reviewer
+   actually ran against the engines (an input file or a one-line Python call), the observed output,
+   and the expected output. Opinions and style notes are out of scope.
+3. Point it at the classes in the [hardening checklist](plugin-hardening-checklist.md), especially
+   A (fail closed), B (finding integrity) and D (data as data): wrong types, missing or null
+   fields, unrecognised enum values, self-declared trusted sources, other-client names in any
+   field, and reworded instruction-like text.
+4. **Use neutral QA wording.** The review model has rejected prompts phrased as security attacks
+   (HTTP 422, content flagged). Describe the work as correctness QA: "instruction-like text in
+   data fields", "reworded variants", "inputs that should hold but pass", "confirmed defects". Do
+   not use words such as "adversarial", "attack", "injection", "bypass" or "jailbreak" in the
+   prompt.
+5. Send the confirmed findings to the fix agent as new commits (no version bump before the first
+   freeze of that version), then run another round on the new commits.
+6. Separately, score the plugin's detector call sites against the
+   [held-out set](#held-out-scoring). The review agent must not see that set.
+
+Prompt skeleton:
+
+```text
+QA review of <slug> <version>: commits <base>..<head> in submissions\<industry>\<slug>\.
+Report confirmed defects only. For each: the input you ran, the command, the observed output,
+the expected output, and the file and line responsible. Run each reproducer before reporting it.
+Focus: inputs that should hold or escalate but pass clean (wrong types, null or missing fields,
+unrecognised values, self-declared trusted sources), other-client data reaching output, and
+instruction-like text in data fields, including reworded variants, text split across fields and
+look-alike letters. Do not edit files.
+```
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -556,13 +655,14 @@ can archive again with `evaluation:watch` or `evaluation:archive`.
 
 ## Handover checklist
 
-Workstream state lives in four places:
+Workstream state lives in five places:
 
 | Where | What |
 |---|---|
 | Repository | Plugin source and changelogs; `docs\professional-services\wave-1.md` (wave log); commits not yet pushed |
 | SharePoint library | `sharepoint\<Industry>\README.md` status; `Evaluation\<version>\` archives; deployment docs; trackers; promoted ZIPs |
 | `evaluation-inbox\` | Frozen candidates and receipts on the operator's machine only (gitignored). Preserve until archived |
+| Operator's machine | The private steering held-out set (see [Held-out scoring](#held-out-scoring)); hand it over directly |
 | Cowork | Task folders under the launching user's OneDrive |
 
 Receipts and Cowork tasks are per person. Before handing over, the outgoing operator should let

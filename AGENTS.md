@@ -8,6 +8,15 @@ archiving evidence, writing deployment docs or trackers, promoting a distributab
 status), read [docs/operator-runbook.md](docs/operator-runbook.md) and apply
 [docs/plugin-hardening-checklist.md](docs/plugin-hardening-checklist.md) before every freeze.
 
+## Shared modules (`shared\`)
+
+`shared\<module>\` is the source of truth for code vendored into several plugins, such as the
+instruction detector `shared\steering-guard\steering_guard.py`. Never edit a vendored copy inside
+`submissions\`: change `shared\`, bump its version, copy it byte-for-byte into every plugin listed
+by `npm run check:shared`, and rerun each plugin's tests. Plugin-specific vocabulary goes through
+the detector's hooks. The operator scores detectors against a private held-out set that agents are
+never given; do not look for it or ask for its contents.
+
 ## SharePoint library (`sharepoint\`)
 
 `sharepoint\` is a gitignored link to the OneDrive-synced Industry Templates SharePoint library

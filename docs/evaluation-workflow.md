@@ -64,7 +64,8 @@ npm run evaluation:prepare -- --slug <plugin-slug>
 
 The command:
 
-1. Validates every submission.
+1. Validates every submission, and that every vendored copy of a `shared/` module matches its
+   source (`npm run check:shared`).
 2. Rebuilds all reproducible bundles.
 3. Confirms the submission and plugin-manifest versions agree.
 4. Extracts the built ZIP to a temporary folder and runs any shipped `tests/run_tests.py`,

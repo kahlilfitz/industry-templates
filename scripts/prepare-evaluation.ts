@@ -60,6 +60,7 @@ function main(): void {
 
   console.log(`Validating submissions before freezing ${slug} ${submission.version}...`);
   run("npm", ["run", "check:submissions"]);
+  run("npm", ["run", "check:shared"]);
   console.log("Building reproducible bundles...");
   run("npm", ["run", "build"]);
 
