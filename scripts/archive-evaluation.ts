@@ -24,6 +24,24 @@ import {
   sha256,
 } from "./evaluation-workflow.js";
 
+// OneDrive briefly locks newly created folders while it registers them for sync.
+const TRANSIENT_RENAME_CODES = new Set(["EPERM", "EBUSY", "EACCES"]);
+
+function renameWithRetry(from: string, to: string, attempts = 8): void {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      renameSync(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (!TRANSIENT_RENAME_CODES.has(code) || attempt >= attempts || existsSync(to)) {
+        throw error;
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000 * attempt);
+    }
+  }
+}
+
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const slug = requiredArg(args, "slug");
@@ -113,7 +131,7 @@ function main(): void {
     if (sha256(archivedArtifact) !== runData.artifactSha256) {
       throw new Error("archived ZIP hash verification failed");
     }
-    renameSync(staging, destination);
+    renameWithRetry(staging, destination);
   } catch (error) {
     rmSync(staging, { recursive: true, force: true });
     throw error;

@@ -517,6 +517,7 @@ version bump.
 | Tracker will not open in Python or LibreOffice | Sensitivity-label encryption | Use Excel desktop or Excel COM |
 | `<name>-<COMPUTERNAME>.xlsx` appears | OneDrive conflict copy from concurrent edits | Merge by hand in Excel, then remove only the copy you created |
 | `.<version>-<pid>.tmp` folder under `Evaluation\` | An archive was interrupted while copying | See [Recovering an interrupted archive](#recovering-an-interrupted-archive) |
+| `EPERM`/`EBUSY: operation not permitted, rename '...tmp'` | OneDrive held the new staging folder longer than the script's retries (about 30 s) | The script already removed the staging folder and the receipt still says `prepared`; wait a minute and rerun `evaluation:archive` (or restart the watcher) |
 
 ### Recovering an interrupted archive
 
