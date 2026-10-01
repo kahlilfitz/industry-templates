@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "ps.deliverable-review-quality-gate.v1",
   "title": "Deliverable Review & Quality Gate contract v1",
-  "description": "Chains deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-check -> review-packet. Carries data plus confidence, provenance and citations on every hop so release-readiness escalation is mechanical.",
+  "description": "Chains deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-check -> review-packet. Carries data plus confidence, provenance and citations on every hop so review-status escalation is mechanical. Engines treat deliverable and evidence text as untrusted data.",
   "type": "object",
   "required": ["contract_version", "engagement_id", "deliverable", "criteria", "assertions", "evidence_set"],
   "properties": {
@@ -81,7 +81,7 @@
     },
     "ranked_findings": { "type": "array", "items": { "type": "object" } },
     "release_readiness": { "type": "object" },
-    "escalations": { "type": "array", "items": { "type": "string" } },
+    "escalations": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "type": "object" }] } },
     "provenance": { "type": "object" }
   },
   "definitions": {

@@ -4,7 +4,7 @@
 
 Produced by deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-check -> review-packet under contract `ps.deliverable-review-quality-gate.v1`.
 
-## Release-readiness status
+## Review status
 **{{release_readiness.status}}** - {{release_readiness.summary}}
 
 ## Gate checklist
@@ -27,7 +27,7 @@ Produced by deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-che
 {{end}}
 
 ## Required human decision
-The reviewing partner/QRM owner decides whether fixes are sufficient. The engine can flag or block; it cannot clear the gate.
+The reviewing partner/QRM owner decides whether fixes are sufficient. The engine can flag or block; it cannot sign off the gate or authorize client issue.
 
 ## Appendix - contract payload
 ```json

@@ -239,10 +239,10 @@
   ],
   "escalations": [],
   "provenance": {
-    "generated_at": "2026-09-23T00:00:00Z",
+    "generated_at": "2026-10-01T00:00:00Z",
     "engines": [
-      "assertion_map/1.0",
-      "gate_check/1.0"
+      "assertion_map/1.0.1",
+      "gate_check/1.0.1"
     ],
     "demo_scenario": "scenario-a-happy"
   },
@@ -341,7 +341,7 @@
     {
       "gate_id": "G1",
       "name": "Evidence support and substantiation",
-      "status": "cleared",
+      "status": "no_engine_findings",
       "highest_severity": "none",
       "finding_count": 0,
       "confidence": 0.95,
@@ -351,7 +351,7 @@
     {
       "gate_id": "G2",
       "name": "Required disclaimer, limitation and reliance language",
-      "status": "cleared",
+      "status": "no_engine_findings",
       "highest_severity": "none",
       "finding_count": 0,
       "confidence": 0.95,
@@ -361,7 +361,7 @@
     {
       "gate_id": "G3",
       "name": "Scope-of-work alignment",
-      "status": "cleared",
+      "status": "no_engine_findings",
       "highest_severity": "none",
       "finding_count": 0,
       "confidence": 0.95,
@@ -371,7 +371,7 @@
     {
       "gate_id": "G4",
       "name": "Confidentiality marking and client-data handling",
-      "status": "cleared",
+      "status": "no_engine_findings",
       "highest_severity": "none",
       "finding_count": 0,
       "confidence": 0.95,
@@ -391,7 +391,7 @@
     {
       "gate_id": "G6",
       "name": "Third-party and licensed content attribution",
-      "status": "cleared",
+      "status": "no_engine_findings",
       "highest_severity": "none",
       "finding_count": 0,
       "confidence": 0.95,
@@ -401,12 +401,22 @@
     {
       "gate_id": "G7",
       "name": "Prior-findings closure",
-      "status": "cleared",
+      "status": "no_engine_findings",
       "highest_severity": "none",
       "finding_count": 0,
       "confidence": 0.95,
       "source": "engine:gate_check",
       "citation": "quality-gate-criteria.md #7"
+    },
+    {
+      "gate_id": "G8",
+      "name": "Data-as-data and embedded-instruction handling",
+      "status": "no_engine_findings",
+      "highest_severity": "none",
+      "finding_count": 0,
+      "confidence": 0.95,
+      "source": "engine:gate_check",
+      "citation": "quality-gate-criteria.md #8"
     }
   ]
 }

@@ -2,7 +2,7 @@
 
 For reviewing partners and QRM teams who need to know whether a deliverable is mechanically ready for judgement before scarce partner time is spent on the substance.
 
-The package does **not** review the deliverable. It clears the mechanical layer so the human review starts at the judgement layer. The reviewing partner's expertise is the scarce resource; spending it on "is the disclaimer present" or "does the headline saving cite a real source" is the waste.
+The package does **not** review the deliverable. It checks the mechanical layer so the human review starts at the judgement layer. The reviewing partner's expertise is the scarce resource; spending it on "is the disclaimer present" or "does the headline saving cite a real source" is the waste.
 
 ## How it works
 
@@ -14,7 +14,9 @@ The package does **not** review the deliverable. It clears the mechanical layer 
 | 4 | `gate-check` | Determines gate compliance and release-readiness severity using deterministic `gate_check` and `severity_rank` logic |
 | 5 | `review-packet` | Drafts the partner review packet ordered by severity, using only contract data and citations |
 
-Engines compute; the model drafts. Evidence-support verdicts, gate pass/fail, severity ranking and release-readiness status come from Python. The model extracts candidate assertions from prose, orchestrates the steps and writes the cited packet narrative. It never clears a gate, downgrades a blocker or decides that an unsupported claim is acceptable.
+Engines compute; the model drafts. Evidence-support verdicts, gate pass/fail, severity ranking and review status come from Python. The model extracts candidate assertions from prose, orchestrates the steps and writes the cited packet narrative. It never signs off a gate, downgrades a blocker or decides that an unsupported claim is acceptable.
+
+Version 1.0.1 hardens the first evaluation path: missing required registers fail closed or produce a blocker, no linked evidence is unsupported, ambiguous recipients hold for human clarification, embedded approval/waiver/forwarding instructions in deliverable or evidence text are treated as untrusted data, and outputs avoid positive sign-off wording.
 
 ## The case that shows why it exists
 

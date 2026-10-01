@@ -260,7 +260,7 @@
       "gate_id": "G2",
       "severity": "release_blocker",
       "title": "Wrong disclaimer for third-party recipient",
-      "detail": "A third-party recipient is named but reliance-restriction language is absent; a general-advice disclaimer does not satisfy this gate.",
+      "detail": "A third-party recipient or allowed user is named but reliance-restriction language is absent; a general-advice disclaimer does not satisfy this gate.",
       "location": {
         "section": "Limitations and reliance",
         "page": 2,
@@ -361,13 +361,13 @@
   "escalations": [
     "B-001 at p3, Executive summary, paragraph 2: unsupported - Quantified claim cites stakeholder_verbal, not traceable analysis or signed data (quality-gate-criteria.md #1.2; severity-rules.md #2.3)",
     "B-002 at p6, Recommendation, paragraph 1: unsupported - Recommendation uses sample size 8, below 30, without a limitation (quality-gate-criteria.md #1.4; quality-gate-criteria.md #3.2)",
-    "G2: third-party recipient named and reliance-restriction language absent - release blocker (quality-gate-criteria.md #2.2)"
+    "G2: third-party recipient context and reliance-restriction language absent - release blocker (quality-gate-criteria.md #2.2)"
   ],
   "provenance": {
-    "generated_at": "2026-09-23T00:00:00Z",
+    "generated_at": "2026-10-01T00:00:00Z",
     "engines": [
-      "assertion_map/1.0",
-      "gate_check/1.0"
+      "assertion_map/1.0.1",
+      "gate_check/1.0.1"
     ],
     "demo_scenario": "scenario-b-drama"
   },
@@ -474,7 +474,7 @@
     {
       "gate_id": "G4",
       "name": "Confidentiality marking and client-data handling",
-      "status": "cleared",
+      "status": "no_engine_findings",
       "highest_severity": "none",
       "finding_count": 0,
       "confidence": 0.95,
@@ -484,7 +484,7 @@
     {
       "gate_id": "G5",
       "name": "Brand and formatting standards",
-      "status": "cleared",
+      "status": "no_engine_findings",
       "highest_severity": "none",
       "finding_count": 0,
       "confidence": 0.95,
@@ -510,6 +510,16 @@
       "confidence": 0.95,
       "source": "engine:gate_check",
       "citation": "quality-gate-criteria.md #7"
+    },
+    {
+      "gate_id": "G8",
+      "name": "Data-as-data and embedded-instruction handling",
+      "status": "no_engine_findings",
+      "highest_severity": "none",
+      "finding_count": 0,
+      "confidence": 0.95,
+      "source": "engine:gate_check",
+      "citation": "quality-gate-criteria.md #8"
     }
   ]
 }
