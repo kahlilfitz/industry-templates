@@ -11,7 +11,6 @@ import { basename, join } from "node:path";
 import {
   DEFAULT_INBOX_ROOT,
   REQUIRED_REPORTS,
-  ROOT,
   EvaluationRun,
   assertNonEmptyFile,
   confirmsArtifactMatch,
@@ -21,6 +20,7 @@ import {
   parseArgs,
   requiredArg,
   resolveInputPath,
+  resolveSharepointRoot,
   sha256,
 } from "./evaluation-workflow.js";
 
@@ -31,11 +31,9 @@ function main(): void {
   const inboxRoot = args.has("inbox-root")
     ? resolveInputPath(requiredArg(args, "inbox-root"))
     : DEFAULT_INBOX_ROOT;
-  const sharepointRoot = args.has("sharepoint-root")
-    ? resolveInputPath(requiredArg(args, "sharepoint-root"))
-    : process.env.INDUSTRY_TEMPLATES_SHAREPOINT_ROOT
-      ? resolveInputPath(process.env.INDUSTRY_TEMPLATES_SHAREPOINT_ROOT)
-      : join(ROOT, "sharepoint");
+  const { root: sharepointRoot } = resolveSharepointRoot({
+    flag: args.has("sharepoint-root") ? requiredArg(args, "sharepoint-root") : undefined,
+  });
   const submission = findSubmission(slug);
   const version = args.get("version")?.trim() || submission.version;
 

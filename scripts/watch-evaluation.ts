@@ -13,6 +13,7 @@ import {
   parseArgs,
   requiredArg,
   resolveInputPath,
+  resolveSharepointRoot,
   sha256,
 } from "./evaluation-workflow.js";
 
@@ -85,7 +86,7 @@ function archive(
   version: string,
   source: string,
   inboxRoot: string,
-  sharepointRoot: string | undefined,
+  sharepointRoot: string,
 ): void {
   const args = [
     "--slug",
@@ -96,8 +97,9 @@ function archive(
     source,
     "--inbox-root",
     inboxRoot,
+    "--sharepoint-root",
+    sharepointRoot,
   ];
-  if (sharepointRoot) args.push("--sharepoint-root", sharepointRoot);
 
   const tsxCli = join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
   const archiveScript = join(ROOT, "scripts", "archive-evaluation.ts");
@@ -118,9 +120,9 @@ async function main(): Promise<void> {
   const tasksRoot = args.has("tasks-root")
     ? resolveInputPath(requiredArg(args, "tasks-root"))
     : defaultTasksRoot();
-  const sharepointRoot = args.has("sharepoint-root")
-    ? resolveInputPath(requiredArg(args, "sharepoint-root"))
-    : undefined;
+  const { root: sharepointRoot, source: sharepointSource } = resolveSharepointRoot({
+    flag: args.has("sharepoint-root") ? requiredArg(args, "sharepoint-root") : undefined,
+  });
   const timeoutMinutes = positiveNumber(
     args.get("timeout-minutes"),
     180,
@@ -148,6 +150,7 @@ async function main(): Promise<void> {
   const deadline = Date.now() + timeoutMinutes * 60_000;
   console.log(`Watching ${tasksRoot} for ${slug} ${version}.`);
   console.log(`Expected ZIP SHA-256: ${runData.artifactSha256}`);
+  console.log(`Archive root (${sharepointSource}): ${sharepointRoot}`);
 
   const reportedTasks = new Set<string>();
   const reportedStaleOutput = new Set<string>();

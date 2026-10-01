@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,6 +9,7 @@ import {
   extractVerdict,
   htmlToText,
   parseArgs,
+  resolveSharepointRoot,
   sha256,
 } from "./evaluation-workflow.js";
 
@@ -89,6 +90,38 @@ test("sha256 hashes file bytes", () => {
       sha256(path),
       "C7C5C1D70C5DEC4416AB6158AFD0B223EF40C29B1DC1F97ED9428B94D4CADB1C",
     );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveSharepointRoot prefers flag, then env, then a link; refuses plain folders", () => {
+  const dir = mkdtempSync(join(tmpdir(), "sharepoint-root-"));
+  try {
+    const library = join(dir, "library");
+    mkdirSync(library);
+    const linkPath = join(dir, "sharepoint");
+
+    assert.deepEqual(resolveSharepointRoot({ flag: library, env: "ignored", linkPath }), {
+      root: library,
+      source: "flag",
+    });
+    assert.deepEqual(resolveSharepointRoot({ env: library, linkPath }), { root: library, source: "env" });
+    assert.throws(() => resolveSharepointRoot({ env: join(dir, "nope"), linkPath }), /does not point to a folder/);
+
+    assert.throws(() => resolveSharepointRoot({ env: "", linkPath }), /no SharePoint root configured/);
+
+    mkdirSync(linkPath);
+    assert.throws(() => resolveSharepointRoot({ env: "", linkPath }), /plain local folder/);
+    rmSync(linkPath, { recursive: true });
+
+    symlinkSync(library, linkPath, "junction");
+    assert.deepEqual(resolveSharepointRoot({ env: "", linkPath }), { root: linkPath, source: "link" });
+
+    rmSync(linkPath);
+    rmSync(library, { recursive: true });
+    symlinkSync(join(dir, "gone"), linkPath, "junction");
+    assert.throws(() => resolveSharepointRoot({ env: "", linkPath }), /broken link/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

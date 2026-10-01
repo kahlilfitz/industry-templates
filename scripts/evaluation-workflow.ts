@@ -1,5 +1,6 @@
 import {
   existsSync,
+  lstatSync,
   readFileSync,
   readdirSync,
   statSync,
@@ -72,6 +73,58 @@ export function requiredArg(args: Map<string, string>, name: string): string {
 
 export function resolveInputPath(value: string): string {
   return isAbsolute(value) ? resolve(value) : resolve(ROOT, value);
+}
+
+export const SHAREPOINT_ENV = "INDUSTRY_TEMPLATES_SHAREPOINT_ROOT";
+export const SHAREPOINT_LINK = join(ROOT, "sharepoint");
+
+export type SharepointRoot = {
+  root: string;
+  source: "flag" | "env" | "link";
+};
+
+/**
+ * Resolves where evaluation evidence is archived: --sharepoint-root, then the
+ * environment variable, then the repo's `sharepoint` link to the OneDrive-synced
+ * library. A plain `sharepoint` folder is refused because nobody else can see it.
+ */
+export function resolveSharepointRoot(
+  options: { flag?: string; env?: string; linkPath?: string } = {},
+): SharepointRoot {
+  const flag = options.flag?.trim();
+  if (flag) return { root: resolveInputPath(flag), source: "flag" };
+
+  const env = (options.env ?? process.env[SHAREPOINT_ENV])?.trim();
+  if (env) {
+    const root = resolveInputPath(env);
+    if (!existsSync(root) || !statSync(root).isDirectory()) {
+      throw new Error(`${SHAREPOINT_ENV} does not point to a folder: ${root}`);
+    }
+    return { root, source: "env" };
+  }
+
+  const linkPath = options.linkPath ?? SHAREPOINT_LINK;
+  let link;
+  try {
+    link = lstatSync(linkPath);
+  } catch {
+    throw new Error(
+      `no SharePoint root configured: ${linkPath} does not exist. Run \`npm run sharepoint:link\` ` +
+        `(see docs/sharepoint-sync.md), set ${SHAREPOINT_ENV}, or pass --sharepoint-root.`,
+    );
+  }
+  if (!link.isSymbolicLink()) {
+    throw new Error(
+      `${linkPath} is a plain local folder, not a link to the synced SharePoint library. ` +
+        "Run `npm run sharepoint:link` (see docs/sharepoint-sync.md) or pass --sharepoint-root explicitly.",
+    );
+  }
+  if (!existsSync(linkPath)) {
+    throw new Error(
+      `${linkPath} is a broken link; its OneDrive target is missing. Run \`npm run sharepoint:doctor\`.`,
+    );
+  }
+  return { root: linkPath, source: "link" };
 }
 
 export function sha256(path: string): string {

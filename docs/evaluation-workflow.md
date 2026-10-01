@@ -38,11 +38,14 @@ the critical-path spot checks before publication.
 1. Install Node.js 22 and run `npm install`.
 2. Ensure the plugin's `metadata.json` and `.claude-plugin/plugin.json` use the same version.
 3. Complete plugin-specific regression tests.
-4. Know the local path to the synchronized Industry Templates SharePoint library, if one is
-   available.
+4. Link the synchronized Industry Templates SharePoint library into the repository once with
+   `npm run sharepoint:link`, and confirm `npm run sharepoint:doctor` reports ready. See
+   [SharePoint sync](sharepoint-sync.md).
 
-The default archive root is the repository's ignored `sharepoint/` mirror. To archive directly into
-a synchronized library, set:
+Evidence is archived through the repository's `sharepoint` link, so it syncs to SharePoint. The
+archive root is resolved in this order: `--sharepoint-root`, then `INDUSTRY_TEMPLATES_SHAREPOINT_ROOT`,
+then the `sharepoint` link. A plain, unsynced `sharepoint` folder is refused. To archive into a
+different synchronized folder, set:
 
 ```powershell
 $env:INDUSTRY_TEMPLATES_SHAREPOINT_ROOT = "C:\path\to\synced\Industry Templates"

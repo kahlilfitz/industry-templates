@@ -11,7 +11,10 @@
     "evaluation:prepare": "tsx scripts/prepare-evaluation.ts",
     "evaluation:archive": "tsx scripts/archive-evaluation.ts",
     "evaluation:watch": "tsx scripts/watch-evaluation.ts",
-    "test:evaluation": "tsx --test scripts/evaluation-workflow.test.ts"
+    "sharepoint:link": "tsx scripts/sharepoint.ts link",
+    "sharepoint:doctor": "tsx scripts/sharepoint.ts doctor",
+    "sharepoint:unlink": "tsx scripts/sharepoint.ts unlink",
+    "test:evaluation": "tsx --test scripts/evaluation-workflow.test.ts scripts/sharepoint-sync.test.ts"
   },
   "dependencies": {},
   "devDependencies": {

@@ -139,11 +139,12 @@ Or watch the synchronized Cowork task directory and archive automatically:
 npm run evaluation:watch -- --slug <plugin-slug>
 ```
 
-By default, evidence is written to
-`sharepoint/<Industry>/<slug>/Evaluation/<version>/`. Set
-`INDUSTRY_TEMPLATES_SHAREPOINT_ROOT` or pass `--sharepoint-root` to target a locally synchronized
-SharePoint library instead. The command refuses missing reports, identity/version/hash mismatches,
-and existing evidence folders. If the submission has advanced since preparation, pass the frozen
+Evidence is written to `sharepoint/<Industry>/<slug>/Evaluation/<version>/`, where `sharepoint`
+is a gitignored link to the OneDrive-synced Industry Templates library (set it up once with
+`npm run sharepoint:link`; see [SharePoint sync](docs/sharepoint-sync.md)). Set
+`INDUSTRY_TEMPLATES_SHAREPOINT_ROOT` or pass `--sharepoint-root` to target another synced folder.
+The command refuses an unsynced plain `sharepoint` folder, missing reports, identity/version/hash
+mismatches, and existing evidence folders. If the submission has advanced since preparation, pass the frozen
 candidate's `--version`. An automated `Ready` verdict still requires two independent human
 critical-path reviews before publication.
 

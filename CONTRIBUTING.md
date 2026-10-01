@@ -114,6 +114,13 @@ On a pull request, [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 
 Merges to `main` also refresh the generated `catalog` branch.
 
+## SharePoint library
+
+Planning documents, scenario references, evaluation evidence and human-test trackers live in the
+Industry Templates SharePoint library, not in git. Sync it with OneDrive and link it into the
+repository as `sharepoint\` with `npm run sharepoint:link` — see
+[SharePoint sync](docs/sharepoint-sync.md). Never commit anything from it.
+
 ## Evaluate a release candidate
 
 Before treating a plugin as publishable, follow the
