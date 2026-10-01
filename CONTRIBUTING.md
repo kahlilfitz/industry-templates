@@ -126,6 +126,8 @@ repository as `sharepoint\` with `npm run sharepoint:link` — see
 Before treating a plugin as publishable, follow the
 [Cowork evaluation workflow](docs/evaluation-workflow.md). It defines how to freeze the exact ZIP,
 run the manual Cowork task, archive the three required HTML reports, preserve failed runs, and
-complete the independent human-review gate.
+complete the independent human-review gate. Operators running the whole workstream (evaluation,
+remediation, human gate, promotion and status) should start with the
+[operator runbook](docs/operator-runbook.md).
 
 By contributing you agree your template is shared under the repository's [MIT license](LICENSE).

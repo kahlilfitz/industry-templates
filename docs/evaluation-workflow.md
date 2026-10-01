@@ -3,6 +3,7 @@
 This runbook describes how to freeze a plugin release candidate, evaluate the exact artifact in
 Cowork, and archive the required evidence. Repository scripts automate artifact integrity and file
 placement. Cowork performs the automated evaluation. Human reviewers retain publication authority.
+For the end-to-end workstream around it, see the [operator runbook](operator-runbook.md).
 
 ## Evidence contract
 
@@ -27,11 +28,11 @@ run. A changed artifact requires a new package version and a new evaluation fold
 | Run automated evaluation | | Yes | |
 | Generate the three HTML reports | | Yes | |
 | Validate and archive evidence | Yes | | |
-| Perform independent critical-path reviews | | | Yes |
+| Perform independent human reviews | | | Yes |
 | Approve publication | | | Yes |
 
-An automated `Ready` verdict is not a publication decision. Two independent reviewers must complete
-the critical-path spot checks before publication.
+An automated `Ready` verdict is not a publication decision. Both reviewers run every prompt in the
+tracker; the critical-path prompts are the mandatory minimum the tracker must contain.
 
 ## Prerequisites
 
@@ -101,8 +102,19 @@ repository scripts.
    - `plugin-health.html`
    - `behavioral-test-report.html`
    - `full-report.html`
-8. Start the task and wait for it to finish.
+8. Start the task and wait for it to finish. Runs typically take 1–3 hours.
 9. Do not rename or edit the generated reports.
+
+Always create a new Cowork task for each artifact version. Reusing a task from an earlier version
+can save the new attachment as `<plugin-slug> (1).zip`, which the watcher never matches; can mix old
+and new reports, because the filenames are fixed and only `full-report.html` is hash-checked; and
+leaves the earlier verdict in the conversation, where it can bias the evaluator.
+
+Resuming a stalled run of the same version in the same task is fine: type
+`continue and produce the 3 reports`.
+
+The Cowork task list can show a task as failed while the task page shows it still working. Trust
+the task page and whether the task's output folder is still changing.
 
 The full report must visibly state the plugin slug, artifact version, Cowork task/run label,
 artifact SHA-256, per-skill scores and launch floors, behavioral and safety totals, security result,
@@ -148,6 +160,13 @@ slug/version candidates. Each watcher matches only its recorded ZIP hash. Do not
 `public/bundles/` directory. Prepare candidates serially, then evaluate and archive them in
 parallel.
 
+The watcher polls every 30 seconds and stops after 180 minutes by default. A timeout is not a
+failure: run the same command again. Restarting is safe, because the watcher only reads until it
+archives, and it refuses a receipt that is already archived. Stop watchers before restarting your
+terminal or agent session and start them again afterwards, but never stop one after it reports
+`All three reports are present and stable.` while it is archiving. If the submission version has
+advanced since preparation, pass the frozen `--version`.
+
 ## Step 4: validate and archive the evidence
 
 Run:
@@ -190,17 +209,30 @@ The archive command:
 
 Archive `Blocked` and `No-ship` runs as evidence. Do not publish them.
 
+### Interpreting the verdict
+
+`Ready` means internal bar items 1–7 of the testing strategy are met and the human spot check
+(item 8) is pending. `Blocked` means one or more items were missed without a guardrail, safety or
+security breach; `No-ship` means such a breach was found. Behavioral item 2 requires a pass rate of
+95% or more, and `WEAK` cases count as not passing, so remediation must fix every `WEAK` case as
+well as every `FAIL`. See [Reading a verdict](operator-runbook.md#reading-a-verdict) in the operator
+runbook for the full bar and where to find each finding in `full-report.html`.
+
 ## Step 5: complete the human gate
 
 For a `Ready` evaluation:
 
-1. Two independent reviewers execute the critical-path prompts.
+1. Two independent reviewers each run every prompt in the tracker. The critical-path prompts are
+   the mandatory minimum the tracker must contain.
 2. Each reviewer records results in the plugin's human-test tracker.
 3. Reviewers investigate failures or discrepancies.
-4. The accountable owner makes the publication decision.
+4. The accountable owner records the publication decision in the tracker: `Publish`,
+   `Fix and re-evaluate` or `Do not publish`.
 
-Only after this gate should the archived ZIP be copied to the plugin folder as the current
-versioned distributable. That copy must remain byte-identical to the ZIP under `Evaluation/`.
+Only when the tracker's publish gate reads `PASS` and the owner decision is `Publish` should the
+archived ZIP be copied to the plugin folder as the current versioned distributable. That copy must
+remain byte-identical to the ZIP under `Evaluation/`. See the
+[Ready path](operator-runbook.md#ready-path-human-gate-and-promotion) for the other decisions.
 
 ## Failure and retry rules
 

@@ -3,6 +3,11 @@
 Follow [CONTRIBUTING.md](CONTRIBUTING.md) for submission conventions and
 [docs/evaluation-workflow.md](docs/evaluation-workflow.md) for release candidates.
 
+Before any workstream task (building or remediating a plugin, freezing or evaluating a candidate,
+archiving evidence, writing deployment docs or trackers, promoting a distributable or updating
+status), read [docs/operator-runbook.md](docs/operator-runbook.md) and apply
+[docs/plugin-hardening-checklist.md](docs/plugin-hardening-checklist.md) before every freeze.
+
 ## SharePoint library (`sharepoint\`)
 
 `sharepoint\` is a gitignored link to the OneDrive-synced Industry Templates SharePoint library

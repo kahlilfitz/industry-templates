@@ -150,6 +150,8 @@ critical-path reviews before publication.
 
 See [Cowork evaluation workflow](docs/evaluation-workflow.md) for the complete contributor runbook,
 including manual Cowork steps, archive validation, retry rules, and the human publication gate.
+If you are running the plugin workstream end to end, start with the
+[operator runbook](docs/operator-runbook.md).
 
 ## Contributing
 
