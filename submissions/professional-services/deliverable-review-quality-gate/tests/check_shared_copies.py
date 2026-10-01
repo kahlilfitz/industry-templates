@@ -4,6 +4,7 @@
 Sources of truth:
   contracts/ps.deliverable-review-quality-gate.v1.json -> skills/*/contracts/
   references/*.md                                      -> skills/*/references/
+  skills/assertion-map/scripts/assertion_rules.py      -> skills/gate-check/scripts/
 
   python tests/check_shared_copies.py
 """
@@ -27,6 +28,9 @@ def main():
         pairs.extend((src, os.path.join(skill, "contracts", os.path.basename(src))) for skill in skills)
     for src in sorted(glob.glob(os.path.join(ROOT, "references", "*.md"))):
         pairs.extend((src, os.path.join(skill, "references", os.path.basename(src))) for skill in skills)
+    # gate_check recomputes assertion_map output, so both engines must classify with identical rules.
+    pairs.append((os.path.join(ROOT, "skills", "assertion-map", "scripts", "assertion_rules.py"),
+                  os.path.join(ROOT, "skills", "gate-check", "scripts", "assertion_rules.py")))
     drift = 0
     for src, copy in pairs:
         rel = os.path.relpath(copy, ROOT)

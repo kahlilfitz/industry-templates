@@ -42,6 +42,7 @@ Every support verdict, score and escalation comes from the engine. Best evidence
 - The model may not decide, soften, suppress, downgrade or reword engine support findings.
 - Draft-first: never send, publish, approve client issue, authorize reliance or clear a gate.
 - No fabrication: never add evidence IDs, facts, scores or citations not produced by the engine.
-- If `assertion_map.py` errors, stop and report; do not hand-build `assertion_mappings`.
+- If `assertion_map.py` errors, stop and report; do not hand-build `assertion_mappings`. `gate-check` recomputes this output with the same shared `scripts/assertion_rules.py`, and any hand-edited mapping or `AM-` finding is restored and held.
+- Assertion flags (`hedging_present`, `limitation_present`, `stated_basis`, `scope_aligned`) must be JSON true/false or omitted; `"false"`, `0` or null is an input error, never coerced. Page and paragraph must be integers (printed labels go in `location.label`).
 ## Escalation / uncertainty
 Missing linked evidence, unknown assertion class, low confidence, unsupported quantified claims or ambiguous evidence source are carried as escalations to `gate-check` and the reviewing partner/QRM owner.

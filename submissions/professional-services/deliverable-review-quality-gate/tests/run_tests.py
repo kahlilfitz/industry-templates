@@ -104,6 +104,24 @@ def chain_packet(packet, workdir, label):
     return chain(input_path, workdir)
 
 
+def chain_error(packet, workdir, label):
+    """Run the chain expecting a clean input error; return (failing engine, stderr). Tracebacks propagate."""
+    try:
+        chain_packet(packet, workdir, label)
+    except RuntimeError as exc:
+        engine, _, message = str(exc).partition(" failed: ")
+        return engine, message
+    return None, ""
+
+
+def gate_error(mapped, workdir, label):
+    """Run gate_check on a hand-edited mapped payload expecting a clean input error; return stderr or None."""
+    mapped_path = os.path.join(workdir, f"{label}-mapped.json")
+    write(mapped_path, mapped)
+    code, stdout, stderr = run("gate_check", "--mapped", mapped_path, "--out", os.path.join(workdir, f"{label}-gated.json"))
+    return stderr if code == 1 and "Traceback" not in stderr + stdout else None
+
+
 def finding_ids(packet):
     return {item["finding_id"] for item in packet.get("findings", [])}
 
@@ -324,7 +342,6 @@ def register_tests(tmp):
         ("blank", "", "release_blocker", "not_ready_for_release"),
         ("not_assessed", "not_assessed", "release_blocker", "not_ready_for_release"),
         ("uppercase OK", "OK", "release_blocker", "not_ready_for_release"),
-        ("non-string", 0, "release_blocker", "not_ready_for_release"),
         ("unknown", "unknown", "release_blocker", "not_ready_for_release"),
         ("breach", "breach", "release_blocker", "not_ready_for_release"),
         ("attention", "attention", "must_fix", "partner_review_required_must_fix"),
@@ -339,6 +356,12 @@ def register_tests(tmp):
               and finding["location"]["page"] is None
               and any(entry.startswith("G4: client_data_handling") for entry in ranked["escalations"]),
               status(ranked))
+    for label, value in (("integer", 0), ("boolean", True), ("object", {"status": "ok"})):
+        packet = copy.deepcopy(base_a)
+        packet["deliverable"]["client_data_handling"] = value
+        engine, err = chain_error(packet, tmp, f"client-data-type-{label}")
+        check(f"R2 client_data_handling {label} is a clean input error, never coerced",
+              engine == "gate_check" and "client_data_handling must be a string" in err, (engine, err))
     packet = copy.deepcopy(base_a)
     ranked = read(chain_packet(packet, tmp, "client-data-ok")["ranked"])
     check("R2 client_data_handling ok stays clean", not any(item["gate_id"] == "G4" for item in ranked["findings"]))
@@ -359,14 +382,28 @@ def page_label_tests(tmp):
     packet["assertions"][0]["location"]["page"] = "iv"
     input_path = os.path.join(tmp, "page-iv-input.json")
     write(input_path, packet)
-    mapped, gated = os.path.join(tmp, "page-iv-mapped.json"), os.path.join(tmp, "page-iv-gated.json")
-    codes = [run("assertion_map", "--input", input_path, "--out", mapped)[0], run("gate_check", "--mapped", mapped, "--out", gated)[0]]
-    code, out, err = run("severity_rank", "--gates", gated, "--out", os.path.join(tmp, "page-iv-ranked.json"))
-    check("W3 non-numeric page label is a clean severity_rank input error",
-          codes == [0, 0] and code == 1 and "location.page must be an integer or null" in err
-          and "'iv'" in err and "Traceback" not in err + out, err)
+    code, out, err = run("assertion_map", "--input", input_path, "--out", os.path.join(tmp, "page-iv-mapped.json"))
+    check("W3 non-numeric page label is a clean input error at the first engine",
+          code == 1 and "location.page must be an integer or null" in err
+          and "'iv'" in err and "location.label" in err and "Traceback" not in err + out, err)
 
     ranked_b = read(os.path.join(ROOT, "demo-data", "scenario-b-drama", "expected", "gate-checked.json"))
+    bad = copy.deepcopy(ranked_b)
+    bad["findings"][0]["location"]["page"] = "iv"
+    bad_path = os.path.join(tmp, "bad-page-iv.json")
+    write(bad_path, bad)
+    code, out, err = run("severity_rank", "--gates", bad_path, "--out", os.path.join(tmp, "bad-page-iv-out.json"))
+    check("W3 non-numeric page label is a clean severity_rank input error",
+          code == 1 and "location.page must be an integer or null" in err and "'iv'" in err and "Traceback" not in err + out, err)
+
+    mapped_a = read(os.path.join(ROOT, "demo-data", "scenario-a-happy", "expected", "assertion-mapped.json"))
+    bad = copy.deepcopy(mapped_a)
+    bad["assertions"][0]["location"]["page"] = "iv"
+    bad_path = os.path.join(tmp, "bad-page-iv-mapped.json")
+    write(bad_path, bad)
+    code, out, err = run("gate_check", "--mapped", bad_path, "--out", os.path.join(tmp, "bad-page-iv-gated.json"))
+    check("W3 non-numeric page label is a clean gate_check input error",
+          code == 1 and "location.page must be an integer or null" in err and "Traceback" not in err + out, err)
     for label, mutate, expected in (
         ("paragraph", lambda f: f["location"].__setitem__("paragraph", "2a"), "location.paragraph must be an integer"),
         ("confidence", lambda f: f.__setitem__("confidence", "high"), "confidence must be a number"),
@@ -468,6 +505,211 @@ def g8_tests(tmp):
     hits = g8_findings(ranked)
     check("W9 evidence-index G8 hit uses no placeholder page",
           len(hits) == 1 and hits[0]["location"]["page"] is None and hits[0]["location"]["section"] == "Evidence index")
+
+
+def strictness_tests(tmp):
+    """1.0.3 code-review follow-up: wrong JSON types are input errors; unrecognised control values fail closed;
+    engine-owned AM findings and mappings are verified by recomputation, not by their self-declared source."""
+    base_a = read(os.path.join(ROOT, "demo-data", "scenario-a-happy", "review-input.json"))
+    mapped_a = read(os.path.join(ROOT, "demo-data", "scenario-a-happy", "expected", "assertion-mapped.json"))
+    mapped_b = read(os.path.join(ROOT, "demo-data", "scenario-b-drama", "expected", "assertion-mapped.json"))
+
+    def mutated(base, mutate):
+        packet = copy.deepcopy(base)
+        mutate(packet)
+        return packet
+
+    def ranked_with(label, mutate):
+        return read(chain_packet(mutated(base_a, mutate), tmp, f"strict-{label}")["ranked"])
+
+    # Item 1: recipient items and gate-critical assertion booleans.
+    for label, value in (("object", [{}]), ("integer", [123]), ("null-item", [None]), ("nested-list", [["Aster"]])):
+        engine, err = chain_error(mutated(base_a, lambda p, v=value: p["deliverable"].__setitem__("intended_recipients", v)), tmp, f"strict-recipient-{label}")
+        check(f"S1 intended_recipients {label} item is a clean input error end to end",
+              engine == "gate_check" and "intended_recipients[0] must be a string" in err, (engine, err))
+    engine, err = chain_error(mutated(base_a, lambda p: p["deliverable"].__setitem__("intended_recipients", "Aster management")), tmp, "strict-recipient-string")
+    check("S1 intended_recipients as a bare string is a clean input error",
+          engine == "gate_check" and "intended_recipients must be an array" in err, (engine, err))
+    ranked = ranked_with("recipient-blank", lambda p: p["deliverable"].__setitem__("intended_recipients", ["  "]))
+    check("S1 blank recipient string holds under G2",
+          "GC-G2-recipient-ambiguity" in finding_ids(ranked) and status(ranked) == "not_ready_for_release")
+    for label, value in (("string-false", "false"), ("zero", 0), ("null", None), ("string-true", "true")):
+        engine, err = chain_error(mutated(base_a, lambda p, v=value: p["assertions"][2].__setitem__("scope_aligned", v)), tmp, f"strict-scope-{label}")
+        check(f"S1 scope_aligned {label} is a clean input error end to end (assertion_map)",
+              engine == "assertion_map" and "scope_aligned must be true or false" in err, (engine, err))
+        err = gate_error(mutated(mapped_a, lambda p, v=value: p["assertions"][2].__setitem__("scope_aligned", v)), tmp, f"strict-scope-gate-{label}")
+        check(f"S1 scope_aligned {label} is a clean gate_check input error when mapping is bypassed",
+              err is not None and "scope_aligned must be true or false" in err, err)
+    for field in ("hedging_present", "limitation_present", "stated_basis"):
+        engine, err = chain_error(mutated(base_a, lambda p, f=field: p["assertions"][0].__setitem__(f, "false")), tmp, f"strict-{field}")
+        check(f"S1 {field} 'false' is a clean input error",
+              engine == "assertion_map" and f"{field} must be true or false" in err, (engine, err))
+    for label, value in (("string-false", "false"), ("null", None), ("zero", 0)):
+        engine, err = chain_error(mutated(base_a, lambda p, v=value: p["deliverable"].__setitem__("third_party_recipient_named", v)), tmp, f"strict-third-party-{label}")
+        check(f"S1 third_party_recipient_named {label} is a clean input error",
+              engine == "gate_check" and "third_party_recipient_named must be true or false" in err, (engine, err))
+    for label, value in (("other", "other"), ("blank", ""), ("null", None)):
+        ranked = ranked_with(f"disclaimer-{label}", lambda p, v=value: p["deliverable"].__setitem__("required_disclaimer_type", v))
+        check(f"S1 required_disclaimer_type {label} holds under G2 and escalates",
+              "GC-G2-disclaimer-type-unrecognised" in finding_ids(ranked) and status(ranked) == "not_ready_for_release"
+              and any(entry.startswith("G2: required_disclaimer_type") for entry in ranked["escalations"]))
+    engine, err = chain_error(mutated(base_a, lambda p: p["deliverable"].__setitem__("present_disclaimer_types", [1])), tmp, "strict-present-disclaimer")
+    check("S1 non-string present_disclaimer_types item is a clean input error",
+          engine == "gate_check" and "present_disclaimer_types[0] must be a string" in err, (engine, err))
+
+    # Item 2: register entry schemas.
+    def brand(**fields):
+        def apply(packet):
+            packet["deliverable"]["brand_checks"][0].update(fields)
+            for key, value in fields.items():
+                if value is ...:
+                    packet["deliverable"]["brand_checks"][0].pop(key)
+        return apply
+    for label, value, legal, severity, expected_status in (
+        ("unknown legal", "unknown", True, "release_blocker", "not_ready_for_release"),
+        ("blank legal", "", True, "release_blocker", "not_ready_for_release"),
+        ("absent legal", ..., True, "release_blocker", "not_ready_for_release"),
+        ("null legal", None, True, "release_blocker", "not_ready_for_release"),
+        ("FAIL legal", "FAIL", True, "release_blocker", "not_ready_for_release"),
+        ("unknown non-legal", "unknown", False, "must_fix", "partner_review_required_must_fix"),
+    ):
+        ranked = ranked_with(f"brand-{label.replace(' ', '-')}", brand(status=value, legal_or_release_control=legal))
+        finding = next((item for item in ranked["findings"] if item["finding_id"] == "GC-G5-appendix-footer"), None)
+        check(f"S2 brand_checks status {label} fails closed as {severity} and escalates",
+              finding is not None and finding["severity"] == severity and status(ranked) == expected_status
+              and any(entry.startswith("G5: brand check appendix-footer") for entry in ranked["escalations"]),
+              (status(ranked), finding and finding["severity"]))
+    ranked = ranked_with("brand-pass", brand(status="pass", legal_or_release_control=True))
+    check("S2 brand_checks status pass stays clean", not any(item["gate_id"] == "G5" for item in ranked["findings"]))
+    for label, mutate, expected in (
+        ("legal string", brand(legal_or_release_control="true"), "legal_or_release_control must be true or false"),
+        ("legal absent", brand(legal_or_release_control=...), "legal_or_release_control"),
+        ("status integer", brand(status=1), "status must be a string"),
+        ("check_id blank", brand(check_id=" "), "check_id"),
+        ("location string", brand(location="p14"), "location must be an object"),
+    ):
+        engine, err = chain_error(mutated(base_a, mutate), tmp, f"strict-brand-{label.replace(' ', '-')}")
+        check(f"S2 brand_checks {label} is a clean input error", engine == "gate_check" and expected in err, (engine, err))
+
+    def licensed(**fields):
+        def apply(packet):
+            entry = {"content_id": "LC-1", "attribution_present": False, "license_status": "unknown", "detail": "Chart reproduced from a third-party report."}
+            entry.update(fields)
+            for key in [key for key, value in entry.items() if value is ...]:
+                entry.pop(key)
+            packet["deliverable"]["licensed_content"] = [entry]
+        return apply
+    for label, value, severity, expected_status in (
+        ("not_assessed", "not_assessed", "release_blocker", "not_ready_for_release"),
+        ("blank", "", "release_blocker", "not_ready_for_release"),
+        ("absent", ..., "release_blocker", "not_ready_for_release"),
+        ("null", None, "release_blocker", "not_ready_for_release"),
+        ("unknown", "unknown", "release_blocker", "not_ready_for_release"),
+        ("known", "known", "must_fix", "partner_review_required_must_fix"),
+    ):
+        ranked = ranked_with(f"license-{label}", licensed(license_status=value))
+        finding = next((item for item in ranked["findings"] if item["finding_id"] == "GC-G6-LC-1"), None)
+        escalated = any(entry.startswith("G6: unattributed licensed content LC-1") for entry in ranked["escalations"])
+        check(f"S2 license_status {label} with attribution absent is {severity}",
+              finding is not None and finding["severity"] == severity and status(ranked) == expected_status
+              and escalated == (severity == "release_blocker"),
+              (status(ranked), finding and finding["severity"]))
+    ranked = ranked_with("license-attributed", licensed(attribution_present=True, license_status="not_assessed"))
+    check("S2 attributed licensed content stays clean", not any(item["gate_id"] == "G6" for item in ranked["findings"]))
+    for label, mutate, expected in (
+        ("attribution string", licensed(attribution_present="false"), "attribution_present must be true or false"),
+        ("attribution null", licensed(attribution_present=None), "attribution_present must be true or false"),
+        ("attribution absent", licensed(attribution_present=...), "attribution_present"),
+        ("license_status integer", licensed(license_status=0), "license_status must be a string"),
+    ):
+        engine, err = chain_error(mutated(base_a, mutate), tmp, f"strict-licensed-{label.replace(' ', '-')}")
+        check(f"S2 licensed_content {label} is a clean input error", engine == "gate_check" and expected in err, (engine, err))
+
+    for label, field, value, expected in (
+        ("document_fix_present string", "document_fix_present", "false", "document_fix_present must be true or false"),
+        ("document_fix_present null", "document_fix_present", None, "document_fix_present must be true or false"),
+        ("claimed_closed string", "claimed_closed", "true", "claimed_closed must be true or false"),
+        ("claimed_closed integer", "claimed_closed", 1, "claimed_closed must be true or false"),
+        ("finding_id blank", "finding_id", "", "finding_id"),
+    ):
+        engine, err = chain_error(mutated(base_a, lambda p, f=field, v=value: p["prior_findings"][0].__setitem__(f, v)), tmp, f"strict-prior-{label.replace(' ', '-')}")
+        check(f"S2 prior_findings {label} is a clean input error", engine == "gate_check" and expected in err, (engine, err))
+    engine, err = chain_error(mutated(base_a, lambda p: p["prior_findings"][0].pop("document_fix_present")), tmp, "strict-prior-absent")
+    check("S2 prior_findings missing document_fix_present is a clean input error",
+          engine == "gate_check" and "document_fix_present" in err, (engine, err))
+    ranked = ranked_with("prior-real-false", lambda p: p["prior_findings"][0].__setitem__("document_fix_present", False))
+    check("S2 prior_findings document_fix_present false still raises G7", "GC-G7-PR-A1" in finding_ids(ranked))
+    engine, err = chain_error(mutated(base_a, lambda p: p["deliverable"].__setitem__("required_language", [1])), tmp, "strict-required-language-item")
+    check("S2 non-string required_language item is a clean input error",
+          engine == "gate_check" and "required_language[0] must be a string" in err, (engine, err))
+
+    # Item 3: AM findings and mappings are verified by recomputation.
+    def tamper_a001(packet):
+        mapping = next(item for item in packet["assertion_mappings"] if item["assertion_id"] == "A-001")
+        mapping["support_status"] = "unsupported"
+        mapping["criteria_section"] = "quality-gate-criteria.md #3.2"
+        packet["findings"].append({"finding_id": "AM-A-001", "gate_id": "G1", "severity": "advisory", "title": "Minor", "detail": "Minor.", "location": mapping["location"], "criteria_section": "quality-gate-criteria.md #3.2", "confidence": 0.9, "source": "engine:assertion_map", "citation": "x"})
+    ranked = gate_from_mapped(mutated(mapped_a, tamper_a001), tmp, "strict-am-tamper")
+    restored = next(item for item in ranked["assertion_mappings"] if item["assertion_id"] == "A-001")
+    check("S3 AM finding with self-declared engine source but no recomputed match is discarded and held",
+          "AM-A-001" not in finding_ids(ranked) and "GC-G8-engine-id-spoof" in finding_ids(ranked)
+          and restored["support_status"] == "supported" and status(ranked) == "not_ready_for_release"
+          and any("AM-A-001" in entry and "engine-owned" in entry for entry in ranked["escalations"])
+          and any(entry.startswith("G8: assertion_map output for A-001") for entry in ranked["escalations"]),
+          [(item["finding_id"], item["severity"]) for item in ranked["findings"]])
+
+    def forge_mapping(packet):
+        mapping = next(item for item in packet["assertion_mappings"] if item["assertion_id"] == "A-002")
+        mapping["support_score"] = 0.99
+    ranked = gate_from_mapped(mutated(mapped_a, forge_mapping), tmp, "strict-am-forged-mapping")
+    check("S3 altered assertion mapping alone is restored and held",
+          "GC-G8-engine-id-spoof" in finding_ids(ranked) and status(ranked) == "not_ready_for_release"
+          and next(item for item in ranked["assertion_mappings"] if item["assertion_id"] == "A-002")["support_score"] == mapped_a["assertion_mappings"][1]["support_score"])
+
+    def downgrade_b002(packet):
+        next(item for item in packet["findings"] if item["finding_id"] == "AM-B-002")["severity"] = "advisory"
+    ranked = gate_from_mapped(mutated(mapped_b, downgrade_b002), tmp, "strict-am-downgrade")
+    b002 = next((item for item in ranked["findings"] if item["finding_id"] == "AM-B-002"), None)
+    check("S3 downgraded AM finding is replaced by the recomputed blocker and held",
+          b002 is not None and b002["severity"] == "release_blocker" and "GC-G8-engine-id-spoof" in finding_ids(ranked))
+
+    def delete_b002(packet):
+        packet["findings"] = [item for item in packet["findings"] if item["finding_id"] != "AM-B-002"]
+    ranked = gate_from_mapped(mutated(mapped_b, delete_b002), tmp, "strict-am-delete")
+    b002 = next((item for item in ranked["findings"] if item["finding_id"] == "AM-B-002"), None)
+    check("S3 deleted AM finding is reinstated from recomputation and held",
+          b002 is not None and b002["severity"] == "release_blocker" and "GC-G8-engine-id-spoof" in finding_ids(ranked)
+          and "GC-G3-B-002" not in finding_ids(ranked))
+
+    ranked = gate_from_mapped(copy.deepcopy(mapped_b), tmp, "strict-am-genuine")
+    check("S3 genuine assertion_map output passes through without a spoof hold",
+          "GC-G8-engine-id-spoof" not in finding_ids(ranked) and {"AM-B-001", "AM-B-002"}.issubset(finding_ids(ranked)))
+
+    ranked = gate_from_mapped(mutated(mapped_b, lambda p: p.__setitem__("evidence_set", None)), tmp, "strict-am-unverifiable")
+    check("S3 AM findings that cannot be verified (evidence index null) are discarded and held",
+          not any(item["finding_id"].startswith("AM-") for item in ranked["findings"])
+          and {"GC-G8-engine-id-spoof", "GC-G1-evidence-index-missing", "GC-G3-B-002"}.issubset(finding_ids(ranked)))
+
+    err = gate_error(mutated(mapped_a, lambda p: p.pop("assertion_mappings")), tmp, "strict-no-mappings")
+    check("S3 gate_check without assertion_mappings is a clean input error", err is not None and "assertion_map" in err, err)
+    err = gate_error(mutated(mapped_a, lambda p: (p.__setitem__("evidence_set", None), p["assertion_mappings"][0].__setitem__("support_status", "fine"))), tmp, "strict-unverified-status")
+    check("S3 unrecognised support_status on unverifiable mappings is a clean input error", err is not None and "support_status must be" in err, err)
+    err = gate_error(mutated(mapped_a, lambda p: p.__setitem__("evidence_set", "EV-A1")), tmp, "strict-evidence-string")
+    check("S3 non-array evidence_set at gate_check is a clean input error", err is not None and "evidence_set must be an array" in err, err)
+
+    # Sweep: other gate-read fields.
+    for label, mutate, expected in (
+        ("upstream gate_id", lambda p: p["findings"].append({"finding_id": "HR-1", "gate_id": "G9", "severity": "advisory", "title": "t", "detail": "d", "location": p["assertions"][0]["location"], "criteria_section": "c", "confidence": 0.9, "source": "skill:criteria-retrieve", "citation": "c"}), "gate_id"),
+        ("upstream severity", lambda p: p["findings"].append({"finding_id": "HR-1", "gate_id": "G5", "severity": "low", "title": "t", "detail": "d", "location": p["assertions"][0]["location"], "criteria_section": "c", "confidence": 0.9, "source": "skill:criteria-retrieve", "citation": "c"}), "unknown severity"),
+        ("evidence confidence", lambda p: p["evidence_set"][0].__setitem__("confidence", "0.9"), "confidence must be a number"),
+        ("evidence_ids item", lambda p: p["assertions"][0].__setitem__("evidence_ids", [1]), "evidence_ids"),
+        ("criteria_sections item", lambda p: p["criteria"].__setitem__("criteria_sections", [1]), "criteria_sections[0]"),
+        ("escalation item", lambda p: p["escalations"].append(5), "escalations"),
+        ("confidentiality marking", lambda p: p["deliverable"].__setitem__("confidentiality_marking", True), "confidentiality_marking must be a string"),
+        ("assertion text", lambda p: p["assertions"][0].__setitem__("text", 7), "text must be a string"),
+    ):
+        err = gate_error(mutated(mapped_a, mutate), tmp, f"strict-sweep-{label.replace(' ', '-')}")
+        check(f"S4 {label} of the wrong type is a clean gate_check input error", err is not None and expected in err and "malformed input" not in err, err)
 
 
 def tripwire_tests():
@@ -647,6 +889,7 @@ def main():
         register_tests(tmp)
         page_label_tests(tmp)
         g8_tests(tmp)
+        strictness_tests(tmp)
     tripwire_tests()
     packet_template_tests()
     skill_doc_tests()

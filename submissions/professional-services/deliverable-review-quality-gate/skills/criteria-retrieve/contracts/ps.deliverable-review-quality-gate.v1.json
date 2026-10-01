@@ -17,16 +17,52 @@
         "title": { "type": "string" },
         "version": { "type": "string" },
         "type": { "type": "string" },
-        "intended_recipients": { "type": "array", "items": { "type": "string" } },
-        "third_party_recipient_named": { "type": "boolean" },
+        "intended_recipients": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Every entry must be a JSON string; any other entry type is an input error. Absent or null, empty, blank-entry or ambiguous lists hold under G2 (quality-gate-criteria.md #2.4)." },
+        "third_party_recipient_named": { "type": "boolean", "description": "JSON true/false only; omit when unknown. null, text or numbers are input errors." },
         "confidentiality_marking": { "type": "string" },
         "client_data_handling": { "enum": ["ok", "attention", "breach", "unknown"], "default": "unknown", "description": "Set by deliverable-ingest from the source/client-data register; use unknown when the register cannot confirm safe handling. Missing is not equivalent to ok. Only ok is clean; attention is a G4 must-fix; breach, unknown, blank, null or any unrecognised value is a G4 release blocker; every non-ok value is escalated." },
-        "required_disclaimer_type": { "enum": ["general_advice", "reliance_restriction"] },
+        "required_disclaimer_type": { "enum": ["general_advice", "reliance_restriction"], "description": "Absent, null, blank or any other value is a G2 release blocker with an escalation (quality-gate-criteria.md #2.4); a non-string is an input error." },
         "present_disclaimer_types": { "type": "array", "items": { "type": "string" } },
         "required_language": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error." },
         "present_language": { "type": "array", "items": { "type": "string" } },
-        "brand_checks": { "type": ["array", "null"], "items": { "type": "object" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error." },
-        "licensed_content": { "type": ["array", "null"], "items": { "type": "object" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error." },
+        "brand_checks": {
+          "type": ["array", "null"],
+          "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error.",
+          "items": {
+            "type": "object",
+            "required": ["check_id", "legal_or_release_control"],
+            "properties": {
+              "check_id": { "type": "string", "minLength": 1 },
+              "status": { "enum": ["pass", "fail"], "description": "Only pass and fail are recognised. Absent, null, blank or any other string means not verified: a G5 release blocker when legal_or_release_control is true, otherwise a must-fix, always escalated (quality-gate-criteria.md #5.3). A non-string is an input error." },
+              "legal_or_release_control": { "type": "boolean", "description": "Required JSON true/false; text, numbers or null are input errors." },
+              "title": { "type": "string" },
+              "detail": { "type": "string" },
+              "location": { "$ref": "#/definitions/location" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "source": { "type": "string" },
+              "citation": { "type": "string" }
+            }
+          }
+        },
+        "licensed_content": {
+          "type": ["array", "null"],
+          "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error.",
+          "items": {
+            "type": "object",
+            "required": ["content_id", "attribution_present"],
+            "properties": {
+              "content_id": { "type": "string", "minLength": 1 },
+              "attribution_present": { "type": "boolean", "description": "Required JSON true/false; text, numbers or null are input errors." },
+              "license_status": { "enum": ["known", "unknown"], "description": "Closed enum. Absent, null, blank or any other string is treated as unknown, so unattributed content is a G6 release blocker with an escalation (quality-gate-criteria.md #6.3). A non-string is an input error." },
+              "title": { "type": "string" },
+              "detail": { "type": "string" },
+              "location": { "$ref": "#/definitions/location" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "source": { "type": "string" },
+              "citation": { "type": "string" }
+            }
+          }
+        },
         "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
         "citation": { "type": "string" },
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
@@ -37,6 +73,7 @@
       "type": "array",
       "items": {
         "type": "object",
+        "description": "Boolean flags (hedging_present, limitation_present, stated_basis, scope_aligned) must be JSON true/false when present; omit a flag when unknown. null, text such as \"false\" or numbers are input errors, never coerced.",
         "required": ["assertion_id", "class", "text", "location", "confidence", "source", "citation"],
         "properties": {
           "assertion_id": { "type": "string" },
@@ -56,9 +93,41 @@
         }
       }
     },
-    "evidence_set": { "type": ["array", "null"], "items": { "type": "object" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error. Every string, including citation, is scanned by the G8 tripwire." },
-    "prior_findings": { "type": ["array", "null"], "items": { "type": "object" }, "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error." },
-    "assertion_mappings": { "type": "array", "items": { "type": "object" } },
+    "evidence_set": {
+      "type": ["array", "null"],
+      "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error. Every string, including citation, is scanned by the G8 tripwire.",
+      "items": {
+        "type": "object",
+        "required": ["evidence_id"],
+        "properties": {
+          "evidence_id": { "type": "string", "minLength": 1 },
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "prior_findings": {
+      "type": ["array", "null"],
+      "description": "Absent or null means the register was not loaded: gate-check holds with the register-missing finding and an escalation. An explicit empty array means checked with no entries. Any other type is an input error.",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "claimed_closed", "document_fix_present"],
+        "properties": {
+          "finding_id": { "type": "string", "minLength": 1 },
+          "claimed_closed": { "type": "boolean", "description": "Required JSON true/false; text, numbers or null are input errors (quality-gate-criteria.md #7.3)." },
+          "document_fix_present": { "type": "boolean", "description": "Required JSON true/false; text, numbers or null are input errors (quality-gate-criteria.md #7.3)." },
+          "detail": { "type": "string" },
+          "location": { "$ref": "#/definitions/location" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "assertion_mappings": { "type": "array", "items": { "type": "object" }, "description": "Required by gate-check (run assertion_map first). gate-check recomputes the mappings and AM- findings from assertions and evidence_set; any mapping or AM- finding that does not match recomputation is restored and raises a G8 spoof hold (quality-gate-criteria.md #8.4)." },
     "gate_results": { "type": "array", "items": { "type": "object" } },
     "findings": {
       "type": "array",
@@ -66,8 +135,8 @@
         "type": "object",
         "required": ["finding_id", "gate_id", "severity", "location", "criteria_section", "confidence", "source", "citation"],
         "properties": {
-          "finding_id": { "type": "string", "description": "Prefixes GC- (gate_check) and AM- (assertion_map, source engine:assertion_map) are engine-owned. Upstream findings that reuse them are ignored and raise a G8 spoof hold; a duplicate finding_id never lowers severity." },
-          "gate_id": { "type": "string" },
+          "finding_id": { "type": "string", "description": "Prefixes GC- (gate_check) and AM- (assertion_map) are engine-owned. A GC- finding, or an AM- finding that does not exactly match gate-check's recomputation of assertion_map output, is ignored and raises a G8 spoof hold; the source tag is never trusted. A duplicate finding_id never lowers severity." },
+          "gate_id": { "enum": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"] },
           "severity": { "enum": ["release_blocker", "must_fix", "advisory"] },
           "title": { "type": "string" },
           "detail": { "type": "string" },
