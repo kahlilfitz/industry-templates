@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "draftFirst": true,
+  "unknownWallStatus": "hold",
+  "missingWallRegister": "hold",
+  "staffingSlate": "recommendation_until_confirmed"
+}

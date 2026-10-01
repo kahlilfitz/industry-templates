@@ -1,0 +1,322 @@
+{
+  "contract_version": "ps.engagement-mobilization-onboarding-pack.v1",
+  "run_metadata": {
+    "generated_at": "2026-10-01T00:00:00Z",
+    "demo_scenario": "scenario-a-happy"
+  },
+  "engagement": {
+    "engagement_id": "MOB-ORC-1042",
+    "matter_id": "ORC-1042-MOB",
+    "title": "Patient access operating model mobilization",
+    "client_name": "Orchard Ridge Clinics",
+    "sector": "healthcare",
+    "region": "Midwest US",
+    "source": "engine:scope_digest",
+    "confidence": 0.95,
+    "citation": "raw/sow-extract.md header; raw/pursuit-record.md context"
+  },
+  "joiner": {
+    "person": "Taylor Reed",
+    "role": "Delivery analyst",
+    "responsibilities": [
+      "Supports stakeholder map",
+      "prepares governance notes"
+    ],
+    "point_of_contact": "Ava Morgan",
+    "onboarding_status": "joining",
+    "assignment_status": "confirmed",
+    "source": "raw:confirmed-roster.csv",
+    "confidence": 0.97,
+    "citation": "raw/confirmed-roster.csv row 4"
+  },
+  "scope_summary": {
+    "objectives": [
+      "Mobilize the patient access workstream",
+      "prepare data migration readiness",
+      "align clinic leads on launch governance"
+    ],
+    "in_scope": [
+      "Patient access current-state review",
+      "data migration planning",
+      "stakeholder interview schedule",
+      "first sprint backlog"
+    ],
+    "exclusions": [
+      "Billing system configuration",
+      "production cutover execution"
+    ],
+    "deliverables": [
+      "Mobilization charter",
+      "stakeholder map",
+      "data migration readiness checklist",
+      "weekly governance cadence"
+    ],
+    "key_dates": [
+      "2026-10-05 kickoff",
+      "2026-10-12 data workstream start",
+      "2026-10-16 first governance huddle"
+    ],
+    "systems": [
+      "Engagement SharePoint",
+      "Delivery Planner",
+      "Client Teams channel",
+      "Knowledge Repository"
+    ],
+    "first_week_focus": [
+      "Review SOW scope and exclusions",
+      "meet delivery manager and data lead",
+      "read cleared onboarding checklist",
+      "request viewer/member access only",
+      "attend first governance huddle"
+    ],
+    "source": "engine:scope_digest",
+    "confidence": 0.94,
+    "citation": "raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"
+  },
+  "engagement_terms": {
+    "confidentiality_terms": [
+      "Client information is internal to the engagement team",
+      "prior knowledge may be used only when sanitised and cleared for internal engagement reuse."
+    ],
+    "ethical_wall_terms": [
+      "Team members must be checked against the firm wall register before receiving prior engagement materials or client-confidential workspace access."
+    ],
+    "source": "raw:engagement-letter-extract.md",
+    "confidence": 0.93,
+    "citation": "raw/engagement-letter-extract.md"
+  },
+  "team_roster": [
+    {
+      "person": "Ava Morgan",
+      "role": "Client delivery manager",
+      "responsibilities": [
+        "Owns mobilization cadence",
+        "approves first-week plan"
+      ],
+      "point_of_contact": "Engagement partner",
+      "onboarding_status": "active",
+      "assignment_status": "confirmed",
+      "source": "raw:confirmed-roster.csv",
+      "confidence": 0.97,
+      "citation": "raw/confirmed-roster.csv row 2"
+    },
+    {
+      "person": "Leo Brooks",
+      "role": "Data migration consultant",
+      "responsibilities": [
+        "Leads data readiness checklist",
+        "coordinates source extracts"
+      ],
+      "point_of_contact": "Ava Morgan",
+      "onboarding_status": "active",
+      "assignment_status": "confirmed",
+      "source": "raw:confirmed-roster.csv",
+      "confidence": 0.97,
+      "citation": "raw/confirmed-roster.csv row 3"
+    },
+    {
+      "person": "Taylor Reed",
+      "role": "Delivery analyst",
+      "responsibilities": [
+        "Supports stakeholder map",
+        "prepares governance notes"
+      ],
+      "point_of_contact": "Ava Morgan",
+      "onboarding_status": "joining",
+      "assignment_status": "confirmed",
+      "source": "raw:confirmed-roster.csv",
+      "confidence": 0.97,
+      "citation": "raw/confirmed-roster.csv row 4"
+    }
+  ],
+  "proposed_staffing": [],
+  "staffing_exclusions": [],
+  "escalations": [],
+  "holds": [],
+  "provenance": {
+    "engines": [
+      "scope_digest/1.0.0",
+      "knowledge_match/1.0.0",
+      "wall_check/1.0.0",
+      "access_checklist/1.0.0"
+    ],
+    "generated_at": "2026-10-01T00:00:00Z",
+    "sources": [
+      "raw/sow-extract.md",
+      "raw/engagement-letter-extract.md",
+      "raw/pursuit-record.md",
+      "raw/confirmed-roster.csv",
+      "upstream/staffing"
+    ]
+  },
+  "prior_knowledge_candidates": [
+    {
+      "knowledge_id": "AST-A-001",
+      "title": "Patient access onboarding checklist",
+      "summary": "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.",
+      "relevance_score": 0.79,
+      "matched_terms": [
+        "access",
+        "checklist",
+        "patient"
+      ],
+      "clearance_state": "RELEASE_CANDIDATE_SANITISED",
+      "confidentiality_permission": "release_candidate_state",
+      "review_status": "pending_practice_review",
+      "source": "adapter:closeout-governed.knowledge_record",
+      "confidence": 0.93,
+      "citations": [
+        "upstream closeout AST-A-001",
+        "upstream released_assets AST-A-001",
+        "knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"
+      ]
+    },
+    {
+      "knowledge_id": "LC-A-001",
+      "title": "Lesson: mobilization-governance",
+      "summary": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
+      "relevance_score": 0.71,
+      "matched_terms": [
+        "governance",
+        "mobilization"
+      ],
+      "clearance_state": "LESSON_FOR_INTERNAL_DRAFT",
+      "confidentiality_permission": "closeout_governed_lesson",
+      "review_status": "cleared_for_internal_reuse",
+      "source": "adapter:closeout-governed.knowledge_record.lessons",
+      "confidence": 0.88,
+      "citations": [
+        "synthetic decision log row 4",
+        "upstream closeout LC-A-001",
+        "knowledge-reuse-rules.md #2.2,#2.4,#3.2"
+      ]
+    }
+  ],
+  "knowledge_digest": {
+    "status": "ready",
+    "items": [
+      {
+        "knowledge_id": "AST-A-001",
+        "title": "Patient access onboarding checklist",
+        "summary": "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.",
+        "relevance_score": 0.79,
+        "matched_terms": [
+          "access",
+          "checklist",
+          "patient"
+        ],
+        "clearance_state": "RELEASE_CANDIDATE_SANITISED",
+        "confidentiality_permission": "release_candidate_state",
+        "review_status": "pending_practice_review",
+        "source": "adapter:closeout-governed.knowledge_record",
+        "confidence": 0.93,
+        "citations": [
+          "upstream closeout AST-A-001",
+          "upstream released_assets AST-A-001",
+          "knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"
+        ]
+      },
+      {
+        "knowledge_id": "LC-A-001",
+        "title": "Lesson: mobilization-governance",
+        "summary": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
+        "relevance_score": 0.71,
+        "matched_terms": [
+          "governance",
+          "mobilization"
+        ],
+        "clearance_state": "LESSON_FOR_INTERNAL_DRAFT",
+        "confidentiality_permission": "closeout_governed_lesson",
+        "review_status": "cleared_for_internal_reuse",
+        "source": "adapter:closeout-governed.knowledge_record.lessons",
+        "confidence": 0.88,
+        "citations": [
+          "synthetic decision log row 4",
+          "upstream closeout LC-A-001",
+          "knowledge-reuse-rules.md #2.2,#2.4,#3.2"
+        ]
+      }
+    ],
+    "excluded_items": [],
+    "source": "engine:knowledge_match",
+    "confidence": 0.92,
+    "citation": "knowledge-reuse-rules.md #1.1-#3.2"
+  },
+  "wall_decision": {
+    "status": "clear",
+    "reason": "wall register marks joiner clear for this client/matter",
+    "allowed_knowledge_ids": [
+      "AST-A-001",
+      "LC-A-001"
+    ],
+    "denied_knowledge_ids": [],
+    "denied_workspace_ids": [],
+    "held_workspace_ids": [],
+    "may_not_access_discuss": [],
+    "source": "engine:wall_check",
+    "confidence": 0.98,
+    "citation": "raw/ethical-wall-register.csv row 2"
+  },
+  "access_checklist": [
+    {
+      "workspace_id": "WS-A-SP",
+      "workspace_name": "ORC Engagement SharePoint",
+      "workspace_type": "engagement-sharepoint",
+      "status": "request",
+      "requested_permission": "viewer",
+      "reason": "role matrix allows requested workspace access",
+      "source": "engine:access_checklist",
+      "confidence": 0.96,
+      "citation": "raw/workspace-inventory.csv row 2; role-access-matrix.md #2.1; workspace-inventory-rules.md #3.1"
+    },
+    {
+      "workspace_id": "WS-A-PLAN",
+      "workspace_name": "ORC Delivery Planner",
+      "workspace_type": "delivery-planner",
+      "status": "request",
+      "requested_permission": "viewer",
+      "reason": "role matrix allows requested workspace access",
+      "source": "engine:access_checklist",
+      "confidence": 0.96,
+      "citation": "raw/workspace-inventory.csv row 3; role-access-matrix.md #2.1; workspace-inventory-rules.md #3.1"
+    },
+    {
+      "workspace_id": "WS-A-TEAMS",
+      "workspace_name": "ORC Team Channel",
+      "workspace_type": "client-teams-channel",
+      "status": "request",
+      "requested_permission": "member",
+      "reason": "role matrix allows requested workspace access",
+      "source": "engine:access_checklist",
+      "confidence": 0.96,
+      "citation": "raw/workspace-inventory.csv row 4; role-access-matrix.md #2.1; workspace-inventory-rules.md #3.1"
+    },
+    {
+      "workspace_id": "WS-A-KNOW",
+      "workspace_name": "Cleared Healthcare Mobilization Knowledge",
+      "workspace_type": "knowledge-repository",
+      "status": "request",
+      "requested_permission": "viewer",
+      "reason": "role matrix allows requested workspace access",
+      "source": "engine:access_checklist",
+      "confidence": 0.96,
+      "citation": "raw/workspace-inventory.csv row 5; role-access-matrix.md #2.1; workspace-inventory-rules.md #3.1"
+    }
+  ],
+  "mobilization_pack": {
+    "status": "draft_internal_only",
+    "label": "DRAFT - for internal review only. Do not send to the client or provision access.",
+    "sections": [
+      "client_context",
+      "scope",
+      "prior_knowledge",
+      "team_roster",
+      "access_checklist",
+      "wall_briefing",
+      "first_week_plan"
+    ],
+    "source": "engine:access_checklist",
+    "confidence": 0.94,
+    "citation": "workspace-inventory-rules.md #3.1; confidentiality-and-ethical-wall-rules.md #3.1"
+  }
+}

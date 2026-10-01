@@ -1,0 +1,21 @@
+{
+  "name": "Engagement Mobilization & Onboarding Pack",
+  "description": "Assemble a governed Professional Services mobilization pack for joiners with cleared knowledge, roster, access checklist and ethical-wall briefing.",
+  "industry": "Professional Services",
+  "platforms": [
+    "Cowork"
+  ],
+  "tags": [
+    "mobilization",
+    "onboarding",
+    "knowledge-reuse",
+    "ethical-wall",
+    "access-checklist"
+  ],
+  "author": "Kahlil Fitzgerald",
+  "authorUrl": "https://github.com/kahlilfitz",
+  "version": "1.0.0",
+  "createdAt": "2026-10-01",
+  "updatedAt": "2026-10-01",
+  "bundleTests": true
+}
