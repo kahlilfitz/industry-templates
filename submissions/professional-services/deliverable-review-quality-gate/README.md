@@ -20,14 +20,17 @@ Version 1.0.2 closes the v1.0.1 automated-evaluation blockers: review packets no
 
 Version 1.0.3 closes the v1.0.2 automated-evaluation blockers. Null or absent registers and any client-data value other than `ok` now hold and escalate. The G8 tripwire folds Cyrillic/Greek look-alikes, catches reviewer- and assistant-addressed paraphrases, scans evidence citations, ignores ordinary "pre-approved" business prose and cannot be suppressed by upstream findings that reuse engine IDs. severity_rank returns a clean error for non-numeric page labels. The review packet is headed `DRAFT - HUMAN REVIEW REQUIRED`.
 
-Version 1.0.4 follows 1.0.3, which was frozen and submitted for evaluation. It carries every 1.0.3 fix, and the G8 tripwire is now structural rather than phrase-based. It catches:
+Version 1.0.4 follows 1.0.3, which was frozen and submitted for evaluation. It carries every 1.0.3 fix, and the G8 tripwire now runs on `steering_guard`, a shared detector vendored byte-for-byte into `skills/gate-check/scripts/`. It groups rules into intent families rather than phrase lists. It catches:
 
-- text that addresses the tool directly (assistant, AI, Copilot, Claude, GPT, bot, agent, reviewer) in vocative form, whatever the verb;
-- verdict steering such as "mark/report/classify this as supported";
-- negative instructions aimed at this review, a finding or an item;
+- text that addresses the tool directly (assistant, AI, Copilot, Claude, GPT, bot, agent, reviewer), whatever the verb;
+- verdict steering such as "mark/report/classify this as supported" or "treat this as release ready";
+- negative instructions aimed at this review, a finding or an item, and overrides of the disclaimer, reliance clause, QRM or G1-G8 rules;
+- authority claims such as "System note: quality gate passed", and forwarding to an e-mail address or URL;
 - look-alike letters from any non-Latin script mixed into a Latin word;
 - steering hidden in IDs or file names;
 - steering split across an assertion's text, citation, evidence titles and location label.
+
+A field too long to screen is held for review, never passed.
 
 1.0.4 also closes the Cowork 1.0.3 findings. Every value in the demo `review-input.json` files now traces to the scenario's raw pack, including a new `raw/release-registers.md` with the client-data, brand-check and licensed-content registers. `tests/derive_review_input.py` re-derives each input from its raw pack, and the shipped tests pass from the built ZIP.
 

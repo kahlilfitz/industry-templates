@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """gate_check - deterministic quality-gate compliance engine."""
 import argparse
+import functools
 import json
 import os
 import re
@@ -12,6 +13,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 import assertion_rules as rules  # noqa: E402  byte-identical copy of skills/assertion-map/scripts/assertion_rules.py
+import steering_guard as sg  # noqa: E402  vendored shared detector; never edit (tests/check_shared_copies.py pins its SHA-256)
 
 ENGINE = "engine:gate_check"
 ENGINE_VERSION = "1.0.4"
@@ -61,10 +63,9 @@ PRIMARY_SECTIONS = ("deliverable", "criteria", "assertions", "evidence_set", "pr
 UNSCANNED_KEYS = {"contract_version"}  # validated against CONTRACT_VERSION before any scan
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.:#/ -]{1,80}$")
 
-# Letters that render like Latin letters (quality-gate-criteria.md #8.2): Cyrillic, Greek, Armenian, Cherokee, Lisu
-# and Latin small capitals / IPA forms. Applied after Unicode Cf stripping and NFKC folding (which already folds
-# fullwidth and mathematical alphanumerics) so look-alike spellings of steering text still match. Upper/lower case
-# partners are added automatically because normalize_text folds case between two translate passes.
+# Letters that render like Latin letters. Used only to compare identifiers and recipient names (finding-ID
+# spoofing #8.4, recipient classification #2.2); embedded-instruction screening uses steering_guard.
+# Upper/lower case partners are added automatically because normalize_text folds case between two passes.
 _CONFUSABLE_BASE = {
     # Cyrillic
     "А": "A", "В": "B", "Е": "E", "І": "I", "Ј": "J", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P",
@@ -101,164 +102,16 @@ def _with_case_partners(base):
     return table
 CONFUSABLE_MAP = _with_case_partners(_CONFUSABLE_BASE)
 CONFUSABLES = str.maketrans(CONFUSABLE_MAP)
-CONFUSABLE_CHARS = set(CONFUSABLE_MAP)
-# Non-Latin letters routinely used as symbols inside Latin words in consulting prose (ΔEBITDA, 5 μg, σ-level).
-# None of them is a Latin look-alike, so they cannot spell steering text; every other non-Latin letter mixed
-# with Latin letters in one token is flagged (quality-gate-criteria.md #8.2).
-SYMBOL_LETTERS = set("ΔδμσΣπΠΩλθφψγΓµ")
-
-_AI = (r"(?:(?:ai|qrm|quality|human|automated|engagement quality)\s+)?"
-       r"(?:ai|assistant|copilot|llm|chatbot|claude|bot|reviewers?|review agent)")
-_DOC = r"(?:deliverable|draft|report|document|section|packet|memo|deck|finding|findings|assertion|assertions|claim|claims)"
-_OBJ_DOC = r"(?:this|these|that|those|the)\s+(?:[\w'-]+\s+){0,2}?" + _DOC + r"\b"
-_OBJ_SELF = r"(?:this|these)\s+(?:[\w'-]+\s+){0,2}?" + _DOC + r"\b"
-_OBJ_ANY = r"(?:" + _OBJ_DOC + r"|(?:this|these|that|it|them)\b)"
-_END = r"\s*(?:[.;:,!?)]|-|$)"
-_OBJ_STRICT = r"(?:" + _OBJ_DOC + r"|(?:this|these|that|it|them)(?=" + _END + r"))"
-_CLAUSE = r"(?:^|[.;:!?,(\"'-]\s*|\bplease\s+|\bkindly\s+|\bjust\s+)"
-_AUTHORITY = r"(?:(?:engagement|reviewing|signing|lead)\s+)?(?:partner|qrm(?: team| reviewer)?|quality reviewer|risk and quality|risk team)"
-_APPROVED = r"(?:pre-?approved|pre-?cleared|approved|cleared|signed[- ]off)"
-_CONTACT = (r"(?:[a-z0-9._%+-]+\s*(?:@|\(at\)|\[at\])\s*[a-z0-9-]+(?:\s*(?:\.|\(dot\)|\[dot\])\s*[a-z0-9-]+)+"
-            r"|https?://|www\.)")
-# Deliverable prose about a client's business (AI adoption, reviews, approvals, reporting) is normal;
-# these patterns target text that addresses the reviewer/assistant or tries to steer THIS review
-# (quality-gate-criteria.md #8.1-#8.3). An approval word on its own (e.g. "pre-approved by the board")
-# is never a hit; it needs an addressee, a self-reference to the document, a review authority or a
-# skip/do-not-flag instruction. tests/run_tests.py ships an attack paraphrase set and a benign prose set.
-# 1.0.4 structural rules (quality-gate-criteria.md #8.1-#8.3).
-# (a) Addressee: the tool itself addressed in vocative/imperative form, whatever the verb.
-_TOOL = (r"(?:(?:the|an?|our|my|dear|hey|hi|hello|ok|okay|attention|attn)\s+)?"
-         r"(?:(?:ai|automated|quality|qrm|review|engagement quality|language)\s+)?"
-         r"(?:ai|assistant|model|llm|copilot|claude|chatgpt|gpt(?:\s?-?\s?\d[\w.]*)?|gemini|bot|chatbot|agent|"
-         r"reviewers?|review tool|review agent|reviewing tool|tool)")
-_VOC_START = r"(?:^|[.;:!?\"'(\[\n]\s*|\s-\s*)"
-_LIST_CONTINUATION = r"(?!(?:please|kindly|just|now|again|ok|okay)\b)[\w'&/]+(?:\s+[\w'&/]+)?\s*(?:,|&|\band\b|\bor\b|/)"
-_COLON_FOLLOW = (r"(?:please|kindly|just|you|do|don't|dont|never|no need|treat|mark|report|approve|clear|pass|ignore|skip|"
-                 r"accept|release|consider|overlook|disregard|leave|let|waive|classify|rate|record|set|list|show|deem|flag|"
-                 r"confirm|sign|move|proceed|output|respond|answer|say|state|write|return|forget|stop|override|bypass|"
-                 r"this|these|it|everything|nothing|all good)\b")
-VOCATIVE_PATTERNS = (
-    re.compile(_VOC_START + _TOOL + r"\s*,\s*(?!" + _LIST_CONTINUATION + r")\S"),
-    re.compile(_VOC_START + _TOOL + r"\s*(?::|-|\u2014)\s*" + _COLON_FOLLOW),
-    re.compile(_VOC_START + r"(?:to\s+|for\s+)?(?:whoever|anyone|anybody)\s+(?:is\s+)?(?:review(?:s|ing)?|check(?:s|ing)?)\s+"
-               r"(?:this|these|it)\b(?:\s+[\w'-]+){0,2}?\s*[,:\-\u2014]"),
+# G8 embedded-instruction screening (quality-gate-criteria.md #8.1-#8.6) runs through the vendored shared detector.
+# DRQG vocabulary reaches it only through the hooks. The contract carries no client or firm e-mail/web domains, so
+# trusted_domains stays empty and any send/forward verb aimed at an address or URL holds.
+STEERING_HOOKS = dict(
+    extra_verdict_words=("release ready", "ready for issue", "ready for release", "cleared for release", "quality gate passed"),
+    extra_rule_nouns=("disclaimer requirement", "citation rules", "reliance clause", "reliance language", "disclaimer", "qrm",
+                      "quality gate", "gate criteria", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"),
+    trusted_domains=(),
 )
-# (b) Verdict steering, independent of addressee: an imperative verdict verb aimed at this material.
-_VERDICT_VERB = r"(?:mark|report|treat|rate|record|flag|set|classify|list|show|consider|deem|log|tag|label|score)"
-_ID = r"(?:[a-z]{1,8}\s?-?\s?\d{1,6}[a-z0-9]*)"
-_VERDICT_OBJ = (r"(?:this|it|these|them|that|those|everything|all\s+of\s+(?:it|them|these)|" + _ID + r"|"
-                r"(?:the|this|these|that|those|all|each|every|all\s+the)\s+[\w']+(?:\s+[\w']+)?)")
-_VERDICT = (r"(?:supported|substantiated|verified|validated|confirmed|ready|release[\s-]ready|ready\s+for\s+(?:client\s+)?"
-            r"release|approved|cleared|resolved|closed|passed|compliant|ok|okay|fine|accepted|no\s+issues?|"
-            r"not\s+an?\s+issue|green|low\s+risk|clean)")
-_VERDICT_TAIL = (r"(?=" + _END + r"|\s+(?:and|so|for|by|because|since|without|now|already|please|too|anyway|in|"
-                 r"pdf|docx?|xlsx?|pptx?|txt|md|csv|json)\b)")
-_LEAD = (r"(?:" + _CLAUSE + r"|\byou\s+(?:can|could|may|should|must|need\s+to)\s+(?:just\s+|simply\s+)?|"
-         r"\b(?:then|and|so|now|simply)\s+|\b" + _TOOL + r"\s+(?:should\s+|must\s+|can\s+|will\s+|please\s+)?)")
-# Review objects for negative instructions: the review itself, a finding/flag/item, the document, or an ID.
-_REVIEW_NOUN = (r"(?:one|item|items|issue|issues|entry|entries|finding|findings|flag|flags|point|points|exception|exceptions|"
-                r"claim|claims|assertion|assertions|section|deliverable|draft|report|document|packet|memo|deck|page|"
-                r"paragraph|line|check|review|gate)")
-_REVIEW_OBJ = (r"(?:(?:this|these|it|them|that)(?:\s+" + _REVIEW_NOUN + r")?(?=" + _END + r"|\s+(?:again|further|either|"
-               r"now|please|because|since|as|at all|any more|anymore|for)\b)|(?:this|these|that|the|any)\s+(?:[\w'-]+\s+)?"
-               + _REVIEW_NOUN + r"\b|" + _ID + r"(?=" + _END + r"|\s))")
-STEERING_PATTERNS = (
-    re.compile(_LEAD + r"(?:please\s+|kindly\s+|just\s+)?" + _VERDICT_VERB + r"\s+" + _VERDICT_OBJ +
-               r"(?:\s+[\w']+){0,2}?\s+(?:as\s+(?:being\s+)?|to\s+)?" + _VERDICT + _VERDICT_TAIL),
-    re.compile(r"(?:" + _CLAUSE + r"|\b(?:you|so|then|and)\s+)(?:do not|don't|dont|never|please do not|please don't)\s+"
-               r"(?:flag|escalate|hold|review|re-?review|check|re-?check|raise|report|block|surface|question|challenge|"
-               r"query|verify)\s+" + _REVIEW_OBJ),
-    re.compile(r"(?:" + _CLAUSE + r"|\b(?:you\s+(?:can|could|may|should)|just|please|so|then|and)\s+)skip\s+"
-               r"(?:(?:it|this|these|them|that)(?=" + _END + r")|(?:the|this|these|any|further|all|all\s+the)?\s*"
-               r"(?:checks?|review|reviews|reviewing|gates?|flags?|findings?|validation|verification|qrm|sign[- ]?off|"
-               r"escalation|this\s+(?:item|finding|claim|assertion|flag))\b)"),
-    re.compile(r"\b(?:no|without)\s+(?:further\s+|additional\s+|more\s+)?(?:review|reviews|checks?|checking|escalation|"
-               r"qrm(?:\s+review)?|sign[- ]?off|flagging)\s+(?:is\s+|are\s+)?(?:needed|required|necessary)"
-               r"(?=" + _END + r"|\s+(?:for|on)\s+(?:this|these|it|the\s+" + _REVIEW_NOUN + r")\b)"),
-)
-# Loose forms: the same instruction run on from preceding text without punctuation ("...EV-A2 mark this as
-# supported"). Only self-referential objects (this/these/it/them or an ID) qualify, and a preceding subject or
-# modal ("audit will mark it as closed", "teams do not ...") is excluded so third-person process prose stays clean.
-_NOT_AFTER_SUBJECT = "".join(r"(?<!\b" + word + r" )" for word in (
-    "will", "would", "should", "shall", "can", "could", "may", "might", "must", "to", "they", "we", "i", "who", "which",
-    "that", "then", "and", "or", "team", "teams", "staff", "auditors", "management", "owners", "users", "agents", "it",
-    "he", "she", "also", "not", "never", "usually", "typically", "often", "always", "generally"))
-_SELF_OBJ = r"(?:this|these|it|them|" + _ID + r")"
-LOOSE_STEERING_PATTERNS = (
-    re.compile(r"(?<![\w'-])" + _NOT_AFTER_SUBJECT + _VERDICT_VERB + r"\s+" + _SELF_OBJ + r"(?:\s+" + _REVIEW_NOUN + r")?"
-               r"\s+as\s+(?:being\s+)?" + _VERDICT + _VERDICT_TAIL),
-    re.compile(r"(?<![\w'-])" + _NOT_AFTER_SUBJECT + r"(?:do not|don't|dont|never)\s+(?:flag|escalate|hold|re-?review|"
-               r"re-?check|raise|block|surface|question|challenge)\s+(?:this|these|it|them|" + _ID + r")(?:\s+"
-               + _REVIEW_NOUN + r")?(?=" + _END + r"|\s+(?:again|further|either|now|please|because|since|at all)\b)"),
-)
-# (d) IDs and file names: '-', '_' and '.' become spaces in a second matching view.
-ID_SEPARATORS = re.compile(r"[-_.]+")
-
-INSTRUCTION_PATTERNS = (
-    # Notes, greetings or vocatives addressed to the reviewer/assistant.
-    re.compile(r"\b(?:note|message|instruction|reminder|comment)s?\s+(?:to|for)\s+(?:the\s+|any\s+|all\s+)?" + _AI + r"\b"),
-    re.compile(r"\b(?:hey|hi|hello|dear|attention|attn)\s+(?:the\s+)?" + _AI + r"\b"),
-    re.compile(r"\b" + _AI + r"\s*(?:[:,]|-)\s*(?:please\s+|kindly\s+|just\s+)?(?:treat|mark|approve|clear|pass|ignore|skip|"
-               r"accept|release|consider|overlook|disregard|leave|let|waive|wave|do not|don't|dont|no need|nothing to|move on|"
-               r"you can|you may)\b"),
-    re.compile(r"\b" + _AI + r"\s*(?:[:,]|-)\s*" + _OBJ_ANY + r"\s+(?:is|are)\s+(?:already\s+)?(?:fine|ok|okay|good to go|"
-               r"approved|pre-?approved|cleared|signed[- ]off|verified|confirmed)\b"),
-    # Permission or instruction given to the reviewer/assistant about this material.
-    re.compile(r"\b" + _AI + r"\s+(?:should|must|needs? to|please|can|could|may|will|are free to|is free to)\s+"
-               r"(?:safely\s+|just\s+|simply\s+)?(?:not\s+)?(?:flag|approve|clear|pass|ignore|skip|mark|treat|release|"
-               r"accept|overlook|disregard|bypass)\s+" + _OBJ_STRICT),
-    re.compile(r"\b" + _AI + r"\s+(?:(?:do not|don't|dont|does not|doesn't)\s+(?:need|have)\s+to|need not|needn't)\s+"
-               r"(?:flag|check|re-?check|review|verify|question|challenge|escalate|look at)\s+" + _OBJ_STRICT),
-    re.compile(r"\b(?:" + _AI + r"\s+(?:can|could|may|should|must|will|are free to|is free to)\s+(?:safely\s+|just\s+|simply\s+)?"
-               r"|please\s+|kindly\s+|just\s+|you\s+(?:can|could|may|should)\s+(?:safely\s+|just\s+|simply\s+)?)"
-               r"(?:leave|let|wave)\s+" + _OBJ_ANY + r"(?:\s+[\w'-]+){0,2}?\s+(?:alone|unflagged|untouched|unchallenged|"
-               r"unchecked|through|stand)\b"),
-    re.compile(r"\bno need (?:for (?:the |any |a )?" + _AI + r"\s+)?to\s+(?:flag|check|re-?check|review|verify|question|"
-               r"challenge|escalate|look at|hold)\s+" + _OBJ_STRICT),
-    re.compile(r"\b(?:whoever|anyone|anybody)\s+(?:is\s+)?(?:review(?:s|ing)?|check(?:s|ing)?)\s+(?:this|the\s+" + _DOC +
-               r")\b[^.!?]{0,80}?\b(?:skip|ignore|leave|let it|do not|don't|approve|clear|sign off|already|no need)\b"),
-    re.compile(r"\byou\s+(?:can|could|may|should)\s+(?:safely\s+|just\s+|simply\s+)?(?:skip|ignore|disregard|overlook|"
-               r"pass over)\s+(?:" + _OBJ_SELF + r"|(?:this|these|it)(?=" + _END + r"))"),
-    re.compile(r"\byou\s+(?:need not|needn't|(?:do not|don't)\s+(?:need|have)\s+to|should not|shouldn't|must not)\s+"
-               r"(?:flag|check|re-?check|review|verify|question|challenge|escalate)\s+(?:" + _OBJ_SELF +
-               r"|(?:this|these|it)(?=" + _END + r"))"),
-    # Imperative do-not-flag / do-not-review at the start of a clause.
-    re.compile(_CLAUSE + r"(?:do not|don't|dont|never|no need to)\s+(?:flag|surface|escalate|hold|block|review|check|re-?check|"
-               r"question|challenge|query|verify|scrutini[sz]e)\s+" + _OBJ_STRICT),
-    re.compile(_CLAUSE + r"(?:do not|don't|dont|no need to)\s+(?:flag|escalate|hold|block|re-?check|question|challenge|query)"
-               + _END),
-    re.compile(r"\b(?:this|these|it|" + _OBJ_DOC + r")\s+(?:does not|doesn't|do not|don't|need not|needn't)\s+(?:need\s+to\s+)?"
-               r"(?:be\s+)?(?:flagged|checked|re-?checked|reviewed|verified|escalated|questioned|challenged|held)"
-               r"(?:\s+(?:again|further|any further|by\s+(?:you|qrm|the\s+partner|(?:the\s+)?" + _AI + r")))?" + _END),
-    # Generic override of the review itself.
-    re.compile(r"\b(?:ignore|disregard|override|bypass|skip)\b.{0,30}\b(?:previous instructions|prior instructions|"
-               r"(?:the |these |your |all )?instructions|quality gate|gate criteria|qrm|quality review|this review|"
-               r"review findings|the flags?)\b"),
-    re.compile(r"\bno (?:further |additional )?(?:review|qrm|qrm review|sign[- ]?off|partner review|quality review|checks?)"
-               r"(?: is| are)? (?:required|needed|necessary)(?:\s+(?:for|on|of)\s+(?:this|these|the)\s+" + _DOC + r")?" + _END),
-    # Approval or authority claims that steer the review (an approval word alone is not enough).
-    re.compile(r"(?:\b(?:partner|qrm|reviewers?|note|memo)\b|" + _OBJ_DOC + r")[^.;!?]{0,40}?\b" + _APPROVED +
-               r"\s+for\s+(?:client\s+)?(?:release|issue|distribution|sign[- ]?off)\b"),
-    re.compile(r"\b" + _APPROVED + r"\s+for\s+(?:client\s+)?(?:release|issue)\b[^.!?]{0,40}?(?:do not|don't|dont|"
-               r"no (?:further |additional )?(?:review|qrm|checks?|sign[- ]?off)|skip|ignore|not (?:be )?flag)"),
-    re.compile(r"\b(?:the\s+)?" + _AUTHORITY + r"\s+(?:has\s+|have\s+|had\s+)?(?:already\s+(?:pre-?)?|pre-?)(?:confirmed|"
-               r"approved|cleared|signed[- ]off(?:\s+on)?|verified|validated|reviewed|checked)\s+" + _OBJ_ANY),
-    re.compile(r"\b" + _OBJ_SELF + r"\s+(?:is|are|was|were|(?:has|have|had)\s+been)\s+(?:already\s+|pre-?)(?:approved|"
-               r"cleared|signed[- ]off|verified|confirmed|validated|reviewed)\b"),
-    re.compile(r"\b" + _OBJ_SELF + r"\s+(?:has|have|had)\s+already\s+been\s+(?:pre-?)?(?:approved|cleared|signed[- ]off|"
-               r"verified|confirmed|validated|reviewed)\b"),
-    re.compile(r"\b" + _OBJ_DOC + r"\s+(?:is|are|was|were|(?:has|have|had)(?:\s+already)?\s+been)\s+(?:already\s+)?"
-               r"(?:approved|cleared|signed[- ]off|verified|confirmed|reviewed)\s+by\s+(?:the\s+)?" + _AUTHORITY + r"\b"),
-    re.compile(r"\b(?:waived?|waives|waiving|exempt(?:ed)?|suspended)\b.{0,40}\b(?:disclaimers?|reliance|limitation language|"
-               r"quality gate|qrm|gate criteria|quality (?:rules|criteria|review))\b"),
-    re.compile(r"\b(?:disclaimer|reliance|qrm|quality|gate)\s+(?:rules?|requirements?|criteria|language|review)?\s*"
-               r"(?:are|is|were|was|have been|has been)\s+(?:waived|suspended|not required|not applicable)\b"),
-    re.compile(r"\b(?:treat|mark|consider|record|classify)\s+(?:all|every|each|this|these|the)\s+" + _DOC +
-               r"\s+(?:as\s+)?(?:supported|verified|substantiated|cleared|approved|resolved|closed|passed|release ready|"
-               r"confirmed|accepted)\b"),
-    re.compile(r"\b(?:forward|send|e-?mail|share|upload|transmit)\s+(?:this|these|it|a copy|the\s+(?:packet|draft|"
-               r"deliverable|report|document|file|review))\b.{0,60}" + _CONTACT),
-)
+OVERSIZE = "oversize"
 
 
 InputError = rules.InputError
@@ -312,36 +165,21 @@ def normalize_text(value):
         normalized = normalized.replace(source, target)
     return re.sub(r"\s+", " ", normalized).strip()
 
-def letter_script(ch):
-    """Script of a letter from its Unicode name ('LATIN', 'CYRILLIC', 'ARMENIAN', ...); None for non-letters."""
-    if not ch.isalpha():
-        return None
-    name = unicodedata.name(ch, "")
-    if name.startswith("MODIFIER LETTER"):
-        return None
-    return name.split(" ", 1)[0] if name else "UNKNOWN"
+@functools.lru_cache(maxsize=4096)
+def _screen_cached(value):
+    return tuple(sg.scan(value, **STEERING_HOOKS))
 
-def has_confusable_mixed_token(value):
-    """True when one token mixes Latin letters with letters of any other script (e.g. 'apprօve' with an Armenian
-    'օ', or 'аpproved' with a Cyrillic 'а').
+def screen_text(value):
+    """steering_guard hits for one untrusted string, with the DRQG hooks (cached: keys and IDs repeat)."""
+    return list(_screen_cached(value)) if isinstance(value, str) else []
 
-    Digits and punctuation never count. Single-script words (all Cyrillic, all Greek, Turkish 'ı' or other Latin
-    letters) are not mixed, and the non-confusable symbol letters in SYMBOL_LETTERS (ΔEBITDA, 5 μg) are allowed.
-    Latin small capitals are Latin script; normalize_text folds them instead."""
-    for token in re.findall(r"\w+", strip_format_characters(value)):
-        scripts = {letter_script(ch) for ch in token if ch not in SYMBOL_LETTERS} - {None}
-        if "LATIN" in scripts and len(scripts) > 1:
-            return True
-    return False
+def screen_fields(fields):
+    """steering_guard hits for a multi-field record; a 'split' hit means only the joined fields trip."""
+    return sg.scan_fields(fields, **STEERING_HOOKS)
 
 def suspicious_instruction(value):
-    if has_confusable_mixed_token(value):
-        return True
-    text = normalize_text(value)
-    views = (text, " ".join(ID_SEPARATORS.sub(" ", text).split()))
-    if any(pattern.search(view) for view in views for pattern in VOCATIVE_PATTERNS + STEERING_PATTERNS + LOOSE_STEERING_PATTERNS):
-        return True
-    return any(pattern.search(text) for pattern in INSTRUCTION_PATTERNS)
+    """True when the text trips the shared detector or is too long to screen (an oversize result is a hold)."""
+    return bool(screen_text(value))
 
 def safe_token(value, fallback):
     text = str(value)
@@ -380,31 +218,44 @@ def collect_scan_text(payload):
         if residue.strip():
             yield path, residue
 
-MAX_AGGREGATE_CHARS = 4000
+AGGREGATE_LABEL = "(combined text, citation, evidence titles and location label)"
 
-def assertion_aggregates(payload):
-    """Yield (path, combined text, component texts) per assertion: text, citation, linked evidence titles and the
-    location label, joined in reading order and capped at MAX_AGGREGATE_CHARS. This catches steering text split
-    across fields (quality-gate-criteria.md #8.1) that no single field contains."""
+def assertion_fields(payload):
+    """Yield (path, fields) per assertion: text, citation, linked evidence titles and the location label in reading
+    order. scan_fields screens them together so steering split across fields (quality-gate-criteria.md #8.5) that no
+    single field contains is caught."""
     evidence = {item["evidence_id"]: item for item in payload.get("evidence_set") or [] if isinstance(item, dict) and isinstance(item.get("evidence_id"), str)}
     for index, assertion in enumerate(payload.get("assertions") or []):
         if not isinstance(assertion, dict):
             continue
-        parts = [assertion.get("text"), assertion.get("citation")]
-        parts += [evidence.get(evidence_id, {}).get("title") for evidence_id in assertion.get("evidence_ids") or [] if isinstance(evidence_id, str)]
+        fields = {"text": assertion.get("text"), "citation": assertion.get("citation")}
+        for position, evidence_id in enumerate(assertion.get("evidence_ids") or []):
+            if isinstance(evidence_id, str):
+                fields[f"evidence title {position + 1}"] = evidence.get(evidence_id, {}).get("title")
         location = assertion.get("location")
-        parts.append(location.get("label") if isinstance(location, dict) else None)
-        parts = [part for part in parts if isinstance(part, str) and part.strip()]
-        if len(parts) > 1:
-            yield f"$.assertions[{index}] (combined text, citation, evidence titles and location label)", " ".join(parts)[:MAX_AGGREGATE_CHARS], parts
+        fields["location label"] = location.get("label") if isinstance(location, dict) else None
+        fields = {key: value for key, value in fields.items() if isinstance(value, str) and value.strip()}
+        if len(fields) > 1:
+            yield f"$.assertions[{index}] {AGGREGATE_LABEL}", fields
 
 def instruction_hits(payload):
-    """Every untrusted field that trips the tripwire, then each assertion whose combined fields trip it when none
-    of its component fields does on its own (so one note is never counted twice)."""
-    hits = [path for path, text in collect_scan_text(payload) if suspicious_instruction(text)]
-    for path, combined, parts in assertion_aggregates(payload):
-        if suspicious_instruction(combined) and not any(suspicious_instruction(part) for part in parts):
-            hits.append(path)
+    """(path, reason) for every untrusted field that trips the detector, then for each assertion whose fields trip
+    only when joined (so one note is never counted twice). reason is OVERSIZE when the text was too long to screen,
+    which is a hold (quality-gate-criteria.md #8.6), otherwise 'instruction'."""
+    def reason(found):
+        return OVERSIZE if any(hit.family == OVERSIZE for hit in found) else "instruction"
+    hits, tripped = [], set()
+    for path, text in collect_scan_text(payload):
+        found = screen_text(text)
+        if found:
+            hits.append((path, reason(found)))
+            tripped.add(text)
+    for path, fields in assertion_fields(payload):
+        if tripped.intersection(fields.values()):
+            continue
+        found = screen_fields(fields)
+        if found:
+            hits.append((path, reason(found)))
     return hits
 
 def loc(section, page, paragraph, label):
@@ -890,7 +741,11 @@ def main():
                 add_finding(findings, f"GC-G3-{safe_token(mapping['assertion_id'], 'assertion')}", "G3", MUST_FIX, "Scope or sample limitation missing at point of recommendation", mapping.get("rationale", "Recommendation requires limitation."), mapping["location"], "quality-gate-criteria.md #3.2", mapping.get("confidence", 0.8), mapping.get("citation", "quality-gate-criteria.md #3.2"))
         if EMBEDDED_INSTRUCTION_HOLD:
             hits = instruction_hits(payload)
-            for hit_index, path in enumerate(hits[:MAX_G8_HITS], start=1):
+            for hit_index, (path, hit_reason) in enumerate(hits[:MAX_G8_HITS], start=1):
+                if hit_reason == OVERSIZE:
+                    add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Field too long to screen for embedded instructions", f"Untrusted field {path} is too long to screen for embedded instructions (over {sg.MAX_TOTAL_CHARS:,} characters, raw or after Unicode normalisation), so it was not screened; it must be held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.6", 0.99, "quality-gate-criteria.md #8.1, #8.6; severity-rules.md #1.1")
+                    escalations.append(f"G8: {path} is too long to screen for embedded instructions - hold for reviewing partner/QRM (quality-gate-criteria.md #8.6)")
+                    continue
                 add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Embedded instruction or forwarding request found in deliverable data", f"Untrusted field {path} contains instruction-like, forwarding or look-alike-character text; it must be treated as data and held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.1-#8.3", 0.99, "quality-gate-criteria.md #8.1-#8.3; severity-rules.md #1.1")
                 escalations.append(f"G8: embedded-instruction tripwire in {path} - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")
             if len(hits) > MAX_G8_HITS:
