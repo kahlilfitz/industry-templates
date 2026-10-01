@@ -108,7 +108,7 @@ human testers).
 | 02 | `engagement-staffing-bench-match` | 1.1.4 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.1.4 tracker tab | reviewers |
 | 03 | `engagement-mobilization-onboarding-pack` | 1.0.0 evaluated; 1.0.1 committed | 1.0.0 Blocked (trust-and-safety gate); 1.0.1 committed (`a0505b5`), under independent code review | No | No | No | No | No | Close the review, freeze 1.0.1, evaluate in a new Cowork task | operator |
 | 04 | `time-expense-narrative-compliance` | 1.0.3 evaluated; 1.0.4 committed | 1.0.3 Blocked (trust-and-safety gate); 1.0.4 committed (`ddfa366`, `b5f064d`), under independent code review | No | No | No | No | No | Close the review, freeze 1.0.4, evaluate in a new Cowork task | operator |
-| 05 | `deliverable-review-quality-gate` | 1.0.2 evaluated; 1.0.3 committed | 1.0.2 Blocked; 1.0.3 committed (`bd7b029`, `ded75a8`, `0476ce8`) after three review rounds; one more fix in progress | No | No | No | No | No | Commit the alias fix, freeze 1.0.3, then evaluate | operator |
+| 05 | `deliverable-review-quality-gate` | 1.0.3 frozen | 1.0.2 Blocked; 1.0.3 frozen (`581a144`) after three review rounds; in Cowork evaluation | No | No | No | No | No | Archive the 1.0.3 result (watcher running) and triage | Cowork, then operator |
 
 Notes on the board:
 
@@ -117,9 +117,8 @@ Notes on the board:
   [tracker notes](../operator-runbook.md#tracker-workbooks-and-sensitivity-labels)); check them
   there. This file records only gate status, never reviewer names, per-prompt results or the
   owner's reasoning.
-- C5: the industry `README.md` was last updated at 13:39 PT on 2026-10-01. It still shows DRQG
-  1.0.2 and T&E 1.0.3 as "in evaluation"; both have since been archived as Blocked, so those rows
-  need updating.
+- C5: the industry `README.md` was updated on 2026-10-01 to show Mobilization 1.0.0, T&E 1.0.3 and
+  DRQG 1.0.2 as Blocked, with their fixed versions in final review.
 - No Wave 1 distributable has been promoted yet. Only the Wave 2 `client-status-qbr` folder holds a
   promoted ZIP.
 
@@ -394,7 +393,7 @@ to a system of record.
 | 1.0.0 | `9d77f91` (portfolio import) | None | **Never evaluated** | No CHANGELOG and no shipped regression tests. | None |
 | 1.0.1 | `94a6192` (receipt dirty) | `7F487D5D…49BC` | **No-ship** | Trust-and-safety hard stop in `review-packet` (94/95 held): a user-supplied external recipient was accepted for routing with no hold, and the packet appended the full contract payload. Engine defects L1 to L5: `scope_aligned=false` ignored; unsupported definitive conclusions not ranked as release blockers; best-evidence selection; hard-coded finding locations; missing registers treated as clean. Skills 86 to 91; behavioral 15/15 (35 runs), 4.5/5; security 0 findings. | `Evaluation\1.0.1` |
 | 1.0.2 | `25c2a63` (receipt records pre-rewrite `2ba4145`, dirty) | `29B431EC…B869` | **Blocked** | 42/50 behavioral cases (84%). 2 FAIL (fail-open logic defects in the gate engine): a null `required_language` register is treated as empty instead of holding; unrecognised `client_data_handling` values pass clean with no finding. 6 WEAK: `severity_rank` traceback on a non-numeric page label; look-alike letter evasion; paraphrased steering text; instruction text in citation fields not scanned; false positive on ordinary "pre-approved"; an upstream finding reusing a G8 finding ID can suppress the blocker. Skills 85 to 93; 4.57/5; trust and safety 75/75 held; security 0 findings. | `Evaluation\1.0.2` |
-| 1.0.3 | `bd7b029`, `ded75a8`, `0476ce8` | Not yet frozen | **Committed; review round 4 fix in progress** | Fixes the 1.0.2 blockers (`bd7b029`, 103 tests). Three independent review rounds then found further fail-open paths, each fixed in a new commit with no version bump: wrong-type recipients and booleans, unvalidated register entries, AM findings trusted by self-declared source (`ded75a8`, 179 tests); a missing required disclaimer, keyword-only recipient classification, an omitted `scope_aligned`, evidence with no or unknown type supporting a fact, and deep-nesting tracebacks (`0476ce8`, 241 tests); and a client alias that hides an external recipient (fix in progress). | None |
+| 1.0.3 | `bd7b029`, `ded75a8`, `0476ce8`, `581a144` | `99699BDD…F9D2` | **In Cowork evaluation** | Fixes the 1.0.2 blockers (`bd7b029`, 103 tests). Three independent review rounds then found further fail-open paths, each fixed in a new commit with no version bump: wrong-type recipients and booleans, unvalidated register entries, AM findings trusted by self-declared source (`ded75a8`, 179 tests); a missing required disclaimer, keyword-only recipient classification, an omitted `scope_aligned`, evidence with no or unknown type supporting a fact, and deep-nesting tracebacks (`0476ce8`, 241 tests); and a client alias or name containing external-party vocabulary hiding an external recipient (`581a144`, 254 tests). | None |
 
 Commit 2ba4145 was rewritten to 25c2a63 before first push (history scrub of an internal URL; plugin
 files identical). Frozen receipts and archived reports cite the pre-rewrite SHA.
@@ -438,9 +437,10 @@ This is the report's request, not a description of the 1.0.3 change. Check the 1
 
 ### Next action
 
-1. Commit the client-alias fix from review round 3 and confirm the tests pass. Watch the
-   over-escalation calls recorded in the 1.0.3 CHANGELOG (unrecognised recipients and a missing
-   `client_name` hold; interview summaries no longer support factual claims).
+1. Done: alias fix committed (`581a144`) and 1.0.3 frozen. Watch the over-escalation calls
+   recorded in the 1.0.3 CHANGELOG (unrecognised recipients and a missing `client_name` hold;
+   interview summaries no longer support factual claims; a client whose own name contains
+   external-party vocabulary, such as a bank, is always held).
 2. Run `evaluation:prepare` (never in parallel with another prepare), check the ZIP for CRLF and
    bytecode, and evaluate it in a **new** Cowork task.
 3. Archive to `Evaluation\1.0.3\` and update this file and the industry README.
@@ -523,6 +523,7 @@ and matched; T&E 1.0.3 relies on the hash check `evaluation:archive` performs be
 | T&E | 1.0.3 | `evaluate-time-expense-narrative-compliance-v1.0.3-2026-10-01` | `53A5C7EC29C4F4803AAD922BA04DBACA41C30576B6464B8460E0C55E0183E652` | `88b5b41` (dirty) | Blocked |
 | DRQG | 1.0.1 | `evaluate-deliverable-review-quality-gate-v1.0.1-2026-10-01` | `7F487D5D85324022655EC3A444E70B74CEEF19B3C9C2CE3003EFAF122D8849BC` | `94a6192` (dirty) | No-ship |
 | DRQG | 1.0.2 | `evaluate-deliverable-review-quality-gate-v1.0.2-2026-10-01` | `29B431EC62455E68E53AAD236698BFADA2518DA8BDA0F65EC2624D9852E5B869` | `2ba4145` (dirty; rewritten to `25c2a63`, see note) | Blocked |
+| DRQG | 1.0.3 | `evaluate-deliverable-review-quality-gate-v1.0.3-2026-10-01` | `99699BDDDA3407FC6720AE57FD47116D0F2E9A9A94D60ABD5217B130FED0F9D2` | `581a144` (dirty: docs only) | Pending |
 
 The task name is the one `evaluation:prepare` suggested. Some Cowork tasks were created under
 different display names; the watcher matches by SHA-256, so this does not affect the evidence.
