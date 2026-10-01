@@ -18,9 +18,12 @@
    and unrecognised enum values raise SchemaError - nothing is coerced through truthiness, and a
    string can never stand in for the boolean team-view confirmation.
 4. Embedded-instruction tripwire (client-billing-guidelines.md #11.1). Free text is data.
-   embedded_instruction() normalises (NFKC, strip Unicode Cf, fold Cyrillic/Greek look-alikes,
-   fold punctuation and case) and flags text that steers the reviewer, claims an approval or
-   waiver, asks for forwarding, or carries an e-mail address or URL.
+   embedded_instruction() normalises (NFKC, strip Unicode Cf and combining marks, fold Cyrillic,
+   Greek, Armenian and Cherokee look-alikes and Latin small capitals/variants, fold punctuation and
+   case) and flags text addressed to the assistant/AI/reviewer whatever the verb, verdict steering
+   whoever it addresses, approval or waiver claims, forwarding requests, e-mail addresses and URLs,
+   and any word that mixes Latin with another script. signal_texts()/entry_texts() also scan file
+   names in word form and a bounded aggregate of related fields, so a split instruction is caught.
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
@@ -90,7 +93,7 @@ def load_policy_file(path):
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise PolicyError(f"cannot read signal policy {os.path.basename(path)}: {exc}") from exc
     sources = data.get("sources") if isinstance(data, dict) else None
     if not isinstance(sources, dict):
@@ -281,7 +284,23 @@ CONFUSABLES = str.maketrans({
     "\u0456": "i", "\u0457": "i", "\u0458": "j", "\u04bb": "h", "\u04cf": "l", "\u0501": "d", "\u051b": "q",
     "\u051d": "w", "\u03b1": "a", "\u03b2": "b", "\u03b5": "e", "\u03b7": "n", "\u03b9": "i", "\u03ba": "k",
     "\u03bd": "v", "\u03bf": "o", "\u03c1": "p", "\u03c4": "t", "\u03c5": "u", "\u03c7": "x",
+    # Armenian
+    "\u0585": "o", "\u057d": "u", "\u0581": "g", "\u0570": "h", "\u0578": "n", "\u057c": "n", "\u0566": "q",
+    "\u0584": "p", "\u0561": "w", "\u0575": "j", "\u0582": "i",
+    # Latin letters NFKC leaves alone
+    "\u0251": "a", "\u0269": "i", "\u028b": "u", "\u0261": "g", "\u0131": "i", "\u0237": "j",
 })
+# Cherokee capitals that render like Latin letters; lower() maps them to Cherokee small letters,
+# so both forms are folded.
+_CHEROKEE = {0x13A0: "d", 0x13A1: "r", 0x13A2: "t", 0x13A5: "i", 0x13A9: "y", 0x13AA: "a", 0x13AB: "j",
+             0x13AC: "e", 0x13B3: "w", 0x13B7: "m", 0x13BB: "h", 0x13BD: "y", 0x13C0: "g", 0x13C2: "h",
+             0x13C3: "z", 0x13CF: "b", 0x13D2: "r", 0x13D9: "v", 0x13DA: "s", 0x13DE: "l", 0x13DF: "c",
+             0x13E2: "p", 0x13E6: "k", 0x13EB: "o", 0x13F4: "b"}
+CONFUSABLES.update({cp: v for cp, v in _CHEROKEE.items()})
+CONFUSABLES.update({ord(chr(cp).lower()): v for cp, v in _CHEROKEE.items() if chr(cp).lower() != chr(cp)})
+# Latin small capitals and other one-letter Latin variants, by Unicode name
+# ("LATIN LETTER SMALL CAPITAL A", "LATIN SMALL LETTER DOTLESS I", "LATIN SMALL LETTER A WITH STROKE").
+_LATIN_NAME_RE = re.compile(r"LATIN (?:SMALL |CAPITAL )?LETTER (?:SMALL CAPITAL |DOTLESS |SCRIPT |TURNED )?([A-Z])(?: |$)")
 _OBJ = (r"(?:this|it|these|that|them|my (?:entry|entries|time|narrative)|"
         r"the (?:entry|entries|time entry|time entries|narrative|narratives|line|charge|item))")
 _ENTRY_OBJ = r"(?:(?:this|these|the|my) (?:entry|entries|time entry|time entries|narrative|line|charge|item|one))"
@@ -368,6 +387,61 @@ INSTRUCTION_PATTERNS = (
     r"\b(?:forward|send|e ?mail|share|cc|bcc|copy)\s+(?:the\s+)?(?:time entries|entries|packet|pre ?bill|"
     r"exception list|exceptions|cleanup list|wip|timesheets?|narratives)\s+to\b",
 )
+_ADDRESSEE = (r"(?:assistant|ai|a i|copilot|m365 copilot|claude|chatgpt|gpt(?: ?\d+)?|llm|chatbot|bot|gemini|"
+              r"agent|model|reviewer|engine|system)")
+_STRONG_ADDRESSEE = r"(?:assistant|ai|a i|copilot|claude|chatgpt|gpt(?: ?\d+)?|llm|chatbot|bot|gemini)"
+_VERDICT_VERB = (r"(?:mark|report|treat|rate|record|flag|set|class|classify|categori[sz]e|show|list|log|tag|label|"
+                 r"code|count|consider|enter|book|file|keep|leave|put|note|register|score|grade|return|output)")
+_VERDICT_OBJ = (r"(?:this|it|that|these|them|(?:this|that|these|those|the|my|our|each|every|all)\s+(?:\w+\s+){0,2}?"
+                r"(?:entry|entries|item|items|line|lines|charge|charges|narrative|narratives|time|one|ones|record|"
+                r"records|row|rows|task|tasks))")
+_VERDICT_STATE = (r"(?:compliant|approved|pre ?approved|billable|ok|okay|clean|fine|accepted|cleared|passed|pass|good|"
+                  r"exempt|green|valid|verified|reviewed|acceptable|unflagged|not flagged|no issues?|in compliance|"
+                  r"within (?:the )?guidelines?)")
+_SELF = r"(?:this|it|these|that|them|me|my|our|us|(?:the|this|my) (?:entry|entries|time|narrative|line|charge|item))"
+# Verdict steering, whoever it is addressed to (client-billing-guidelines.md #11.1).
+INSTRUCTION_PATTERNS += (
+    r"\b" + _VERDICT_VERB + r"\s+" + _VERDICT_OBJ + r"(?:\s+\w+){0,2}?\s+(?:as\s+|to\s+be\s+|is\s+)?(?:already\s+|"
+    r"fully\s+)?" + _VERDICT_STATE + r"\b",
+    r"\b(?:this|the|my)\s+(?:entry|entries|time entry|time entries|narrative|line|charge|item|time)\s+(?:should|must|"
+    r"shall|needs to|need to|is to|ought to)\s+be\s+(?:\w+\s+){0,2}?(?:as\s+)?" + _VERDICT_STATE + r"\b",
+    r"\b(?:this|the|my)\s+(?:entry|entries|time entry|narrative|charge)\s+(?:is|are)\s+(?:already\s+|fully\s+)?"
+    r"(?:compliant|exempt|cleared|ok|okay|pre ?approved|in compliance)\b",
+    r"\b(?:do not|don t|dont|never|please do not)\s+(?:flag|hold|review|re review|reject|escalate|query|question)"
+    r"(?:\s+" + _SELF + r")?\s*$",
+    r"\b(?:do not|don t|dont|never)\s+(?:flag|hold|review|reject|escalate|query|question)\s+" + _SELF + r"\b",
+    r"\bno\s+(?:further\s+|additional\s+)?(?:review|reviews|check|checks|checking|scrutiny|flags?|hold)\s+"
+    r"(?:is\s+|are\s+)?(?:required|needed|necessary|wanted)\b",
+    r"\b(?:needs|need|requires|require)\s+no\s+(?:further\s+|additional\s+)?(?:review|checks?|scrutiny|flag)\b",
+    r"\bno\s+need\s+(?:for|to)\s+(?:a\s+)?(?:review|re review|check|flag|hold|escalat\w*)\b",
+    r"\b(?:review|re review|checks?|scrutiny)\s+(?:is\s+|are\s+)?(?:not\s+(?:needed|required|necessary)|unnecessary)"
+    r"\s+(?:for|on)\s+" + _SELF + r"\b",
+)
+# Text addressed to the assistant/AI/reviewer, whatever the verb: a vocative ("Assistant, ...",
+# "Claude: approve this") or a tool name followed by an imperative and an object. Run on folded
+# text before punctuation is flattened, because the comma or colon is the signal.
+VOCATIVE_RE = re.compile(
+    r"(?:^|[.!?;\n(\[\"']\s*|\bplease\s*,?\s*|\b(?:hey|hi|hello|dear|attention|attn|psst|yo|ok|okay)\s*,?\s*)"
+    r"(?:the\s+|dear\s+|my\s+)?" + _ADDRESSEE + r"\s*(?:"
+    r",\s*(?!\w+\s+and\b)(?:(?:please|kindly|you|do|don't|dont|never|ignore|disregard|now|just)\b|"
+    r"\S+(?:\s+\S+){0,3}?\s+(?:this|it|these|that|them|the|my|our|all|every|any|me|us|you|your)\b)"
+    r"|[:\-\u2013\u2014!]\s*(?:please\s+|kindly\s+)?\S+\s+(?:this|it|these|that|them|my|me|all)\b)"
+)
+# Text addressed to the tool, whatever the verb: a tool name opening a sentence and followed by a
+# comma (but not a list such as "AI, ML and analytics"), or any addressee followed by a verdict.
+ADDRESSED_RE = re.compile(
+    r"(?:^|[.!?;\n(\[\"']\s*|\bplease\s*,?\s*|\b(?:hey|hi|hello|dear|attention|attn|psst|yo|ok|okay)\s*,?\s*)"
+    r"(?:the\s+|dear\s+|my\s+)?(?:" + _STRONG_ADDRESSEE + r"\s*,\s*(?!\w+(?:\s+\w+)?\s*(?:,|&|/|\band\b|\bor\b))\w"
+    r"|" + _ADDRESSEE + r"\s*[:,\-\u2013\u2014]\s*(?:\S+\s+){0,3}?(?:" + _VERDICT_STATE
+    + r"|no\s+(?:changes?|issues?|problems?|concerns?|action|edits?)|nothing\s+to)\b)"
+)
+TOOL_IMPERATIVE_RE = re.compile(
+    r"^(?:hey\s+|hi\s+|dear\s+|attention\s+)?(?:the\s+)?" + _STRONG_ADDRESSEE + r"\s+(?:please\s+|kindly\s+)?"
+    r"(?!(?:of|for|and|with|on|to|in|at|by|is|was|are|were|has|had|tools?|use|usage|based|enabled|driven|"
+    r"assisted|generated|powered|readiness|governance|strategy|roadmap|rollout|pilot|workshop|session|controller|"
+    r"accountant|director|manager|team|lead)\b)"
+    r"\w+\s+(?:this|it|these|that|them|my|me|all|every|the (?:entry|entries|time|narrative|line|charge|item))\b"
+)
 # Anchored at the start of a sentence: imperatives that a time narrative never contains.
 IMPERATIVE_PATTERNS = (
     r"^(?:please\s+|kindly\s+|just\s+)?(?:approve|submit|release|finali[sz]e|post|accept|clear)\s+(?:this|these|the|"
@@ -390,11 +464,46 @@ CONTACT_RE = re.compile(
 )
 
 
-def fold_text(text):
-    """NFKC, strip Unicode format (Cf) characters, lower-case, fold Cyrillic/Greek look-alikes."""
+def _latin_variant(ch):
+    if ch.isascii() or not ch.isalpha():
+        return ch
+    match = _LATIN_NAME_RE.match(unicodedata.name(ch, ""))
+    return match.group(1).lower() if match else ch
+
+
+def normalise(text):
+    """NFKC (folds fullwidth and mathematical alphanumerics), strip Unicode Cf and combining marks."""
     text = unicodedata.normalize("NFKC", text if isinstance(text, str) else "")
-    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
-    return text.lower().translate(CONFUSABLES)
+    text = unicodedata.normalize("NFKD", "".join(ch for ch in text if unicodedata.category(ch) != "Cf"))
+    return unicodedata.normalize("NFC", "".join(ch for ch in text if unicodedata.category(ch) != "Mn"))
+
+
+def fold_text(text):
+    """normalise(), lower-case, fold Cyrillic/Greek/Armenian/Cherokee look-alikes and Latin variants."""
+    folded = normalise(text).lower().translate(CONFUSABLES)
+    return "".join(_latin_variant(ch) for ch in folded)
+
+
+def _script(ch):
+    name = unicodedata.name(ch, "")
+    return "LATIN" if name.startswith("LATIN") else (name.split(" ", 1)[0] or "UNKNOWN")
+
+
+def mixed_script(text):
+    """True when one word mixes Latin letters with letters of any other script (a look-alike tell)."""
+    for token in re.findall(r"[^\W\d_]+", normalise(text)):
+        if token.isascii() or re.fullmatch("\u03bc[a-zA-Z]{1,2}", token):  # SI micro units: um, us, ug, uL
+            continue
+        scripts = {_script(ch) for ch in token if ch.isalpha()}
+        if "LATIN" in scripts and len(scripts) > 1:
+            return True
+    return False
+
+
+def filename_words(name):
+    """'Assistant-report_thisEntry.docx' -> 'Assistant report this Entry docx' (scan form only)."""
+    name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
+    return re.sub(r"[-_.]+", " ", name).strip()
 
 
 def flatten_text(folded):
@@ -405,9 +514,12 @@ def _trips(text):
     folded = fold_text(text)
     if not folded.strip():
         return False
-    if CONTACT_RE.search(folded) or INSTRUCTION_RE.search(flatten_text(folded)):
+    if mixed_script(text) or CONTACT_RE.search(folded) or VOCATIVE_RE.search(folded) or ADDRESSED_RE.search(folded):
         return True
-    return any(IMPERATIVE_RE.search(flatten_text(seg)) for seg in SEGMENT_SPLIT_RE.split(folded))
+    if INSTRUCTION_RE.search(flatten_text(folded)):
+        return True
+    segments = [flatten_text(seg) for seg in SEGMENT_SPLIT_RE.split(folded)]
+    return any(IMPERATIVE_RE.search(seg) or TOOL_IMPERATIVE_RE.search(seg) for seg in segments)
 
 
 def embedded_instruction(*texts):
@@ -422,18 +534,50 @@ def embedded_instruction(*texts):
     return False
 
 
+AGGREGATE_LIMIT = 4000
+
+
+def aggregate(parts):
+    """The related fields joined (both orders), bounded, so an instruction split across fields
+    ("Mark this" + "entry compliant") is caught even when no single field trips (#11.1)."""
+    parts = [p.strip() for p in parts if isinstance(p, str) and p.strip()]
+    if len(parts) < 2:
+        return []
+    return [" ".join(parts)[:AGGREGATE_LIMIT], " ".join(reversed(parts))[:AGGREGATE_LIMIT]]
+
+
 def signal_texts(signal):
-    """Every free-text field of an activity signal that can reach a draft, a table or a report."""
+    """Every free-text field of an activity signal that can reach a draft, a table or a report, the
+    file name in word form, and a bounded aggregate of the related fields."""
     if not isinstance(signal, dict):
         return []
     texts = [signal.get(k) for k in ("subject", "deliverable", "purpose", "organizer", "file_name",
                                       "activity_class", "meeting_id")]
+    if isinstance(signal.get("file_name"), str):
+        texts.append(filename_words(signal["file_name"]))
     attendees = signal.get("attendees")
     if isinstance(attendees, list):
         texts.extend(a if isinstance(a, str) else json.dumps(a, default=str) for a in attendees)
     elif attendees is not None:
         texts.append(json.dumps(attendees, default=str))  # wrong type: scan everything it holds
+    file_words = filename_words(signal["file_name"]) if isinstance(signal.get("file_name"), str) else None
+    texts += aggregate([signal.get("subject"), signal.get("purpose"), signal.get("deliverable"), file_words])
     return [t for t in texts if isinstance(t, str)]
+
+
+def entry_texts(entry, linked=()):
+    """An entry's own free text (narrative, notes) plus a bounded aggregate with its linked activity."""
+    if not isinstance(entry, dict):
+        return []
+    own = [entry.get("narrative"), entry.get("notes")]
+    related = []
+    for signal in linked:
+        if isinstance(signal, dict):
+            related += [signal.get("subject"), signal.get("purpose"), signal.get("deliverable")]
+    texts = [t for t in own if isinstance(t, str)]
+    texts += aggregate(own)
+    texts += aggregate(own + related) if any(isinstance(t, str) and t.strip() for t in own) else []
+    return texts
 
 
 def redact(text):
@@ -480,6 +624,11 @@ def _bad(where, rule, value):
 def check_text(value, where, null=True):
     if not (isinstance(value, str) or (null and value is None)):
         _bad(where, "a string" + (" or null" if null else ""), value)
+    if isinstance(value, str):
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            _bad(where, "valid Unicode text (no lone surrogates)", value)
 
 
 def check_id(value, where):

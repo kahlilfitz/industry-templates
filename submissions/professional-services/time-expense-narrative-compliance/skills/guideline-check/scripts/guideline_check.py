@@ -99,7 +99,7 @@ def load_packet(path):
     try:
         with open(path, encoding="utf-8") as fh:
             payload = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
     if not isinstance(payload, dict):
         raise InputError("input is not a JSON object")
@@ -261,11 +261,16 @@ def main():
         draft = entry.get("draft") or {}
         rewrites = [r for r in draft.get("suggested_rewrites") or [] if isinstance(r, dict)]
         rewrite_texts = [r.get("narrative") for r in rewrites]
-        if embedded_instruction(narrative, entry.get("narrative"), entry.get("notes"), *rewrite_texts,
-                                *[signal_policy.signal_texts(a) for a in linked]):
+        # Any upstream marker or any field (or field aggregate) that trips holds the entry; never compliant.
+        injected = (entry.get("embedded_instruction") is True
+                    or any(a.get("embedded_instruction") is True for a in linked)
+                    or embedded_instruction(narrative, signal_policy.entry_texts(entry, linked), *rewrite_texts,
+                                            *[signal_policy.signal_texts(a) for a in linked]))
+        if injected:
             add_flag(flags, "embedded_instruction", "hold_for_review",
-                     "narrative or linked activity text addresses the reviewer/engine, claims an approval or waiver, "
-                     "asks for forwarding, or carries an e-mail address or URL; treated as data and not followed",
+                     "narrative or linked activity text addresses the reviewer/engine, steers the verdict, claims an "
+                     "approval or waiver, asks for forwarding, mixes scripts in one word, or carries an e-mail "
+                     "address or URL; treated as data and not followed",
                      [signal_policy.INJECTION_CITATION], 0.95)
         for rewrite in rewrites:
             if embedded_instruction(rewrite.get("narrative")):
@@ -359,7 +364,8 @@ def main():
         if activity["activity_id"] in used_activity_ids:
             continue
         if activity.get("billable_signal") and activity.get("duration_hours", 0) >= MISSING_TIME_MIN_HOURS:
-            flagged = embedded_instruction(signal_policy.signal_texts(activity))
+            flagged = (activity.get("embedded_instruction") is True
+                       or embedded_instruction(signal_policy.signal_texts(activity)))
             item = {
                 "activity_id": activity["activity_id"],
                 "person": activity.get("person"),

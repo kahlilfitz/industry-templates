@@ -77,7 +77,7 @@ def read_csv(path, required):
     try:
         with open(path, encoding="utf-8", newline="") as fh:
             rows = list(csv.DictReader(fh))
-    except OSError as exc:
+    except (OSError, UnicodeError, csv.Error) as exc:
         raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
     if rows:
         missing = [c for c in required if c not in rows[0]]
@@ -132,7 +132,7 @@ def read_engagement(path):
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         raise InputError(f"cannot read engagement-letter-extract.md: {exc}") from exc
     fields = dict(re.findall(r"^- (engagement_id|client_name|matter_name|billing_guidelines_id|engagement_manager): (.+)$",
                              text, re.M))
@@ -174,9 +174,10 @@ def resolve_scope(args, engagement):
     wants_team = bool(args.all_timekeepers or others)
     token = None
     if args.team_view_confirmation is not None:
-        token = args.team_view_confirmation.strip()
+        token = args.team_view_confirmation  # compared exactly: no trimming, no case folding
         if not signal_policy.TEAM_VIEW_TOKEN_RE.fullmatch(token):
-            raise InputError("--team-view-confirmation must be exactly 'engagement-manager:<engagement_id>'")
+            raise InputError("--team-view-confirmation must be exactly 'engagement-manager:<engagement_id>' "
+                             "(no spaces or other characters)")
         if token != signal_policy.team_view_token(eng_id):
             raise InputError(f"--team-view-confirmation is for another engagement; expected "
                              f"'{signal_policy.team_view_token(eng_id)}'")
@@ -276,7 +277,7 @@ def main():
         cli_date(args.period_end, "--period-end")
         if args.period_start and args.period_end and args.period_start > args.period_end:
             raise InputError("--period-start is after --period-end")
-    except (InputError, signal_policy.PolicyError, OSError, json.JSONDecodeError) as exc:
+    except (InputError, signal_policy.PolicyError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         sys.exit(f"activity_pull: {exc}")
 
     eng_id = engagement["engagement_id"]
@@ -438,7 +439,8 @@ def main():
         }
         if dropped:
             entry["excluded_activity_ids"] = dropped
-        if signal_policy.embedded_instruction(row["narrative"]):
+        linked_signals = [s for s in signals if s["activity_id"] in kept_links]
+        if signal_policy.embedded_instruction(signal_policy.entry_texts({"narrative": row["narrative"]}, linked_signals)):
             entry["embedded_instruction"] = True
         entries.append(entry)
 

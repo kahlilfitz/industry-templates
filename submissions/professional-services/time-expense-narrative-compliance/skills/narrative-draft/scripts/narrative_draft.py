@@ -68,7 +68,7 @@ def load_packet(path):
     try:
         with open(path, encoding="utf-8") as fh:
             payload = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
     if not isinstance(payload, dict):
         raise InputError("input is not a JSON object")
@@ -169,7 +169,8 @@ def build_narrative(entry, linked):
         return narrative, status, confidence, reasons, [], covered
 
     reasons = []
-    existing_flagged = entry.get("embedded_instruction") is True or signal_policy.embedded_instruction(existing)
+    existing_flagged = (entry.get("embedded_instruction") is True
+                        or signal_policy.embedded_instruction(signal_policy.entry_texts(entry, linked)))
     if existing_flagged:
         reasons.append("existing narrative flagged as embedded_instruction; withheld from the "
                        "draft and left in the source entry only as evidence for guideline-check, never obeyed "

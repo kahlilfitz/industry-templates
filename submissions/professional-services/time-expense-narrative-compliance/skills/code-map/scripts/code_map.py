@@ -69,7 +69,7 @@ def load_packet(path):
     try:
         with open(path, encoding="utf-8") as fh:
             payload = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
     if not isinstance(payload, dict):
         raise InputError("input is not a JSON object")
