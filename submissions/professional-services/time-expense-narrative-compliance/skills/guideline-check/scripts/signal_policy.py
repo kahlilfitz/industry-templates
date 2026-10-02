@@ -417,11 +417,13 @@ CITATION_RE = re.compile(r"[A-Za-z0-9_./-]+\.(?:csv|md|json|xlsx|docx)(?: row \d
 def safe_citations(citations, flagged=False):
     """(citations that may be copied into output, whether any was withheld) (#11.2).
 
-    Each citation must pass the tripwire on its own. When the record it came from is flagged, only
-    plain source-row or reference-section citations are kept, so an instruction split across several
-    citations cannot survive as fragments."""
+    Each citation must pass the tripwire on its own. When the record it came from is flagged, or the
+    citations trip together, only plain source-row or reference-section citations are kept, so an
+    instruction split across several citations cannot survive as fragments."""
     kept, withheld = [], False
-    for citation in citations if isinstance(citations, list) else []:
+    citations = citations if isinstance(citations, list) else []
+    flagged = flagged or embedded_instruction(_joined([c for c in citations if isinstance(c, str)]))
+    for citation in citations:
         if not isinstance(citation, str):
             continue
         if embedded_instruction(citation) or (flagged and not CITATION_RE.fullmatch(citation)):
@@ -432,9 +434,9 @@ def safe_citations(citations, flagged=False):
 
 
 def entry_texts(entry, linked=()):
-    """One multi-field record: an entry's own free text (narrative, notes) and, when it has any, the
-    subject/purpose/deliverable of its linked activities, so an instruction split between the entry
-    and its activity is caught."""
+    """One multi-field record: an entry's own free text (narrative, notes, citations) and, when it has
+    a narrative or notes, the subject/purpose/deliverable of its linked activities, so an instruction
+    split between the entry and its activity is caught."""
     if not isinstance(entry, dict):
         return {}
     record = {"narrative": entry.get("narrative"), "notes": entry.get("notes")}
@@ -443,6 +445,11 @@ def entry_texts(entry, linked=()):
             if isinstance(signal, dict):
                 for key in ("subject", "purpose", "deliverable"):
                     record[f"linked{n}_{key}"] = signal.get(key)
+    citations = entry.get("citations")
+    if isinstance(citations, list):
+        record["citations"] = _joined(citations)
+    elif citations is not None:
+        record["citations"] = json.dumps(citations, default=str)  # wrong type: scan everything it holds
     return record
 
 
@@ -660,6 +667,9 @@ def validate_packet(packet, stage):
     # period is required by the contract: a missing or null period is an input error, never "no period".
     check_fields(packet, "packet", (("period", "object", True),))
     check_fields(packet["period"], "period", PERIOD_SPEC)
+    start, end = packet["period"]["start"], packet["period"]["end"]
+    if start is not None and end is not None and start > end:
+        raise SchemaError("invalid input: period.start is after period.end")
     if "signal_config" in packet:
         # Present means a real policy: null or a policy without sources would silently lift its restrictions.
         config = check_fields(packet["signal_config"], "signal_config", (("sources", "object", True),))

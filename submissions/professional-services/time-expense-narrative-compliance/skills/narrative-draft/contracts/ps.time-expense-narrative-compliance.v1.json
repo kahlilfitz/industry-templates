@@ -59,7 +59,7 @@
     },
     "period": {
       "type": "object",
-      "description": "Required, never null. start and end are both present: a YYYY-MM-DD date, or null for an open end (activity_pull without --period-start/--period-end). A missing or null period is an input error at every engine.",
+      "description": "Required, never null. start and end are both present: a YYYY-MM-DD date, or null for an open end (activity_pull without --period-start/--period-end). A missing or null period, or a start after its end, is an input error at every engine.",
       "required": [
         "start",
         "end"

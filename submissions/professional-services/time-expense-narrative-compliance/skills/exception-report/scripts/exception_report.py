@@ -17,7 +17,8 @@ engine re-runs the shared guideline rules (billing_rules.py) on a copy. An entry
 or flags are less severe than the rules', missing-time items that differ from the rules', or summary
 totals, verdict counts or missing-time hours that contradict the line items are refused: no packet
 is written, and the user is told to re-run guideline_check.py. A reject never renders as compliant.
-Summary figures are derived from the line items.
+Summary figures are derived from the line items, excluded signal IDs from provenance.excluded_signals, and
+every printed flag detail and citation from the re-run (a supplied detail is never printed).
 """
 import argparse
 import datetime
@@ -98,7 +99,7 @@ def main():
         data = deepcopy(load_governed(args.governed))
         signal_policy.enforce_timekeeper_scope(data, engine=ENGINE, strict=True)
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        problems = billing_rules.reconcile_governed(data, script_dir=script_dir, engine=ENGINE)
+        problems, rerun = billing_rules.reconcile_governed(data, script_dir=script_dir, engine=ENGINE)
         if problems:
             raise InputError(
                 f"governed data does not match a re-run of the guideline-check rules ({billing_rules.RECONCILE_CITATION}): "
@@ -109,6 +110,10 @@ def main():
     except (InputError, signal_policy.PolicyError) as exc:
         sys.exit(f"exception_report: {exc}")
 
+    # Only re-derived flag detail and citations are printed; supplied detail text never is (#13.2).
+    for entry, want in zip(data["time_entries"], rerun["time_entries"]):
+        entry["compliance"]["flags"] = billing_rules.rendered_flags(entry["compliance"].get("flags"),
+                                                                    want["compliance"]["flags"])
     eng = data.get("engagement", {})
     # The header fields are one record: an instruction split across client and matter name is withheld.
     header = {k: eng.get(k) for k in HEADER_KEYS if isinstance(eng.get(k), str)}
@@ -116,7 +121,6 @@ def main():
     if header_hits:
         eng = {k: signal_policy.WITHHELD_TEXT for k in HEADER_KEYS}
     period = data.get("period") or {}
-    summary = data["prebill_summary"]
     figures = billing_rules.summary_figures(data["time_entries"], data["missing_time_report"])
     data_dates = sorted({d for d in [e.get("date") for e in data["time_entries"]]
                          + [s.get("date") for s in data.get("activity_signals", [])] if isinstance(d, str) and d})
@@ -175,7 +179,7 @@ def main():
         f"- Entries: {figures['total_entries']} ({figures['total_hours']} h)",
         "- Verdicts: " + ", ".join(f"{cell(k)} {cell(v)}" for k, v in sorted(figures["verdict_counts"].items())),
         f"- Missing time: {figures['missing_time_hours']} h across {len(data['missing_time_report'])} activity signal(s)",
-        f"- Excluded by signal policy: {cells(summary.get('excluded_signal_ids') or []) or 'none'}",
+        f"- Excluded by signal policy: {cells(billing_rules.excluded_ids(data)) or 'none'}",
         "",
     ]
     sections = (("hold_for_review", "Held for review"),

@@ -5,7 +5,8 @@
 - guideline_check.py runs govern(). It recomputes every entry's code mapping and holds an entry whose
   supplied mapping disagrees (client-billing-guidelines.md #13.1), then applies #1-#9 and #11.
 - exception_report.py runs reconcile_governed(): govern() again on a copy of the governed data. It lists
-  every entry, missing-time item and summary figure the supplied data understates or contradicts (#13.2).
+  every entry, missing-time item, summary figure and exclusion the supplied data understates or contradicts
+  (#13.2), and prints only the re-derived flag detail and citations (rendered_flags).
 
 Constants mirror references/task-phase-codes.md and references/client-billing-guidelines.md section
 by section. The model reports these results; it never decides, suppresses or downgrades them.
@@ -111,10 +112,13 @@ def code_mapping(entry, linked):
             "confidence": confidence,
             "citations": ["task-phase-codes.md #5.3", "client-billing-guidelines.md #4.1"],
         })
-    elif submitted_task and submitted_task != task:
+    elif (submitted_task and submitted_task != task) or (submitted_phase and submitted_phase != phase):
+        # Either code can be wrong: a matching task code under the wrong phase is still a mismatch (#4.1).
+        detail = (f"submitted {submitted_task} does not match recommended {task}" if submitted_task and submitted_task != task
+                  else f"submitted phase {submitted_phase} does not match recommended phase {phase} for {task}")
         flags.append({
             "flag": "submitted_code_mismatch",
-            "detail": f"submitted {submitted_task} does not match recommended {task}",
+            "detail": detail,
             "severity": "needs_review" if confidence >= CODE_MISMATCH_REVIEW_CONFIDENCE else "hold_for_review",
             "source": CODE_MAP_ENGINE,
             "confidence": confidence,
@@ -291,9 +295,18 @@ def govern(out):
 
     for entry in out["time_entries"]:
         draft = entry.get("draft") or {}
-        narrative = (draft.get("narrative") or entry.get("narrative") or "").strip()
-        narrative_norm = normalize(narrative)
         linked = [by_id[a] for a in entry.get("activity_ids", []) if a in by_id]
+        draft_text = draft.get("narrative").strip() if isinstance(draft.get("narrative"), str) else ""
+        draft_hits = []
+        if draft_text and draft_text != signal_policy.WITHHELD_TEXT:
+            # The main draft alone, and with the entry's notes and linked activity text (split instructions).
+            draft_hits = signal_policy.screen(draft_text, signal_policy.entry_texts(
+                {"narrative": draft_text, "notes": entry.get("notes")}, linked))
+        # #11.2: a withheld draft (flagged now, or already the marker) is never checked as text. Every rule runs
+        # on the entry's own narrative instead, so exception_report's re-run reproduces every flag (#13.2).
+        draft_withheld = draft_text == signal_policy.WITHHELD_TEXT or bool(draft_hits)
+        narrative = ((None if draft_withheld else draft.get("narrative")) or entry.get("narrative") or "").strip()
+        narrative_norm = normalize(narrative)
         used_activity_ids.update(a["activity_id"] for a in linked)
         classes = sorted({a.get("activity_class") for a in linked if a.get("activity_class")})
         duration = entry["duration_hours"]
@@ -303,7 +316,7 @@ def govern(out):
         all_date_hours = round(sum(a.get("duration_hours", 0) for a in linked), 2)
         # #13.1: the code mapping is recomputed from the rules (before any draft text is withheld, as
         # code_map.py saw it); a supplied mapping that disagrees is discarded and the entry is held.
-        mapping = code_mapping(entry, linked)
+        mapping = code_mapping(dict(entry, draft=dict(draft, narrative="")) if draft_withheld else entry, linked)
         mapping_rejected = entry.get("code_mapping") != mapping
         flags = []
 
@@ -359,16 +372,11 @@ def govern(out):
 
         rewrites = [r for r in draft.get("suggested_rewrites") or [] if isinstance(r, dict)]
         rewrite_texts = [r.get("narrative") for r in rewrites]
-        draft_text = draft.get("narrative").strip() if isinstance(draft.get("narrative"), str) else ""
-        draft_hits = []
-        if draft_text and draft_text != signal_policy.WITHHELD_TEXT:
-            # The main draft alone, and with the entry's notes and linked activity text (split instructions).
-            draft_hits = signal_policy.screen(draft_text, signal_policy.entry_texts(
-                {"narrative": draft_text, "notes": entry.get("notes")}, linked))
         # Any upstream marker or any field (or field aggregate) that trips holds the entry; never compliant.
         hits = signal_policy.screen(narrative, signal_policy.entry_texts(entry, linked), *rewrite_texts,
                                     *[signal_policy.signal_texts(a) for a in linked]) + draft_hits
-        marked = (entry.get("embedded_instruction") is True or any(a.get("embedded_instruction") is True for a in linked)
+        marked = (draft_withheld or entry.get("embedded_instruction") is True
+                  or any(a.get("embedded_instruction") is True for a in linked)
                   or any(r.get("status") == "withheld_embedded_instruction" for r in rewrites))
         if marked or hits:
             add_flag(flags, "embedded_instruction", "hold_for_review",
@@ -523,16 +531,40 @@ def _flag_keys(flags):
     return {(f.get("flag"), f.get("severity")) for f in flags or [] if isinstance(f, dict)}
 
 
+def excluded_ids(packet):
+    """The excluded signal IDs, derived from provenance.excluded_signals (#10.1)."""
+    return [e.get("activity_id") for e in (packet.get("provenance") or {}).get("excluded_signals", [])]
+
+
+NOT_REDERIVED = "recorded by guideline_check but not raised by a re-run of the rules on this governed data"
+
+
+def rendered_flags(recorded, rederived):
+    """The flags exception_report prints for one entry (#13.2): the re-run's flags with their re-derived detail
+    and citations. A recorded flag the re-run does not raise (a stricter earlier run) keeps its name and
+    severity with a neutral detail. Supplied detail and citation text is never printed."""
+    out = [{"flag": f["flag"], "severity": f["severity"], "detail": f.get("detail", ""),
+            "citations": list(f.get("citations", []))} for f in rederived]
+    derived = _flag_keys(rederived)
+    for flag in recorded or []:
+        if isinstance(flag, dict) and (flag.get("flag"), flag.get("severity")) not in derived:
+            out.append({"flag": flag.get("flag"), "severity": flag.get("severity"), "detail": NOT_REDERIVED,
+                        "citations": [RECONCILE_CITATION]})
+    return out
+
+
 def reconcile_governed(packet, script_dir=None, engine="engine:unknown"):
-    """Re-run govern() on a copy of governed data and list every disagreement (#13.2). Empty = consistent.
+    """Re-run govern() on a copy of governed data; return (problems, rerun). No problems = consistent (#13.2).
 
     - Entries: the recorded verdict may never be less severe than the re-run's, and every re-run
-      (flag, severity) must be recorded. Extra recorded flags are allowed (text an earlier run flagged
-      may since have been withheld). An entry whose draft was withheld (#11.2) cannot be re-checked
-      from its text: it must be held (hold_for_review or reject) with an embedded_instruction flag.
+      (flag, severity) must be recorded. Extra recorded flags are allowed (a stricter earlier run). An entry
+      whose draft was withheld (#11.2) is re-checked on its own narrative like any other, with the
+      embedded_instruction hold merged in: a reject stays a reject.
     - Missing time: the recorded items must equal the re-run's exactly.
-    - Summary: totals, hours, verdict counts, missing-time hours and the exception count must match the
-      line items.
+    - Summary: totals, hours, verdict counts, missing-time hours, the exception count, the period and the
+      excluded signal IDs must match the line items, the packet period and provenance.excluded_signals.
+    - Exclusions: provenance.excluded_signals must cover every entry's excluded links, list no signal still
+      present, and be unchanged when the signal policy is re-applied.
     Messages name fields, positions, verdicts and the re-run's flag names only; never supplied text.
     """
     rerun = deepcopy(packet)
@@ -547,15 +579,14 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown"):
         where = f"time_entries[{i}]"
         recorded = got["compliance"]
         have = _flag_keys(recorded.get("flags"))
+        need = _flag_keys(want["compliance"]["flags"])
+        floor = want["compliance"]["verdict"]
         if (got.get("draft") or {}).get("narrative") == signal_policy.WITHHELD_TEXT:
-            if rank[recorded["verdict"]] < rank["hold_for_review"] or ("embedded_instruction", "hold_for_review") not in have:
-                problems.append(f"{where}: a withheld draft must be held with an embedded_instruction flag, "
-                                f"but the recorded verdict is {recorded['verdict']}")
-            continue
-        expected = want["compliance"]
-        absent = sorted(f for f, _ in _flag_keys(expected["flags"]) - have)
-        if rank[recorded["verdict"]] < rank[expected["verdict"]] or absent:
-            problems.append(f"{where}: recorded verdict {recorded['verdict']}, the rules give {expected['verdict']}"
+            need.add(("embedded_instruction", "hold_for_review"))
+            floor = max(floor, "hold_for_review", key=rank.__getitem__)
+        absent = sorted({f for f, _ in need - have})
+        if rank[recorded["verdict"]] < rank[floor] or absent:
+            problems.append(f"{where}: recorded verdict {recorded['verdict']}, the rules give {floor}"
                             + (f" (flags not recorded: {', '.join(absent)})" if absent else ""))
     if packet["missing_time_report"] != rerun["missing_time_report"]:
         problems.append(f"missing_time_report: {len(packet['missing_time_report'])} recorded item(s) do not match "
@@ -569,4 +600,18 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown"):
         problems.append("prebill_summary.exception_count does not match the line items")
     if len(packet["exception_list"]) != derived_exceptions:
         problems.append("exception_list does not match the line items")
-    return problems
+    if "period" in summary and summary["period"] != packet.get("period"):
+        problems.append("prebill_summary.period does not match the packet period")
+    ids = excluded_ids(packet)
+    if "excluded_signal_ids" in summary and summary["excluded_signal_ids"] != ids:
+        problems.append("prebill_summary.excluded_signal_ids does not match provenance.excluded_signals")
+    if excluded_ids(rerun) != ids:
+        problems.append("activity_signals hold signal(s) the signal policy excludes, or provenance.excluded_signals "
+                        "is incomplete")
+    present = {a.get("activity_id") for a in packet["activity_signals"]}
+    if present & set(ids):
+        problems.append("provenance.excluded_signals lists signal(s) still present in activity_signals")
+    for i, entry in enumerate(supplied):
+        if set(entry.get("excluded_activity_ids") or []) - set(ids):
+            problems.append(f"time_entries[{i}].excluded_activity_ids are not recorded in provenance.excluded_signals")
+    return problems, rerun

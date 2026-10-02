@@ -10,8 +10,8 @@ v1.0.4 rules:
   client-billing-guidelines.md #10.1); an entry that linked one is marked needs_review.
 - Rows outside the recorded timekeeper scope are withheld before drafting (#12.1).
 - Every free-text field of a linked signal (subject, deliverable, purpose, attendees, organizer,
-  file name, citations) and the existing narrative pass the shared embedded-instruction tripwire
-  first (#11.1). Flagged text is never copied into a narrative, a suggested rewrite or the draft's
+  file name, citations) and of the entry (narrative, notes, citations) passes the shared
+  embedded-instruction tripwire first (#11.1). Flagged text is never copied into a narrative, a suggested rewrite or the draft's
   citations (#11.2): the draft is withheld and marked needs_review_embedded_instruction.
 - Calendar activity is "Attended" unless the calendar organizer is the timekeeper ("Led").
 - Each activity becomes "<verb> <subject> [with <attendees>] to <purpose> [for the <deliverable>]."
@@ -234,6 +234,16 @@ def main():
     for entry in out["time_entries"]:
         linked = [by_id[a] for a in entry.get("activity_ids", []) if a in by_id]
         narrative, status, confidence, reasons, suggestions, covered = build_narrative(entry, linked)
+        # The entry's own text, citations included, is screened like signal text (#11.1): when it trips, the
+        # draft is withheld and no flagged entry citation is copied (#11.2).
+        entry_hits = signal_policy.screen(signal_policy.entry_texts(entry))
+        entry_flagged = entry.get("embedded_instruction") is True or bool(entry_hits)
+        entry_citations, entry_citations_dropped = signal_policy.safe_citations(entry.get("citations", []), entry_flagged)
+        if (entry_flagged or entry_citations_dropped) and status != "needs_review_embedded_instruction":
+            narrative, status, confidence = "", "needs_review_embedded_instruction", NO_EVIDENCE_CONFIDENCE
+            reasons.append(signal_policy.hold_reason(entry_hits, "time entry text or citation flagged as embedded_instruction")
+                           + "; draft withheld and the flagged text never copied or obeyed "
+                           "(client-billing-guidelines.md #11.1, #11.2)")
         excluded_links = entry.get("excluded_activity_ids") or []
         if excluded_links:
             reasons.append("linked signal(s) from a disabled or unresolvable source were excluded from evidence: "
@@ -272,7 +282,7 @@ def main():
             "excluded_activity_ids": list(excluded_links),
             "confidence": confidence,
             "source": ENGINE,
-            "citations": sorted(set(citations)) or entry.get("citations", []),
+            "citations": sorted(set(citations)) or entry_citations,
         }
         if suggestions:
             entry["draft"]["suggested_rewrites"] = suggestions
