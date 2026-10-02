@@ -137,6 +137,14 @@ How to read a report:
   paths. [Wave 1 pre-freeze QA round 8]
   Test: a team-view entry linked to another timekeeper's signal; a malformed input file whose name
   is an instruction.
+- [ ] **A19. Trust is re-derived, never carried.** A field in an intermediate that widens trust or
+  relaxes a screen (trusted domains, client-only recipients, own-client vocabulary, confirmed
+  roles, enabled sources) is re-derived from the screened source at each stage, or reconciled
+  against carried screened evidence with a refusal on mismatch. Every section a stage reads is
+  validated before use; a wrongly typed section is an input error, never skipped. Supplied paths
+  never appear in holds or outputs. [Wave 1 pre-freeze QA round 11]
+  Test: add one domain only to an intermediate's trusted list, then send text to that domain; it
+  must still be withheld and held.
 
 ## B. Finding integrity (engines)
 
