@@ -101,6 +101,14 @@ How to read a report:
   in every downstream validator. Check required CSV headers even when the file has no rows.
   [Wave 1 pre-freeze QA round 5]
   Test: two activity signals sharing one ID; a header-only CSV missing a required column.
+- [ ] **A13. One canonical form for every comparison.** Every comparison of names, IDs and CSV
+  headers (joins, dict keys, set membership, rule applicability, duplicate detection) goes through
+  one shared function: NFKC, strip `Cf` characters, casefold, collapse whitespace, and for IDs fold
+  `-`, `_` and `.`. No length cap or fast path skips the folding. Output keeps the original value.
+  Extra CSV cells beyond the header are kept and screened, never dropped. [Wave 1 pre-freeze QA
+  round 7]
+  Test: a blocked or restricted person written with a double space; a denied workspace ID in a
+  different case; a fullwidth duplicate header; an over-long ID that differs only by separator.
 
 ## B. Finding integrity (engines)
 
