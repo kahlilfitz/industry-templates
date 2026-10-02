@@ -19,8 +19,13 @@ quoted from the located paragraph under the stated section and page, sample and 
 must appear in that paragraph or in a linked evidence entry, and every evidence ID must be indexed.
 Classification fields (class, label, hedging_present, limitation_present, stated_basis,
 scope_aligned), prior-finding detail and extraction confidence are ingest judgements: they are
-listed in JUDGEMENT_KEYS and type-checked, not re-derived. Any other field is reported, so a new
-fixture value cannot be added without a raw source or a documented rule.
+listed in JUDGEMENT_KEYS and are not re-derived, but each is type- and range-checked by
+judgement_problems (a confidence is a finite number in 0..1, a class is one of the four contract
+classes, a location has a text section and label and positive integer page and paragraph, flags
+are true/false), so "high", {} or "certain" never pass. Any other field is reported, so a new
+fixture value cannot be added without a raw source or a documented rule. The review input is
+loaded with the engines' strict JSON loader, and IDs and names are compared in the engines'
+canonical form (assertion_rules.canonical_id / canonical_name, quality-gate-criteria.md #8.11).
 
 Paragraph rule (deliverable-ingest step 3): a paragraph is a block of body text separated by a
 blank line; headings, [Page N] markers and blank lines are not paragraphs. Paragraphs are counted
@@ -32,6 +37,10 @@ import json
 import os
 import re
 import sys
+from datetime import datetime
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skills", "assertion-map", "scripts"))
+import assertion_rules as rules  # noqa: E402  (the engines' strict loader and canonical comparison forms)
 
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 CRITERIA_FLOOR = ["quality-gate-criteria.md #1-#8", "severity-rules.md #1-#4"]
@@ -53,6 +62,8 @@ JUDGEMENT_KEYS = {
     "assertion": {"assertion_id", "class", "location", "hedging_present", "limitation_present", "stated_basis", "scope_aligned", "confidence"},
     "prior_finding": {"detail"},
 }
+ASSERTION_CLASSES = tuple(sorted(rules.SUPPORT_TYPES_BY_CLASS))
+ASSERTION_FLAGS = ("hedging_present", "limitation_present", "stated_basis", "scope_aligned")
 ORDER_FREE = {"present_disclaimer_types", "required_language", "present_language"}
 REGISTER_IDS = {"brand_checks": "check_id", "licensed_content": "content_id"}
 
@@ -205,7 +216,7 @@ def derive(scenario_dir):
     title, cover, blocks, disclaimers = parse_draft(read_text(os.path.join(raw, "draft-deliverable.md")))
     client = cover.get("Client")
     recipients = [item.strip() for item in cover["Distribution"].split(";")] if cover.get("Distribution") else None
-    third_party = any(client is None or client.lower() not in item.lower() for item in recipients or [])
+    third_party = any(client is None or rules.canonical_name(client) not in rules.canonical_name(item) for item in recipients or [])
     handling, brand, licensed = parse_registers(os.path.join(raw, "release-registers.md"))
     body = " ".join(block["text"] for block in blocks.values())
     headings = " ".join(block["section"] or "" for block in blocks.values())
@@ -287,13 +298,19 @@ def compare_object(path, expected, actual, judgement, problems):
             compare_value(f"{path}.{key}", expected[key], actual[key], problems)
 
 
+def id_key(value):
+    """Comparison form of an ID (canonical_id); a non-string is compared by its JSON form."""
+    return rules.canonical_id(value) if isinstance(value, str) else json.dumps(value, sort_keys=True)
+
+
 def compare_list(path, expected, actual, key, judgement, problems):
     if not isinstance(actual, list):
         problems.append(f"{path}: raw pack gives a list of {len(expected)}, review input has {actual!r}")
         return
     want, have = [item[key] for item in expected], [item.get(key) for item in actual if isinstance(item, dict)]
     for side, ids in (("raw pack", want), ("review input", have)):
-        repeated = sorted({str(item) for item in ids if ids.count(item) > 1})
+        folded = [id_key(item) for item in ids]
+        repeated = sorted({str(item) for item, fold in zip(ids, folded) if folded.count(fold) > 1})
         if repeated:
             problems.append(f"{path}: {side} repeats {key} {', '.join(repeated)}; IDs must be unique")
             return
@@ -325,9 +342,54 @@ def assertion_problems(index, assertion, blocks, evidence_lines):
         value = assertion.get(key)
         if value is not None and float(value) not in numbers_in(context):
             problems.append(f"{label}.{key}: {value} appears in neither the located paragraph nor a linked evidence entry")
-    for key in ("hedging_present", "limitation_present", "stated_basis", "scope_aligned"):
-        if key in assertion and not isinstance(assertion[key], bool):
-            problems.append(f"{label}.{key}: ingest judgement must be true/false")
+    return problems + judgement_problems(label, "assertion", assertion)
+
+
+def is_confidence(value):
+    return rules.is_number(value) and 0 <= value <= 1
+
+
+def is_iso_timestamp(value):
+    if not isinstance(value, str):
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+def judgement_problems(label, kind, item):
+    """Type- and range-check the ingest judgements that are not re-derived (JUDGEMENT_KEYS)."""
+    if not isinstance(item, dict):
+        return []
+    problems = []
+    if "confidence" in item or kind == "assertion":
+        if not is_confidence(item.get("confidence")):
+            problems.append(f"{label}.confidence: ingest judgement must be a number from 0 to 1, got {rules.describe(item.get('confidence'))}")
+    if kind == "assertion":
+        if not isinstance(item.get("assertion_id"), str) or not item["assertion_id"].strip():
+            problems.append(f"{label}.assertion_id: must be a non-blank string, got {rules.describe(item.get('assertion_id'))}")
+        if item.get("class") not in ASSERTION_CLASSES:
+            problems.append(f"{label}.class: must be one of {', '.join(ASSERTION_CLASSES)}, got {rules.describe(item.get('class'))}")
+        location = item.get("location")
+        if not isinstance(location, dict):
+            problems.append(f"{label}.location: must be an object, got {rules.describe(location)}")
+        else:
+            for key in ("section", "label"):
+                if not isinstance(location.get(key), str) or not location[key].strip():
+                    problems.append(f"{label}.location.{key}: must be a non-blank string, got {rules.describe(location.get(key))}")
+            for key in ("page", "paragraph"):
+                value = location.get(key)
+                if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                    problems.append(f"{label}.location.{key}: must be a positive integer, got {rules.describe(value)}")
+        for key in ASSERTION_FLAGS:
+            if (key in item or key == "scope_aligned") and not isinstance(item.get(key), bool):
+                problems.append(f"{label}.{key}: ingest judgement must be true/false, got {rules.describe(item.get(key))}")
+    if kind == "prior_finding" and "detail" in item and not isinstance(item["detail"], str):
+        problems.append(f"{label}.detail: must be a string, got {rules.describe(item['detail'])}")
+    if kind == "provenance" and "generated_at" in item and not is_iso_timestamp(item["generated_at"]):
+        problems.append(f"{label}.generated_at: must be an ISO-8601 timestamp, got {rules.describe(item['generated_at'])}")
     return problems
 
 
@@ -343,6 +405,11 @@ def compare(scenario_dir, payload):
     compare_list("evidence_set", derived["evidence_set"], payload.get("evidence_set"), "evidence_id", set(), problems)
     compare_list("prior_findings", derived["prior_findings"], payload.get("prior_findings"), "finding_id", JUDGEMENT_KEYS["prior_finding"], problems)
     compare_object("provenance", derived["provenance"], payload.get("provenance"), {"generated_at"}, problems)
+    problems += judgement_problems("deliverable", "deliverable", payload.get("deliverable"))
+    problems += judgement_problems("criteria", "criteria", payload.get("criteria"))
+    problems += judgement_problems("provenance", "provenance", payload.get("provenance"))
+    for index, item in enumerate(payload.get("prior_findings") or []):
+        problems += judgement_problems(f"prior_findings[{index}]", "prior_finding", item)
     deliverable = derived["deliverable"]
     for name in ("brand_checks", "licensed_content"):
         for index, item in enumerate(deliverable[name] or []):
@@ -350,7 +417,8 @@ def compare(scenario_dir, payload):
     for index, item in enumerate(derived["prior_findings"]):
         problems += location_problems(f"prior_findings[{index}]", item["location"], blocks)
     assertion_ids = [item.get("assertion_id") for item in payload.get("assertions") or [] if isinstance(item, dict)]
-    repeated = sorted({str(item) for item in assertion_ids if assertion_ids.count(item) > 1})
+    folded = [id_key(item) for item in assertion_ids]
+    repeated = sorted({str(item) for item, fold in zip(assertion_ids, folded) if folded.count(fold) > 1})
     if repeated:
         problems.append(f"assertions: review input repeats assertion_id {', '.join(repeated)}; IDs must be unique")
     for index, assertion in enumerate(payload.get("assertions") or []):
@@ -364,10 +432,14 @@ def main(argv):
     failed = False
     for scenario_dir in scenarios:
         try:
-            with open(os.path.join(scenario_dir, "review-input.json"), encoding="utf-8") as fh:
-                problems = compare(scenario_dir, json.load(fh))
-        except ValueError as exc:
-            problems = [f"raw pack is malformed: {exc}"]
+            payload = rules.load_json_file(os.path.join(scenario_dir, "review-input.json"))
+        except rules.InputError as exc:
+            problems = [f"review input is malformed: {exc}"]
+        else:
+            try:
+                problems = compare(scenario_dir, payload)
+            except ValueError as exc:
+                problems = [f"raw pack is malformed: {exc}"]
         print(f"{os.path.basename(os.path.normpath(scenario_dir))}: {'derives from its raw pack' if not problems else f'{len(problems)} difference(s)'}")
         for problem in problems:
             print("  - " + problem)

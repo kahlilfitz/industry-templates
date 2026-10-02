@@ -28,7 +28,9 @@ SR_SPOOF_ID = "SR-G8-engine-id-spoof"
 # G8 holds that re-derivation cannot reproduce from gate-checked.json alone: gate_check's spoof and pre-restoration hits
 # depend on input it has since corrected, and severity_rank's own holds come from an earlier severity_rank run. Each is
 # accepted only as a G8 release blocker carrying its own engine's source tag, so accepting one can only hold the run.
-HISTORY_HOLD_ID = re.compile(r"^(?:GC|SR)-G8-(?:engine-id-spoof|embedded-instruction-[1-9][0-9]{0,5})$")
+# The numbered suffix is bounded by what the engines can emit (1..MAX_G8_HITS), so an impossible sixth hold is forged.
+G8_HIT_NUMBER = "(?:" + "|".join(str(number) for number in range(1, MAX_G8_HITS + 1)) + ")"
+HISTORY_HOLD_ID = re.compile(r"^(?:GC|SR)-G8-(?:engine-id-spoof|embedded-instruction-" + G8_HIT_NUMBER + r")$")
 
 InputError = rules.InputError
 
@@ -91,10 +93,11 @@ def sort_key(item):
 def collapse_duplicates(findings):
     """Keep one finding per finding_id at the highest severity (first occurrence on a tie), so a duplicate is never
     counted twice and can never lower severity (severity-rules.md #3.1). Entry validation already refuses copies that
-    differ (quality-gate-criteria.md #8.11), so this is a backstop. Returns (kept, {finding_id: copies})."""
+    differ (quality-gate-criteria.md #8.11), so this is a backstop. IDs are compared in canonical form (rules.canonical_id),
+    and the kept finding keeps its original ID. Returns (kept, {canonical finding_id: copies})."""
     kept, positions, copies = [], {}, {}
     for item in findings:
-        finding_id = item["finding_id"]
+        finding_id = rules.canonical_id(item["finding_id"])
         if finding_id not in positions:
             positions[finding_id] = len(kept)
             kept.append(item)
@@ -168,25 +171,26 @@ def rederive_gate_findings(payload):
 
 
 def engine_owner(item):
-    """The engine source tag an incoming finding claims, by finding-ID prefix or source tag; None for other findings."""
-    finding_id = gc.normalize_text(item["finding_id"]).upper()
-    owner = next((tag for prefix, tag in gc.ENGINE_OWNED_PREFIXES.items() if finding_id.startswith(prefix)), None)
-    source = gc.normalize_text(item.get("source", ""))
-    return owner or (source if source.startswith("engine:") else None)
+    """The engine an incoming finding claims, by finding-ID prefix or source tag, both compared in canonical form
+    (rules.engine_id_owner, rules.canonical_tag: `gc_G8-x`, `Engine :gate_check`); None for other findings. Called on
+    the raw finding, before any text is withheld, so a flagged `GC-<instruction>` ID keeps its owner (#8.11)."""
+    owner = rules.engine_id_owner(item.get("finding_id"))
+    return owner or (rules.canonical_tag(item.get("source")) if rules.is_engine_tag(item.get("source")) else None)
 
 
-def remove_forged_engine_findings(payload, derived):
+def remove_forged_engine_findings(payload, derived, raw_owners=()):
     """Hold every engine-owned finding to re-derivation (severity-rules.md #3.8, quality-gate-criteria.md #8.4).
 
     A finding with an engine-owned ID prefix (AM-, GC-, SR-) or an engine source tag stands only when gate_check
     re-derivation produces exactly that finding (same ID and every field equal), or when it is a G8 history hold
     (HISTORY_HOLD_ID) carried as a release blocker under its own engine's tag. Anything else is forged: it is removed,
     and when its ID is one re-derivation produces and no exact copy remains, the derived finding is restored in its
-    place. Returns the labels of the forged findings (never their text)."""
+    place. `raw_owners[i]` is the owner of findings[i] read before screening withheld any text, so a flagged engine ID
+    is still treated as engine-owned. Returns the labels of the forged findings (never their text)."""
     derived_by_id = {item["finding_id"]: item for item in derived}
     kept, forged = [], []
     for index, item in enumerate(payload["findings"]):
-        owner = engine_owner(item)
+        owner = (raw_owners[index] if index < len(raw_owners) else None) or engine_owner(item)
         if owner is None or derived_by_id.get(item["finding_id"]) == item:
             kept.append(item)
             continue
@@ -274,20 +278,22 @@ def main():
         rules.validate_contract(payload, "severity_rank")
         reconcile_gate_results(payload["findings"], payload["gate_results"])
         derived = rederive_gate_findings(payload)
+        # Ownership is read before screening can withhold an ID (quality-gate-criteria.md #8.4, #8.11).
+        raw_owners = [engine_owner(item) for item in payload["findings"]]
         # Screen first, so instruction text planted in a forged finding still raises its own G8 hold before removal.
         g8_hits = screen_embedded_instructions(payload)
         if g8_hits:
             add_g8_findings(payload, g8_hits)
-        forged = remove_forged_engine_findings(payload, derived)
+        forged = remove_forged_engine_findings(payload, derived, raw_owners)
         if forged:
             add_spoof_hold(payload, forged)
         findings, duplicates = collapse_duplicates(payload["findings"])
         payload["findings"] = findings
         refresh_gate_results(payload)
         escalations = payload["escalations"]
-        for finding_id, count in duplicates.items():
-            kept = next(item for item in findings if item["finding_id"] == finding_id)
-            escalations.append(f"{finding_id}: {count} findings shared this finding_id; one was kept at the highest severity ({kept['severity']}) - reviewing partner/QRM to confirm (severity-rules.md #3.4)")
+        for key, count in duplicates.items():
+            kept = next(item for item in findings if rules.canonical_id(item["finding_id"]) == key)
+            escalations.append(f"{kept['finding_id']}: {count} findings shared this finding_id; one was kept at the highest severity ({kept['severity']}) - reviewing partner/QRM to confirm (severity-rules.md #3.4)")
         for item in findings:
             if float(item.get("confidence", 1.0)) < CONFIDENCE_FLOOR:
                 escalations.append(f"{item['finding_id']}: confidence {item.get('confidence')} below {CONFIDENCE_FLOOR} - human confirmation required (severity-rules.md #2.1)")

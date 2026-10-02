@@ -5,7 +5,6 @@ import copy
 import os
 import re
 import sys
-import unicodedata
 from datetime import datetime
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -35,7 +34,6 @@ SEVERITY_RANK = {ADVISORY: 1, MUST_FIX: 2, RELEASE_BLOCKER: 3}
 VALID_SEVERITIES = set(SEVERITY_RANK)
 # quality-gate-criteria.md #8.4: finding-ID prefixes and source tags only the engines may emit.
 SR_ENGINE = "engine:severity_rank"
-ENGINE_OWNED_PREFIXES = {"GC-": ENGINE, "AM-": rules.AM_ENGINE, "SR-": SR_ENGINE}
 GATES = {"G1": "Evidence support and substantiation", "G2": "Required disclaimer, limitation and reliance language", "G3": "Scope-of-work alignment", "G4": "Confidentiality marking and client-data handling", "G5": "Brand and formatting standards", "G6": "Third-party and licensed content attribution", "G7": "Prior-findings closure", "G8": "Data-as-data and embedded-instruction handling"}
 # Recipient classification (quality-gate-criteria.md #2.5): client-only requires a positive client-name match.
 EXTERNAL_RECIPIENT_PATTERN = re.compile(r"\b(?:" + "|".join((
@@ -58,45 +56,9 @@ CLIENT_ROLE_WORDS = {
 INTERNAL_RECIPIENTS = {"engagement team", "engagement partner", "engagement manager", "reviewing partner", "engagement quality reviewer", "qrm"}
 AMBIGUOUS_RECIPIENT_TERMS = ("tbd", "to be confirmed", "external parties", "third parties", "stakeholders", "interested parties", "advisors", "advisers", "allowed users", "distribution list")
 
-# Letters that render like Latin letters. Used only to compare identifiers and recipient names (finding-ID
-# spoofing #8.4, recipient classification #2.2); embedded-instruction screening uses steering_guard.
-# Upper/lower case partners are added automatically because normalize_text folds case between two passes.
-_CONFUSABLE_BASE = {
-    # Cyrillic
-    "А": "A", "В": "B", "Е": "E", "І": "I", "Ј": "J", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P",
-    "С": "C", "Т": "T", "Х": "X", "У": "Y", "Ѕ": "S", "Ԁ": "D", "Ԛ": "Q", "Ԝ": "W",
-    "а": "a", "в": "b", "е": "e", "і": "i", "ј": "j", "к": "k", "м": "m", "н": "h", "о": "o", "р": "p",
-    "с": "c", "т": "t", "х": "x", "у": "y", "ѕ": "s", "ԁ": "d", "һ": "h", "ӏ": "l", "ԛ": "q", "ԝ": "w",
-    # Greek
-    "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O",
-    "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X", "Ϲ": "C",
-    "α": "a", "β": "b", "ε": "e", "η": "n", "ι": "i", "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t",
-    "υ": "u", "χ": "x", "ω": "w", "ϲ": "c", "ϳ": "j",
-    # Armenian
-    "Օ": "O", "օ": "o", "Ս": "U", "ս": "u", "ո": "n", "հ": "h", "ց": "g", "զ": "q", "ա": "w", "Լ": "L",
-    "Տ": "S", "ı": "i",
-    # Cherokee (capitals; small forms are added below through str.lower)
-    "Ꭰ": "D", "Ꭱ": "R", "Ꭲ": "T", "Ꭵ": "I", "Ꭹ": "Y", "Ꭺ": "A", "Ꭻ": "J", "Ꭼ": "E", "Ꮃ": "W", "Ꮇ": "M",
-    "Ꮋ": "H", "Ꮍ": "Y", "Ꮐ": "G", "Ꮒ": "H", "Ꮓ": "Z", "Ꮏ": "B", "Ꮢ": "R", "Ꮤ": "W", "Ꮥ": "S", "Ꮩ": "V",
-    "Ꮪ": "S", "Ꮮ": "L", "Ꮯ": "C", "Ꮲ": "P", "Ꮶ": "K", "Ᏼ": "B",
-    # Lisu
-    "ꓮ": "A", "ꓐ": "B", "ꓚ": "C", "ꓓ": "D", "ꓰ": "E", "ꓝ": "F", "ꓖ": "G", "ꓧ": "H", "ꓲ": "I", "ꓙ": "J",
-    "ꓗ": "K", "ꓡ": "L", "ꓟ": "M", "ꓠ": "N", "ꓳ": "O", "ꓑ": "P", "ꓣ": "R", "ꓢ": "S", "ꓔ": "T", "ꓴ": "U",
-    "ꓦ": "V", "ꓪ": "W", "ꓫ": "X", "ꓬ": "Y", "ꓜ": "Z",
-    # Latin small capitals and IPA look-alikes (Latin script, so only folding catches them)
-    "ᴀ": "a", "ʙ": "b", "ᴄ": "c", "ᴅ": "d", "ᴇ": "e", "ꜰ": "f", "ɢ": "g", "ʜ": "h", "ɪ": "i", "ᴊ": "j",
-    "ᴋ": "k", "ʟ": "l", "ᴍ": "m", "ɴ": "n", "ᴏ": "o", "ᴘ": "p", "ʀ": "r", "ꜱ": "s", "ᴛ": "t", "ᴜ": "u",
-    "ᴠ": "v", "ᴡ": "w", "ʏ": "y", "ᴢ": "z", "ɑ": "a", "ɡ": "g", "ɩ": "i", "ʋ": "u",
-}
-def _with_case_partners(base):
-    table = dict(base)
-    for source, target in base.items():
-        for variant in (source.lower(), source.upper()):
-            if len(variant) == 1 and variant != source and variant not in table and not variant.isascii():
-                table[variant] = target.lower() if variant == source.lower() else target.upper()
-    return table
-CONFUSABLE_MAP = _with_case_partners(_CONFUSABLE_BASE)
-CONFUSABLES = str.maketrans(CONFUSABLE_MAP)
+# Look-alike folding and the canonical comparison forms live in assertion_rules (quality-gate-criteria.md #8.11).
+CONFUSABLE_MAP = rules.CONFUSABLE_MAP
+CONFUSABLES = rules.CONFUSABLES
 # G8 embedded-instruction screening and withholding (quality-gate-criteria.md #8.1-#8.7) is shared by every stage and
 # lives in assertion_rules (byte-identical in both skills); these names are kept for callers and tests.
 STEERING_HOOKS = rules.STEERING_HOOKS
@@ -146,14 +108,9 @@ def require_contract(payload):
             raise InputError(f"escalations[{index}] must be a string or object, got {rules.describe(entry)}")
     rules.validate_assertions(payload.get("assertions"))
 
-def strip_format_characters(value):
-    return "".join(ch for ch in unicodedata.normalize("NFKC", str(value)) if unicodedata.category(ch) != "Cf")
-
 def normalize_text(value):
-    normalized = strip_format_characters(value).translate(CONFUSABLES).lower().translate(CONFUSABLES)
-    for source, target in (("’", "'"), ("‘", "'"), ("‐", "-"), ("‑", "-"), ("–", "-"), ("—", "-")):
-        normalized = normalized.replace(source, target)
-    return re.sub(r"\s+", " ", normalized).strip()
+    """Comparison form of a name or label: rules.canonical_name (one canonical function, quality-gate-criteria.md #8.11)."""
+    return rules.canonical_name(value)
 
 def loc(section, page, paragraph, label):
     return {"section": section, "page": page, "paragraph": paragraph, "label": label}
@@ -167,7 +124,7 @@ def add_finding(findings, finding_id, gate_id, severity, title, detail, location
         raise InputError(f"{rules.safe_token(finding_id, 'an engine finding')}: unknown severity ({rules.describe(severity)})")
     finding = {"finding_id": finding_id, "gate_id": gate_id, "severity": severity, "title": title, "detail": detail, "location": location, "criteria_section": criteria_section, "confidence": confidence, "source": ENGINE, "citation": citation}
     for index, existing in enumerate(findings):
-        if existing.get("finding_id") == finding_id:
+        if rules.canonical_id(existing.get("finding_id", "")) == rules.canonical_id(finding_id):
             # De-duplication may raise severity but never lowers it (quality-gate-criteria.md #8.4).
             if SEVERITY_RANK[severity] > SEVERITY_RANK.get(existing.get("severity"), 0):
                 findings[index] = finding
@@ -202,7 +159,7 @@ def expected_assertion_outputs(payload, evidence_set):
             escalations.append(escalation)
     return {"mappings": mappings, "findings": findings, "escalations": escalations}
 
-def screen_upstream_findings(upstream, expected):
+def screen_upstream_findings(upstream, expected, raw_upstream=None):
     """Keep legitimate upstream findings; drop any engine-owned finding that engine recomputation does not reproduce.
 
     An engine-owned finding stands only when the engine's own recomputation reproduces it exactly. An AM- finding is kept
@@ -210,19 +167,23 @@ def screen_upstream_findings(upstream, expected):
     finding is returned in `claimed` and checked at the end of the run against what gate_check computes
     (`check_claimed_findings`), so re-running gate_check on its own output reproduces it. SR- findings cannot precede
     severity_rank, and any other finding carrying an engine source tag is spoofed; a self-declared source tag proves
-    nothing. Returns (kept, spoofed labels, claimed (label, finding) pairs) (quality-gate-criteria.md #8.4)."""
+    nothing. Ownership is read from `raw_upstream` (the same findings before withholding), so a flagged ID such as
+    `GC-<instruction>` is both withheld and still engine-owned, and compared in canonical form (rules.engine_id_owner,
+    rules.canonical_tag), so `gc_G8-x` or `Engine :gate_check` cannot pass as a reviewer finding. Returns (kept,
+    spoofed labels, claimed (label, finding) pairs) (quality-gate-criteria.md #8.4, #8.11)."""
     kept, spoofed, claimed = [], [], []
     expected_am = expected["findings"] if expected else None
+    raw_upstream = upstream if raw_upstream is None else raw_upstream
     for index, item in enumerate(upstream):
         validate_upstream_finding(item, index)
-        finding_id = normalize_text(item["finding_id"]).upper()
-        source = normalize_text(item.get("source", ""))
-        owner = next((tag for prefix, tag in ENGINE_OWNED_PREFIXES.items() if finding_id.startswith(prefix)), None)
+        raw = raw_upstream[index] if index < len(raw_upstream) and isinstance(raw_upstream[index], dict) else item
+        owner = rules.engine_id_owner(raw.get("finding_id"))
+        source = rules.canonical_tag(raw.get("source")) or ""
         label = safe_token(item["finding_id"], f"findings[{index}]")
         if owner == ENGINE:
             claimed.append((label, item))
             continue
-        if (owner is not None and owner != rules.AM_ENGINE) or source in (ENGINE, SR_ENGINE):
+        if (owner is not None and owner != rules.AM_ENGINE) or source in (rules.canonical_tag(ENGINE), rules.canonical_tag(SR_ENGINE)):
             spoofed.append(label)
             continue
         if owner == rules.AM_ENGINE:
@@ -231,10 +192,10 @@ def screen_upstream_findings(upstream, expected):
             elif not any(kept_item["finding_id"] == item["finding_id"] for kept_item in kept):
                 kept.append(item)
             continue
-        if source.startswith("engine:"):
+        if rules.is_engine_tag(raw.get("source")):
             spoofed.append(label)
             continue
-        duplicate = next((i for i, kept_item in enumerate(kept) if kept_item["finding_id"] == item["finding_id"]), None)
+        duplicate = next((i for i, kept_item in enumerate(kept) if rules.canonical_id(kept_item["finding_id"]) == rules.canonical_id(item["finding_id"])), None)
         if duplicate is None:
             kept.append(item)
         elif SEVERITY_RANK[item["severity"]] > SEVERITY_RANK[kept[duplicate]["severity"]]:
@@ -252,13 +213,14 @@ def claim_finding_id(findings, owners, base, owner):
 
     `base` comes from safe_token, which falls back to a fixed or indexed label for long, unsafe or flagged values, so
     two distinct items could otherwise share an ID and add_finding would merge them. The same owner always gets the
-    same ID; a different owner, or an ID already used by another finding, gets the first free `-2`, `-3`, ... suffix."""
-    taken = {item["finding_id"] for item in findings}
+    same ID; a different owner, or an ID already used by another finding, gets the first free `-2`, `-3`, ... suffix.
+    IDs are compared in canonical form, so two findings never differ only in case or separators (#8.11)."""
+    taken = {rules.canonical_id(item["finding_id"]) for item in findings}
     candidate, suffix = base, 2
-    while owners.get(candidate, owner if candidate not in taken else None) != owner:
+    while owners.get(rules.canonical_id(candidate), owner if rules.canonical_id(candidate) not in taken else None) != owner:
         candidate = f"{base}-{suffix}"
         suffix += 1
-    owners[candidate] = owner
+    owners[rules.canonical_id(candidate)] = owner
     return candidate
 
 def language_excerpt(text, limit=120):
@@ -383,8 +345,8 @@ def recipient_list_problem(deliverable):
         return "recipient list is empty"
     if any(not item.strip() for item in recipients):
         return "recipient list contains a blank entry"
-    joined = " | ".join(recipients).lower()
-    if any(term in joined for term in AMBIGUOUS_RECIPIENT_TERMS):
+    joined = " | ".join(rules.canonical_name(item) for item in recipients)
+    if any(rules.canonical_name(term) in joined for term in AMBIGUOUS_RECIPIENT_TERMS):
         return "recipient list is ambiguous"
     return None
 
@@ -460,13 +422,13 @@ def register(container, key, label):
 
 def find_prior_location(payload, *terms):
     priors = payload.get("prior_findings")
-    lowered_terms = tuple(term.lower() for term in terms)
+    folded_terms = tuple(rules.canonical_name(term) for term in terms)
     for prior in priors if isinstance(priors, list) else []:
         if not isinstance(prior, dict) or not isinstance(prior.get("location"), dict):
             continue
         location = prior["location"]
-        haystack = " ".join(str(value) for value in (prior.get("finding_id", ""), prior.get("detail", ""), prior.get("citation", ""), location.get("section", ""), location.get("label", ""))).lower()
-        if all(term in haystack for term in lowered_terms):
+        haystack = rules.canonical_name(" ".join(str(value) for value in (prior.get("finding_id", ""), prior.get("detail", ""), prior.get("citation", ""), location.get("section", ""), location.get("label", ""))))
+        if all(term in haystack for term in folded_terms):
             return location
     return None
 
@@ -578,7 +540,7 @@ def evaluate(payload):
     if expected is None:
         validate_unverified_mappings(payload["assertion_mappings"])
     escalations = list(payload.get("escalations", []))
-    findings, spoofed, claimed = screen_upstream_findings(payload.get("findings", []), expected)
+    findings, spoofed, claimed = screen_upstream_findings(payload.get("findings", []), expected, raw.get("findings", []))
     altered = reconcile_assertion_outputs(payload, expected, findings, escalations)
     owners = {}
     loaded = check_missing_registers(payload, deliverable, findings, escalations)
@@ -616,7 +578,8 @@ def evaluate(payload):
         reason = "no trusted deliverable.client_name or client_aliases entry is supplied, so no recipient can be positively matched to the client" if not client_identities(deliverable) else "they do not positively match the client named in deliverable.client_name/client_aliases or a defined internal role"
         add_finding(findings, "GC-G2-recipient-unconfirmed", "G2", MUST_FIX, "Recipients not confirmed as client-only", f"Recipient(s) {names} are unclassified: {reason}. An unmatched recipient is never assumed to be client-only.", disclaimer_location(payload), "quality-gate-criteria.md #2.5", 0.9, "quality-gate-criteria.md #2.5; severity-rules.md #1.2")
         escalations.append(f"G2: confirm recipients {names} - not positively matched to the client; must-fix until the reviewing partner/QRM confirms they are client-only (quality-gate-criteria.md #2.5)")
-    present_disclaimers = string_list(deliverable, "present_disclaimer_types", "deliverable.present_disclaimer_types")
+    # Names and labels are compared in canonical form (quality-gate-criteria.md #8.11); closed enums stay exact.
+    present_disclaimers = {rules.canonical_id(item) for item in string_list(deliverable, "present_disclaimer_types", "deliverable.present_disclaimer_types")}
     disclaimer_type = deliverable.get("required_disclaimer_type")
     third_party = is_third_party_context(deliverable)
     if disclaimer_type not in DISCLAIMER_TYPES:
@@ -624,20 +587,20 @@ def evaluate(payload):
         escalations.append("G2: required_disclaimer_type is absent, blank or unrecognised - release blocker; reviewing partner/QRM must confirm the required disclaimer (quality-gate-criteria.md #2.4)")
     if third_party and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY and disclaimer_type in DISCLAIMER_TYPES and disclaimer_type != "reliance_restriction":
         add_finding(findings, "GC-G2-required-disclaimer-wrong", "G2", RELEASE_BLOCKER, "Required disclaimer type is wrong for third-party context", "A third-party recipient or allowed user requires reliance-restriction language.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
-    if (disclaimer_type == "reliance_restriction" or (third_party and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY)) and "reliance_restriction" not in present_disclaimers:
+    if (disclaimer_type == "reliance_restriction" or (third_party and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY)) and "reliance restriction" not in present_disclaimers:
         if third_party:
             add_finding(findings, "GC-G2-reliance-language", "G2", RELEASE_BLOCKER, "Wrong disclaimer for third-party recipient", "A third-party recipient or allowed user is named but reliance-restriction language is absent; a general-advice disclaimer does not satisfy this gate.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
             escalations.append("G2: third-party recipient context and reliance-restriction language absent - release blocker (quality-gate-criteria.md #2.2)")
         else:
             add_finding(findings, "GC-G2-reliance-language", "G2", RELEASE_BLOCKER, "Required reliance-restriction disclaimer is absent", "required_disclaimer_type is reliance_restriction but reliance-restriction language is not in present_disclaimer_types.", disclaimer_location(payload), "quality-gate-criteria.md #2.2; quality-gate-criteria.md #2.4", 0.97, "quality-gate-criteria.md #2.2, #2.4; severity-rules.md #1.1")
             escalations.append("G2: required reliance-restriction disclaimer absent from the deliverable - release blocker (quality-gate-criteria.md #2.4)")
-    if disclaimer_type == "general_advice" and "general_advice" not in present_disclaimers:
+    if disclaimer_type == "general_advice" and "general advice" not in present_disclaimers:
         add_finding(findings, "GC-G2-general-advice-absent", "G2", MUST_FIX, "Required general-advice disclaimer is absent", "required_disclaimer_type is general_advice but general-advice language is not in present_disclaimer_types; a declared disclaimer requirement is only met when the disclaimer is present.", disclaimer_location(payload), "quality-gate-criteria.md #2.1; quality-gate-criteria.md #2.4", 0.95, "quality-gate-criteria.md #2.1, #2.4; severity-rules.md #1.2")
         escalations.append("G2: required general-advice disclaimer absent from the deliverable - must-fix; reviewing partner/QRM must confirm the disclaimer before release (quality-gate-criteria.md #2.4)")
-    present_language = string_list(deliverable, "present_language", "deliverable.present_language")
+    present_language = {rules.canonical_id(item) for item in string_list(deliverable, "present_language", "deliverable.present_language")}
     for index, required in enumerate(required_language):
-        if required not in present_language:
-            severity = RELEASE_BLOCKER if required == "reliance_restriction" else MUST_FIX
+        if rules.canonical_id(required) not in present_language:
+            severity = RELEASE_BLOCKER if rules.canonical_id(required) == "reliance restriction" else MUST_FIX
             token = safe_token(required, "")
             finding_id = claim_finding_id(findings, owners, f"GC-G2-missing-{token or f'language-{index + 1}'}", ("required_language", required))
             if token:
@@ -647,7 +610,7 @@ def evaluate(payload):
                 title = f"Missing required language: item {index + 1}"
                 detail = f"Required language item {index + 1} (deliverable.required_language[{index}]: \"{language_excerpt(required)}\") is not present in the deliverable."
             add_finding(findings, finding_id, "G2", severity, title, detail, disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.3", 0.94, "quality-gate-criteria.md #2.1-#2.3")
-    if CONFIDENTIALITY_MARK_REQUIRED and deliverable.get("confidentiality_marking") != "client confidential":
+    if CONFIDENTIALITY_MARK_REQUIRED and rules.canonical_id(deliverable.get("confidentiality_marking") or "") != "client confidential":
         add_finding(findings, "GC-G4-confidentiality", "G4", RELEASE_BLOCKER, "Missing client-confidential marking", "Required client-confidential marking is absent from cover/footer.", loc("Cover", 1, 1, "Confidentiality mark"), "quality-gate-criteria.md #4.1", 0.97, "quality-gate-criteria.md #4.1; severity-rules.md #1.1")
     check_client_data_value(deliverable, findings, escalations)
     for index, check in enumerate(brand_checks):
@@ -678,11 +641,11 @@ def evaluate(payload):
         if assertion["scope_aligned"] is not True:
             assertion_id = safe_token(assertion["assertion_id"], f"assertion-{index + 1}")
             add_finding(findings, claim_finding_id(findings, owners, f"GC-G3-scope-{assertion_id}", ("scope", index)), "G3", RELEASE_BLOCKER, "Claim or recommendation falls outside signed scope", "Assertion is marked scope_aligned=false; claims and recommendations must stay inside the signed statement of work and documented evidence set.", assertion["location"], "quality-gate-criteria.md #3.1", assertion.get("confidence", 0.9), f"{assertion['citation']}; quality-gate-criteria.md #3.1; severity-rules.md #1.1")
-    verified_am = {item["finding_id"] for item in findings if item["finding_id"].startswith("AM-")}
+    verified_am = {rules.canonical_id(item["finding_id"]) for item in findings if rules.engine_id_owner(item["finding_id"]) == rules.AM_ENGINE}
     for index, mapping in enumerate(payload["assertion_mappings"]):
         if mapping["support_status"] in {"unsupported", "limited"} and "#3.2" in mapping["criteria_section"]:
             # Only an AM finding that matched engine recomputation may stand in for the G3 limitation finding.
-            if f"AM-{mapping['assertion_id']}" in verified_am:
+            if rules.canonical_id(f"AM-{mapping['assertion_id']}") in verified_am:
                 continue
             add_finding(findings, claim_finding_id(findings, owners, f"GC-G3-{safe_token(mapping['assertion_id'], f'assertion-{index + 1}')}", ("limitation", index)), "G3", MUST_FIX, "Scope or sample limitation missing at point of recommendation", mapping.get("rationale", "Recommendation requires limitation."), mapping["location"], "quality-gate-criteria.md #3.2", mapping.get("confidence", 0.8), mapping.get("citation", "quality-gate-criteria.md #3.2"))
     if EMBEDDED_INSTRUCTION_HOLD:

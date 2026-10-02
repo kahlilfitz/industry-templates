@@ -144,13 +144,109 @@ class _OverlongFieldName(dict):
 
 
 MAX_FIELD_NAME_CHARS = 512  # far above any contract field name or withheld marker (quality-gate-criteria.md #8.10)
+MAX_ID_CHARS = 512  # far above any contract ID, engine finding ID or withheld marker (quality-gate-criteria.md #8.11)
+
+# Letters that render like Latin letters, folded before comparing names and identifiers (finding-ID spoofing #8.4,
+# recipient classification #2.5, duplicate IDs and member names #8.10-#8.11). Embedded-instruction screening uses
+# steering_guard's own fold. Upper/lower case partners are added automatically.
+_CONFUSABLE_BASE = {
+    # Cyrillic
+    "А": "A", "В": "B", "Е": "E", "І": "I", "Ј": "J", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P",
+    "С": "C", "Т": "T", "Х": "X", "У": "Y", "Ѕ": "S", "Ԁ": "D", "Ԛ": "Q", "Ԝ": "W",
+    "а": "a", "в": "b", "е": "e", "і": "i", "ј": "j", "к": "k", "м": "m", "н": "h", "о": "o", "р": "p",
+    "с": "c", "т": "t", "х": "x", "у": "y", "ѕ": "s", "ԁ": "d", "һ": "h", "ӏ": "l", "ԛ": "q", "ԝ": "w",
+    # Greek
+    "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O",
+    "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X", "Ϲ": "C",
+    "α": "a", "β": "b", "ε": "e", "η": "n", "ι": "i", "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t",
+    "υ": "u", "χ": "x", "ω": "w", "ϲ": "c", "ϳ": "j",
+    # Armenian
+    "Օ": "O", "օ": "o", "Ս": "U", "ս": "u", "ո": "n", "հ": "h", "ց": "g", "զ": "q", "ա": "w", "Լ": "L",
+    "Տ": "S", "ı": "i",
+    # Cherokee (capitals; small forms are added below through str.lower)
+    "Ꭰ": "D", "Ꭱ": "R", "Ꭲ": "T", "Ꭵ": "I", "Ꭹ": "Y", "Ꭺ": "A", "Ꭻ": "J", "Ꭼ": "E", "Ꮃ": "W", "Ꮇ": "M",
+    "Ꮋ": "H", "Ꮍ": "Y", "Ꮐ": "G", "Ꮒ": "H", "Ꮓ": "Z", "Ꮏ": "B", "Ꮢ": "R", "Ꮤ": "W", "Ꮥ": "S", "Ꮩ": "V",
+    "Ꮪ": "S", "Ꮮ": "L", "Ꮯ": "C", "Ꮲ": "P", "Ꮶ": "K", "Ᏼ": "B",
+    # Lisu
+    "ꓮ": "A", "ꓐ": "B", "ꓚ": "C", "ꓓ": "D", "ꓰ": "E", "ꓝ": "F", "ꓖ": "G", "ꓧ": "H", "ꓲ": "I", "ꓙ": "J",
+    "ꓗ": "K", "ꓡ": "L", "ꓟ": "M", "ꓠ": "N", "ꓳ": "O", "ꓑ": "P", "ꓣ": "R", "ꓢ": "S", "ꓔ": "T", "ꓴ": "U",
+    "ꓦ": "V", "ꓪ": "W", "ꓫ": "X", "ꓬ": "Y", "ꓜ": "Z",
+    # Latin small capitals and IPA look-alikes (Latin script, so only folding catches them)
+    "ᴀ": "a", "ʙ": "b", "ᴄ": "c", "ᴅ": "d", "ᴇ": "e", "ꜰ": "f", "ɢ": "g", "ʜ": "h", "ɪ": "i", "ᴊ": "j",
+    "ᴋ": "k", "ʟ": "l", "ᴍ": "m", "ɴ": "n", "ᴏ": "o", "ᴘ": "p", "ʀ": "r", "ꜱ": "s", "ᴛ": "t", "ᴜ": "u",
+    "ᴠ": "v", "ᴡ": "w", "ʏ": "y", "ᴢ": "z", "ɑ": "a", "ɡ": "g", "ɩ": "i", "ʋ": "u",
+}
 
 
-@functools.lru_cache(maxsize=4096)
+def _with_case_partners(base):
+    table = dict(base)
+    for source, target in base.items():
+        for variant in (source.lower(), source.upper()):
+            if len(variant) == 1 and variant != source and variant not in table and not variant.isascii():
+                table[variant] = target.lower() if variant == source.lower() else target.upper()
+    return table
+
+
+CONFUSABLE_MAP = _with_case_partners(_CONFUSABLE_BASE)
+CONFUSABLES = str.maketrans(CONFUSABLE_MAP)
+_ID_SEPARATOR_RUN = re.compile(r"[\s\-_./\\]+")
+
+
+@functools.lru_cache(maxsize=8192)
+def canonical_name(value):
+    """The one comparison form for names and free-text labels (quality-gate-criteria.md #8.11): the look-alike map
+    above, then the detector's fold (NFKC, format-character (Cf) stripping, confusables, diacritics, casefold,
+    whitespace collapsing). Applied at every length; there is no length-gated fast path. Compare only; outputs keep
+    the original value."""
+    return sg.normalize(str(value).translate(CONFUSABLES))
+
+
+@functools.lru_cache(maxsize=8192)
+def canonical_id(value):
+    """canonical_name plus separator folding: every run of whitespace, -, _, ., / or \\ is one space, so `A-001`,
+    `a_001` and `A .001` compare equal. Used for every ID and member-name comparison, at every length."""
+    return _ID_SEPARATOR_RUN.sub(" ", canonical_name(value)).strip()
+
+
 def field_name_key(name):
-    """Comparison form of a member name: the detector's full fold (NFKC, format characters, confusables, case and
-    separators), applied at every length. Names longer than MAX_FIELD_NAME_CHARS never get here; they are refused."""
-    return sg.normalize(name)
+    """Comparison form of a member name (canonical_id). Names longer than MAX_FIELD_NAME_CHARS are refused at load."""
+    return canonical_id(name)
+
+
+ENGINE_ID_PREFIXES = {"am": AM_ENGINE, "gc": "engine:gate_check", "sr": "engine:severity_rank"}
+
+
+def engine_id_owner(finding_id):
+    """The engine tag whose finding-ID prefix (AM-, GC-, SR-) finding_id carries after the canonical fold, so `gc_G8-x`,
+    `ＧＣ-x` or a G and C split by a zero-width character is still engine-owned (quality-gate-criteria.md #8.4); None otherwise. Callers pass the raw
+    ID, before any withholding, so a flagged ID keeps its owner."""
+    if not isinstance(finding_id, str):
+        return None
+    head = re.match(r"[^\W_]+", canonical_id(finding_id))
+    return ENGINE_ID_PREFIXES.get(head.group(0)) if head else None
+
+
+def canonical_tag(source):
+    """Comparison form of a `prefix:slug` source tag: canonical_id on each side of the first colon (after NFKC, so a
+    fullwidth colon counts), so `Engine :gate_check`, `ENGINE:gate-check` and a tag split by a zero-width character all
+    read as `engine:gate check` (quality-gate-criteria.md #8.4, #8.11). None for a non-string."""
+    if not isinstance(source, str):
+        return None
+    prefix, separator, slug = canonical_name(source).partition(":")
+    return f"{canonical_id(prefix)}:{canonical_id(slug)}" if separator else canonical_id(prefix)
+
+
+def is_engine_tag(source):
+    """True when a source claims to be an engine (`engine:<anything>` in canonical form)."""
+    tag = canonical_tag(source)
+    return tag is not None and tag.startswith("engine:")
+
+
+def is_id_field(parts):
+    """True when the path ends at an ID: a member named *_id, or an entry of a member named *_ids."""
+    if parts and isinstance(parts[-1], str):
+        return canonical_id(parts[-1]).endswith(" id")
+    return len(parts) > 1 and isinstance(parts[-1], int) and isinstance(parts[-2], str) and canonical_id(parts[-2]).endswith(" ids")
 
 
 def _object_pairs(pairs):
@@ -166,12 +262,13 @@ def _object_pairs(pairs):
 
 def _check_loaded(value):
     """Reject objects with duplicate member names (a later value would overwrite an earlier one, quality-gate-criteria.md
-    #8.10) and lone UTF-16 surrogates (for example "\\ud800": not Unicode text, cannot be written as UTF-8)."""
+    #8.10), identifiers longer than MAX_ID_CHARS (#8.11: no ID needs that length, so none is ever compared at it), and
+    lone UTF-16 surrogates (for example "\\ud800": not Unicode text, cannot be written as UTF-8)."""
     stack = [(value, ())]
     while stack:
         item, parts = stack.pop()
         if isinstance(item, _OverlongFieldName):
-            raise InputError(f"{format_path(parts)} has a field name longer than {MAX_FIELD_NAME_CHARS} characters, which no contract field needs and which cannot be checked for duplicates safely; the input is malformed")
+            raise InputError(f"{format_path(parts)} has a field name longer than {MAX_FIELD_NAME_CHARS} characters; no contract field needs one, so the input is malformed")
         if isinstance(item, _DuplicateFields):
             raise InputError(f"{format_path(parts)} has duplicate field names (equal exactly or after Unicode, case and separator folding), so a later value could overwrite an earlier one; the input is malformed")
         if isinstance(item, dict):
@@ -182,6 +279,8 @@ def _check_loaded(value):
             stack.extend((child, parts + (index,)) for index, child in enumerate(item))
         elif isinstance(item, str):
             _check_encodable_text(item, lambda parts=parts: format_path(parts))
+            if len(item) > MAX_ID_CHARS and is_id_field(parts):
+                raise InputError(f"{format_path(parts)} is an identifier longer than {MAX_ID_CHARS} characters; no contract ID needs one, so the input is malformed")
 
 
 def _check_encodable_text(text, path):
@@ -355,18 +454,16 @@ def validate_assertion(assertion, index):
 def validate_assertions(assertions):
     if not isinstance(assertions, list):
         raise InputError("assertions must be an array")
-    seen = {}
     for index, assertion in enumerate(assertions):
         validate_assertion(assertion, index)
-        if assertion["assertion_id"] in seen:
-            raise InputError(f"assertions[{index}].assertion_id duplicates assertions[{seen[assertion['assertion_id']]}].assertion_id; assertion IDs must be unique")
-        seen[assertion["assertion_id"]] = index
+    require_unique_ids(assertions, "assertions", "assertion_id")
 
 
 def evidence_index(evidence_set):
+    """Evidence items keyed by canonical_id(evidence_id), so a reference spelled `ev_001` finds `EV-001`; the items
+    keep their original IDs. Duplicate IDs (exact or after the fold) are refused (quality-gate-criteria.md #8.11)."""
     if not isinstance(evidence_set, list):
         raise InputError("evidence_set must be an array")
-    by_id = {}
     for index, item in enumerate(evidence_set):
         if not isinstance(item, dict):
             raise InputError(f"evidence_set[{index}] must be an object with evidence_id")
@@ -375,11 +472,13 @@ def evidence_index(evidence_set):
         for key in ("type", "title", "citation", "source"):
             require_text(item, key, label, required=False, allow_blank=True)
         require_confidence(item, label)
-        if item["evidence_id"] in by_id:
-            first = next(position for position, other in enumerate(evidence_set) if other is by_id[item["evidence_id"]])
-            raise InputError(f"{label}.evidence_id duplicates evidence_set[{first}].evidence_id; evidence IDs must be unique")
-        by_id[item["evidence_id"]] = item
-    return by_id
+    require_unique_ids(evidence_set, "evidence_set", "evidence_id")
+    return {canonical_id(item["evidence_id"]): item for item in evidence_set}
+
+
+def evidence_for(evidence_by_id, evidence_id):
+    """The evidence item an assertion's evidence_ids entry names, compared in canonical form; None when absent."""
+    return evidence_by_id.get(canonical_id(evidence_id)) if isinstance(evidence_id, str) else None
 
 
 _CONTRACT_SCHEMA = []
@@ -445,7 +544,16 @@ def _contract_errors(value, node, path, root):
             if key not in value:
                 yield f"{path} is missing required field {key}"
                 return
-        for key, child in node.get("properties", {}).items():
+        properties = node.get("properties", {})
+        if properties:
+            # A member that differs from a contract field only in case, Unicode form or separators would be ignored
+            # by every exact lookup while looking like that field to a reader (quality-gate-criteria.md #8.11).
+            canonical = {canonical_id(name): name for name in properties}
+            for key in value:
+                if key not in properties and canonical_id(key) in canonical:
+                    yield f"{path}.{path_key(key)} is a variant spelling of the contract field {canonical[canonical_id(key)]}; use the exact field name"
+                    return
+        for key, child in properties.items():
             if key in value:
                 yield from _contract_errors(value[key], child, f"{path}.{key}", root)
     elif isinstance(value, list) and "items" in node:
@@ -489,7 +597,7 @@ def require_unique_ids(items, label, id_key, allow_identical=False, prefix=""):
     for index, item in enumerate(items):
         if not isinstance(item, dict) or not isinstance(item.get(id_key), str):
             continue
-        key = field_name_key(item[id_key]) if len(item[id_key]) <= MAX_FIELD_NAME_CHARS else item[id_key]
+        key = canonical_id(item[id_key])
         if key in seen:
             first = seen[key]
             if allow_identical and items[first] == item:
@@ -508,7 +616,8 @@ def validate_unique_ids(payload):
 
 
 def linked_evidence(assertion, evidence_by_id):
-    return [evidence_by_id[eid] for eid in assertion.get("evidence_ids") or [] if eid in evidence_by_id]
+    found = (evidence_for(evidence_by_id, eid) for eid in assertion.get("evidence_ids") or [])
+    return [item for item in found if item is not None]
 
 
 def evidence_relevance(assertion, evidence):
@@ -556,7 +665,7 @@ def best_evidence(assertion, linked_items):
 def linked_evidence_citation(assertion, evidence_by_id):
     citations = []
     for evidence_id in assertion.get("evidence_ids") or []:
-        evidence = evidence_by_id.get(evidence_id)
+        evidence = evidence_for(evidence_by_id, evidence_id)
         citations.append(evidence.get("citation", f"evidence {evidence_id}") if evidence else f"missing linked evidence {evidence_id}")
     return "; ".join(citations) if citations else "no linked evidence found"
 
@@ -632,7 +741,7 @@ def classify(assertion, evidence, missing_ids=()):
 def map_assertion(assertion, evidence_by_id):
     """Return (mapping, AM finding or None, escalation or None) exactly as assertion_map emits them."""
     evidence = best_evidence(assertion, linked_evidence(assertion, evidence_by_id))
-    missing_ids = [eid for eid in assertion.get("evidence_ids") or [] if eid not in evidence_by_id]
+    missing_ids = [eid for eid in assertion.get("evidence_ids") or [] if evidence_for(evidence_by_id, eid) is None]
     status, support_score, rationale, criteria_section = classify(assertion, evidence, missing_ids)
     mapping = {
         "assertion_id": assertion["assertion_id"], "class": assertion["class"], "text": assertion["text"],
@@ -683,7 +792,7 @@ WITHHELD_WORDING = {
     OVERSIZE: "too long to screen for embedded instructions",
     SPLIT: "flagged with neighbouring fields by the embedded-instruction screen",
 }
-WITHHELD_PATTERN = re.compile(r"\[withheld (\d+)(?: \((oversize|split)\))?: [a-z -]+; see the G8 finding\]")
+WITHHELD_PATTERN = re.compile(r"\[withheld ([1-9][0-9]*)(?: \((oversize|split)\))?: [a-z -]+; see the G8 finding\]")
 
 
 def withheld_marker(number, kind=INSTRUCTION):
@@ -819,13 +928,14 @@ def assertion_records(payload):
     """Yield (path, fields, refs) per assertion: fields maps text, citation, linked evidence titles and the location
     label (in reading order, non-blank strings only) to their values, and refs maps the same names to the
     (container, key) holding each value. Only assertions with more than one such field are yielded."""
-    evidence = {item["evidence_id"]: item for item in payload.get("evidence_set") or [] if isinstance(item, dict) and isinstance(item.get("evidence_id"), str)}
+    evidence = {canonical_id(item["evidence_id"]): item for item in payload.get("evidence_set") or [] if isinstance(item, dict) and isinstance(item.get("evidence_id"), str)}
     for index, assertion in enumerate(payload.get("assertions") or []):
         if not isinstance(assertion, dict):
             continue
         refs = {"text": (assertion, "text"), "citation": (assertion, "citation")}
         for position, evidence_id in enumerate(assertion.get("evidence_ids") or []):
-            linked = evidence.get(evidence_id) if isinstance(evidence_id, str) else None
+            # The same canonical lookup map_assertion uses, so every title that can support a claim is screened with it.
+            linked = evidence_for(evidence, evidence_id)
             if isinstance(linked, dict):
                 refs[f"evidence title {position + 1}"] = (linked, "title")
         location = assertion.get("location")
