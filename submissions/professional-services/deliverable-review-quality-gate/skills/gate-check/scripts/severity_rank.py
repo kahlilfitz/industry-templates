@@ -114,14 +114,15 @@ def reconcile_gate_results(findings, gate_results):
     blocked can therefore never reach a lower verdict because its findings were removed or downgraded."""
     seen = [item["gate_id"] for item in gate_results]
     if sorted(seen) != sorted(GATE_IDS):
-        raise InputError(f"gate_results must contain exactly one entry per gate {', '.join(GATE_IDS)}, got {', '.join(rules.safe_token(gate, '<invalid>') for gate in seen) or 'none'}")
-    mismatches = []
-    for item in gate_results:
-        status, highest, count = gate_summary(findings, item["gate_id"])
-        if (item["status"], item["highest_severity"], item["finding_count"]) != (status, highest, count):
-            mismatches.append(f"{item['gate_id']} reports {item['status']}/{item['highest_severity']}/{item['finding_count']} but findings[] give {status}/{highest}/{count}")
-    if mismatches:
-        raise InputError("gate_results do not match findings[] (status/highest_severity/finding_count): " + "; ".join(mismatches) + "; re-run gate_check, findings cannot be removed or downgraded after the gate run")
+        missing = [gate for gate in GATE_IDS if gate not in seen]
+        repeated = [gate for gate in GATE_IDS if seen.count(gate) > 1]
+        raise InputError(f"gate_results must contain exactly one entry per gate {', '.join(GATE_IDS)}; got {len(seen)} entries"
+                         + (f", missing {', '.join(missing)}" if missing else "") + (f", repeated {', '.join(repeated)}" if repeated else ""))
+    by_gate = {item["gate_id"]: item for item in gate_results}
+    mismatched = [gate for gate in GATE_IDS
+                  if (by_gate[gate]["status"], by_gate[gate]["highest_severity"], by_gate[gate]["finding_count"]) != gate_summary(findings, gate)]
+    if mismatched:
+        raise InputError(f"gate_results do not match findings[] for {', '.join(mismatched)} (status/highest_severity/finding_count); re-run gate_check, findings cannot be removed or downgraded after the gate run")
 
 SEVERITY_RANK = {severity: len(SEVERITY_ORDER) - order for severity, order in SEVERITY_ORDER.items()}
 
@@ -138,8 +139,7 @@ def rederive_gate_findings(payload):
     (severity-rules.md #3.6). Raises InputError when anything engine-derived is missing or lower."""
     derived_sections = ("findings", "escalations", "provenance", "gate_results", "ranked_findings", "release_readiness")
     mapped = {key: copy.deepcopy(value) for key, value in payload.items() if key not in derived_sections}
-    am_findings = [copy.deepcopy(item) for item in payload["findings"] if item["finding_id"].startswith("AM-")]
-    mapped["findings"], _ = collapse_duplicates(am_findings)
+    mapped["findings"] = am_findings_for_rederivation(mapped, [copy.deepcopy(item) for item in payload["findings"] if item["finding_id"].startswith("AM-")])
     mapped["escalations"] = []
     try:
         derived = gc.evaluate(mapped)["findings"]
@@ -149,16 +149,38 @@ def rederive_gate_findings(payload):
     for item in payload["findings"]:
         key = (item["finding_id"], item.get("gate_id"))
         supplied[key] = max(supplied.get(key, 0), SEVERITY_RANK[item["severity"]])
-    problems = []
+    # Counted by gate and severity (engine constants), never named: an engine finding ID carries an assertion, register
+    # or evidence ID from the input (quality-gate-criteria.md #8.9).
+    counts = {"missing": {}, "downgraded": {}}
     for item in derived:
         present = supplied.get((item["finding_id"], item["gate_id"]), 0)
         if present < SEVERITY_RANK[item["severity"]]:
-            label = gc.safe_token(item["finding_id"], "an engine finding")
-            problems.append(f"{label} ({item['gate_id']}, {item['severity']}) is {'missing' if not present else 'downgraded'}")
-    if problems:
-        shown = "; ".join(problems[:10]) + (f"; and {len(problems) - 10} more" if len(problems) > 10 else "")
+            tally = counts["downgraded" if present else "missing"]
+            tally[(item["gate_id"], item["severity"])] = tally.get((item["gate_id"], item["severity"]), 0) + 1
+    if counts["missing"] or counts["downgraded"]:
+        shown = "; ".join(f"{sum(counts[kind].values())} {kind} (" + ", ".join(f"{gate} {severity} x{counts[kind][(gate, severity)]}" for gate in GATE_IDS for severity in SEVERITY_ORDER if (gate, severity) in counts[kind]) + ")"
+                          for kind in ("missing", "downgraded") if counts[kind])
         raise InputError(f"findings[] do not contain every finding gate_check derives from the carried mapped input: {shown}. Re-run gate_check; engine findings cannot be removed or downgraded after the gate run (severity-rules.md #3.7)")
     return derived
+
+
+def am_findings_for_rederivation(mapped, am_findings):
+    """One AM- finding per canonical ID for gate_check re-derivation: the genuine copy (what assertion_map recomputes
+    from the carried assertions and evidence, gc.genuine_am_finding) when one is present, otherwise the highest
+    severity. A forged copy colliding with a genuine one is then removed and held by remove_forged_engine_findings,
+    exactly as gate_check holds it (quality-gate-criteria.md #8.4)."""
+    probe = copy.deepcopy(mapped)
+    probe["findings"] = []
+    rules.withhold_untrusted(probe)
+    expected = gc.expected_assertion_outputs(probe, probe.get("evidence_set")) if isinstance(probe.get("assertions"), list) else None
+    expected_am = expected["findings"] if expected else None
+    chosen = {}
+    for item in am_findings:
+        key, genuine = rules.canonical_id(item["finding_id"]), gc.genuine_am_finding(item, expected_am)
+        current = chosen.get(key)
+        if current is None or (genuine and not current[1]) or (genuine == current[1] and SEVERITY_ORDER[item["severity"]] < SEVERITY_ORDER[current[0]["severity"]]):
+            chosen[key] = (item, genuine)
+    return [item for item, _ in chosen.values()]
 
 
 def engine_owner(item):

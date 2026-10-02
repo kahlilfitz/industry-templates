@@ -259,6 +259,56 @@ def engine_id_owner(finding_id):
     return ENGINE_ID_PREFIXES.get(head.group(0)) if head else None
 
 
+AM_SPOOF_ID = "AM-G8-engine-id-spoof"
+AM_SPOOF_ESCALATION = ("G8: a finding supplied with the review input reused a finding ID that assertion_map recomputes without "
+                       "matching the recomputation and was replaced by the recomputed finding - hold for reviewing partner/QRM "
+                       "(quality-gate-criteria.md #8.4)")
+
+
+def am_spoof_finding():
+    """The G8 release blocker assertion_map emits when a supplied finding collides with one it recomputes (#8.4). Fixed
+    text, so gate_check and severity_rank can verify it exactly and a re-run reproduces it."""
+    return {"finding_id": AM_SPOOF_ID, "gate_id": "G8", "severity": "release_blocker",
+            "title": "Supplied finding reused an assertion_map finding ID",
+            "detail": "A finding supplied with the review input used a finding ID that assertion_map recomputes from the assertions and evidence index but did not match the recomputation; it was replaced by the recomputed finding. Engine findings cannot be replaced, removed or downgraded by input data.",
+            "location": {"section": "Upstream findings", "page": None, "paragraph": None, "label": "findings[] supplied with the review input"},
+            "criteria_section": "quality-gate-criteria.md #8.4", "confidence": 0.99, "source": AM_ENGINE,
+            "citation": "quality-gate-criteria.md #8.1, #8.4; severity-rules.md #1.1"}
+
+
+def is_am_spoof_id(finding_id):
+    return isinstance(finding_id, str) and canonical_id(finding_id) == canonical_id(AM_SPOOF_ID)
+
+
+def merge_recomputed_findings(supplied, raw_supplied, recomputed):
+    """Combine supplied findings with the AM- findings assertion_map recomputes (quality-gate-criteria.md #8.4).
+
+    IDs are compared in canonical form (canonical_id). A supplied finding whose raw ID is assertion_map-owned and
+    collides with a recomputed finding (or with the AM spoof hold) stands only when it is exactly that finding; any
+    other copy is dropped, so the genuine finding replaces it and the ID is never duplicated. Every other supplied
+    finding passes through for gate_check to screen. Missing recomputed findings are appended in assertion order, so a
+    re-run on assertion_map's own output reproduces it. `raw_supplied[i]` is findings[i] before withholding, so a
+    flagged ID keeps its owner. Returns (findings, number of supplied findings dropped as spoofed)."""
+    reserved = {canonical_id(item["finding_id"]): item for item in recomputed}
+    reserved[canonical_id(AM_SPOOF_ID)] = am_spoof_finding()
+    kept, spoofed = [], 0
+    for index, item in enumerate(supplied):
+        raw = raw_supplied[index] if index < len(raw_supplied) and isinstance(raw_supplied[index], dict) else item
+        raw_id = raw.get("finding_id") if isinstance(raw, dict) else None
+        key = canonical_id(raw_id) if isinstance(raw_id, str) else None
+        if key in reserved and engine_id_owner(raw_id) == AM_ENGINE and item != reserved[key]:
+            spoofed += 1
+            continue
+        kept.append(item)
+    present = {canonical_id(item["finding_id"]) for item in kept if isinstance(item, dict) and isinstance(item.get("finding_id"), str)}
+    for item in recomputed:
+        if canonical_id(item["finding_id"]) not in present:
+            kept.append(item)
+    if spoofed and canonical_id(AM_SPOOF_ID) not in present:
+        kept.append(am_spoof_finding())
+    return kept, spoofed
+
+
 def canonical_tag(source):
     """Comparison form of a `prefix:slug` source tag: canonical_id on each side of the first colon (after NFKC, so a
     fullwidth colon counts), so `Engine :gate_check`, `ENGINE:gate-check` and a tag split by a zero-width character all
@@ -513,6 +563,8 @@ def validate_assertion(assertion, index):
         raise InputError(f"assertions[{index}] must be an object")
     label = f"assertions[{index}]"
     require_text(assertion, "assertion_id", label)
+    if is_am_spoof_id(f"AM-{assertion['assertion_id']}"):
+        raise InputError(f"{label}.assertion_id is reserved: its assertion_map finding ID would be the engine's own spoof hold ({AM_SPOOF_ID}); choose another assertion ID")
     require_text(assertion, "class", label)
     require_text(assertion, "text", label, allow_blank=True)
     require_text(assertion, "citation", label, allow_blank=True)
@@ -670,22 +722,22 @@ def _contract_errors(value, node, path, root):
             else:
                 yield f"{path} must be between {node.get('minimum')} and {node.get('maximum')}, got a number outside that range"
     elif isinstance(value, dict):
-        for key in node.get("required", ()):
-            if key not in value:
-                yield f"{path} is missing required field {key}"
+        for field in node.get("required", ()):
+            if field not in value:
+                yield f"{path} is missing required field {field}"
                 return
         properties = node.get("properties", {})
         if properties:
             # A member that differs from a contract field only in case, Unicode form or separators would be ignored
             # by every exact lookup while looking like that field to a reader (quality-gate-criteria.md #8.11).
             canonical = {canonical_id(name): name for name in properties}
-            for key in value:
-                if key not in properties and canonical_id(key) in canonical:
-                    yield f"{path}.{path_key(key)} is a variant spelling of the contract field {canonical[canonical_id(key)]}; use the exact field name"
+            for member in value:
+                if member not in properties and canonical_id(member) in canonical:
+                    yield f"{path}.{path_key(member)} is a variant spelling of the contract field {canonical[canonical_id(member)]}; use the exact field name"
                     return
-        for key, child in properties.items():
-            if key in value:
-                yield from _contract_errors(value[key], child, f"{path}.{key}", root)
+        for field, child in properties.items():
+            if field in value:
+                yield from _contract_errors(value[field], child, f"{path}.{field}", root)
     elif isinstance(value, list) and "items" in node:
         for index, item in enumerate(value):
             yield from _contract_errors(item, node["items"], f"{path}[{index}]", root)
@@ -719,21 +771,21 @@ ID_KEYED_ARRAYS = (
 )
 
 
-def require_unique_ids(items, label, id_key, allow_identical=False, prefix=""):
+def require_unique_ids(items, label, id_key, allow_identical=False, prefix="", skip=None):
     """Refuse two entries whose IDs are equal exactly or after the detector's fold (Unicode, case, separators), so a
     lookup keyed by ID can never let one entry overwrite or mask another. With allow_identical, entries that are equal
     in every field are not a conflict: nothing differs, so nothing can be hidden. The message names positions only."""
-    seen = {}
+    positions = {}
     for index, item in enumerate(items):
-        if not isinstance(item, dict) or not isinstance(item.get(id_key), str):
+        if not isinstance(item, dict) or not isinstance(item.get(id_key), str) or (skip and skip(item)):
             continue
         key = canonical_id(item[id_key])
-        if key in seen:
-            first = seen[key]
+        if key in positions:
+            first = positions[key]
             if allow_identical and items[first] == item:
                 continue
             raise InputError(f"{prefix}{label}[{index}].{id_key} duplicates {label}[{first}].{id_key} (equal exactly or after Unicode, case and separator folding); IDs must be unique so no entry can overwrite or mask another")
-        seen[key] = index
+        positions[key] = index
 
 
 def validate_unique_ids(payload):
@@ -742,7 +794,10 @@ def validate_unique_ids(payload):
         for part in path:
             items = items.get(part) if isinstance(items, dict) else None
         if isinstance(items, list):
-            require_unique_ids(items, ".".join(path), id_key, allow_identical=path == ("findings",), prefix="contract violation: ")
+            # An engine-owned finding ID (AM-, GC-, SR-) is not refused for colliding: every stage recomputes engine
+            # findings, keeps the genuine one and holds any other copy as a spoof (quality-gate-criteria.md #8.4).
+            skip = (lambda item: engine_id_owner(item.get(id_key)) is not None) if path == ("findings",) else None
+            require_unique_ids(items, ".".join(path), id_key, allow_identical=path == ("findings",), prefix="contract violation: ", skip=skip)
 
 
 def contains_withheld(value):

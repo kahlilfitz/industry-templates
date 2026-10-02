@@ -65,8 +65,9 @@ BRAND = re.compile(r"^- (?P<id>[\w-]+): (?P<status>\w+)\. (?P<title>.+?)\. (?P<d
 LICENSED = re.compile(r"^- (?P<id>[\w-]+): (?P<detail>.+?) Attribution present: (?P<attr>yes|no)\. License status: (?P<status>[\w ]+)\. Location: (?P<loc>.+?)\. Confidence: (?P<conf>" + CONF + r")\. Register: (?P<register>.+?)\. Criteria: (?P<crit>.+?)\.$")
 NO_ASSURANCE = re.compile(r"\bnot (?:provide |be treated as |an? )?assurance\b", re.IGNORECASE)
 RELIANCE = re.compile(r"\bmay not be relied (?:up)?on\b|\breliance\b", re.IGNORECASE)
-# A number is a standalone token: digits glued to a letter, digit, "_" or "." (EV-X30, v0.7) are part of an ID or label.
-NUMBER = re.compile(r"(?<![\w.])[0-9][0-9,]*(?:\.[0-9]+)?")
+# A number is a standalone token: digits glued to a letter, digit, "_" or "." on either side (EV-X30, EV-30X, X30Y,
+# v0.7, 30.5x) are part of an ID or label. A sentence-ending period or comma after the number still ends it ("30.").
+NUMBER = re.compile(r"(?<![\w.])[0-9][0-9,]*(?:\.[0-9]+)?(?!\w|\.\w)")
 # A record-shaped line: a list item, or a line carrying one of its section's field labels. In a known section every one
 # must parse; a line that does not is a PackError, never silently dropped.
 RECORD_ITEM = re.compile(r"^(?:[-*+]|[0-9]{1,9}[.)])[ \t]")
@@ -152,7 +153,7 @@ def parse_draft(text):
         if current:
             paragraph += 1
             if (page, paragraph) in blocks:
-                raise PackError(f"draft has two blocks at page {page} paragraph {paragraph}; a later one would overwrite the earlier")
+                raise PackError("draft has two blocks at the same page and paragraph; a later one would overwrite the earlier")
             blocks[(page, paragraph)] = {"section": section, "text": " ".join(current), "lines": list(current)}
             current.clear()
 
@@ -164,7 +165,7 @@ def parse_draft(text):
             page, paragraph = position(marker.group(1), f"draft line {number}"), 0
             # A repeated page marker would restart paragraph numbering and overwrite that page's blocks.
             if page in pages:
-                raise PackError(f"draft repeats the page {page} marker (line {number}); page markers must be unique")
+                raise PackError(f"draft repeats a page marker (line {number}); page markers must be unique")
             pages.add(page)
         elif line.startswith("# "):
             flush()
@@ -356,10 +357,10 @@ def location_problems(label, location, blocks):
         return [f"{label}: location page {show(page)} / paragraph {show(paragraph)} cannot be looked up in the draft"]
     block = blocks.get((page, paragraph))
     if block is None:
-        return [f"{label}: draft has no paragraph {paragraph} on page {page}"]
+        return [f"{label}.location: page and paragraph point at no paragraph of the draft"]
     section = location.get("section")
     if not isinstance(section, str) or not section or not (block["section"] or "").startswith(section):
-        return [f"{label}: page {page} paragraph {paragraph} is under a different section from location.section ({show(section)})"]
+        return [f"{label}.location.section: the located paragraph is under a different section ({show(section)})"]
     return []
 
 
@@ -442,12 +443,12 @@ def assertion_problems(index, assertion, blocks, evidence_lines):
     problems = location_problems(label, location, blocks)
     block = block_at(location, blocks)
     allowed = JUDGEMENT_KEYS["assertion"] | {"text", "evidence_ids", "sample_size", "population_size", "source", "citation"}
-    problems += [f"{label}.{rules.path_key(key)}: value is neither derived from the raw pack nor a declared ingest judgement" for key in sorted(set(assertion) - allowed)]
+    problems += [f"{label}.{rules.path_key(member)}: value is neither derived from the raw pack nor a declared ingest judgement" for member in sorted(set(assertion) - allowed)]
     text = assertion.get("text")
     if not isinstance(text, str):
         problems.append(f"{label}.text: must be a string, got {show(text)}")
     elif block and text.rstrip(".") not in block["text"]:
-        problems.append(f"{label}: text is not quoted from page {location['page']} paragraph {location['paragraph']}")
+        problems.append(f"{label}.text: not quoted from the paragraph at its location")
     if block and assertion.get("citation") != f"draft-deliverable.md p{location['page']} para{location['paragraph']}":
         problems.append(f"{label}.citation: {show(assertion.get('citation'))} does not match its location")
     if assertion.get("source") != "skill:deliverable-ingest":

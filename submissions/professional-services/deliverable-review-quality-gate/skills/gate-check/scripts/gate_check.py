@@ -112,7 +112,7 @@ def unplaced(section, label):
 
 def add_finding(findings, finding_id, gate_id, severity, title, detail, location, criteria_section, confidence, citation):
     if severity not in VALID_SEVERITIES:
-        raise InputError(f"{rules.safe_token(finding_id, 'an engine finding')}: unknown severity ({rules.describe(severity)})")
+        raise InputError(f"an engine finding has an unknown severity ({rules.describe(severity)})")
     finding = {"finding_id": finding_id, "gate_id": gate_id, "severity": severity, "title": title, "detail": detail, "location": location, "criteria_section": criteria_section, "confidence": confidence, "source": ENGINE, "citation": citation}
     for index, existing in enumerate(findings):
         if rules.canonical_id(existing.get("finding_id", "")) == rules.canonical_id(finding_id):
@@ -151,11 +151,20 @@ def expected_assertion_outputs(payload, evidence_set):
             escalations.append(escalation)
     return {"mappings": mappings, "findings": findings, "escalations": escalations}
 
+def genuine_am_finding(item, expected_am):
+    """True when an AM- finding is exactly what assertion_map emits for the current assertions and evidence
+    (`expected_am`, keyed by finding ID), or exactly assertion_map's fixed spoof hold (rules.am_spoof_finding), which
+    can only hold the run (quality-gate-criteria.md #8.4)."""
+    if rules.is_am_spoof_id(item.get("finding_id")):
+        return item == rules.am_spoof_finding()
+    return expected_am is not None and expected_am.get(item.get("finding_id")) == item
+
 def screen_upstream_findings(upstream, expected, raw_upstream=None):
     """Keep legitimate upstream findings; drop any engine-owned finding that engine recomputation does not reproduce.
 
     An engine-owned finding stands only when the engine's own recomputation reproduces it exactly. An AM- finding is kept
-    only when it is byte-for-byte what assertion_map emits for the current assertions and evidence (`expected`). A GC-
+    only when it is byte-for-byte what assertion_map emits for the current assertions and evidence (`expected`), or
+    assertion_map's fixed spoof hold (genuine_am_finding); of two copies sharing an ID only the genuine one stands. A GC-
     finding is returned in `claimed` and checked at the end of the run against what gate_check computes
     (`check_claimed_findings`), so re-running gate_check on its own output reproduces it. SR- findings cannot precede
     severity_rank, and any other finding carrying an engine source tag is spoofed; a self-declared source tag proves
@@ -179,7 +188,7 @@ def screen_upstream_findings(upstream, expected, raw_upstream=None):
             spoofed.append(label)
             continue
         if owner == rules.AM_ENGINE:
-            if expected_am is None or expected_am.get(item["finding_id"]) != item:
+            if not genuine_am_finding(item, expected_am):
                 spoofed.append(label)
             elif not any(kept_item["finding_id"] == item["finding_id"] for kept_item in kept):
                 kept.append(item)

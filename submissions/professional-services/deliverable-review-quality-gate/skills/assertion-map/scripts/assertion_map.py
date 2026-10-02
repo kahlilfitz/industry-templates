@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """assertion_map - deterministic assertion-to-evidence support engine."""
+import copy
 import os
 import sys
 
@@ -59,21 +60,27 @@ def main():
         evidence_by_id = rules.evidence_index(payload["evidence_set"])
         rules.validate_assertions(payload["assertions"])
         rules.validate_contract(payload, "assertion_map")
+        # Ownership of a supplied finding ID is read before withholding (quality-gate-criteria.md #8.4).
+        raw_findings = copy.deepcopy(payload.get("findings", []))
         # Flagged text is withheld before mapping, so no mapping, finding or later stage repeats it
         # (quality-gate-criteria.md #8.7); gate_check raises the G8 hold for every marker.
         rules.withhold_untrusted(payload, raw_input=True)
         evidence_by_id = rules.evidence_index(payload["evidence_set"])
-        findings = list(payload.get("findings", []))
         escalations = list(payload.get("escalations", []))
-        mappings = []
+        mappings, recomputed = [], []
         for assertion in payload["assertions"]:
             mapping, finding, escalation = rules.map_assertion(assertion, evidence_by_id, rules.review_subject(payload))
             mappings.append(mapping)
-            # Appended once: re-running assertion_map on its own output reproduces it instead of duplicating findings.
-            if finding and finding not in findings:
-                findings.append(finding)
-            if finding and escalation not in escalations:
-                escalations.append(escalation)
+            if finding:
+                recomputed.append(finding)
+                # Appended once: re-running assertion_map on its own output reproduces it.
+                if escalation not in escalations:
+                    escalations.append(escalation)
+        # A supplied finding colliding with a recomputed one (canonical ID) is replaced by the genuine finding and held
+        # as a spoof under G8, never duplicated (quality-gate-criteria.md #8.4).
+        findings, spoofed = rules.merge_recomputed_findings(list(payload.get("findings", [])), raw_findings, recomputed)
+        if spoofed and rules.AM_SPOOF_ESCALATION not in escalations:
+            escalations.append(rules.AM_SPOOF_ESCALATION)
         payload["assertion_mappings"], payload["findings"], payload["escalations"] = mappings, findings, escalations
         rules.record_engine(payload, f"assertion_map/{ENGINE_VERSION}", generated_at)
         rules.write_json_atomic(args.out, payload, "mapped output")
