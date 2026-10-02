@@ -509,12 +509,14 @@ def screen_keys(v, path, terms, engine, new):
 def words(*xs): return {w for x in xs for w in re.findall(r"[a-z0-9]+", id_spaced(norm(x or "")))}
 def client_terms(names, own):
     """[(normalised full name or ID, distinctive words)] for every other-client identity. IDs (anything with a digit)
-    match only in full; names also match on any distinctive word that is not shared with this engagement."""
+    match only in full; names also match on any distinctive word that is not shared with this engagement. `own` (the
+    engagement's own identity words, own_words) only trims the distinctive words: it never drops an identity, so an
+    exact full-name match is always screened (#3.3)."""
     out = []; seen = set()
     for nm in names:
         if not isinstance(nm, str) or not nm.strip() or nm in (WITHHELD, OTHER_WITHHELD): continue
         full = id_spaced(norm(nm))
-        if full in seen or (words(nm) and words(nm) <= own): continue
+        if not full.strip() or full in seen: continue
         seen.add(full)
         dist = set() if re.search(r"\d", nm) else {w for w in words(nm) - own - GENERIC if len(w) >= 3}
         out.append((full, dist))
@@ -726,9 +728,14 @@ def other_names(rows, e, own):
                     if not ws or ws <= own | GENERIC | ALLOW_CAPS or (start and len(run.split()) == 1): continue
                     names.append(run)
     return names
+def engagement_words(client, engagement_id, matter_id, title):
+    """The trusted own vocabulary: words of the engagement's own identity only (client, engagement ID, matter ID and
+    engagement title, as the SOW declares them). No screenable field - roster or register cells, staffing affiliates,
+    systems, any other CSV or JSON value - ever adds to it, so input data cannot make another client trusted (#3.3)."""
+    return words(client, engagement_id, matter_id, title)
 def own_words(doc):
-    e = doc.get("engagement") or {}; j = doc.get("joiner") or {}
-    return words(e.get("client_name"), e.get("matter_id"), e.get("engagement_id"), e.get("title"), *(e.get("affiliates") or []), j.get("person"), *[r.get("person") for r in doc.get("team_roster", []) if isinstance(r, dict)], *(doc.get("scope_summary") or {}).get("systems", []))
+    e = doc.get("engagement") or {}
+    return engagement_words(e.get("client_name"), e.get("engagement_id"), e.get("matter_id"), e.get("title"))
 REGISTER_COLUMNS = ("person", "client_name", "matter_id", "status")  # confidentiality-and-ethical-wall-rules.md #2.1
 REGISTER_LABEL = "raw/ethical-wall-register.csv"
 def register_terms(path, e, own):
