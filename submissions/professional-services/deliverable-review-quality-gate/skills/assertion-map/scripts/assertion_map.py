@@ -35,7 +35,7 @@ def require_contract(payload):
     if not isinstance(payload, dict):
         raise InputError("input must be a JSON object")
     if payload.get("contract_version") != CONTRACT_VERSION:
-        raise InputError(f"expected contract {CONTRACT_VERSION}, got {payload.get('contract_version')!r}")
+        raise InputError(f"expected contract {CONTRACT_VERSION}, got {rules.describe(payload.get('contract_version'))}")
     for key in ("deliverable", "criteria"):
         if not isinstance(payload.get(key), dict):
             raise InputError(f"missing required object: {key}")
@@ -51,7 +51,7 @@ def require_contract(payload):
         raise InputError("criteria.criteria_sections must be an array")
     for index, section in enumerate(criteria_sections):
         if not isinstance(section, str) or not section.strip():
-            raise InputError(f"criteria.criteria_sections[{index}] must be a non-blank string, got {section!r}")
+            raise InputError(f"criteria.criteria_sections[{index}] must be a non-blank string, got {rules.describe(section)}")
     for key in ("findings", "escalations"):
         if key in payload and not isinstance(payload[key], list):
             raise InputError(f"{key} must be an array")
@@ -99,7 +99,7 @@ def main():
         print("assertion_map input error: input is nested too deeply to process safely", file=sys.stderr)
         return 1
     except (KeyError, TypeError, AttributeError, ValueError, IndexError) as exc:
-        print(f"assertion_map input error: malformed input ({type(exc).__name__}: {exc})", file=sys.stderr)
+        print(f"assertion_map input error: malformed input ({type(exc).__name__}; details withheld because they may quote untrusted text)", file=sys.stderr)
         return 1
 
 if __name__ == "__main__":

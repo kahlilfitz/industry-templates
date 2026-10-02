@@ -131,7 +131,7 @@ def require_contract(payload):
     if not isinstance(payload, dict):
         raise InputError("input must be a JSON object")
     if payload.get("contract_version") != CONTRACT_VERSION:
-        raise InputError(f"expected contract {CONTRACT_VERSION}, got {payload.get('contract_version')!r}")
+        raise InputError(f"expected contract {CONTRACT_VERSION}, got {rules.describe(payload.get('contract_version'))}")
     if not isinstance(payload.get("deliverable"), dict):
         raise InputError("missing required object: deliverable")
     for key in ("assertions", "assertion_mappings", "findings", "escalations"):
@@ -143,7 +143,7 @@ def require_contract(payload):
         raise InputError("criteria must be an object when supplied (absent or null means the criteria register was not loaded)")
     for index, entry in enumerate(payload.get("escalations", [])):
         if not isinstance(entry, (str, dict)):
-            raise InputError(f"escalations[{index}] must be a string or object, got {entry!r}")
+            raise InputError(f"escalations[{index}] must be a string or object, got {rules.describe(entry)}")
     rules.validate_assertions(payload.get("assertions"))
 
 def strip_format_characters(value):
@@ -164,7 +164,7 @@ def unplaced(section, label):
 
 def add_finding(findings, finding_id, gate_id, severity, title, detail, location, criteria_section, confidence, citation):
     if severity not in VALID_SEVERITIES:
-        raise InputError(f"{finding_id}: unknown severity {severity!r}")
+        raise InputError(f"{rules.safe_token(finding_id, 'an engine finding')}: unknown severity ({rules.describe(severity)})")
     finding = {"finding_id": finding_id, "gate_id": gate_id, "severity": severity, "title": title, "detail": detail, "location": location, "criteria_section": criteria_section, "confidence": confidence, "source": ENGINE, "citation": citation}
     for index, existing in enumerate(findings):
         if existing.get("finding_id") == finding_id:
@@ -180,9 +180,9 @@ def validate_upstream_finding(item, index):
     label = f"findings[{index}]"
     rules.require_text(item, "finding_id", label)
     if item.get("severity") not in VALID_SEVERITIES:
-        raise InputError(f"{item['finding_id']}: unknown severity {item.get('severity')!r}")
+        raise InputError(f"{label}: unknown severity ({rules.describe(item.get('severity'))}); severity must be one of {', '.join(sorted(VALID_SEVERITIES))}")
     if item.get("gate_id") not in GATES:
-        raise InputError(f"{label} ({item['finding_id']}): gate_id must be one of {', '.join(GATES)}, got {item.get('gate_id')!r}")
+        raise InputError(f"{label}: gate_id must be one of {', '.join(GATES)}, got {rules.describe(item.get('gate_id'))}")
     for key in ("title", "detail", "criteria_section", "source", "citation"):
         rules.require_text(item, key, label, required=False, allow_blank=True)
     rules.require_confidence(item, label)
@@ -262,7 +262,7 @@ def validate_unverified_mappings(mappings):
         for key in ("assertion_id", "support_status", "criteria_section"):
             rules.require_text(mapping, key, label)
         if mapping["support_status"] not in {"supported", "limited", "unsupported"}:
-            raise InputError(f"{label}.support_status must be supported, limited or unsupported, got {mapping['support_status']!r}")
+            raise InputError(f"{label}.support_status must be supported, limited or unsupported, got {rules.describe(mapping['support_status'])}")
         for key in ("rationale", "citation"):
             rules.require_text(mapping, key, label, required=False, allow_blank=True)
         rules.require_confidence(mapping, label)
@@ -366,7 +366,7 @@ def string_list(container, key, label):
         raise InputError(f"{label} must be an array when present")
     for index, item in enumerate(value):
         if not isinstance(item, str):
-            raise InputError(f"{label}[{index}] must be a string, got {item!r}")
+            raise InputError(f"{label}[{index}] must be a string, got {rules.describe(item)}")
     return value
 
 def validate_deliverable(deliverable):
@@ -381,11 +381,11 @@ def validate_deliverable(deliverable):
         string_list(deliverable, key, f"deliverable.{key}")
 
 def require_unique_ids(items, label, id_key):
-    seen = set()
+    seen = {}
     for index, item in enumerate(items):
         if item[id_key] in seen:
-            raise InputError(f"{label}[{index}]: duplicate {id_key} {item[id_key]!r}; each register entry must be unique so no entry can mask another")
-        seen.add(item[id_key])
+            raise InputError(f"{label}[{index}].{id_key} duplicates {label}[{seen[item[id_key]]}].{id_key}; each register entry must be unique so no entry can mask another")
+        seen[item[id_key]] = index
 
 def require_entry_basics(item, label, id_key):
     if not isinstance(item, dict):
@@ -527,6 +527,9 @@ def evaluate(payload):
     # Withhold flagged text before any computation, so every derived field, finding and output carries the numbered
     # marker instead of the text (quality-gate-criteria.md #8.7). The contract is still checked on the raw input.
     rules.withhold_untrusted(payload)
+    # Hits are also taken before any upstream engine output is restored from recomputation, so a flagged field inside
+    # a restored entry (for example a member name added to assertion_mappings[]) is still reported, not just dropped.
+    screened_hits = instruction_hits(payload) if EMBEDDED_INSTRUCTION_HOLD else []
     deliverable = payload["deliverable"]
     validate_deliverable(deliverable)
     expected = expected_assertion_outputs(payload, payload.get("evidence_set"))
@@ -553,10 +556,10 @@ def evaluate(payload):
     required_language = loaded.get("required_language") or []
     for index, section in enumerate(loaded.get("criteria_sections") or []):
         if not isinstance(section, str) or not section.strip():
-            raise InputError(f"criteria.criteria_sections[{index}] must be a non-blank string, got {section!r}")
+            raise InputError(f"criteria.criteria_sections[{index}] must be a non-blank string, got {rules.describe(section)}")
     for index, item in enumerate(required_language):
         if not isinstance(item, str):
-            raise InputError(f"deliverable.required_language[{index}] must be a string, got {item!r}")
+            raise InputError(f"deliverable.required_language[{index}] must be a string, got {rules.describe(item)}")
     validate_brand_checks(brand_checks)
     validate_licensed_content(licensed_content)
     validate_prior_findings(prior_findings)
@@ -643,6 +646,7 @@ def evaluate(payload):
             add_finding(findings, f"GC-G3-{safe_token(mapping['assertion_id'], 'assertion')}", "G3", MUST_FIX, "Scope or sample limitation missing at point of recommendation", mapping.get("rationale", "Recommendation requires limitation."), mapping["location"], "quality-gate-criteria.md #3.2", mapping.get("confidence", 0.8), mapping.get("citation", "quality-gate-criteria.md #3.2"))
     if EMBEDDED_INSTRUCTION_HOLD:
         hits = instruction_hits(payload)
+        hits += [hit for hit in screened_hits if hit not in hits]
         for hit_index, (path, hit_reason) in enumerate(hits[:MAX_G8_HITS], start=1):
             if hit_reason == OVERSIZE:
                 add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Field too long to screen for embedded instructions", f"Untrusted field {path} is too long to screen for embedded instructions (over {sg.MAX_TOTAL_CHARS:,} characters, raw or after Unicode normalisation), so it was not screened; it must be held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.6", 0.99, "quality-gate-criteria.md #8.1, #8.6; severity-rules.md #1.1")
@@ -691,7 +695,7 @@ def main():
         print("gate_check input error: input is nested too deeply to process safely", file=sys.stderr)
         return 1
     except (KeyError, TypeError, AttributeError, ValueError, IndexError) as exc:
-        print(f"gate_check input error: malformed input ({type(exc).__name__}: {exc})", file=sys.stderr)
+        print(f"gate_check input error: malformed input ({type(exc).__name__}; details withheld because they may quote untrusted text)", file=sys.stderr)
         return 1
 
 if __name__ == "__main__":

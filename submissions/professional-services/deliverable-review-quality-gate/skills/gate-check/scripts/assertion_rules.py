@@ -97,34 +97,95 @@ def _reject_constant(name):
     raise InputError(f"input JSON contains {name}, which is not a valid JSON number")
 
 
-def _check_encodable(value):
-    """Reject lone UTF-16 surrogates (for example "\\ud800"): they are not Unicode text and cannot be written as UTF-8."""
-    stack = [(value, "$")]
+def describe(value):
+    """A content-free description of an untrusted value for error messages: its JSON type and size, never its text
+    (quality-gate-criteria.md #8.9), so a rejected value can never echo embedded instructions to stderr."""
+    def plural(count, noun):
+        return f"{count} {noun}{'' if count == 1 else 's'}"
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "a boolean"
+    if isinstance(value, int):
+        return "an integer"
+    if isinstance(value, float):
+        return "a number"
+    if isinstance(value, str):
+        return f"a {'' if value.strip() else 'blank '}string of {plural(len(value), 'character')}"
+    if isinstance(value, list):
+        return f"an array of {plural(len(value), 'item')}"
+    if isinstance(value, dict):
+        return f"an object with {plural(len(value), 'field')}"
+    return f"a {type(value).__name__} value"
+
+
+FIELD_NAME = re.compile(r"[a-z][a-z0-9_]{0,40}")
+
+
+def path_key(key):
+    """A field name shown in an error path only when it is a plain snake_case name that passes the screen; anything
+    else is shown as <field>, so an untrusted member name is never echoed."""
+    return key if isinstance(key, str) and FIELD_NAME.fullmatch(key) and not suspicious_instruction(key) else "<field>"
+
+
+def format_path(parts):
+    text = "$"
+    for part in parts:
+        text += f"[{part}]" if isinstance(part, int) else f".{path_key(part)}"
+    return text
+
+
+class _DuplicateFields(dict):
+    """A JSON object with two member names that are equal exactly or after normalisation; rejected after loading."""
+
+
+@functools.lru_cache(maxsize=4096)
+def field_name_key(name):
+    """Comparison form of a member name: the detector's fold (NFKC, format characters, confusables, case, separators).
+    Very long names are compared case-folded only, which keeps loading fast; they are screened (and held) anyway."""
+    return sg.normalize(name) if len(name) <= 512 else name.casefold()
+
+
+def _object_pairs(pairs):
+    seen, duplicate = set(), False
+    for key, _ in pairs:
+        folded = field_name_key(key)
+        duplicate = duplicate or folded in seen
+        seen.add(folded)
+    return _DuplicateFields(pairs) if duplicate else dict(pairs)
+
+
+def _check_loaded(value):
+    """Reject objects with duplicate member names (a later value would overwrite an earlier one, quality-gate-criteria.md
+    #8.10) and lone UTF-16 surrogates (for example "\\ud800": not Unicode text, cannot be written as UTF-8)."""
+    stack = [(value, ())]
     while stack:
-        item, path = stack.pop()
+        item, parts = stack.pop()
+        if isinstance(item, _DuplicateFields):
+            raise InputError(f"{format_path(parts)} has duplicate field names (equal exactly or after Unicode, case and separator folding), so a later value could overwrite an earlier one; the input is malformed")
         if isinstance(item, dict):
             for key, child in item.items():
-                _check_encodable_text(key, f"{path} (a field name)")
-                stack.append((child, f"{path}.<field>"))
+                _check_encodable_text(key, lambda parts=parts: f"{format_path(parts)} (a field name)")
+                stack.append((child, parts + (key,)))
         elif isinstance(item, list):
-            stack.extend((child, f"{path}[{index}]") for index, child in enumerate(item))
+            stack.extend((child, parts + (index,)) for index, child in enumerate(item))
         elif isinstance(item, str):
-            _check_encodable_text(item, path)
+            _check_encodable_text(item, lambda parts=parts: format_path(parts))
 
 
 def _check_encodable_text(text, path):
     try:
         text.encode("utf-8")
     except UnicodeEncodeError as exc:
-        raise InputError(f"{path} contains a lone surrogate code point, which is not valid Unicode text") from exc
+        raise InputError(f"{path()} contains a lone surrogate code point, which is not valid Unicode text") from exc
 
 
 def load_json_file(path):
-    """Load engine input. Strict JSON only: NaN/Infinity constants, lone surrogates and over-deep nesting are input
-    errors, so no engine ever processes or writes a value that is not valid JSON."""
+    """Load engine input. Strict JSON only: NaN/Infinity constants, lone surrogates, duplicate member names and
+    over-deep nesting are input errors, so no engine ever processes or writes a value that is not valid JSON."""
     try:
         with open(path, encoding="utf-8") as handle:
-            payload = json.load(handle, parse_constant=_reject_constant)
+            payload = json.load(handle, parse_constant=_reject_constant, object_pairs_hook=_object_pairs)
     except OSError as exc:
         raise InputError(f"could not read input JSON: {exc}") from exc
     except UnicodeDecodeError as exc:
@@ -134,7 +195,7 @@ def load_json_file(path):
     except RecursionError as exc:
         raise InputError("input JSON is nested too deeply to process safely") from exc
     check_depth(payload)
-    _check_encodable(payload)
+    _check_loaded(payload)
     return payload
 
 
@@ -178,7 +239,7 @@ def require_text(container, key, label, required=True, allow_blank=False):
         return None
     value = container[key]
     if not isinstance(value, str):
-        raise InputError(f"{label}.{key} must be a string, got {value!r}")
+        raise InputError(f"{label}.{key} must be a string, got {describe(value)}")
     if not allow_blank and not value.strip():
         raise InputError(f"{label}.{key} must not be blank")
     return value
@@ -192,7 +253,7 @@ def require_boolean(container, key, label, required=True):
         return None
     value = container[key]
     if not isinstance(value, bool):
-        raise InputError(f"{label}.{key} must be true or false, got {value!r}; omit optional flags instead of sending null or text")
+        raise InputError(f"{label}.{key} must be true or false, got {describe(value)}; omit optional flags instead of sending null or text")
     return value
 
 
@@ -203,7 +264,7 @@ def require_confidence(container, label, required=False):
         return None
     value = container["confidence"]
     if not is_number(value) or not 0 <= value <= 1:
-        raise InputError(f"{label}.confidence must be a number from 0 to 1, got {value!r}")
+        raise InputError(f"{label}.confidence must be a number from 0 to 1, got {describe(value)}")
     return value
 
 
@@ -214,11 +275,11 @@ def validate_location(location, label, required=True):
         raise InputError(f"{label}.location must be an object")
     for key in ("section", "label"):
         if key in location and location[key] is not None and not isinstance(location[key], str):
-            raise InputError(f"{label}.location.{key} must be a string, got {location[key]!r}")
+            raise InputError(f"{label}.location.{key} must be a string, got {describe(location[key])}")
     for key in ("page", "paragraph"):
         value = location.get(key)
         if value is not None and not is_integer(value):
-            raise InputError(f"{label}: location.{key} must be an integer or null, got {value!r}; {PAGE_LABEL_HINT}")
+            raise InputError(f"{label}: location.{key} must be an integer or null, got {describe(value)}; {PAGE_LABEL_HINT}")
     return location
 
 
@@ -227,7 +288,6 @@ def validate_assertion(assertion, index):
         raise InputError(f"assertions[{index}] must be an object")
     label = f"assertions[{index}]"
     require_text(assertion, "assertion_id", label)
-    label = f"{label} ({assertion['assertion_id']})"
     require_text(assertion, "class", label)
     require_text(assertion, "text", label, allow_blank=True)
     require_text(assertion, "citation", label, allow_blank=True)
@@ -245,7 +305,7 @@ def validate_assertion(assertion, index):
     for key in ASSERTION_COUNTS:
         value = assertion.get(key)
         if value is not None and (not is_integer(value) or value < 0):
-            raise InputError(f"{label}.{key} must be a non-negative integer or null, got {value!r}")
+            raise InputError(f"{label}.{key} must be a non-negative integer or null, got {describe(value)}")
     require_confidence(assertion, label)
     evidence_ids = assertion.get("evidence_ids")
     if evidence_ids is not None:
@@ -253,18 +313,18 @@ def validate_assertion(assertion, index):
             raise InputError(f"{label}.evidence_ids must be an array when present")
         for position, evidence_id in enumerate(evidence_ids):
             if not isinstance(evidence_id, str) or not evidence_id.strip():
-                raise InputError(f"{label}.evidence_ids[{position}] must be a non-blank string, got {evidence_id!r}")
+                raise InputError(f"{label}.evidence_ids[{position}] must be a non-blank string, got {describe(evidence_id)}")
 
 
 def validate_assertions(assertions):
     if not isinstance(assertions, list):
         raise InputError("assertions must be an array")
-    seen = set()
+    seen = {}
     for index, assertion in enumerate(assertions):
         validate_assertion(assertion, index)
         if assertion["assertion_id"] in seen:
-            raise InputError(f"assertions[{index}]: duplicate assertion_id {assertion['assertion_id']!r}")
-        seen.add(assertion["assertion_id"])
+            raise InputError(f"assertions[{index}].assertion_id duplicates assertions[{seen[assertion['assertion_id']]}].assertion_id; assertion IDs must be unique")
+        seen[assertion["assertion_id"]] = index
 
 
 def evidence_index(evidence_set):
@@ -280,7 +340,8 @@ def evidence_index(evidence_set):
             require_text(item, key, label, required=False, allow_blank=True)
         require_confidence(item, label)
         if item["evidence_id"] in by_id:
-            raise InputError(f"{label}: duplicate evidence_id {item['evidence_id']!r}")
+            first = next(position for position, other in enumerate(evidence_set) if other is by_id[item["evidence_id"]])
+            raise InputError(f"{label}.evidence_id duplicates evidence_set[{first}].evidence_id; evidence IDs must be unique")
         by_id[item["evidence_id"]] = item
     return by_id
 
@@ -311,24 +372,24 @@ def _contract_errors(value, node, path, root):
     if "$ref" in node:
         node = root["definitions"][node["$ref"].rsplit("/", 1)[-1]]
     if "const" in node and value != node["const"]:
-        yield f"{path} must be {node['const']!r}, got {value!r}"
+        yield f"{path} must be {node['const']!r}, got {describe(value)}"
         return
     if "oneOf" in node:
         if sum(1 for option in node["oneOf"] if next(_contract_errors(value, option, path, root), None) is None) != 1:
-            yield f"{path} has the wrong shape (expected exactly one of {', '.join(str(option.get('type')) for option in node['oneOf'])}), got {value!r}"
+            yield f"{path} has the wrong shape (expected exactly one of {', '.join(str(option.get('type')) for option in node['oneOf'])}), got {describe(value)}"
         return
     types = node.get("type")
     if types is not None:
         types = [types] if isinstance(types, str) else types
         if not any(_JSON_TYPES[name](value) for name in types):
-            yield f"{path} must be {' or '.join(types)}, got {value!r}"
+            yield f"{path} must be {' or '.join(types)}, got {describe(value)}"
             return
     if "enum" in node and value not in node["enum"]:
         if node.get("x-unrecognised") == "hold":
             if not (value is None or isinstance(value, str)):
-                yield f"{path} must be a string or null, got {value!r}"
+                yield f"{path} must be a string or null, got {describe(value)}"
         else:
-            yield f"{path} must be one of {', '.join(node['enum'])}, got {value!r}"
+            yield f"{path} must be one of {', '.join(node['enum'])}, got {describe(value)}"
         return
     if isinstance(value, str):
         if is_withheld(value):
@@ -339,10 +400,10 @@ def _contract_errors(value, node, path, root):
         elif "pattern" in node:
             candidate = normalise_provenance(value) if node.get("x-normalise") == "provenance" else value
             if not re.search(node["pattern"], candidate):
-                yield f"{path} {value!r} does not match the contract format {node['pattern']}"
+                yield f"{path} ({describe(value)}) does not match the contract format {node['pattern']}"
     elif is_number(value):
         if value < node.get("minimum", value) or value > node.get("maximum", value):
-            yield f"{path} must be between {node.get('minimum')} and {node.get('maximum')}, got {value!r}"
+            yield f"{path} must be between {node.get('minimum')} and {node.get('maximum')}, got a number outside that range"
     elif isinstance(value, dict):
         for key in node.get("required", ()):
             if key not in value:
@@ -599,11 +660,19 @@ def safe_token(value, fallback):
     return text if SAFE_TOKEN.match(text) and not suspicious_instruction(text) else fallback
 
 
+KEY_SUFFIX = " (field name)"
+PAIR_SUFFIX = " (adjacent entries)"
+
+
 def iter_strings(value, path):
+    """Yield (path, text) for every string in value, member names included: a name is untrusted text too
+    (quality-gate-criteria.md #8.5). Nothing below the top level is skipped, whatever its key (metadata, provenance or a
+    nested contract_version alike)."""
     if isinstance(value, dict):
         for key, child in value.items():
-            if key not in UNSCANNED_KEYS:
-                yield from iter_strings(child, f"{path}.{safe_token(key, '<field>')}")
+            child_path = f"{path}.{safe_token(key, '<field>')}"
+            yield child_path + KEY_SUFFIX, key
+            yield from iter_strings(child, child_path)
     elif isinstance(value, list):
         for index, child in enumerate(value):
             yield from iter_strings(child, f"{path}[{index}]")
@@ -611,15 +680,47 @@ def iter_strings(value, path):
         yield path, value
 
 
-def scan_sections(payload):
-    """(primary, derived): lists of (path, text) for every untrusted string, primary sections and top-level scalars first."""
-    primary, derived = [], []
+def iter_arrays(value, path):
+    """Yield (path, list) for every array in value, at any depth."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            yield from iter_arrays(child, f"{path}.{safe_token(key, '<field>')}")
+    elif isinstance(value, list):
+        yield path, value
+        for index, child in enumerate(value):
+            yield from iter_arrays(child, f"{path}[{index}]")
+
+
+def top_level_sections(payload):
+    """Yield (key, path, child, derived) for each top-level member except the validated contract_version."""
     for key, child in payload.items():
         if key in UNSCANNED_KEYS:
             continue
-        target = primary if key in PRIMARY_SECTIONS or not isinstance(child, (dict, list)) else derived
-        target.extend(iter_strings(child, f"$.{safe_token(key, '<field>')}"))
+        yield key, f"$.{safe_token(key, '<field>')}", child, not (key in PRIMARY_SECTIONS or not isinstance(child, (dict, list)))
+
+
+def scan_sections(payload):
+    """(primary, derived): lists of (path, text) for every untrusted string and member name, primary sections and
+    top-level scalars first."""
+    primary, derived = [], []
+    for key, path, child, is_derived in top_level_sections(payload):
+        target = derived if is_derived else primary
+        target.append((path + KEY_SUFFIX, key))
+        target.extend(iter_strings(child, path))
     return primary, derived
+
+
+def array_pairs(payload):
+    """Yield (path, fields, refs, derived) for each pair of adjacent non-blank string entries in any array, so prose
+    split across array entries is screened joined (quality-gate-criteria.md #8.5), as an assertion's fields are."""
+    for _, path, child, derived in top_level_sections(payload):
+        for list_path, items in iter_arrays(child, path):
+            for index in range(len(items) - 1):
+                first, second = items[index], items[index + 1]
+                if isinstance(first, str) and isinstance(second, str) and first.strip() and second.strip():
+                    names = (f"entry {index}", f"entry {index + 1}")
+                    yield (f"{list_path}[{index}]+[{index + 1}]{PAIR_SUFFIX}", dict(zip(names, (first, second))),
+                           dict(zip(names, ((items, index), (items, index + 1)))), derived)
 
 
 def collect_scan_text(payload):
@@ -673,17 +774,20 @@ def assertion_fields(payload):
 
 
 def instruction_hits(payload):
-    """(path, reason) for every untrusted field that trips the detector or carries a withheld marker, then for each
-    assertion whose fields trip only when joined (so one note is never counted twice).
+    """(path, reason) for every untrusted string or member name that trips the detector or carries a withheld marker,
+    then for each assertion whose fields trip only when joined, then for each run of adjacent array entries that trip
+    only when joined (so one note is never counted twice).
 
     Text withheld at an earlier stage stays a hit: a primary instruction/oversize marker is a field hit, a split marker
-    on any of an assertion's fields is that assertion's combined hit, and a derived string that is exactly a marker
-    (and not a copy of a primary string) is a hit. A derived string that merely contains a marker or embeds tripped
-    primary text is the same note and is not counted again (quality-gate-criteria.md #8.1-#8.7)."""
-    hits, tripped = [], set()
+    on any of an assertion's fields is that assertion's combined hit, a run of split-marked array entries is one hit,
+    any other split marker is a hit of its own, and a derived string that is exactly a marker (and not a copy of a
+    primary string) is a hit. A derived string that merely contains a marker or embeds tripped primary text is the same
+    note and is not counted again (quality-gate-criteria.md #8.1-#8.7)."""
+    hits, tripped, pending_split = [], set(), []
     for path, text, derived in collect_scan_text(payload):
         kind = withheld_kind(text)
-        if kind == SPLIT and not derived:
+        if kind == SPLIT and (not derived or path.endswith("]")):
+            pending_split.append((path, text))
             continue
         if kind:
             reason = OVERSIZE if kind == OVERSIZE else INSTRUCTION
@@ -699,14 +803,48 @@ def instruction_hits(payload):
         hits.append((path, reason))
         if not derived:
             tripped.add(text)
+    covered = set()
     for path, fields in assertion_fields(payload):
         if tripped.intersection(fields.values()):
             continue
-        if any(withheld_kind(value) == SPLIT for value in fields.values()):
+        splits = [value for value in fields.values() if withheld_kind(value) == SPLIT]
+        if splits:
+            covered.update(splits)
             hits.append((path, INSTRUCTION))
             continue
         found = screen_fields(fields)
         if found:
+            hits.append((path, hit_reason(found)))
+    hits.extend(_array_hits(payload, tripped, covered))
+    hits.extend((path, INSTRUCTION) for path, text in pending_split if text not in covered)
+    return hits
+
+
+def _array_hits(payload, tripped, covered):
+    """Hits for runs of split-marked adjacent array entries, then for adjacent unmarked entries that trip only joined."""
+    hits = []
+    for _, path, child, _ in top_level_sections(payload):
+        for list_path, items in iter_arrays(child, path):
+            index = 0
+            while index < len(items):
+                if withheld_kind(items[index]) != SPLIT:
+                    index += 1
+                    continue
+                last = index
+                while last + 1 < len(items) and withheld_kind(items[last + 1]) == SPLIT:
+                    last += 1
+                covered.update(items[index:last + 1])
+                hits.append((f"{list_path}[{index}]+[{last}]{PAIR_SUFFIX}" if last > index else f"{list_path}[{index}]", INSTRUCTION))
+                index = last + 1
+    used = set()
+    for path, fields, refs, _ in array_pairs(payload):
+        values = list(fields.values())
+        slots = {(id(container), key) for container, key in refs.values()}
+        if used & slots or any(is_withheld(value) or value in tripped or screen_text(value) or any(source in value for source in tripped) for value in values):
+            continue
+        found = screen_fields(fields)
+        if found:
+            used |= slots
             hits.append((path, hit_reason(found)))
     return hits
 
@@ -719,17 +857,8 @@ def _next_marker_number(payload):
     return highest + 1
 
 
-def _replace_withheld(value, exact, embedded):
-    if isinstance(value, dict):
-        for key in value:
-            if key not in UNSCANNED_KEYS:
-                value[key] = _replace_withheld(value[key], exact, embedded)
-        return value
-    if isinstance(value, list):
-        for index, child in enumerate(value):
-            value[index] = _replace_withheld(child, exact, embedded)
-        return value
-    if not isinstance(value, str) or is_withheld(value):
+def _replace_text(value, exact, embedded):
+    if is_withheld(value):
         return value
     if value in exact:
         return exact[value]
@@ -739,6 +868,31 @@ def _replace_withheld(value, exact, embedded):
     return value
 
 
+def _renamed(items, exact, embedded):
+    """Rebuild an object with every flagged member name replaced by its marker, in the original order. Marker numbers
+    are unique per text, so two names never collapse into one; if they ever would, the input is refused."""
+    renamed = {}
+    for key, child in items:
+        new_key = _replace_text(key, exact, embedded)
+        if new_key in renamed:
+            raise InputError("withholding flagged field names would merge two fields of one object; the input is malformed")
+        renamed[new_key] = _replace_withheld(child, exact, embedded)
+    return renamed
+
+
+def _replace_withheld(value, exact, embedded):
+    if isinstance(value, dict):
+        renamed = _renamed(list(value.items()), exact, embedded)
+        value.clear()
+        value.update(renamed)
+        return value
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            value[index] = _replace_withheld(child, exact, embedded)
+        return value
+    return _replace_text(value, exact, embedded) if isinstance(value, str) else value
+
+
 def withhold_untrusted(payload):
     """Screen the whole payload and replace every string that trips the detector with a numbered withheld marker,
     everywhere that text appears, so no stage, output or review packet repeats it (quality-gate-criteria.md #8.7).
@@ -746,7 +900,9 @@ def withhold_untrusted(payload):
     Detection runs on the original text first; nothing is stripped or rewritten before screening. Then:
     - a tripped primary or derived string is replaced wherever it appears exactly, and wherever it is embedded in a
       longer string (for example the assertion citation inside assertion_mappings[].citation);
-    - when only an assertion's joined fields trip, each of those fields gets a split marker wherever it appears exactly.
+    - when only an assertion's joined fields trip, each of those fields gets a split marker wherever it appears exactly;
+    - when only two adjacent array entries trip joined, both get split markers;
+    - member names are screened like values, and a flagged name is replaced by its marker in place (order kept).
     Markers already present are left alone and are not new hits. The payload is updated in place. Returns
     (path, reason, derived) for each newly withheld hit, in the order instruction_hits reports them."""
     primary, derived = scan_sections(payload)
@@ -793,6 +949,19 @@ def withhold_untrusted(payload):
             own = [name for name in needed if not name.startswith("evidence title")]
             split_refs.extend(refs[name] for name in (own or needed))
             combined.append((path, hit_reason(found), False))
+    # Prose split across adjacent array entries: each entry passes alone, the joined pair trips. Both entries are
+    # withheld with split markers; an entry already part of a flagged pair is not paired again.
+    paired = set()
+    for path, fields, refs, is_derived in array_pairs(payload):
+        values = list(fields.values())
+        slots = {(id(container), key) for container, key in refs.values()}
+        if paired & slots or any(value in markers or is_withheld(value) or any(source in value for source in embedded) for value in values):
+            continue
+        found = screen_fields(fields)
+        if found:
+            paired |= slots
+            split_refs.extend(refs.values())
+            combined.append((path, hit_reason(found), is_derived))
     split_exact = {}
     for container, key in split_refs:
         value = container[key]
@@ -803,9 +972,18 @@ def withhold_untrusted(payload):
     exact = {text: marker for text, marker in markers.items() if text not in split_exact}
     ordered = sorted(((text, markers[text]) for text in embedded), key=lambda pair: -len(pair[0]))
     if exact or split_exact:
-        primary_keys = {key for key, child in payload.items() if key in PRIMARY_SECTIONS or not isinstance(child, (dict, list))}
-        for key in list(payload):
-            if key not in UNSCANNED_KEYS:
-                # Derived copies of split fields (for example assertion_mappings[].text) are withheld with them.
-                payload[key] = _replace_withheld(payload[key], exact if key in primary_keys else {**exact, **split_exact}, ordered)
+        primary_keys = {key for key, _, _, is_derived in top_level_sections(payload) if not is_derived}
+        renamed = {}
+        for key, child in payload.items():
+            if key in UNSCANNED_KEYS:
+                renamed[key] = child
+                continue
+            # Derived copies of split fields (for example assertion_mappings[].text) are withheld with them.
+            mapping = exact if key in primary_keys else {**exact, **split_exact}
+            new_key = _replace_text(key, mapping, ordered)
+            if new_key in renamed:
+                raise InputError("withholding flagged field names would merge two top-level fields; the input is malformed")
+            renamed[new_key] = _replace_withheld(child, mapping, ordered)
+        payload.clear()
+        payload.update(renamed)
     return new + derived_new + combined

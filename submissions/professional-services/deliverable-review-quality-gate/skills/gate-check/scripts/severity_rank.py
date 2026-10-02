@@ -42,7 +42,7 @@ def require_contract(payload):
     if not isinstance(payload, dict):
         raise InputError("input must be a JSON object")
     if payload.get("contract_version") != CONTRACT_VERSION:
-        raise InputError(f"expected contract {CONTRACT_VERSION}, got {payload.get('contract_version')!r}")
+        raise InputError(f"expected contract {CONTRACT_VERSION}, got {rules.describe(payload.get('contract_version'))}")
     # gate_check always emits both arrays; an absent one means the gate run is missing, never "nothing found".
     for key in ("findings", "escalations"):
         if key not in payload:
@@ -51,19 +51,19 @@ def require_contract(payload):
             raise InputError(f"{key} must be an array")
     for index, item in enumerate(payload["escalations"]):
         if not (isinstance(item, dict) or (isinstance(item, str) and item.strip())):
-            raise InputError(f"escalations[{index}] must be a non-blank string or an object, got {item!r}")
+            raise InputError(f"escalations[{index}] must be a non-blank string or an object, got {rules.describe(item)}")
 
 def validate_finding(index, item):
     """Fail closed with a clear message on values the ranking cannot order (severity-rules.md #3.2)."""
     if not isinstance(item, dict):
         raise InputError(f"findings[{index}] must be an object")
-    label = f"findings[{index}] ({item.get('finding_id', '<unknown>')})"
+    label = f"findings[{index}]"
     if not isinstance(item.get("finding_id"), str) or not item["finding_id"].strip():
         raise InputError(f"findings[{index}] missing required field: finding_id")
     if item.get("severity") not in SEVERITY_ORDER:
-        raise InputError(f"{item.get('finding_id', '<unknown>')}: unknown severity {item.get('severity')!r}")
+        raise InputError(f"{label}: unknown severity ({rules.describe(item.get('severity'))}); severity must be one of {', '.join(SEVERITY_ORDER)}")
     if "confidence" in item and not rules.is_number(item["confidence"]):
-        raise InputError(f"{label}: confidence must be a number, got {item['confidence']!r}")
+        raise InputError(f"{label}: confidence must be a number, got {rules.describe(item['confidence'])}")
     location = item.get("location")
     if location is None:
         return
@@ -72,7 +72,7 @@ def validate_finding(index, item):
     for key in ("page", "paragraph"):
         value = location.get(key)
         if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
-            raise InputError(f"{label}: location.{key} must be an integer or null, got {value!r}; record the physical "
+            raise InputError(f"{label}: location.{key} must be an integer or null, got {rules.describe(value)}; record the physical "
                              f"page number and keep printed labels such as roman numerals in location.label")
 
 def sort_key(item):
@@ -113,7 +113,7 @@ def reconcile_gate_results(findings, gate_results):
     blocked can therefore never reach a lower verdict because its findings were removed or downgraded."""
     seen = [item["gate_id"] for item in gate_results]
     if sorted(seen) != sorted(GATE_IDS):
-        raise InputError(f"gate_results must contain exactly one entry per gate {', '.join(GATE_IDS)}, got {', '.join(seen) or 'none'}")
+        raise InputError(f"gate_results must contain exactly one entry per gate {', '.join(GATE_IDS)}, got {', '.join(rules.safe_token(gate, '<invalid>') for gate in seen) or 'none'}")
     mismatches = []
     for item in gate_results:
         status, highest, count = gate_summary(findings, item["gate_id"])
@@ -272,7 +272,7 @@ def main():
         print("severity_rank input error: input is nested too deeply to process safely", file=sys.stderr)
         return 1
     except (KeyError, TypeError, AttributeError, ValueError, IndexError) as exc:
-        print(f"severity_rank input error: malformed input ({type(exc).__name__}: {exc})", file=sys.stderr)
+        print(f"severity_rank input error: malformed input ({type(exc).__name__}; details withheld because they may quote untrusted text)", file=sys.stderr)
         return 1
 
 if __name__ == "__main__":
