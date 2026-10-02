@@ -6,6 +6,9 @@ import os
 import sys
 from datetime import datetime
 
+import assertion_rules as rules
+import gate_check as gc
+
 ENGINE = "engine:severity_rank"
 ENGINE_VERSION = "1.0.4"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
@@ -17,9 +20,11 @@ STATUS_WITH_MUST_FIX = "partner_review_required_must_fix"  # severity-rules.md #
 STATUS_WITH_ADVISORIES = "partner_review_required_advisories_only"  # severity-rules.md #3.3
 STATUS_CLEAN = "partner_review_required_no_engine_findings"  # severity-rules.md #3.3
 
+GATE_IDS = tuple(gc.GATES)
+MAX_G8_HITS = gc.MAX_G8_HITS
+SR_G8_PREFIX = "SR-G8-embedded-instruction-"
 
-class InputError(ValueError):
-    """Raised for malformed or unsafe engine input."""
+InputError = rules.InputError
 
 MAX_INPUT_DEPTH = 64  # mirrors assertion_rules.MAX_INPUT_DEPTH
 
@@ -120,6 +125,80 @@ def collapse_duplicates(findings):
             kept[positions[finding_id]] = item
     return kept, copies
 
+def gate_status(highest):
+    return "no_engine_findings" if highest == "none" else "blocked" if highest == "release_blocker" else "attention_required"
+
+def gate_summary(findings, gate_id):
+    """(status, highest_severity, finding_count) for one gate, computed exactly as gate_check computes it."""
+    severities = [item["severity"] for item in findings if item["gate_id"] == gate_id]
+    highest = min(severities, key=SEVERITY_ORDER.get) if severities else "none"
+    return gate_status(highest), highest, len(severities)
+
+def reconcile_gate_results(findings, gate_results):
+    """Refuse input whose gate_results disagree with findings[] (severity-rules.md #3.5): one entry per gate G1-G8,
+    and each entry's status, highest_severity and finding_count must equal what the findings give. A gate reported
+    blocked can therefore never reach a lower verdict because its findings were removed or downgraded."""
+    seen = [item["gate_id"] for item in gate_results]
+    if sorted(seen) != sorted(GATE_IDS):
+        raise InputError(f"gate_results must contain exactly one entry per gate {', '.join(GATE_IDS)}, got {', '.join(seen) or 'none'}")
+    mismatches = []
+    for item in gate_results:
+        status, highest, count = gate_summary(findings, item["gate_id"])
+        if (item["status"], item["highest_severity"], item["finding_count"]) != (status, highest, count):
+            mismatches.append(f"{item['gate_id']} reports {item['status']}/{item['highest_severity']}/{item['finding_count']} but findings[] give {status}/{highest}/{count}")
+    if mismatches:
+        raise InputError("gate_results do not match findings[] (status/highest_severity/finding_count): " + "; ".join(mismatches) + "; re-run gate_check, findings cannot be removed or downgraded after the gate run")
+
+def covered_by_gate_check(findings, escalations, path):
+    """True when gate_check already holds this primary-field hit under its own G8 finding."""
+    if any(item["finding_id"].startswith("GC-G8-embedded-instruction-") and f"Untrusted field {path} " in item.get("detail", "") for item in findings):
+        return True
+    listed = sum(1 for item in findings if item["finding_id"].startswith("GC-G8-embedded-instruction-"))
+    overflow = any(isinstance(entry, str) and entry.startswith("G8: ") and "further embedded-instruction hit(s) not listed individually" in entry for entry in escalations)
+    return listed >= MAX_G8_HITS and overflow
+
+def screen_embedded_instructions(payload):
+    """Screen every incoming string through steering_guard exactly as gate_check does (severity-rules.md #3.6).
+
+    Primary sections are re-screened; a hit gate_check already holds under its own G8 finding is not counted twice.
+    Every string in the derived sections (findings, escalations, gate_results, provenance, assertion_mappings and any
+    other notes) that trips the detector, and is not a copy of primary text already held, is withheld and becomes a
+    hit. Returns (path, reason) for each new hit; the payload is updated in place."""
+    hits = []
+    primary_payload = {key: value for key, value in payload.items() if key in gc.PRIMARY_SECTIONS or not isinstance(value, (dict, list))}
+    for path, reason in gc.instruction_hits(primary_payload):
+        if not covered_by_gate_check(payload["findings"], payload["escalations"], path):
+            hits.append((path, reason))
+    primary, primary_tripped = gc.primary_strings(payload)
+    for key in list(payload):
+        if key in gc.UNSCANNED_KEYS or key in primary_payload:
+            continue
+        withheld = []
+        payload[key] = gc.withhold_derived(payload[key], f"$.{gc.safe_token(key, '<field>')}", primary, primary_tripped, withheld)
+        hits.extend(withheld)
+    for index, item in enumerate(payload["findings"]):
+        if item["finding_id"] == gc.WITHHELD_TEXT:
+            item["finding_id"] = f"withheld-finding-{index + 1}"
+    return hits
+
+def add_g8_findings(payload, hits):
+    """One SR-G8 release blocker per new hit (up to MAX_G8_HITS) plus escalations; withheld text is never repeated."""
+    findings, escalations = payload["findings"], payload["escalations"]
+    for hit_index, (path, reason) in enumerate(hits[:MAX_G8_HITS], start=1):
+        location = gc.location_for_scan_path(payload, path)
+        if reason == gc.OVERSIZE:
+            title, detail, section = "Field too long to screen for embedded instructions", f"Field {path} reached severity_rank too long to screen for embedded instructions, so it was withheld and must be held for human review.", "quality-gate-criteria.md #8.6"
+            escalations.append(f"G8: {path} reached severity_rank too long to screen for embedded instructions - hold for reviewing partner/QRM (severity-rules.md #3.6)")
+        else:
+            title, detail, section = "Embedded instruction found in gate-check output", f"Field {path} reached severity_rank with instruction-like, forwarding or look-alike-character text that gate_check did not hold; the text was withheld and must be held for human review.", "quality-gate-criteria.md #8.1-#8.3"
+            escalations.append(f"G8: embedded-instruction tripwire in {path} at severity_rank - text withheld; hold for reviewing partner/QRM (severity-rules.md #3.6)")
+        findings.append({"finding_id": f"{SR_G8_PREFIX}{hit_index}", "gate_id": "G8", "severity": "release_blocker", "title": title, "detail": detail, "location": location, "criteria_section": section, "confidence": 0.99, "source": ENGINE, "citation": "quality-gate-criteria.md #8.1-#8.3, #8.7; severity-rules.md #1.1, #3.6"})
+    if len(hits) > MAX_G8_HITS:
+        escalations.append(f"G8: {len(hits) - MAX_G8_HITS} further embedded-instruction hit(s) at severity_rank not listed individually - hold for reviewing partner/QRM (severity-rules.md #3.6)")
+    for item in payload["gate_results"]:
+        if item["gate_id"] == "G8":
+            item["status"], item["highest_severity"], item["finding_count"] = gate_summary(findings, "G8")
+
 def main():
     parser = argparse.ArgumentParser(description="Rank gate findings and compute release-readiness status.")
     parser.add_argument("--gates", required=True)
@@ -132,6 +211,11 @@ def main():
         require_contract(payload)
         for index, item in enumerate(payload["findings"]):
             validate_finding(index, item)
+        rules.validate_contract(payload, "severity_rank")
+        reconcile_gate_results(payload["findings"], payload["gate_results"])
+        g8_hits = screen_embedded_instructions(payload)
+        if g8_hits:
+            add_g8_findings(payload, g8_hits)
         findings, duplicates = collapse_duplicates(payload["findings"])
         payload["findings"] = findings
         escalations = payload["escalations"]

@@ -35,7 +35,8 @@ ADVISORY = "advisory"  # severity-rules.md #1.3
 SEVERITY_RANK = {ADVISORY: 1, MUST_FIX: 2, RELEASE_BLOCKER: 3}
 VALID_SEVERITIES = set(SEVERITY_RANK)
 # quality-gate-criteria.md #8.4: finding-ID prefixes and source tags only the engines may emit.
-ENGINE_OWNED_PREFIXES = {"GC-": ENGINE, "AM-": rules.AM_ENGINE}
+SR_ENGINE = "engine:severity_rank"
+ENGINE_OWNED_PREFIXES = {"GC-": ENGINE, "AM-": rules.AM_ENGINE, "SR-": SR_ENGINE}
 GATES = {"G1": "Evidence support and substantiation", "G2": "Required disclaimer, limitation and reliance language", "G3": "Scope-of-work alignment", "G4": "Confidentiality marking and client-data handling", "G5": "Brand and formatting standards", "G6": "Third-party and licensed content attribution", "G7": "Prior-findings closure", "G8": "Data-as-data and embedded-instruction handling"}
 # Recipient classification (quality-gate-criteria.md #2.5): client-only requires a positive client-name match.
 EXTERNAL_RECIPIENT_PATTERN = re.compile(r"\b(?:" + "|".join((
@@ -216,6 +217,29 @@ def collect_scan_text(payload):
             yield path, text, True
 
 AGGREGATE_LABEL = "(combined text, citation, evidence titles and location label)"
+WITHHELD_TEXT = "[withheld: flagged by the embedded-instruction screen; see the G8 finding]"
+
+def primary_strings(payload):
+    """Every primary string, and the subset that trips the detector (already held under G8 by its own finding)."""
+    texts = [text for path, text, derived in collect_scan_text(payload) if not derived]
+    return set(texts), {text for text in texts if suspicious_instruction(text)}
+
+def withhold_derived(value, path, primary, primary_tripped, withheld):
+    """Copy of a derived section with every string that trips the detector replaced by WITHHELD_TEXT, so a later
+    stage or the review packet never repeats it (quality-gate-criteria.md #8.7). A string equal to, or embedding, a
+    primary string already held under G8 is that same note and is left for its own finding. withheld collects
+    (path, reason) for each replaced string."""
+    if isinstance(value, dict):
+        return {key: withhold_derived(child, f"{path}.{safe_token(key, '<field>')}", primary, primary_tripped, withheld) for key, child in value.items()}
+    if isinstance(value, list):
+        return [withhold_derived(child, f"{path}[{index}]", primary, primary_tripped, withheld) for index, child in enumerate(value)]
+    if not isinstance(value, str) or value == WITHHELD_TEXT or value in primary or any(text in value for text in primary_tripped):
+        return value
+    found = screen_text(value)
+    if not found:
+        return value
+    withheld.append((path, OVERSIZE if any(hit.family == OVERSIZE for hit in found) else "instruction"))
+    return WITHHELD_TEXT
 
 def assertion_fields(payload):
     """Yield (path, fields) per assertion: text, citation, linked evidence titles and the location label in reading
@@ -311,7 +335,7 @@ def expected_assertion_outputs(payload, evidence_set):
 def screen_upstream_findings(upstream, expected):
     """Keep legitimate upstream findings; drop any engine-owned finding that engine recomputation does not reproduce.
 
-    GC- findings are always recomputed here. An AM- finding is kept only when it is byte-for-byte what assertion_map
+    GC- and SR- findings are always recomputed by their engines. An AM- finding is kept only when it is byte-for-byte what assertion_map
     emits for the current assertions and evidence (`expected`); a self-declared source tag proves nothing. Any other
     finding carrying an engine source tag is spoofed. Returns (kept, spoofed IDs) (quality-gate-criteria.md #8.4)."""
     kept, spoofed = [], []
@@ -322,7 +346,7 @@ def screen_upstream_findings(upstream, expected):
         source = normalize_text(item.get("source", ""))
         owner = next((tag for prefix, tag in ENGINE_OWNED_PREFIXES.items() if finding_id.startswith(prefix)), None)
         label = safe_token(item["finding_id"], f"findings[{index}]")
-        if owner == ENGINE or source == ENGINE:
+        if (owner is not None and owner != rules.AM_ENGINE) or source in (ENGINE, SR_ENGINE):
             spoofed.append(label)
             continue
         if owner == rules.AM_ENGINE:
@@ -663,6 +687,7 @@ def main():
         validate_brand_checks(brand_checks)
         validate_licensed_content(licensed_content)
         validate_prior_findings(prior_findings)
+        rules.validate_contract(payload, "gate_check")
         recipient_problem = recipient_list_problem(deliverable)
         if recipient_problem:
             add_finding(findings, "GC-G2-recipient-ambiguity", "G2", RELEASE_BLOCKER, "Recipient list is missing or ambiguous", f"{recipient_problem}; reliance language cannot be confirmed until the allowed recipient set is explicit.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
@@ -758,10 +783,15 @@ def main():
             highest = highest_for_gate(findings, gate_id)
             status = "no_engine_findings" if highest == "none" else "blocked" if highest == RELEASE_BLOCKER else "attention_required"
             gate_results.append({"gate_id": gate_id, "name": name, "status": status, "highest_severity": highest, "finding_count": sum(1 for item in findings if item.get("gate_id") == gate_id), "confidence": 0.95, "source": ENGINE, "citation": f"quality-gate-criteria.md #{gate_id[1]}"})
-        payload["findings"], payload["gate_results"], payload["escalations"] = findings, gate_results, escalations
         provenance = payload.setdefault("provenance", {})
         if not isinstance(provenance, dict):
             raise InputError("provenance must be an object when present")
+        # Upstream text that tripped G8 above is held by its finding; it is withheld from the output so severity_rank
+        # and the review packet never carry it forward (quality-gate-criteria.md #8.7).
+        primary, primary_tripped = primary_strings(payload)
+        withheld = []
+        findings, escalations, provenance = (withhold_derived(section, f"$.{name}", primary, primary_tripped, withheld) for name, section in (("findings", findings), ("escalations", escalations), ("provenance", provenance)))
+        payload["findings"], payload["gate_results"], payload["escalations"], payload["provenance"] = findings, gate_results, escalations, provenance
         if generated_at:
             provenance["generated_at"] = generated_at
         provenance.setdefault("engines", []).append(f"gate_check/{ENGINE_VERSION}")

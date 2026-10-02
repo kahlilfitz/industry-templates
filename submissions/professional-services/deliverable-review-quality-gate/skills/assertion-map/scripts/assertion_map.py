@@ -78,6 +78,7 @@ def main():
         require_contract(payload)
         evidence_by_id = rules.evidence_index(payload["evidence_set"])
         rules.validate_assertions(payload["assertions"])
+        rules.validate_contract(payload, "assertion_map")
         findings = list(payload.get("findings", []))
         escalations = list(payload.get("escalations", []))
         mappings = []

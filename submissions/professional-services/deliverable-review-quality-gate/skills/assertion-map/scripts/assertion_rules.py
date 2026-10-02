@@ -5,9 +5,23 @@ byte-identical copy (verified by tests/check_shared_copies.py) so gate_check can
 assertion_map emits and never has to trust a self-declared source tag (quality-gate-criteria.md #8.4).
 
 Type rule: a field of the wrong JSON type is a clean InputError; values are never coerced, so a string
-"false" is never read as a boolean and a page label "iv" is never read as a page number."""
+"false" is never read as a boolean and a page label "iv" is never read as a page number.
+
+Contract rule: every engine calls validate_contract at entry, which checks the whole payload against the
+skill's own copy of contracts/ps.deliverable-review-quality-gate.v1.json (required fields, JSON types, closed
+enums, ranges and provenance prefixes). A violation is an InputError raised before any output is written."""
+import json
+import os
+import re
 
 AM_ENGINE = "engine:assertion_map"
+CONTRACT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "contracts", "ps.deliverable-review-quality-gate.v1.json")
+# Top-level sections each engine needs beyond the contract's own required list (contract descriptions say which).
+STAGE_REQUIRED = {
+    "assertion_map": ("criteria", "evidence_set"),
+    "gate_check": ("assertion_mappings",),
+    "severity_rank": ("assertion_mappings", "gate_results", "findings", "escalations"),
+}
 EVIDENCE_CONFIDENCE_FLOOR = 0.70  # severity-rules.md #2.2
 QUANTIFIED_CONFIDENCE_FLOOR = 0.80  # severity-rules.md #2.3; quality-gate-criteria.md #1.2
 FORWARD_LOOKING_CONFIDENCE_FLOOR = 0.55  # quality-gate-criteria.md #1.3
@@ -136,7 +150,8 @@ def validate_assertion(assertion, index):
     require_text(assertion, "class", label)
     require_text(assertion, "text", label, allow_blank=True)
     require_text(assertion, "citation", label, allow_blank=True)
-    require_text(assertion, "source", label, required=False, allow_blank=True)
+    # Required provenance (contract: engine:/skill:/connector: prefix); the prefix itself is checked by validate_contract.
+    require_text(assertion, "source", label)
     if "location" not in assertion:
         raise InputError(f"{label} missing required field: location")
     validate_location(assertion["location"], label)
@@ -187,6 +202,87 @@ def evidence_index(evidence_set):
             raise InputError(f"{label}: duplicate evidence_id {item['evidence_id']!r}")
         by_id[item["evidence_id"]] = item
     return by_id
+
+
+_CONTRACT_SCHEMA = []
+_JSON_TYPES = {
+    "object": lambda v: isinstance(v, dict), "array": lambda v: isinstance(v, list), "string": lambda v: isinstance(v, str),
+    "boolean": lambda v: isinstance(v, bool), "null": lambda v: v is None, "number": is_number, "integer": is_integer,
+}
+
+
+def contract_schema():
+    """The contract this skill ships (contracts/ next to scripts/), loaded once. A missing contract fails closed."""
+    if not _CONTRACT_SCHEMA:
+        try:
+            with open(CONTRACT_PATH, encoding="utf-8") as handle:
+                _CONTRACT_SCHEMA.append(json.load(handle))
+        except (OSError, ValueError) as exc:
+            raise InputError(f"contract schema could not be loaded from the skill's contracts folder: {exc}") from exc
+    return _CONTRACT_SCHEMA[0]
+
+
+def _contract_errors(value, node, path, root):
+    """Yield the first violation of `node` (a draft-07 subset: $ref, const, oneOf, type, enum, required, properties,
+    items, minLength, pattern, minimum, maximum). x-unrecognised: hold marks an enum the gates judge themselves: any
+    string or null passes here and the gate holds on an unrecognised value. x-normalise: provenance compares a source
+    after normalise_provenance, as the evidence rule does."""
+    if "$ref" in node:
+        node = root["definitions"][node["$ref"].rsplit("/", 1)[-1]]
+    if "const" in node and value != node["const"]:
+        yield f"{path} must be {node['const']!r}, got {value!r}"
+        return
+    if "oneOf" in node:
+        if sum(1 for option in node["oneOf"] if next(_contract_errors(value, option, path, root), None) is None) != 1:
+            yield f"{path} has the wrong shape (expected exactly one of {', '.join(str(option.get('type')) for option in node['oneOf'])}), got {value!r}"
+        return
+    types = node.get("type")
+    if types is not None:
+        types = [types] if isinstance(types, str) else types
+        if not any(_JSON_TYPES[name](value) for name in types):
+            yield f"{path} must be {' or '.join(types)}, got {value!r}"
+            return
+    if "enum" in node and value not in node["enum"]:
+        if node.get("x-unrecognised") == "hold":
+            if not (value is None or isinstance(value, str)):
+                yield f"{path} must be a string or null, got {value!r}"
+        else:
+            yield f"{path} must be one of {', '.join(node['enum'])}, got {value!r}"
+        return
+    if isinstance(value, str):
+        if len(value.strip()) < node.get("minLength", 0):
+            yield f"{path} must be a non-blank string"
+        elif "pattern" in node:
+            candidate = normalise_provenance(value) if node.get("x-normalise") == "provenance" else value
+            if not re.search(node["pattern"], candidate):
+                yield f"{path} {value!r} does not match the contract format {node['pattern']}"
+    elif is_number(value):
+        if value < node.get("minimum", value) or value > node.get("maximum", value):
+            yield f"{path} must be between {node.get('minimum')} and {node.get('maximum')}, got {value!r}"
+    elif isinstance(value, dict):
+        for key in node.get("required", ()):
+            if key not in value:
+                yield f"{path} is missing required field {key}"
+                return
+        for key, child in node.get("properties", {}).items():
+            if key in value:
+                yield from _contract_errors(value[key], child, f"{path}.{key}", root)
+    elif isinstance(value, list) and "items" in node:
+        for index, item in enumerate(value):
+            yield from _contract_errors(item, node["items"], f"{path}[{index}]", root)
+
+
+def validate_contract(payload, stage):
+    """Check the whole payload against the contract at engine entry; raise InputError on the first violation."""
+    schema = contract_schema()
+    error = next(_contract_errors(payload, schema, "$", schema), None)
+    if error is None:
+        missing = [key for key in STAGE_REQUIRED[stage] if key not in payload]
+        if missing:
+            error = f"$ is missing {', '.join(missing)}, which {stage} requires (see the contract descriptions)"
+    if error is not None:
+        raise InputError(f"contract violation: {error}")
+    return payload
 
 
 def linked_evidence(assertion, evidence_by_id):
