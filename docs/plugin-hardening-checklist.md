@@ -157,6 +157,12 @@ How to read a report:
   [Wave 1 pre-freeze QA round 12]
   Test: null `candidate_id` on both a recommendation and its slate record; the recommendation must
   not be proposed. Duplicate a recommendation; the stage must refuse.
+- [ ] **A22. Reconcile by content, not count.** A stage that checks a carried derived list
+  (exceptions, findings, holds, proposals) re-derives it and compares item by item, keys and IDs
+  included; a matching length is not enough. Sets, group-bys and single-versus-multiple decisions
+  on names and IDs use the canonical form (A13). [Wave 1 pre-freeze QA round 10, T&E]
+  Test: change one governed entry ID and leave its exception item alone; the report stage must
+  refuse. `Morgan Lee` and `  morgan   lee  ` roll up as one person.
 
 ## B. Finding integrity (engines)
 
