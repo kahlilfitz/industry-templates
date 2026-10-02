@@ -17,7 +17,6 @@ tests/check_shared_copies.py fails when the copies drift.
 import os
 import re
 import sys
-import unicodedata
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
@@ -55,6 +54,14 @@ KEYWORDS = [
     ("draft", CLASS_MAP["deliverable_drafting"]),
     ("staffing", CLASS_MAP["internal_admin"]),
 ]
+# Activity classes compare in canonical form (signal_policy.canon_id): "Internal_Admin" or "internal-admin" is the
+# internal_admin class, never an unknown class that would turn a non-billable reject into a hold (A13).
+CLASS_KEYS = {signal_policy.canon_id(k): k for k in CLASS_MAP}
+
+
+def known_class(value):
+    """The CLASS_MAP key a (possibly variant-spelled) activity class names, or None."""
+    return CLASS_KEYS.get(signal_policy.canon_id(value))
 
 
 def signal_mapping(signal):
@@ -63,7 +70,7 @@ def signal_mapping(signal):
     A signal explicitly marked non-billable that would otherwise map to a billable code maps to
     NB900 (#4.1); billing_hygiene keeps BH910 (#4.2).
     """
-    mapping = CLASS_MAP.get(signal.get("activity_class"))
+    mapping = CLASS_MAP.get(known_class(signal.get("activity_class")))
     if signal.get("billable_signal") is False and (mapping is None or mapping[0] not in NON_BILLABLE_PHASES):
         return CLASS_MAP["internal_admin"]
     return mapping
@@ -84,7 +91,8 @@ def choose_mapping(entry, linked):
         if len(known) == len(mappings) and len(codes) == 1:
             return known[0], DIRECT_MATCH_CONFIDENCE, "direct_activity_class"
         return UNMAPPED, UNKNOWN_CONFIDENCE, "unknown_activity_class"
-    text = " ".join([entry.get("draft", {}).get("narrative", "") or "", entry.get("narrative", "") or ""]).lower()
+    text = signal_policy.canon_text(" ".join([entry.get("draft", {}).get("narrative", "") or "",
+                                              entry.get("narrative", "") or ""]))
     for token, mapping in KEYWORDS:
         if token in text:
             return mapping, KEYWORD_MATCH_CONFIDENCE, "keyword_inference"
@@ -179,8 +187,9 @@ EMBEDDED_DEFAULT = ("narrative or linked activity text addresses the reviewer/en
 
 
 def normalize(text):
-    text = "".join(ch for ch in (text or "") if unicodedata.category(ch) != "Cf")
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]+", " ", text.lower())).strip()
+    # Canonical text first (NFKC, format characters, casefold): a fullwidth or zero-width-split prohibited term or
+    # vague phrase is the same term, never erased by the ASCII filter below (A13).
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]+", " ", signal_policy.canon_text(text or ""))).strip()
 
 
 def tokens(text):
@@ -325,7 +334,12 @@ def govern(out):
         narrative = ((None if draft_withheld else draft.get("narrative")) or entry.get("narrative") or "").strip()
         narrative_norm = normalize(narrative)
         used_activity_ids.update(a["activity_id"] for a in linked)
-        classes = sorted({a.get("activity_class") for a in linked if a.get("activity_class")})
+        # Distinct classes in canonical form (a variant spelling of one class is one class); first spelling shown.
+        class_names = {}
+        for a in linked:
+            if a.get("activity_class"):
+                class_names.setdefault(signal_policy.canon_id(a["activity_class"]), a["activity_class"])
+        classes = sorted(class_names.values())
         duration = entry["duration_hours"]
         same_day = [a for a in linked if a.get("date") == entry.get("date")]
         off_date = [a for a in linked if a.get("date") != entry.get("date")]
@@ -427,7 +441,7 @@ def govern(out):
                      0.99)
             entry["code_mapping"] = dict(mapping, supplied_mapping_rejected=True)
         task_code = mapping["recommended_task_code"]
-        if any(c in NON_BILLABLE_CLASSES for c in classes) or task_code in NON_BILLABLE_TASK_CODES:
+        if any(signal_policy.class_in(c, NON_BILLABLE_CLASSES) for c in classes) or task_code in NON_BILLABLE_TASK_CODES:
             add_flag(flags, "non_billable_activity", "reject", "entry is linked to internal/non-billable activity",
                      ["client-billing-guidelines.md #5.1", "task-phase-codes.md #4.1"], 0.96)
 
@@ -452,9 +466,14 @@ def govern(out):
         for map_flag in mapping["flags"]:
             flags.append(map_flag)
 
-        meeting_ids = sorted({a.get("meeting_id") for a in linked if a.get("meeting_id")})
-        for meeting_id in meeting_ids:
-            prior = meeting_seen.setdefault(meeting_id, [])
+        # Meetings are matched in canonical form (canon_id): a variant spelling of a meeting ID is the same meeting
+        # and cannot escape the duplicate rule; the detail names the entry's own spelling.
+        meeting_ids = {}
+        for a in linked:
+            if a.get("meeting_id"):
+                meeting_ids.setdefault(signal_policy.canon_id(a["meeting_id"]), a["meeting_id"])
+        for meeting_key, meeting_id in sorted(meeting_ids.items()):
+            prior = meeting_seen.setdefault(meeting_key, [])
             best = None
             for prior_id, prior_text in prior:
                 score = similarity(prior_text, narrative_norm)

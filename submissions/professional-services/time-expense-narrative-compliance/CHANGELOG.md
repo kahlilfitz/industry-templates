@@ -137,7 +137,39 @@ Every class was reproduced against the previous HEAD: 40 of the 59 new checks fa
 
   `reconcile_governed` checks the entry invariant too, beside its existing signal check. Repeated withheld markers are now exempt in `excluded_entries` as well as `excluded_signals`, and are never an overlap. These are the only active/excluded pairs in the contract.
 
+### One canonical comparison for names, IDs, class/code keys and CSV headers (Mobilization round 7 class; hardening checklist A13; 1.0.4, no version bump)
+New `signal_policy.canon_text` (NFKC, `Cf` format characters stripped, casefold, whitespace collapsed) and `signal_policy.canon_id` (`canon_text` plus `-`/`_`/`.` folded), shared ×5, with no length cap and no fast path. Every comparison below now uses them, and output keeps the original spelling. 28 of the 29 new checks fail on 2386c11; the overflow-cell refusal already held.
+- **Workplan join (activity-pull):** a variant spelling escaped the workplan join and the non-billable reject became an UNMAPPED hold. Affected: the workplan `engagement_id`, `item_type` or `match_key` (for example `int_staff_7`), and the workplan class (`Internal_Admin`, fullwidth `ｉｎｔｅｒｎａｌ－ａｄｍｉｎ`).
+  - The workplan index, its uniqueness check, the calendar and document lookups and the engagement-scope checks are now keyed by `canon_id`.
+  - `billable_signal` uses the new `signal_policy.class_in`, and the document `activity_type` lookup is canonical. The workplan class is kept as written.
+- **Activity classes (billing-rules ×3, narrative-draft):** a signal classed `Internal_Admin` was an unknown class, so it escaped the non-billable reject, even when marked billable.
+  - New `billing_rules.known_class`/`CLASS_KEYS` maps a variant to its `CLASS_MAP` class. The non-billable check, the block-billing class count and the narrative verb and meeting ordering compare canonically.
+- **Prohibited terms and vague phrases (billing-rules):** `normalize` lower-cased, then dropped non-ASCII, so a fullwidth `Ａｔｔｅｎｔｉｏｎ ｔｏ ｖａｒｉｏｕｓ ｍａｔｔｅｒｓ` was erased and escaped the #3.1 reject. It now applies `canon_text` first, as does the code-map keyword inference.
+- **Duplicate meetings (billing-rules):** the near-duplicate rule was keyed by the exact `meeting_id`, so `mtg_orion_201` escaped `MTG-ORION-201`. It is now keyed by `canon_id`, and the detail names the entry's own spelling.
+- **ID uniqueness, overlap and links (`check_unique_ids`, every JSON stage):** duplicate signal and entry IDs, the round 6 active/excluded overlaps, and repeated or both-active-and-excluded links now compare by `canon_id`. Examples: `a_cal_001`, `te-a-００１`, a zero-width suffix, and over-long IDs that differ only by separator.
+  - A link that names a known activity only in a variant spelling is refused. Downstream lookups are exact, so a variant link would silently miss its evidence.
+  - At activity-pull, a timesheet link resolves canonically to the signal's exact ID, or to the first spelling of an excluded ID.
+  - Raw activity, entry and workplan IDs and links are de-duplicated canonically.
+- **Other engagements:** `describe_excluded` now counts, never names, another engagement's activity in any spelling. `other_engagement` compares scopes by `canon_id`, so `eng_syn_042` is this engagement and `ENG-SYN-043` is not.
+- **Person names:** `person_key` is now `canon_text`, used by every requester, timekeeper-scope and colleague comparison. Examples: `ＡＬＥＸ  rivera` plus a zero-width space is Alex Rivera, and one colleague named twice in variant spellings is one person.
+  - A requester made only of format characters is refused, and an empty name never joins a team-view allow-list.
+- **CSV headers (activity-pull):** headers compare by `canon_id`, so a fullwidth `ｅｎｔｒｙ＿ｉｄ` beside `entry_id` is a duplicate column and is refused. A lone variant header such as `Entry-ID` is read under its declared name.
+  - Rows with overflow cells are still refused, never dropped unread; a regression test now pins this.
+- **Kept exact, deliberately (stricter; a variant never escapes):**
+  - submitted vs recommended phase and task codes: a variant is a `submitted_code_mismatch`;
+  - the team-view confirmation token and role;
+  - engine labels and connector source names: a variant is unknown or excluded;
+  - the engagement-identity copy reconciliation.
+
 ### Tests and goldens
+- Canonical comparisons (A13): 521 to 550 checks (29 new, in `a13_tests`; 28 of them fail on 2386c11). They cover:
+  - The 7 activity-pull spelling variants of the internal staffing call, plus one end to end: still non-billable, linked and rejected.
+  - At guideline-check: the `Internal_Admin` class, the variant meeting ID and the fullwidth prohibited term.
+  - Unit checks of `normalize`, the keyword inference, `other_engagement` and `class_in`.
+  - 7 canonical ID cases at `check_unique_ids`, one at narrative-draft and the `describe_excluded` wording.
+  - The fullwidth duplicate header, a lone variant header, the overflow cell, and over-long entry and activity IDs that differ only by separator.
+  - Canonical requester and colleague names, and a requester made only of format characters.
+  - No older check changed. Goldens are byte-identical. Runtime is about 65 s on a loaded machine, where 2386c11 now takes about 62 s.
 - QA round 6 of ac9b9e6: 495 to 521 checks (26 new, in `r6_tests`; 20 of them fail on ac9b9e6, and the rest are controls and order pins). They cover:
   - Item 1: a narrowing report-time `--signal-config` refused on both scenarios; a non-narrowing one renders the golden report byte-identically; governing and reporting under the same narrowing file holds the affected entry; narrative-draft and code-map filter before they use evidence.
   - Item 2: covered-plus-undeclared pairs on signal citations, attendees, both orders, entry citations, entry narrative and draft citations; a benign control; the `PAIR_LIMIT` fail-closed case; the reproducer end to end; and direct input to code-map, guideline-check and exception-report.

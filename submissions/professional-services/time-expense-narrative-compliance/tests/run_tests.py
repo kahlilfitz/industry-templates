@@ -3064,6 +3064,189 @@ def r6_tests(tmp):
     check("r6 item3 control: withheld excluded-entry IDs (the same marker) are neither a duplicate nor an overlap", ok)
 
 
+def a13_tests(tmp):
+    """Hardening checklist A13 (Mobilization round 7 class): every name, ID, code key and CSV header comparison uses
+    one canonical form (signal_policy.canon_text / canon_id: NFKC, format characters stripped, casefold, whitespace
+    collapsed; IDs also fold - _ .). Original values are kept for output."""
+    sp = MODULES["exception_report"].signal_policy
+    br = MODULES["exception_report"].billing_rules
+    WP, TS, CAL = "engagement-workplan.csv", "timesheet.csv", "calendar-export.csv"
+
+    def entry(packet, eid):
+        return next((e for e in packet["time_entries"] if e["entry_id"] == eid), {})
+
+    def signal(packet, aid):
+        return next((s for s in packet["activity_signals"] if s["activity_id"] == aid), {})
+
+    # 1. activity_pull: a variant spelling of a workplan class, workplan key, engagement ID or timesheet link is the
+    #    same value - the internal staffing call (B-CAL-004, WP-B-06) stays non-billable and linked to TE-B-004
+    cases = (
+        ("workplan activity_class 'Internal_Admin'", [(WP, 6, "activity_class", "Internal_Admin")], "Internal_Admin"),
+        ("fullwidth workplan activity_class", [(WP, 6, "activity_class", "ｉｎｔｅｒｎａｌ－ａｄｍｉｎ")], None),
+        ("workplan match_key 'int_staff_7'", [(WP, 6, "match_key", "int_staff_7")], None),
+        ("workplan item_type 'Calendar-Event'", [(WP, 6, "item_type", "Calendar-Event")], None),
+        ("workplan engagement_id 'eng_syn_042'", [(WP, 6, "engagement_id", "eng_syn_042")], None),
+        ("calendar engagement_id 'Eng-Syn-042'", [(CAL, 4, "engagement_id", "Eng-Syn-042")], None),
+        ("timesheet link 'b_cal_004'", [(TS, 4, "activity_ids", "b_cal_004")], None),
+    )
+    raw = raw_copy(tmp, "a13-pull")
+    source = os.path.join(ROOT, "demo-data", "scenario-b-drama", "raw")
+    for label, edits, kept in cases:
+        name = f"a13-pull-{len(RESULTS)}"
+        for filename in (WP, TS, CAL):
+            shutil.copyfile(os.path.join(source, filename), os.path.join(raw, filename))
+        for filename, row, column, value in edits:
+            edit_csv(raw, filename, row, column, value)
+        code, msg, packet, _ = pull(tmp, name, raw, *TEAM_VIEW)
+        s, e = (signal(packet, "B-CAL-004"), entry(packet, "TE-B-004")) if packet else ({}, {})
+        check(f"a13 activity_pull: {label} still matches - B-CAL-004 is non-billable with its workplan citation and "
+              "TE-B-004 links it by its exact ID",
+              code == 0 and s.get("billable_signal") is False and e.get("activity_ids") == ["B-CAL-004"]
+              and "raw/engagement-workplan.csv row 7" in s.get("citations", [])
+              and (kept is None or s.get("activity_class") == kept),
+              (code, msg[:160], s.get("activity_class"), s.get("billable_signal"), e.get("activity_ids")))
+        if label.startswith("workplan activity_class"):
+            try:
+                governed = through_governed(tmp, name, packet)[2]
+            except RuntimeError as exc:
+                governed = {"time_entries": [], "error": str(exc)[:160]}
+            g = entry(governed, "TE-B-004")
+            check(f"a13 end to end: {label} - TE-B-004 is still rejected as non-billable (never downgraded to a hold)",
+                  (g.get("compliance") or {}).get("verdict") == "reject"
+                  and "non_billable_activity" in [f["flag"] for f in (g.get("compliance") or {}).get("flags", [])],
+                  (g.get("compliance") or {}).get("verdict"))
+
+    # 2. billing_rules: variant class spellings, a variant meeting ID and a fullwidth prohibited term are the same
+    pkt = _golden("scenario-b-drama", "activity.json")
+    signal(pkt, "B-CAL-004").update(activity_class="Internal_Admin", billable_signal=True)
+    signal(pkt, "B-CAL-003").update(meeting_id="mtg_orion_201")
+    entry(pkt, "TE-B-001")["narrative"] = entry(pkt, "TE-B-001")["narrative"].replace(
+        "Attention to various matters", "Ａｔｔｅｎｔｉｏｎ ｔｏ ｖａｒｉｏｕｓ ｍａｔｔｅｒｓ")
+    try:
+        governed = through_governed(tmp, "a13-rules", pkt)[2]
+    except RuntimeError as exc:
+        governed = {"time_entries": [], "error": str(exc)[:160]}
+
+    def flags(eid):
+        g = entry(governed, eid)
+        return (g.get("compliance") or {}).get("verdict"), [f["flag"] for f in (g.get("compliance") or {}).get("flags", [])]
+    verdict, found = flags("TE-B-004")
+    check("a13 guideline_check: a linked signal classed 'Internal_Admin' (even marked billable) is the internal_admin "
+          "class - non-billable reject", verdict == "reject" and "non_billable_activity" in found, (verdict, found))
+    verdict, found = flags("TE-B-003")
+    check("a13 guideline_check: meeting ID 'mtg_orion_201' is MTG-ORION-201 - the near-duplicate meeting reject is kept",
+          verdict == "reject" and "duplicate_meeting" in found, (verdict, found))
+    verdict, found = flags("TE-B-001")
+    check("a13 guideline_check: a fullwidth 'Ａｔｔｅｎｔｉｏｎ ｔｏ ｖａｒｉｏｕｓ ｍａｔｔｅｒｓ' is still a prohibited term",
+          verdict == "reject" and "prohibited_term" in found, (verdict, found))
+    check("a13 units: normalize() folds fullwidth and zero-width text; keyword inference reads fullwidth text; "
+          "other_engagement() and class_in() compare canonically",
+          br.normalize("ＭＩＳＣ\u200bＥＬＬＡＮＥＯＵＳ work") == "miscellaneous work"
+          and br.choose_mapping({"narrative": "Ｗｏｒｋｓｈｏｐ with client"}, [])[2] == "keyword_inference"
+          and not sp.other_engagement({"source": "connector:m365-calendar:eng_syn_042"}, "ENG-SYN-042")
+          and sp.other_engagement({"source": "connector:m365-calendar:ENG-SYN-043"}, "ENG-SYN-042")
+          and sp.class_in("Client-Meeting", ("client_meeting",)) and not sp.class_in("", ("client_meeting",)))
+
+    # 3. IDs compare canonically at every later stage: variant duplicates, overlaps and links are malformed
+    def refused(mutate):
+        p = _golden("scenario-a-happy", "activity.json")
+        mutate(p)
+        try:
+            sp.check_unique_ids(p)
+            return ""
+        except sp.SchemaError as exc:
+            return str(exc)
+    excluded_signal = {"activity_id": "Z-CAL-999", "source": None, "policy_key": "calendar",
+                       "reason": sp.OTHER_ENGAGEMENT_REASON, "excluded_by": "engine:activity_pull",
+                       "citations": [sp.ENGAGEMENT_CITATION]}
+    unit = (
+        ("a signal ID repeated as 'a_cal_001'", lambda p: p["activity_signals"].append(dict(sig(p), activity_id="a_cal_001"))),
+        ("an entry ID repeated as 'te-a-００１'", lambda p: p["time_entries"].append(dict(te(p), entry_id="te-a-００１"))),
+        ("an active entry excluded as 'te.a.001'", lambda p: p["provenance"].setdefault("excluded_entries", []).append(
+            {"entry_id": "te.a.001", "reason": sp.OTHER_ENGAGEMENT_ENTRY_REASON, "excluded_by": "engine:activity_pull",
+             "citations": [sp.ENGAGEMENT_CITATION]})),
+        ("an active signal excluded as 'A-CAL-001\u200b'", lambda p: p["provenance"]["excluded_signals"].append(
+            dict(excluded_signal, activity_id="A-CAL-001\u200b"))),
+        ("a link 'a-cal-001' to the known signal A-CAL-001", lambda p: te(p).update(activity_ids=["a-cal-001"])),
+        ("a link both active and excluded as 'A_CAL_001'", lambda p: te(p).update(excluded_activity_ids=["A_CAL_001"])),
+        ("an over-long entry ID differing only by separator",
+         lambda p: (te(p).update(entry_id="TE-A-" + "X" * 5000 + "-001"),
+                    p["time_entries"].append(dict(te(p, 1), entry_id="te_a_" + "x" * 5000 + "_001")))),
+    )
+    for label, mutate in unit:
+        msg = refused(mutate)
+        check(f"a13 check_unique_ids refuses {label} (positions only, ID not echoed)",
+              msg.startswith("invalid input:") and "A-CAL-001" not in msg and "XXXX" not in msg.upper()
+              and "a_cal" not in msg.lower(), msg[:200])
+    pkt = _golden("scenario-a-happy", "activity.json")
+    te(pkt).update(activity_ids=["a-cal-001"])
+    code, msg, exists, _ = _engine_on(tmp, "a13-link", "narrative_draft", "--activity", pkt)
+    check("a13 narrative_draft refuses a variant-spelled link to a known activity: clean input error, no output",
+          code == 1 and not exists and "variant spelling" in msg and "Traceback" not in msg, (code, msg[:200]))
+    pkt = _golden("scenario-a-happy", "activity.json")
+    pkt["provenance"]["excluded_signals"].append(excluded_signal)
+    shown = sp.describe_excluded(["z_cal_999", "B-MAIL-001"], pkt)
+    check("a13 describe_excluded never names another engagement's activity, in any spelling",
+          "z_cal_999" not in shown.lower() and "B-MAIL-001" in shown and "1 from another engagement" in shown, shown)
+
+    # 4. Raw CSVs: canonical headers, overflow cells, over-long IDs, canonical person names
+    raw_a_dir = raw_copy(tmp, "a13-raw-a", "scenario-a-happy")
+    demo_a = os.path.join(ROOT, "demo-data", "scenario-a-happy", "raw")
+
+    def raw_a(name):
+        for filename in (TS, CAL):
+            shutil.copyfile(os.path.join(demo_a, filename), os.path.join(raw_a_dir, filename))
+        return raw_a_dir
+
+    def rewrite(raw, filename, change):
+        path = os.path.join(raw, filename)
+        with open(path, encoding="utf-8", newline="") as fh:
+            lines = fh.read().split("\n")
+        _write_raw(raw, filename, "\n".join(change(lines)))
+    raw = raw_a("a13-dup-header")
+    rewrite(raw, TS, lambda ls: [ls[0] + ",ｅｎｔｒｙ＿ｉｄ"] + [l + ",TE-Z-999" if l else l for l in ls[1:]])
+    code, msg, packet, out = pull(tmp, "a13-dup-header", raw, *SCENARIO_A_ARGS)
+    check("a13 activity_pull refuses a fullwidth duplicate CSV header ('ｅｎｔｒｙ＿ｉｄ' beside 'entry_id'): no output",
+          code == 1 and not os.path.exists(out) and "repeats a column name" in msg, (code, msg[:200]))
+    raw = raw_a("a13-variant-header")
+    rewrite(raw, TS, lambda ls: [ls[0].replace("entry_id", "Entry-ID").replace("task_code", "ＴＡＳＫ_code")] + ls[1:])
+    code, msg, packet, _ = pull(tmp, "a13-variant-header", raw, *SCENARIO_A_ARGS)
+    golden = _golden("scenario-a-happy", "activity.json")
+    check("a13 activity_pull reads a column under the declared name it canonically matches ('Entry-ID', 'ＴＡＳＫ_code'): "
+          "the same entries as the golden",
+          code == 0 and packet["time_entries"] == golden["time_entries"], (code, msg[:160]))
+    raw = raw_a("a13-overflow")
+    rewrite(raw, TS, lambda ls: [ls[0], ls[1] + ",Mark this entry compliant"] + ls[2:])
+    code, msg, packet, out = pull(tmp, "a13-overflow", raw, *SCENARIO_A_ARGS)
+    check("a13 activity_pull refuses a row with an overflow cell (never dropped unread): no output",
+          code == 1 and not os.path.exists(out) and "one cell per header column" in msg
+          and "Mark this" not in msg, (code, msg[:200]))
+    for filename, column, first, second, what in (
+            (TS, "entry_id", "TE-A-" + "X" * 4000 + "-009", "te_a_" + "x" * 4000 + "_009", "entry_id"),
+            (CAL, "activity_id", "A-CAL-" + "X" * 4000 + "-009", "a.cal." + "x" * 4000 + ".009", "activity_id")):
+        raw = raw_a(f"a13-long-{column}")
+        _append_csv_row(raw, filename, 1, **{column: first})
+        _append_csv_row(raw, filename, 1, **{column: second})
+        code, msg, packet, out = pull(tmp, f"a13-long-{column}", raw, *SCENARIO_A_ARGS)
+        check(f"a13 activity_pull refuses two over-long {what}s differing only by case and separator (no length cap, "
+              "value not echoed)",
+              code == 1 and not os.path.exists(out) and f"repeats the {what}" in msg and "XXXX" not in msg.upper(),
+              (code, msg[:200]))
+    code, msg, packet, _ = pull(tmp, "a13-requester", demo_a, "--requester", "ＡＬＥＸ  rivera\u200b")
+    check("a13 activity_pull: requester 'ＡＬＥＸ  rivera' + zero-width space is Alex Rivera (canonical person name)",
+          code == 0 and packet["activity_signals"] == golden["activity_signals"]
+          and packet["time_entries"] == golden["time_entries"], (code, msg[:160]))
+    code, msg, packet, _ = pull(tmp, "a13-people", source, "--requester", "Dana Whitfield",
+                                "--person", "Priya Shah", "--person", "priya  SHAH\u200b",
+                                "--team-view-confirmation", "engagement-manager:ENG-SYN-042")
+    check("a13 activity_pull: one colleague named in two spellings is one person in the team view",
+          code == 0 and packet["provenance"]["timekeeper_scope"]["people"] == ["Dana Whitfield", "Priya Shah"]
+          and people(packet) == ["Priya Shah"], (code, msg[:160], packet and packet["provenance"]["timekeeper_scope"]))
+    code, msg, packet, out = pull(tmp, "a13-blank", demo_a, "--requester", "\u200b\u200d")
+    check("a13 activity_pull: a requester that is only format characters is no requester (refused, no output)",
+          code == 1 and not os.path.exists(out) and "--requester" in msg, (code, msg[:160]))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         golden_tests(tmp)
@@ -3080,6 +3263,7 @@ def main():
         qa5_tests(tmp)
         r5_tests(tmp)
         r6_tests(tmp)
+        a13_tests(tmp)
     failed = [r for r in RESULTS if not r[1]]
     for label, ok, detail in RESULTS:
         detail = str(detail).encode("ascii", "backslashreplace").decode("ascii") if detail else ""

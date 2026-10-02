@@ -82,21 +82,28 @@ def read_csv(path, required):
         with open(path, encoding="utf-8", newline="") as fh:
             reader = csv.DictReader(fh)
             header = reader.fieldnames or []
-            # A repeated column (after whitespace and case folding) would let its last cell overwrite the first.
-            names = [" ".join(str(h).split()).casefold() for h in header]
+            # Column names compare in canonical form (signal_policy.canon_id: NFKC, format characters, case and
+            # - _ . separators folded). A repeated column - including a fullwidth or differently cased copy -
+            # would let one cell overwrite or shadow the other, so it is malformed.
+            names = [signal_policy.canon_id(h) for h in header]
             if len(set(names)) != len(names):
                 raise InputError(f"{os.path.basename(path)} repeats a column name in its header row (duplicate "
                                  "columns are malformed, never overwritten)")
             rows = list(reader)
     except (OSError, UnicodeError, csv.Error) as exc:
         raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
+    # Each column is read under the declared name it canonically matches; other columns keep their own name.
+    declared = {signal_policy.canon_id(c): c for c in required}
+    rename = {h: declared.get(n, h) for h, n in zip(header, names)}
     # The header row is checked even when there are no data rows: a header-only file with the right columns is an
     # explicitly empty register; an empty file or a wrong header is malformed.
-    missing = [c for c in required if c not in header]
+    missing = [c for c in required if c not in rename.values()]
     if missing:
         raise InputError(f"{os.path.basename(path)} is missing column(s): {', '.join(missing)}")
+    rows = [{rename.get(k, k): v for k, v in row.items()} for row in rows]
     for idx, row in enumerate(rows, start=2):
-        # csv.DictReader stores surplus cells under None and fills short rows with None: never guess.
+        # csv.DictReader stores surplus cells under None and fills short rows with None: never guess, and never
+        # drop a surplus cell unread - the row is refused.
         if None in row or any(row.get(c) is None for c in required):
             raise InputError(f"{os.path.basename(path)} row {idx} does not have one cell per header column")
     return rows
@@ -192,11 +199,16 @@ def in_period(date, period):
 def resolve_scope(args, engagement):
     """Return (allowed person keys or None for everyone, timekeeper_scope record). Fails closed."""
     requester = " ".join((args.requester or "").split())
-    if not requester:
+    if not signal_policy.person_key(requester):
         raise InputError("--requester must name the requesting timekeeper")
     eng_id = engagement["engagement_id"]
     requested = [" ".join(p.split()) for p in (args.person or []) if p and p.strip()]
-    others = sorted({p for p in requested if not signal_policy.same_person(p, requester)})
+    # Names compare in canonical form (person_key): one colleague named twice in variant spellings is one person.
+    distinct = {}
+    for p in requested:
+        if not signal_policy.same_person(p, requester):
+            distinct.setdefault(signal_policy.person_key(p), p)
+    others = sorted(distinct.values())
     wants_team = bool(args.all_timekeepers or others)
     token = None
     if args.team_view_confirmation is not None:
@@ -307,6 +319,7 @@ def main():
         sys.exit(f"activity_pull: {exc}")
 
     eng_id = engagement["engagement_id"]
+    eng_key = signal_policy.canon_id(eng_id)
     period = {"start": args.period_start, "end": args.period_end}
     dates_available, dates_in_period = set(), set()
 
@@ -316,10 +329,12 @@ def main():
     for idx, row in enumerate(workplan_rows, start=2):
         cite = f"raw/engagement-workplan.csv row {idx}"
         try:
-            unique(workplan_ids, row["workplan_id"].strip(), cite, "workplan_id")
-            if row["engagement_id"] == eng_id:
-                unique(workplan, (row["item_type"], row["match_key"]), cite, "item_type and match_key",
-                       value=(idx, row))
+            unique(workplan_ids, signal_policy.canon_id(row["workplan_id"]), cite, "workplan_id")
+            # Engagement IDs, item types and match keys compare in canonical form (A13): a variant spelling of a
+            # workplan key is the same key, never a missed match that drops the row's activity class.
+            if signal_policy.canon_id(row["engagement_id"]) == eng_key:
+                unique(workplan, (signal_policy.canon_id(row["item_type"]), signal_policy.canon_id(row["match_key"])),
+                       cite, "item_type and match_key", value=(idx, row))
         except InputError as exc:
             sys.exit(f"activity_pull: {exc}")
 
@@ -351,12 +366,12 @@ def main():
                 continue  # #12.1: other timekeepers' rows are never read into the packet
             try:
                 cell_id(row, "activity_id", cite)
-                unique(activity_rows, row["activity_id"].strip(), cite, "activity_id")
+                unique(activity_rows, signal_policy.canon_id(row["activity_id"]), cite, "activity_id")
                 cell_id(row, "person", cite)
                 row["date"] = cell_date(row, "date", cite)
             except InputError as exc:
                 sys.exit(f"activity_pull: {exc}")
-            if row["engagement_id"] != eng_id:
+            if signal_policy.canon_id(row["engagement_id"]) != eng_key:
                 out_of_scope.append({"activity_id": row["activity_id"], "reason": "outside engagement scope", "citations": [cite]})
                 continue
             dates_available.add(row["date"])
@@ -364,7 +379,7 @@ def main():
                 continue
             dates_in_period.add(row["date"])
             if key == "calendar":
-                match = workplan.get(("calendar_event", row["event_id"]))
+                match = workplan.get((signal_policy.canon_id("calendar_event"), signal_policy.canon_id(row["event_id"])))
                 activity_class = (match[1]["activity_class"] if match else "") or "unclassified_meeting"
                 subject = row["subject"].strip()
                 try:
@@ -375,8 +390,8 @@ def main():
                 extra = {"organizer": row["organizer"].strip() or None,
                          "attendees": [a.strip() for a in row["attendees"].split(";") if a.strip()]}
             else:
-                match = workplan.get(("document", row["file_name"]))
-                activity_class = DOCUMENT_CLASS.get(row["activity_type"].strip().lower(), "unclassified_document_activity")
+                match = workplan.get((signal_policy.canon_id("document"), signal_policy.canon_id(row["file_name"])))
+                activity_class = DOCUMENT_CLASS.get(signal_policy.canon_id(row["activity_type"]), "unclassified_document_activity")
                 subject = subject_from_file(row["file_name"])
                 try:
                     duration = round(cell_hours(row, "duration_hours", cite), 2)
@@ -390,7 +405,7 @@ def main():
                 citations.append(f"raw/engagement-workplan.csv row {match[0]}")
                 purpose = match[1]["purpose"].strip() or None
                 deliverable = match[1]["deliverable"].strip() or None
-            billable = activity_class not in NON_BILLABLE_CLASSES
+            billable = not signal_policy.class_in(activity_class, NON_BILLABLE_CLASSES)
             citations.append(POLICY_CITATION)
             if not billable:
                 citations.append("client-billing-guidelines.md #5.1")
@@ -426,7 +441,10 @@ def main():
                 signal["review_reason"] = "; ".join(reasons)
             signals.append(signal)
 
-    kept_ids = {s["activity_id"] for s in signals}
+    # Links resolve in canonical form to the exact ID of the signal (or excluded record) they name, so a variant
+    # spelling neither drops the evidence nor creates a second record for one activity (A13).
+    kept_ids = {signal_policy.canon_id(s["activity_id"]): s["activity_id"] for s in signals}
+    excluded_ids = {}
     entries, excluded, entry_rows = [], [], {}
     for idx, row in enumerate(timesheet_rows, start=2):
         if not allowed(row["person"]):
@@ -434,14 +452,14 @@ def main():
         cite = f"raw/timesheet.csv row {idx}"
         try:
             cell_id(row, "entry_id", cite)
-            unique(entry_rows, row["entry_id"].strip(), cite, "entry_id")
+            unique(entry_rows, signal_policy.canon_id(row["entry_id"]), cite, "entry_id")
             cell_id(row, "person", cite)
             row["date"] = cell_date(row, "date", cite)
             hours = cell_hours(row, "hours", cite)
             links = [a.strip() for a in (row["activity_ids"] or "").split(";") if a.strip()]
             linked = {}
             for link in links:
-                unique(linked, link, cite, "activity_ids link")
+                unique(linked, signal_policy.canon_id(link), cite, "activity_ids link")
         except InputError as exc:
             sys.exit(f"activity_pull: {exc}")
         dates_available.add(row["date"])
@@ -449,12 +467,15 @@ def main():
             continue
         dates_in_period.add(row["date"])
         kept_links, dropped = [], []
-        for activity_id in links:
-            if activity_id in kept_ids:
-                kept_links.append(activity_id)
+        for link in links:
+            link_key = signal_policy.canon_id(link)
+            if link_key in kept_ids:
+                kept_links.append(kept_ids[link_key])
                 continue
+            activity_id = excluded_ids.setdefault(link_key, link)
             dropped.append(activity_id)
-            hint = next((k for ns, k in ID_NAMESPACE if ns in activity_id), None)
+            hint = next((k for ns, k in ID_NAMESPACE
+                         if f" {signal_policy.canon_id(ns)} " in f" {link_key} "), None)
             if hint and not enabled.get(hint):
                 reason = signal_policy.pull_disabled_reason(row["entry_id"], cite, hint)
             else:

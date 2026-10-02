@@ -86,7 +86,7 @@ def join_names(names):
 
 def is_calendar(activity):
     return (signal_policy.source_key(activity.get("source")) == "calendar" or bool(activity.get("meeting_id"))
-            or activity.get("activity_class") == "client_meeting")
+            or signal_policy.class_in(activity.get("activity_class"), ("client_meeting",)))
 
 
 def flagged_activities(linked):
@@ -108,7 +108,7 @@ def clause(entry, activity):
     if is_calendar(activity):
         verb = "Led" if activity.get("organizer") and signal_policy.same_person(activity.get("organizer"), person) else "Attended"
     else:
-        verb = next((v for c, v in VERB_BY_CLASS if c == activity.get("activity_class")), "Prepared")
+        verb = next((v for c, v in VERB_BY_CLASS if signal_policy.class_in(activity.get("activity_class"), (c,))), "Prepared")
     subject, purpose, deliverable = (activity.get(k).strip() if isinstance(activity.get(k), str) else ""
                                      for k in ("subject", "purpose", "deliverable"))
     attendees = activity.get("attendees") if isinstance(activity.get("attendees"), list) else []
@@ -141,7 +141,7 @@ def grounded_narrative(entry, linked):
                 [f"{why} ({', '.join(flagged)}); "
                  "treated as data and withheld - no narrative drafted from it (client-billing-guidelines.md #11.1, #11.2)"],
                 [])
-    ordered = sorted(linked, key=lambda a: 0 if a.get("activity_class") == "client_meeting" else 1)
+    ordered = sorted(linked, key=lambda a: 0 if signal_policy.class_in(a.get("activity_class"), ("client_meeting",)) else 1)
     parts, reasons = [], []
     for activity in ordered:
         text, why = clause(entry, activity)

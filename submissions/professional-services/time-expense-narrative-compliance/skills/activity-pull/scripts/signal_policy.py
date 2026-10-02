@@ -52,6 +52,7 @@ import os
 import re
 import sys
 import tempfile
+import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import contract_check  # noqa: E402  (shared contract walker, identical copies next to each engine)
@@ -117,8 +118,10 @@ def engagement_scopes(record):
 
 
 def other_engagement(record, engagement_id):
-    """True when the record's source scope or engagement_id names a different engagement (#13.3)."""
-    return any(scope != engagement_id for scope in engagement_scopes(record))
+    """True when the record's source scope or engagement_id names a different engagement (#13.3). Engagement IDs
+    compare in canonical form (canon_id), so a variant spelling of this engagement's ID is this engagement."""
+    return any(canon_id(scope) != canon_id(engagement_id) or not canon_id(scope)
+               for scope in engagement_scopes(record))
 
 
 def engagement_identity(engagement, citations):
@@ -134,9 +137,10 @@ def other_engagement_ids(packet):
 
 
 def describe_excluded(links, packet):
-    """Excluded link IDs for a reason or flag detail: other engagements' IDs are counted, never named."""
-    other = other_engagement_ids(packet)
-    shown = [a for a in links if a not in other]
+    """Excluded link IDs for a reason or flag detail: other engagements' IDs are counted, never named (a variant
+    spelling of such an ID is the same ID, canon_id)."""
+    other = {canon_id(a) for a in other_engagement_ids(packet) if isinstance(a, str)}
+    shown = [a for a in links if canon_id(a) not in other]
     hidden = len(links) - len(shown)
     return ", ".join(shown) + (f"{'; ' if shown else ''}{hidden} from another engagement (not shown, "
                                f"{ENGAGEMENT_CITATION})" if hidden else "")
@@ -353,7 +357,42 @@ def same_person(a, b):
 
 
 def person_key(name):
-    return " ".join(name.split()).casefold() if isinstance(name, str) else ""
+    return canon_text(name)
+
+
+# --- Canonical comparison forms (plugin-hardening-checklist A13) ---------------------------
+# Every name, ID, code-key and CSV-header comparison goes through one of these two functions;
+# original values are kept for output. No length cap and no fast path.
+
+def _strip_cf(text):
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+
+
+def canon_text(value):
+    """NFKC, format-character strip, casefold, whitespace collapse."""
+    return _canon_text(value) if isinstance(value, str) else ""
+
+
+@functools.lru_cache(maxsize=8192)
+def _canon_text(value):
+    text = _strip_cf(unicodedata.normalize("NFKC", _strip_cf(value))).casefold()
+    return " ".join(unicodedata.normalize("NFKC", text).split())
+
+
+def canon_id(value):
+    """canon_text plus separator folding (- _ . and whitespace are equivalent)."""
+    return _canon_id(value) if isinstance(value, str) else ""
+
+
+@functools.lru_cache(maxsize=8192)
+def _canon_id(value):
+    return " ".join(re.sub(r"[\s\-_.]+", " ", _canon_text(value)).split())
+
+
+def class_in(value, names):
+    """True when an activity class names one of `names` in canonical form ("Internal_Admin" is internal_admin)."""
+    key = canon_id(value)
+    return bool(key) and any(key == canon_id(n) for n in names)
 
 
 def team_view_token(engagement_id):
@@ -391,7 +430,7 @@ def enforce_timekeeper_scope(packet, engine="engine:unknown", strict=False):
             return 0
         if not isinstance(listed, list):
             raise PolicyError("timekeeper_scope.people must be a list or null")
-        allowed = {person_key(n) for n in listed}
+        allowed = {person_key(n) for n in listed} - {""}
     else:
         requester = scope.get("requester") if isinstance(scope, dict) else None
         if not person_key(requester):
@@ -1147,9 +1186,15 @@ def _first_repeat(values):
     return None
 
 
+def _id_key(value):
+    return canon_id(value) if isinstance(value, str) else value
+
+
 def check_unique_ids(packet):
     """IDs the engines index by must be unique (#13.2): an index keyed by a repeated ID would keep one record and
-    silently drop the other (a hidden signal, missing time or entry). The error names positions, never the ID."""
+    silently drop the other (a hidden signal, missing time or entry). The error names positions, never the ID.
+    IDs compare in canonical form (canon_id: NFKC, case, format characters and - _ . separators folded), so a
+    variant spelling of an ID is the same ID, never a second record that escapes a duplicate or overlap rule."""
     provenance = packet.get("provenance") or {}
     lists = (("activity_signals", packet.get("activity_signals") or [], "activity_id"),
              ("time_entries", packet.get("time_entries") or [], "entry_id"),
@@ -1158,25 +1203,38 @@ def check_unique_ids(packet):
     for where, records, key in lists:
         # Withheld excluded IDs (#11.3) are all the same marker and are never used as an index key.
         exempt = WITHHELD_TEXT if where.startswith("provenance.") else None
-        repeat = _first_repeat([object() if exempt and r.get(key) == exempt else r.get(key) for r in records])
+        repeat = _first_repeat([object() if exempt and r.get(key) == exempt else _id_key(r.get(key)) for r in records])
         if repeat:
             raise SchemaError(f"invalid input: {where}[{repeat[1]}].{key} repeats {where}[{repeat[0]}].{key}; "
                               "duplicate IDs are malformed (one record would silently replace the other)")
     # A record is active or excluded, never both: an active record listed as excluded would be rendered while the
     # report says it was excluded (or the exclusion would be silently ignored).
     for (active, records, key), (excluded, dropped, _) in ((lists[0], lists[2]), (lists[1], lists[3])):
-        gone = {r.get(key): j for j, r in enumerate(dropped) if r.get(key) != WITHHELD_TEXT}
+        gone = {_id_key(r.get(key)): j for j, r in enumerate(dropped) if r.get(key) != WITHHELD_TEXT}
         for i, record in enumerate(records):
-            if record.get(key) in gone:
+            if _id_key(record.get(key)) in gone:
                 raise SchemaError(f"invalid input: {active}[{i}].{key} is also listed in {excluded}"
-                                  f"[{gone[record.get(key)]}]; a record is either active or excluded, never both")
+                                  f"[{gone[_id_key(record.get(key))]}]; a record is either active or excluded, never both")
+    # Links are looked up by exact ID downstream, so a link may name a known activity only by its exact spelling;
+    # a link that matches one only after canonical folding would silently miss it (activity_pull resolves them).
+    known = {}
+    for records in (lists[0][1], lists[2][1]):
+        for r in records:
+            if isinstance(r.get("activity_id"), str) and r.get("activity_id") != WITHHELD_TEXT:
+                known.setdefault(canon_id(r["activity_id"]), r["activity_id"])
     for i, entry in enumerate(packet.get("time_entries") or []):
         for key in ("activity_ids", "excluded_activity_ids"):
-            repeat = _first_repeat(entry.get(key) or [])
+            links = entry.get(key) or []
+            repeat = _first_repeat([_id_key(a) for a in links])
             if repeat:
                 raise SchemaError(f"invalid input: time_entries[{i}].{key}[{repeat[1]}] repeats "
                                   f"time_entries[{i}].{key}[{repeat[0]}]; a link is listed once")
-        both = [j for j, a in enumerate(entry.get("activity_ids") or []) if a in (entry.get("excluded_activity_ids") or [])]
+            for j, link in enumerate(links):
+                if isinstance(link, str) and link != WITHHELD_TEXT and known.get(canon_id(link), link) != link:
+                    raise SchemaError(f"invalid input: time_entries[{i}].{key}[{j}] names a known activity ID "
+                                      "in a variant spelling; links must use the activity's exact ID")
+        excluded = {_id_key(a) for a in entry.get("excluded_activity_ids") or []}
+        both = [j for j, a in enumerate(entry.get("activity_ids") or []) if _id_key(a) in excluded]
         if both:
             raise SchemaError(f"invalid input: time_entries[{i}].activity_ids[{both[0]}] is also in "
                               f"time_entries[{i}].excluded_activity_ids; a link is either active or excluded")
