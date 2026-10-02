@@ -10,9 +10,14 @@ Type rule: a field of the wrong JSON type is a clean InputError; values are neve
 Contract rule: every engine calls validate_contract at entry, which checks the whole payload against the
 skill's own copy of contracts/ps.deliverable-review-quality-gate.v1.json (required fields, JSON types, closed
 enums, ranges and provenance prefixes). A violation is an InputError raised before any output is written."""
+import functools
 import json
+import math
 import os
 import re
+import tempfile
+
+import steering_guard as sg  # vendored shared detector; never edit (tests/check_shared_copies.py pins its SHA-256)
 
 AM_ENGINE = "engine:assertion_map"
 CONTRACT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "contracts", "ps.deliverable-review-quality-gate.v1.json")
@@ -82,7 +87,83 @@ def check_depth(value, label="input", max_depth=MAX_INPUT_DEPTH):
 
 
 def is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """A finite JSON number. NaN and +/-Infinity are not JSON numbers and never pass a range check."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return isinstance(value, int) or math.isfinite(value)
+
+
+def _reject_constant(name):
+    raise InputError(f"input JSON contains {name}, which is not a valid JSON number")
+
+
+def _check_encodable(value):
+    """Reject lone UTF-16 surrogates (for example "\\ud800"): they are not Unicode text and cannot be written as UTF-8."""
+    stack = [(value, "$")]
+    while stack:
+        item, path = stack.pop()
+        if isinstance(item, dict):
+            for key, child in item.items():
+                _check_encodable_text(key, f"{path} (a field name)")
+                stack.append((child, f"{path}.<field>"))
+        elif isinstance(item, list):
+            stack.extend((child, f"{path}[{index}]") for index, child in enumerate(item))
+        elif isinstance(item, str):
+            _check_encodable_text(item, path)
+
+
+def _check_encodable_text(text, path):
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise InputError(f"{path} contains a lone surrogate code point, which is not valid Unicode text") from exc
+
+
+def load_json_file(path):
+    """Load engine input. Strict JSON only: NaN/Infinity constants, lone surrogates and over-deep nesting are input
+    errors, so no engine ever processes or writes a value that is not valid JSON."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle, parse_constant=_reject_constant)
+    except OSError as exc:
+        raise InputError(f"could not read input JSON: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise InputError(f"input JSON is not valid UTF-8: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise InputError(f"invalid JSON input: {exc}") from exc
+    except RecursionError as exc:
+        raise InputError("input JSON is nested too deeply to process safely") from exc
+    check_depth(payload)
+    _check_encodable(payload)
+    return payload
+
+
+def write_json_atomic(path, payload):
+    """Serialise the whole output first, then write it to a temporary file beside the target and os.replace it into
+    place. On any error the output path is neither created nor truncated."""
+    try:
+        data = (json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+    except ValueError as exc:  # includes UnicodeEncodeError and non-finite numbers
+        raise InputError(f"output could not be serialised as valid JSON, so nothing was written: {exc}") from exc
+    target = os.path.abspath(path)
+    try:
+        handle, temp = tempfile.mkstemp(dir=os.path.dirname(target), prefix=f".{os.path.basename(target)}.", suffix=".tmp")
+    except OSError as exc:
+        raise InputError(f"could not write output {path}: {exc}") from exc
+    try:
+        with os.fdopen(handle, "wb") as stream:
+            stream.write(data)
+        if os.name != "nt":
+            os.chmod(temp, 0o644)
+        os.replace(temp, target)
+    except BaseException as exc:
+        try:
+            os.remove(temp)
+        except OSError:
+            pass
+        if isinstance(exc, OSError):
+            raise InputError(f"could not write output {path}: {exc}") from exc
+        raise
 
 
 def is_integer(value):
@@ -250,6 +331,9 @@ def _contract_errors(value, node, path, root):
             yield f"{path} must be one of {', '.join(node['enum'])}, got {value!r}"
         return
     if isinstance(value, str):
+        if is_withheld(value):
+            # Withheld marker: the embedded-instruction screen replaced text that was validated raw before withholding.
+            return
         if len(value.strip()) < node.get("minLength", 0):
             yield f"{path} must be a non-blank string"
         elif "pattern" in node:
@@ -432,3 +516,296 @@ def map_assertion(assertion, evidence_by_id):
         "source": AM_ENGINE, "citation": mapping["citation"]}
     escalation = f"{assertion['assertion_id']} at {location_label(assertion['location'])}: {status} - {rationale} ({criteria_section})"
     return mapping, finding, escalation
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Embedded-instruction screening and withholding shared by every stage (quality-gate-criteria.md #8.1-#8.7).
+# G8 screening runs through the vendored shared detector. DRQG vocabulary reaches it only through the hooks. The
+# contract carries no client or firm e-mail/web domains, so trusted_domains stays empty and any send/forward verb
+# aimed at an address or URL holds.
+STEERING_HOOKS = dict(
+    extra_verdict_words=("release ready", "ready for issue", "ready for release", "cleared for release", "quality gate passed"),
+    extra_rule_nouns=("disclaimer requirement", "citation rules", "reliance clause", "reliance language", "disclaimer", "qrm",
+                      "quality gate", "gate criteria", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"),
+    trusted_domains=(),
+)
+OVERSIZE = "oversize"
+SPLIT = "split"
+INSTRUCTION = "instruction"
+# Untrusted sections scanned verbatim. Every other section (assertion_mappings, findings, escalations,
+# provenance) is derived from them and is scanned only for text that is not a copy of a primary field.
+PRIMARY_SECTIONS = ("deliverable", "criteria", "assertions", "evidence_set", "prior_findings")
+UNSCANNED_KEYS = {"contract_version"}  # validated against the contract version before any scan
+SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.:#/ -]{1,80}$")
+AGGREGATE_LABEL = "(combined text, citation, evidence titles and location label)"
+# Withheld markers (quality-gate-criteria.md #8.7). Numbered per distinct withheld text, so two different withheld
+# identifiers never collide and every copy of one text carries the same marker at every stage.
+WITHHELD_WORDING = {
+    INSTRUCTION: "flagged by the embedded-instruction screen",
+    OVERSIZE: "too long to screen for embedded instructions",
+    SPLIT: "flagged with neighbouring fields by the embedded-instruction screen",
+}
+WITHHELD_PATTERN = re.compile(r"\[withheld (\d+)(?: \((oversize|split)\))?: [a-z -]+; see the G8 finding\]")
+
+
+def withheld_marker(number, kind=INSTRUCTION):
+    qualifier = "" if kind == INSTRUCTION else f" ({kind})"
+    return f"[withheld {number}{qualifier}: {WITHHELD_WORDING[kind]}; see the G8 finding]"
+
+
+def withheld_kind(value):
+    """INSTRUCTION, OVERSIZE or SPLIT when value is exactly a withheld marker, otherwise None."""
+    match = WITHHELD_PATTERN.fullmatch(value) if isinstance(value, str) else None
+    return (match.group(2) or INSTRUCTION) if match else None
+
+
+def is_withheld(value):
+    return withheld_kind(value) is not None
+
+
+@functools.lru_cache(maxsize=4096)
+def _screen_cached(value):
+    return tuple(sg.scan(value, **STEERING_HOOKS))
+
+
+def screen_text(value):
+    """steering_guard hits for one untrusted string, with the DRQG hooks (cached: keys and IDs repeat)."""
+    return list(_screen_cached(value)) if isinstance(value, str) else []
+
+
+@functools.lru_cache(maxsize=4096)
+def _screen_fields_cached(items):
+    return tuple(sg.scan_fields(dict(items), **STEERING_HOOKS))
+
+
+def screen_fields(fields):
+    """steering_guard hits for a multi-field record; a 'split' hit means only the joined fields trip (cached: every
+    stage re-screens the same assertions)."""
+    return list(_screen_fields_cached(tuple(fields.items())))
+
+
+def hit_reason(found):
+    """OVERSIZE when the text was too long to screen, which is a hold (quality-gate-criteria.md #8.6), else INSTRUCTION."""
+    return OVERSIZE if any(hit.family == OVERSIZE for hit in found) else INSTRUCTION
+
+
+def suspicious_instruction(value):
+    """True when the text trips the shared detector or is too long to screen (an oversize result is a hold)."""
+    return bool(screen_text(value))
+
+
+def safe_token(value, fallback):
+    text = str(value)
+    return text if SAFE_TOKEN.match(text) and not suspicious_instruction(text) else fallback
+
+
+def iter_strings(value, path):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key not in UNSCANNED_KEYS:
+                yield from iter_strings(child, f"{path}.{safe_token(key, '<field>')}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from iter_strings(child, f"{path}[{index}]")
+    elif isinstance(value, str):
+        yield path, value
+
+
+def scan_sections(payload):
+    """(primary, derived): lists of (path, text) for every untrusted string, primary sections and top-level scalars first."""
+    primary, derived = [], []
+    for key, child in payload.items():
+        if key in UNSCANNED_KEYS:
+            continue
+        target = primary if key in PRIMARY_SECTIONS or not isinstance(child, (dict, list)) else derived
+        target.extend(iter_strings(child, f"$.{safe_token(key, '<field>')}"))
+    return primary, derived
+
+
+def collect_scan_text(payload):
+    """Yield (path, text, derived) for every untrusted string, primary sections first.
+
+    Every string is yielded verbatim, including citation fields; nothing is stripped before screening
+    (quality-gate-criteria.md #8.5). A derived string that is exactly equal to a primary string is a copy
+    (for example assertion_mappings[].text) and is not yielded again."""
+    primary, derived = scan_sections(payload)
+    for path, text in primary:
+        yield path, text, False
+    copies = {text for _, text in primary}
+    for path, text in derived:
+        if text not in copies:
+            yield path, text, True
+
+
+def assertion_records(payload):
+    """Yield (path, fields, refs) per assertion: fields maps text, citation, linked evidence titles and the location
+    label (in reading order, non-blank strings only) to their values, and refs maps the same names to the
+    (container, key) holding each value. Only assertions with more than one such field are yielded."""
+    evidence = {item["evidence_id"]: item for item in payload.get("evidence_set") or [] if isinstance(item, dict) and isinstance(item.get("evidence_id"), str)}
+    for index, assertion in enumerate(payload.get("assertions") or []):
+        if not isinstance(assertion, dict):
+            continue
+        refs = {"text": (assertion, "text"), "citation": (assertion, "citation")}
+        for position, evidence_id in enumerate(assertion.get("evidence_ids") or []):
+            linked = evidence.get(evidence_id) if isinstance(evidence_id, str) else None
+            if isinstance(linked, dict):
+                refs[f"evidence title {position + 1}"] = (linked, "title")
+        location = assertion.get("location")
+        if isinstance(location, dict):
+            refs["location label"] = (location, "label")
+        fields = {}
+        for name, (container, key) in list(refs.items()):
+            value = container.get(key)
+            if isinstance(value, str) and value.strip():
+                fields[name] = value
+            else:
+                del refs[name]
+        if len(fields) > 1:
+            yield f"$.assertions[{index}] {AGGREGATE_LABEL}", fields, refs
+
+
+def assertion_fields(payload):
+    """Yield (path, fields) per assertion: text, citation, linked evidence titles and the location label in reading
+    order. scan_fields screens them together so steering split across fields (quality-gate-criteria.md #8.5) that no
+    single field contains is caught."""
+    for path, fields, _ in assertion_records(payload):
+        yield path, fields
+
+
+def instruction_hits(payload):
+    """(path, reason) for every untrusted field that trips the detector or carries a withheld marker, then for each
+    assertion whose fields trip only when joined (so one note is never counted twice).
+
+    Text withheld at an earlier stage stays a hit: a primary instruction/oversize marker is a field hit, a split marker
+    on any of an assertion's fields is that assertion's combined hit, and a derived string that is exactly a marker
+    (and not a copy of a primary string) is a hit. A derived string that merely contains a marker or embeds tripped
+    primary text is the same note and is not counted again (quality-gate-criteria.md #8.1-#8.7)."""
+    hits, tripped = [], set()
+    for path, text, derived in collect_scan_text(payload):
+        kind = withheld_kind(text)
+        if kind == SPLIT and not derived:
+            continue
+        if kind:
+            reason = OVERSIZE if kind == OVERSIZE else INSTRUCTION
+        else:
+            found = screen_text(text)
+            if not found:
+                continue
+            # De-duplication happens only after the whole derived string has tripped: it is the same note when it
+            # embeds a primary field that already raised a G8 hit, so the run is held either way.
+            if derived and any(source in text for source in tripped):
+                continue
+            reason = hit_reason(found)
+        hits.append((path, reason))
+        if not derived:
+            tripped.add(text)
+    for path, fields in assertion_fields(payload):
+        if tripped.intersection(fields.values()):
+            continue
+        if any(withheld_kind(value) == SPLIT for value in fields.values()):
+            hits.append((path, INSTRUCTION))
+            continue
+        found = screen_fields(fields)
+        if found:
+            hits.append((path, hit_reason(found)))
+    return hits
+
+
+def _next_marker_number(payload):
+    highest = 0
+    for _, text in iter_strings(payload, "$"):
+        for match in WITHHELD_PATTERN.finditer(text):
+            highest = max(highest, int(match.group(1)))
+    return highest + 1
+
+
+def _replace_withheld(value, exact, embedded):
+    if isinstance(value, dict):
+        for key in value:
+            if key not in UNSCANNED_KEYS:
+                value[key] = _replace_withheld(value[key], exact, embedded)
+        return value
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            value[index] = _replace_withheld(child, exact, embedded)
+        return value
+    if not isinstance(value, str) or is_withheld(value):
+        return value
+    if value in exact:
+        return exact[value]
+    for source, marker in embedded:
+        if source in value:
+            value = value.replace(source, marker)
+    return value
+
+
+def withhold_untrusted(payload):
+    """Screen the whole payload and replace every string that trips the detector with a numbered withheld marker,
+    everywhere that text appears, so no stage, output or review packet repeats it (quality-gate-criteria.md #8.7).
+
+    Detection runs on the original text first; nothing is stripped or rewritten before screening. Then:
+    - a tripped primary or derived string is replaced wherever it appears exactly, and wherever it is embedded in a
+      longer string (for example the assertion citation inside assertion_mappings[].citation);
+    - when only an assertion's joined fields trip, each of those fields gets a split marker wherever it appears exactly.
+    Markers already present are left alone and are not new hits. The payload is updated in place. Returns
+    (path, reason, derived) for each newly withheld hit, in the order instruction_hits reports them."""
+    primary, derived = scan_sections(payload)
+    number = [_next_marker_number(payload)]
+    markers, embedded, new = {}, [], []
+
+    def mark(text, kind):
+        if text not in markers:
+            markers[text] = withheld_marker(number[0], kind)
+            number[0] += 1
+            if kind != SPLIT:
+                embedded.append(text)
+
+    tripped = set()
+    for path, text in primary:
+        if is_withheld(text):
+            continue
+        found = screen_text(text)
+        if found:
+            mark(text, hit_reason(found))
+            tripped.add(text)
+            new.append((path, hit_reason(found), False))
+    primary_texts = {text for _, text in primary}
+    derived_new = []
+    for path, text in derived:
+        if is_withheld(text) or text in primary_texts or any(source in text for source in tripped):
+            continue
+        found = screen_text(text)
+        if found:
+            mark(text, hit_reason(found))
+            derived_new.append((path, hit_reason(found), True))
+    combined, split_refs = [], []
+    for path, fields, refs in assertion_records(payload):
+        values = list(fields.values())
+        if tripped.intersection(values) or any(is_withheld(value) for value in values):
+            continue
+        found = screen_fields(fields)
+        if found:
+            # Mark the fields the note needs (removing one stops the hit), or every field when none is needed alone;
+            # evidence titles are shared between assertions, so they are marked only when the note needs no field of
+            # the assertion's own. No field trips alone, so identical text elsewhere in the primary sections is not
+            # this note and is left as it is.
+            needed = [name for name in fields if not screen_fields({other: value for other, value in fields.items() if other != name})] or list(fields)
+            own = [name for name in needed if not name.startswith("evidence title")]
+            split_refs.extend(refs[name] for name in (own or needed))
+            combined.append((path, hit_reason(found), False))
+    split_exact = {}
+    for container, key in split_refs:
+        value = container[key]
+        if not is_withheld(value):
+            mark(value, SPLIT)
+            split_exact[value] = markers[value]
+            container[key] = markers[value]
+    exact = {text: marker for text, marker in markers.items() if text not in split_exact}
+    ordered = sorted(((text, markers[text]) for text in embedded), key=lambda pair: -len(pair[0]))
+    if exact or split_exact:
+        primary_keys = {key for key, child in payload.items() if key in PRIMARY_SECTIONS or not isinstance(child, (dict, list))}
+        for key in list(payload):
+            if key not in UNSCANNED_KEYS:
+                # Derived copies of split fields (for example assertion_mappings[].text) are withheld with them.
+                payload[key] = _replace_withheld(payload[key], exact if key in primary_keys else {**exact, **split_exact}, ordered)
+    return new + derived_new + combined

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """assertion_map - deterministic assertion-to-evidence support engine."""
 import argparse
-import json
 import os
 import sys
 from datetime import datetime
@@ -18,16 +17,7 @@ InputError = rules.InputError
 
 
 def load_json(path):
-    try:
-        with open(path, encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except OSError as exc:
-        raise InputError(f"could not read input JSON: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise InputError(f"invalid JSON input: {exc}") from exc
-    except RecursionError as exc:
-        raise InputError("input JSON is nested too deeply to process safely") from exc
-    return rules.check_depth(payload)
+    return rules.load_json_file(path)
 
 
 def validate_generated_at(value):
@@ -79,6 +69,10 @@ def main():
         evidence_by_id = rules.evidence_index(payload["evidence_set"])
         rules.validate_assertions(payload["assertions"])
         rules.validate_contract(payload, "assertion_map")
+        # Flagged text is withheld before mapping, so no mapping, finding or later stage repeats it
+        # (quality-gate-criteria.md #8.7); gate_check raises the G8 hold for every marker.
+        rules.withhold_untrusted(payload)
+        evidence_by_id = rules.evidence_index(payload["evidence_set"])
         findings = list(payload.get("findings", []))
         escalations = list(payload.get("escalations", []))
         mappings = []
@@ -93,9 +87,7 @@ def main():
         if generated_at:
             provenance["generated_at"] = generated_at
         provenance.setdefault("engines", []).append(f"assertion_map/{ENGINE_VERSION}")
-        with open(args.out, "w", encoding="utf-8", newline="\n") as handle:
-            json.dump(payload, handle, indent=2, ensure_ascii=False)
-            handle.write("\n")
+        rules.write_json_atomic(args.out, payload)
         unsupported = sum(1 for item in mappings if item["support_status"] == "unsupported")
         limited = sum(1 for item in mappings if item["support_status"] == "limited")
         print(f"assertion_map: {len(mappings)} assertion(s), {unsupported} unsupported, {limited} limited -> {os.path.basename(args.out)}")

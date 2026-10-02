@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """severity_rank - deterministic finding ranking and review-status verdict."""
 import argparse
-import json
+import copy
 import os
 import sys
 from datetime import datetime
@@ -26,32 +26,8 @@ SR_G8_PREFIX = "SR-G8-embedded-instruction-"
 
 InputError = rules.InputError
 
-MAX_INPUT_DEPTH = 64  # mirrors assertion_rules.MAX_INPUT_DEPTH
-
-
-def check_depth(value, max_depth=MAX_INPUT_DEPTH):
-    """Reject nesting deeper than max_depth iteratively, so hostile input can never reach a RecursionError."""
-    stack = [(value, 1)]
-    while stack:
-        item, depth = stack.pop()
-        if isinstance(item, (dict, list)):
-            if depth > max_depth:
-                raise InputError(f"input is nested more than {max_depth} levels deep; the review contract never nests that deeply")
-            stack.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
-    return value
-
-
 def load_json(path):
-    try:
-        with open(path, encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except OSError as exc:
-        raise InputError(f"could not read input JSON: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise InputError(f"invalid JSON input: {exc}") from exc
-    except RecursionError as exc:
-        raise InputError("input JSON is nested too deeply to process safely") from exc
-    return check_depth(payload)
+    return rules.load_json_file(path)
 
 def validate_generated_at(value):
     if value is None:
@@ -77,9 +53,6 @@ def require_contract(payload):
         if not (isinstance(item, dict) or (isinstance(item, str) and item.strip())):
             raise InputError(f"escalations[{index}] must be a non-blank string or an object, got {item!r}")
 
-def is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
-
 def validate_finding(index, item):
     """Fail closed with a clear message on values the ranking cannot order (severity-rules.md #3.2)."""
     if not isinstance(item, dict):
@@ -89,7 +62,7 @@ def validate_finding(index, item):
         raise InputError(f"findings[{index}] missing required field: finding_id")
     if item.get("severity") not in SEVERITY_ORDER:
         raise InputError(f"{item.get('finding_id', '<unknown>')}: unknown severity {item.get('severity')!r}")
-    if "confidence" in item and not is_number(item["confidence"]):
+    if "confidence" in item and not rules.is_number(item["confidence"]):
         raise InputError(f"{label}: confidence must be a number, got {item['confidence']!r}")
     location = item.get("location")
     if location is None:
@@ -149,6 +122,43 @@ def reconcile_gate_results(findings, gate_results):
     if mismatches:
         raise InputError("gate_results do not match findings[] (status/highest_severity/finding_count): " + "; ".join(mismatches) + "; re-run gate_check, findings cannot be removed or downgraded after the gate run")
 
+SEVERITY_RANK = {severity: len(SEVERITY_ORDER) - order for severity, order in SEVERITY_ORDER.items()}
+
+
+def rederive_gate_findings(payload):
+    """Re-run the gate_check engine on the mapped input that gate-checked.json carries and require every
+    engine-derived finding to be present with the same gate at no lower severity (severity-rules.md #3.7).
+
+    gate_results[] and findings[] are equally editable, so agreeing with each other proves nothing; the evidence is
+    the mapped input itself (the primary sections, top-level fields and assertion_mappings). The AM- findings are
+    passed back, collapsed to one per finding_id at the highest severity, because gate_check verifies them against
+    assertion_map; everything else gate_check or a reviewer added (GC- findings, other findings, escalations,
+    provenance) is left out. Those can only add: extra findings are allowed, and their text is screened afterwards
+    (severity-rules.md #3.6). Raises InputError when anything engine-derived is missing or lower."""
+    derived_sections = ("findings", "escalations", "provenance", "gate_results", "ranked_findings", "release_readiness")
+    mapped = {key: copy.deepcopy(value) for key, value in payload.items() if key not in derived_sections}
+    am_findings = [copy.deepcopy(item) for item in payload["findings"] if item["finding_id"].startswith("AM-")]
+    mapped["findings"], _ = collapse_duplicates(am_findings)
+    mapped["escalations"] = []
+    try:
+        derived = gc.evaluate(mapped)["findings"]
+    except InputError as exc:
+        raise InputError(f"gate_check re-derivation failed on the carried mapped input ({exc}); re-run gate_check") from exc
+    supplied = {}
+    for item in payload["findings"]:
+        key = (item["finding_id"], item.get("gate_id"))
+        supplied[key] = max(supplied.get(key, 0), SEVERITY_RANK[item["severity"]])
+    problems = []
+    for item in derived:
+        present = supplied.get((item["finding_id"], item["gate_id"]), 0)
+        if present < SEVERITY_RANK[item["severity"]]:
+            label = gc.safe_token(item["finding_id"], "an engine finding")
+            problems.append(f"{label} ({item['gate_id']}, {item['severity']}) is {'missing' if not present else 'downgraded'}")
+    if problems:
+        shown = "; ".join(problems[:10]) + (f"; and {len(problems) - 10} more" if len(problems) > 10 else "")
+        raise InputError(f"findings[] do not contain every finding gate_check derives from the carried mapped input: {shown}. Re-run gate_check; engine findings cannot be removed or downgraded after the gate run (severity-rules.md #3.7)")
+
+
 def covered_by_gate_check(findings, escalations, path):
     """True when gate_check already holds this primary-field hit under its own G8 finding."""
     if any(item["finding_id"].startswith("GC-G8-embedded-instruction-") and f"Untrusted field {path} " in item.get("detail", "") for item in findings):
@@ -158,26 +168,17 @@ def covered_by_gate_check(findings, escalations, path):
     return listed >= MAX_G8_HITS and overflow
 
 def screen_embedded_instructions(payload):
-    """Screen every incoming string through steering_guard exactly as gate_check does (severity-rules.md #3.6).
+    """Screen every incoming string through steering_guard exactly as gate_check does (severity-rules.md #3.6) and
+    withhold every string that trips, everywhere it appears (quality-gate-criteria.md #8.7).
 
-    Primary sections are re-screened; a hit gate_check already holds under its own G8 finding is not counted twice.
-    Every string in the derived sections (findings, escalations, gate_results, provenance, assertion_mappings and any
-    other notes) that trips the detector, and is not a copy of primary text already held, is withheld and becomes a
-    hit. Returns (path, reason) for each new hit; the payload is updated in place."""
-    hits = []
-    primary_payload = {key: value for key, value in payload.items() if key in gc.PRIMARY_SECTIONS or not isinstance(value, (dict, list))}
-    for path, reason in gc.instruction_hits(primary_payload):
-        if not covered_by_gate_check(payload["findings"], payload["escalations"], path):
-            hits.append((path, reason))
-    primary, primary_tripped = gc.primary_strings(payload)
-    for key in list(payload):
-        if key in gc.UNSCANNED_KEYS or key in primary_payload:
-            continue
-        withheld = []
-        payload[key] = gc.withhold_derived(payload[key], f"$.{gc.safe_token(key, '<field>')}", primary, primary_tripped, withheld)
-        hits.extend(withheld)
+    A primary-field hit gate_check already holds under its own G8 finding is not counted twice. Every string in the
+    derived sections (findings, escalations, gate_results, provenance, assertion_mappings and any other notes) that
+    trips the detector, and is not a copy of primary text already held, is a new hit. Text already replaced by a
+    withheld marker upstream stays withheld. Returns (path, reason) for each new hit; the payload is updated in place."""
+    findings, escalations = list(payload["findings"]), list(payload["escalations"])
+    hits = [(path, reason) for path, reason, derived in rules.withhold_untrusted(payload) if derived or not covered_by_gate_check(findings, escalations, path)]
     for index, item in enumerate(payload["findings"]):
-        if item["finding_id"] == gc.WITHHELD_TEXT:
+        if rules.is_withheld(item["finding_id"]):
             item["finding_id"] = f"withheld-finding-{index + 1}"
     return hits
 
@@ -213,6 +214,7 @@ def main():
             validate_finding(index, item)
         rules.validate_contract(payload, "severity_rank")
         reconcile_gate_results(payload["findings"], payload["gate_results"])
+        rederive_gate_findings(payload)
         g8_hits = screen_embedded_instructions(payload)
         if g8_hits:
             add_g8_findings(payload, g8_hits)
@@ -260,9 +262,7 @@ def main():
         if generated_at:
             provenance["generated_at"] = generated_at
         provenance.setdefault("engines", []).append(f"severity_rank/{ENGINE_VERSION}")
-        with open(args.out, "w", encoding="utf-8", newline="\n") as handle:
-            json.dump(payload, handle, indent=2, ensure_ascii=False)
-            handle.write("\n")
+        rules.write_json_atomic(args.out, payload)
         print(f"severity_rank: status={status}, ranked_findings={len(ranked)} -> {os.path.basename(args.out)}")
         return 0
     except InputError as exc:

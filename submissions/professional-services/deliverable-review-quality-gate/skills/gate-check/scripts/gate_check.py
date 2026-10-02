@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """gate_check - deterministic quality-gate compliance engine."""
 import argparse
-import functools
-import json
+import copy
 import os
 import re
 import sys
@@ -58,11 +57,6 @@ CLIENT_ROLE_WORDS = {
 }
 INTERNAL_RECIPIENTS = {"engagement team", "engagement partner", "engagement manager", "reviewing partner", "engagement quality reviewer", "qrm"}
 AMBIGUOUS_RECIPIENT_TERMS = ("tbd", "to be confirmed", "external parties", "third parties", "stakeholders", "interested parties", "advisors", "advisers", "allowed users", "distribution list")
-# Untrusted sections scanned verbatim. Every other section (assertion_mappings, findings, escalations,
-# provenance) is derived from them and is scanned only for text that is not a copy of a primary field.
-PRIMARY_SECTIONS = ("deliverable", "criteria", "assertions", "evidence_set", "prior_findings")
-UNSCANNED_KEYS = {"contract_version"}  # validated against CONTRACT_VERSION before any scan
-SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.:#/ -]{1,80}$")
 
 # Letters that render like Latin letters. Used only to compare identifiers and recipient names (finding-ID
 # spoofing #8.4, recipient classification #2.2); embedded-instruction screening uses steering_guard.
@@ -103,31 +97,26 @@ def _with_case_partners(base):
     return table
 CONFUSABLE_MAP = _with_case_partners(_CONFUSABLE_BASE)
 CONFUSABLES = str.maketrans(CONFUSABLE_MAP)
-# G8 embedded-instruction screening (quality-gate-criteria.md #8.1-#8.6) runs through the vendored shared detector.
-# DRQG vocabulary reaches it only through the hooks. The contract carries no client or firm e-mail/web domains, so
-# trusted_domains stays empty and any send/forward verb aimed at an address or URL holds.
-STEERING_HOOKS = dict(
-    extra_verdict_words=("release ready", "ready for issue", "ready for release", "cleared for release", "quality gate passed"),
-    extra_rule_nouns=("disclaimer requirement", "citation rules", "reliance clause", "reliance language", "disclaimer", "qrm",
-                      "quality gate", "gate criteria", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"),
-    trusted_domains=(),
-)
-OVERSIZE = "oversize"
-
+# G8 embedded-instruction screening and withholding (quality-gate-criteria.md #8.1-#8.7) is shared by every stage and
+# lives in assertion_rules (byte-identical in both skills); these names are kept for callers and tests.
+STEERING_HOOKS = rules.STEERING_HOOKS
+OVERSIZE = rules.OVERSIZE
+PRIMARY_SECTIONS = rules.PRIMARY_SECTIONS
+UNSCANNED_KEYS = rules.UNSCANNED_KEYS
+AGGREGATE_LABEL = rules.AGGREGATE_LABEL
+screen_text = rules.screen_text
+screen_fields = rules.screen_fields
+suspicious_instruction = rules.suspicious_instruction
+safe_token = rules.safe_token
+iter_strings = rules.iter_strings
+collect_scan_text = rules.collect_scan_text
+assertion_fields = rules.assertion_fields
+instruction_hits = rules.instruction_hits
 
 InputError = rules.InputError
 
 def load_json(path):
-    try:
-        with open(path, encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except OSError as exc:
-        raise InputError(f"could not read input JSON: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise InputError(f"invalid JSON input: {exc}") from exc
-    except RecursionError as exc:
-        raise InputError("input JSON is nested too deeply to process safely") from exc
-    return rules.check_depth(payload)
+    return rules.load_json_file(path)
 
 def validate_generated_at(value):
     if value is None:
@@ -165,125 +154,6 @@ def normalize_text(value):
     for source, target in (("’", "'"), ("‘", "'"), ("‐", "-"), ("‑", "-"), ("–", "-"), ("—", "-")):
         normalized = normalized.replace(source, target)
     return re.sub(r"\s+", " ", normalized).strip()
-
-@functools.lru_cache(maxsize=4096)
-def _screen_cached(value):
-    return tuple(sg.scan(value, **STEERING_HOOKS))
-
-def screen_text(value):
-    """steering_guard hits for one untrusted string, with the DRQG hooks (cached: keys and IDs repeat)."""
-    return list(_screen_cached(value)) if isinstance(value, str) else []
-
-def screen_fields(fields):
-    """steering_guard hits for a multi-field record; a 'split' hit means only the joined fields trip."""
-    return sg.scan_fields(fields, **STEERING_HOOKS)
-
-def suspicious_instruction(value):
-    """True when the text trips the shared detector or is too long to screen (an oversize result is a hold)."""
-    return bool(screen_text(value))
-
-def safe_token(value, fallback):
-    text = str(value)
-    return text if SAFE_TOKEN.match(text) and not suspicious_instruction(text) else fallback
-
-def iter_strings(value, path):
-    if isinstance(value, dict):
-        for key, child in value.items():
-            if key not in UNSCANNED_KEYS:
-                yield from iter_strings(child, f"{path}.{safe_token(key, '<field>')}")
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            yield from iter_strings(child, f"{path}[{index}]")
-    elif isinstance(value, str):
-        yield path, value
-
-def collect_scan_text(payload):
-    """Yield (path, text, derived) for every untrusted string, primary sections first.
-
-    Every string is yielded verbatim, including citation fields; nothing is stripped before screening
-    (quality-gate-criteria.md #8.5). A derived string that is exactly equal to a primary string is a copy
-    (for example assertion_mappings[].text) and is not yielded again."""
-    primary, derived = [], []
-    for key, child in payload.items():
-        if key in UNSCANNED_KEYS:
-            continue
-        target = primary if key in PRIMARY_SECTIONS or not isinstance(child, (dict, list)) else derived
-        target.extend(iter_strings(child, f"$.{safe_token(key, '<field>')}"))
-    for path, text in primary:
-        yield path, text, False
-    copies = {text for _, text in primary}
-    for path, text in derived:
-        if text not in copies:
-            yield path, text, True
-
-AGGREGATE_LABEL = "(combined text, citation, evidence titles and location label)"
-WITHHELD_TEXT = "[withheld: flagged by the embedded-instruction screen; see the G8 finding]"
-
-def primary_strings(payload):
-    """Every primary string, and the subset that trips the detector (already held under G8 by its own finding)."""
-    texts = [text for path, text, derived in collect_scan_text(payload) if not derived]
-    return set(texts), {text for text in texts if suspicious_instruction(text)}
-
-def withhold_derived(value, path, primary, primary_tripped, withheld):
-    """Copy of a derived section with every string that trips the detector replaced by WITHHELD_TEXT, so a later
-    stage or the review packet never repeats it (quality-gate-criteria.md #8.7). A string equal to, or embedding, a
-    primary string already held under G8 is that same note and is left for its own finding. withheld collects
-    (path, reason) for each replaced string."""
-    if isinstance(value, dict):
-        return {key: withhold_derived(child, f"{path}.{safe_token(key, '<field>')}", primary, primary_tripped, withheld) for key, child in value.items()}
-    if isinstance(value, list):
-        return [withhold_derived(child, f"{path}[{index}]", primary, primary_tripped, withheld) for index, child in enumerate(value)]
-    if not isinstance(value, str) or value == WITHHELD_TEXT or value in primary or any(text in value for text in primary_tripped):
-        return value
-    found = screen_text(value)
-    if not found:
-        return value
-    withheld.append((path, OVERSIZE if any(hit.family == OVERSIZE for hit in found) else "instruction"))
-    return WITHHELD_TEXT
-
-def assertion_fields(payload):
-    """Yield (path, fields) per assertion: text, citation, linked evidence titles and the location label in reading
-    order. scan_fields screens them together so steering split across fields (quality-gate-criteria.md #8.5) that no
-    single field contains is caught."""
-    evidence = {item["evidence_id"]: item for item in payload.get("evidence_set") or [] if isinstance(item, dict) and isinstance(item.get("evidence_id"), str)}
-    for index, assertion in enumerate(payload.get("assertions") or []):
-        if not isinstance(assertion, dict):
-            continue
-        fields = {"text": assertion.get("text"), "citation": assertion.get("citation")}
-        for position, evidence_id in enumerate(assertion.get("evidence_ids") or []):
-            if isinstance(evidence_id, str):
-                fields[f"evidence title {position + 1}"] = evidence.get(evidence_id, {}).get("title")
-        location = assertion.get("location")
-        fields["location label"] = location.get("label") if isinstance(location, dict) else None
-        fields = {key: value for key, value in fields.items() if isinstance(value, str) and value.strip()}
-        if len(fields) > 1:
-            yield f"$.assertions[{index}] {AGGREGATE_LABEL}", fields
-
-def instruction_hits(payload):
-    """(path, reason) for every untrusted field that trips the detector, then for each assertion whose fields trip
-    only when joined (so one note is never counted twice). reason is OVERSIZE when the text was too long to screen,
-    which is a hold (quality-gate-criteria.md #8.6), otherwise 'instruction'."""
-    def reason(found):
-        return OVERSIZE if any(hit.family == OVERSIZE for hit in found) else "instruction"
-    hits, tripped = [], set()
-    for path, text, derived in collect_scan_text(payload):
-        found = screen_text(text)
-        if not found:
-            continue
-        # De-duplication happens only after the whole derived string has tripped: it is the same note when it
-        # embeds a primary field that already raised a G8 hit, so the run is held either way.
-        if derived and any(source in text for source in tripped):
-            continue
-        hits.append((path, reason(found)))
-        if not derived:
-            tripped.add(text)
-    for path, fields in assertion_fields(payload):
-        if tripped.intersection(fields.values()):
-            continue
-        found = screen_fields(fields)
-        if found:
-            hits.append((path, reason(found)))
-    return hits
 
 def loc(section, page, paragraph, label):
     return {"section": section, "page": page, "paragraph": paragraph, "label": label}
@@ -443,7 +313,11 @@ def classify_recipient(recipient, identities):
     External-party vocabulary is checked first, on the full recipient text (only the engine's fixed client-role
     phrases such as "general counsel" are exempt); a client name or alias never neutralises it. A recipient is
     client-only only when it positively names a trusted client identity and every remaining word is a client role
-    word. Anything else is unclassified; nothing is inferred from the absence of a keyword."""
+    word. Anything else is unclassified; nothing is inferred from the absence of a keyword. A recipient the
+    embedded-instruction screen withheld (quality-gate-criteria.md #8.7) cannot be read or confirmed, and look-alike
+    characters may hide external vocabulary, so it is treated as external."""
+    if rules.WITHHELD_PATTERN.search(recipient):
+        return "external"
     text = recipient_words(recipient)
     if text in INTERNAL_RECIPIENTS:
         return "internal"
@@ -644,6 +518,152 @@ def check_client_data_value(deliverable, findings, escalations):
     shown = value if value in {"attention", "breach", "unknown"} else "blank/unrecognised"
     escalations.append(f"G4: client_data_handling is {shown}, not ok - {severity}; hold for reviewing partner/QRM (quality-gate-criteria.md #4.2-#4.3)")
 
+def evaluate(payload):
+    """Apply every gate to a mapped payload (assertion_map output) and return it with findings, escalations and
+    gate_results set. No file I/O and no provenance stamp; severity_rank calls it to re-derive the engine findings
+    from the mapped input that gate-checked.json carries (severity-rules.md #3.7)."""
+    require_contract(payload)
+    raw = copy.deepcopy(payload)
+    # Withhold flagged text before any computation, so every derived field, finding and output carries the numbered
+    # marker instead of the text (quality-gate-criteria.md #8.7). The contract is still checked on the raw input.
+    rules.withhold_untrusted(payload)
+    deliverable = payload["deliverable"]
+    validate_deliverable(deliverable)
+    expected = expected_assertion_outputs(payload, payload.get("evidence_set"))
+    if expected is None:
+        validate_unverified_mappings(payload["assertion_mappings"])
+    escalations = list(payload.get("escalations", []))
+    findings, spoofed = screen_upstream_findings(payload.get("findings", []), expected)
+    altered = reconcile_assertion_outputs(payload, expected, findings, escalations)
+    if spoofed or altered:
+        parts = []
+        if spoofed:
+            parts.append(f"{len(spoofed)} upstream finding(s) used an engine-owned finding ID or engine source tag without matching engine recomputation and were ignored")
+        if altered:
+            parts.append(f"assertion_map output for {len(altered)} assertion(s) was missing or did not match recomputation and was restored")
+        add_finding(findings, "GC-G8-engine-id-spoof", "G8", RELEASE_BLOCKER, "Upstream engine output is spoofed or altered", "; ".join(parts) + ". Engine findings are recomputed and cannot be replaced, removed or downgraded by input data.", unplaced("Upstream findings", "findings[] / assertion_mappings supplied with the review input"), "quality-gate-criteria.md #8.1; quality-gate-criteria.md #8.4", 0.99, "quality-gate-criteria.md #8.1, #8.4; severity-rules.md #1.1")
+        if spoofed:
+            escalations.append(f"G8: upstream finding(s) {', '.join(spoofed)} reused engine-owned IDs or source tags without matching engine recomputation and were ignored - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
+        if altered:
+            escalations.append(f"G8: assertion_map output for {', '.join(altered)} was missing or altered upstream and was restored from recomputation - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
+    loaded = check_missing_registers(payload, deliverable, findings, escalations)
+    brand_checks = loaded.get("brand_checks") or []
+    licensed_content = loaded.get("licensed_content") or []
+    prior_findings = loaded.get("prior_findings") or []
+    required_language = loaded.get("required_language") or []
+    for index, section in enumerate(loaded.get("criteria_sections") or []):
+        if not isinstance(section, str) or not section.strip():
+            raise InputError(f"criteria.criteria_sections[{index}] must be a non-blank string, got {section!r}")
+    for index, item in enumerate(required_language):
+        if not isinstance(item, str):
+            raise InputError(f"deliverable.required_language[{index}] must be a string, got {item!r}")
+    validate_brand_checks(brand_checks)
+    validate_licensed_content(licensed_content)
+    validate_prior_findings(prior_findings)
+    rules.validate_contract(raw, "gate_check")
+    recipient_problem = recipient_list_problem(deliverable)
+    if recipient_problem:
+        add_finding(findings, "GC-G2-recipient-ambiguity", "G2", RELEASE_BLOCKER, "Recipient list is missing or ambiguous", f"{recipient_problem}; reliance language cannot be confirmed until the allowed recipient set is explicit.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
+        escalations.append(f"G2: {recipient_problem} - release blocker; reviewing partner/QRM must confirm the allowed recipients (quality-gate-criteria.md #2.2)")
+    recipients = recipient_classes(deliverable)
+    invalid_identities = invalid_client_identities(deliverable)
+    if invalid_identities:
+        names = ", ".join(f"{label}={value}" for label, value in invalid_identities)
+        add_finding(findings, "GC-G2-client-identity-external", "G2", MUST_FIX, "Client name or alias contains external-party vocabulary", f"{names} contains external-party vocabulary (counsel, lender, bank, investor, regulator, auditor, buyer, outside or third party), so it is not trusted to identify the client; recipients naming it are treated as external.", disclaimer_location(payload), "quality-gate-criteria.md #2.5", 0.9, "quality-gate-criteria.md #2.5; severity-rules.md #1.2")
+        escalations.append(f"G2: confirm client aliases {names} - contains external-party vocabulary and is not trusted as the client identity; reviewing partner/QRM must confirm the client name, aliases and recipients (quality-gate-criteria.md #2.5)")
+    if recipients["external"] and deliverable["third_party_recipient_named"] is False:
+        names = ", ".join(recipients["external"])
+        withheld_note = " or were withheld by the embedded-instruction screen" if any(rules.WITHHELD_PATTERN.search(item) for item in recipients_of(deliverable)) else ""
+        add_finding(findings, "GC-G2-recipient-third-party-conflict", "G2", RELEASE_BLOCKER, "External recipient conflicts with third_party_recipient_named=false", f"Recipient(s) {names} match external-party vocabulary (counsel, lender, investor, regulator, auditor, buyer, outside or third party){withheld_note} but third_party_recipient_named is false; the deliverable is treated as third-party and reliance-restriction language is required.", disclaimer_location(payload), "quality-gate-criteria.md #2.2; quality-gate-criteria.md #2.5", 0.97, "quality-gate-criteria.md #2.2, #2.5; severity-rules.md #1.1")
+        escalations.append(f"G2: recipient(s) {names} look external but third_party_recipient_named is false - release blocker; reviewing partner/QRM must confirm the recipients and reliance terms (quality-gate-criteria.md #2.5)")
+    if recipients["unclassified"] and not recipient_problem:
+        names = ", ".join(recipients["unclassified"])
+        reason = "no trusted deliverable.client_name or client_aliases entry is supplied, so no recipient can be positively matched to the client" if not client_identities(deliverable) else "they do not positively match the client named in deliverable.client_name/client_aliases or a defined internal role"
+        add_finding(findings, "GC-G2-recipient-unconfirmed", "G2", MUST_FIX, "Recipients not confirmed as client-only", f"Recipient(s) {names} are unclassified: {reason}. An unmatched recipient is never assumed to be client-only.", disclaimer_location(payload), "quality-gate-criteria.md #2.5", 0.9, "quality-gate-criteria.md #2.5; severity-rules.md #1.2")
+        escalations.append(f"G2: confirm recipients {names} - not positively matched to the client; must-fix until the reviewing partner/QRM confirms they are client-only (quality-gate-criteria.md #2.5)")
+    present_disclaimers = string_list(deliverable, "present_disclaimer_types", "deliverable.present_disclaimer_types")
+    disclaimer_type = deliverable.get("required_disclaimer_type")
+    third_party = is_third_party_context(deliverable)
+    if disclaimer_type not in DISCLAIMER_TYPES:
+        add_finding(findings, "GC-G2-disclaimer-type-unrecognised", "G2", RELEASE_BLOCKER, "Required disclaimer type is not determined", "required_disclaimer_type is absent, blank or not one of general_advice or reliance_restriction, so the required disclaimer cannot be confirmed; an unrecognised value is never treated as clean.", disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.2; quality-gate-criteria.md #2.4", 0.97, "quality-gate-criteria.md #2.1-#2.2, #2.4; severity-rules.md #1.1")
+        escalations.append("G2: required_disclaimer_type is absent, blank or unrecognised - release blocker; reviewing partner/QRM must confirm the required disclaimer (quality-gate-criteria.md #2.4)")
+    if third_party and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY and disclaimer_type in DISCLAIMER_TYPES and disclaimer_type != "reliance_restriction":
+        add_finding(findings, "GC-G2-required-disclaimer-wrong", "G2", RELEASE_BLOCKER, "Required disclaimer type is wrong for third-party context", "A third-party recipient or allowed user requires reliance-restriction language.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
+    if (disclaimer_type == "reliance_restriction" or (third_party and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY)) and "reliance_restriction" not in present_disclaimers:
+        if third_party:
+            add_finding(findings, "GC-G2-reliance-language", "G2", RELEASE_BLOCKER, "Wrong disclaimer for third-party recipient", "A third-party recipient or allowed user is named but reliance-restriction language is absent; a general-advice disclaimer does not satisfy this gate.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
+            escalations.append("G2: third-party recipient context and reliance-restriction language absent - release blocker (quality-gate-criteria.md #2.2)")
+        else:
+            add_finding(findings, "GC-G2-reliance-language", "G2", RELEASE_BLOCKER, "Required reliance-restriction disclaimer is absent", "required_disclaimer_type is reliance_restriction but reliance-restriction language is not in present_disclaimer_types.", disclaimer_location(payload), "quality-gate-criteria.md #2.2; quality-gate-criteria.md #2.4", 0.97, "quality-gate-criteria.md #2.2, #2.4; severity-rules.md #1.1")
+            escalations.append("G2: required reliance-restriction disclaimer absent from the deliverable - release blocker (quality-gate-criteria.md #2.4)")
+    if disclaimer_type == "general_advice" and "general_advice" not in present_disclaimers:
+        add_finding(findings, "GC-G2-general-advice-absent", "G2", MUST_FIX, "Required general-advice disclaimer is absent", "required_disclaimer_type is general_advice but general-advice language is not in present_disclaimer_types; a declared disclaimer requirement is only met when the disclaimer is present.", disclaimer_location(payload), "quality-gate-criteria.md #2.1; quality-gate-criteria.md #2.4", 0.95, "quality-gate-criteria.md #2.1, #2.4; severity-rules.md #1.2")
+        escalations.append("G2: required general-advice disclaimer absent from the deliverable - must-fix; reviewing partner/QRM must confirm the disclaimer before release (quality-gate-criteria.md #2.4)")
+    present_language = string_list(deliverable, "present_language", "deliverable.present_language")
+    for required in required_language:
+        if required not in present_language:
+            severity = RELEASE_BLOCKER if required == "reliance_restriction" else MUST_FIX
+            add_finding(findings, f"GC-G2-missing-{safe_token(required, 'language')}", "G2", severity, f"Missing required language: {safe_token(required, 'required language item')}", f"Required language `{safe_token(required, 'required language item')}` is not present in the deliverable.", disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.3", 0.94, "quality-gate-criteria.md #2.1-#2.3")
+    if CONFIDENTIALITY_MARK_REQUIRED and deliverable.get("confidentiality_marking") != "client confidential":
+        add_finding(findings, "GC-G4-confidentiality", "G4", RELEASE_BLOCKER, "Missing client-confidential marking", "Required client-confidential marking is absent from cover/footer.", loc("Cover", 1, 1, "Confidentiality mark"), "quality-gate-criteria.md #4.1", 0.97, "quality-gate-criteria.md #4.1; severity-rules.md #1.1")
+    check_client_data_value(deliverable, findings, escalations)
+    for index, check in enumerate(brand_checks):
+        check_id = safe_token(check["check_id"], f"brand-check-{index + 1}")
+        location = entry_location(check, "Brand-check register", f"Brand check {check_id}")
+        legal = check["legal_or_release_control"] and LEGAL_MARK_DEFECT_BLOCKS
+        status_value = check.get("status")
+        if status_value == "fail":
+            add_finding(findings, f"GC-G5-{check_id}", "G5", MUST_FIX if legal else ADVISORY, check.get("title", "Brand or formatting defect"), check.get("detail", "Brand check failed"), location, "quality-gate-criteria.md #5.1-#5.2", check.get("confidence", 0.9), check.get("citation", "quality-gate-criteria.md #5.1-#5.2"))
+        elif status_value not in BRAND_CHECK_STATUSES:
+            severity = RELEASE_BLOCKER if legal else MUST_FIX
+            add_finding(findings, f"GC-G5-{check_id}", "G5", severity, "Brand or release-control check not verified", f"Brand check {check_id} has status {safe_token(status_value, 'blank/unrecognised') if status_value else 'blank/missing'}; only pass or fail are recognised, so the check is treated as not verified{' for a legal, confidentiality or release-control mark' if legal else ''}.", location, "quality-gate-criteria.md #5.2-#5.3", 0.95, "quality-gate-criteria.md #5.2-#5.3")
+            escalations.append(f"G5: brand check {check_id} status is not pass or fail - {severity}; hold for reviewing partner/QRM (quality-gate-criteria.md #5.3)")
+    for index, item in enumerate(licensed_content):
+        content_id = safe_token(item["content_id"], f"licensed-content-{index + 1}")
+        license_known = item.get("license_status") == LICENSE_STATUS_KNOWN
+        if LICENSED_ATTRIBUTION_REQUIRED and item["attribution_present"] is not True:
+            severity = MUST_FIX if license_known else RELEASE_BLOCKER
+            add_finding(findings, f"GC-G6-{content_id}", "G6", severity, "Licensed content lacks attribution", item.get("detail", "Third-party content requires attribution."), entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.2", item.get("confidence", 0.93), item.get("citation", "quality-gate-criteria.md #6.1-#6.2"))
+            if not license_known:
+                escalations.append(f"G6: unattributed licensed content {content_id} with license_status not known (unknown, blank or unrecognised) - release blocker; hold for reviewing partner/QRM (quality-gate-criteria.md #6.2-#6.3)")
+    for index, prior in enumerate(prior_findings):
+        if prior["claimed_closed"] is True and prior["document_fix_present"] is not True and PRIOR_FIX_MUST_LAND:
+            prior_id = safe_token(prior["finding_id"], f"prior-finding-{index + 1}")
+            add_finding(findings, f"GC-G7-{prior_id}", "G7", MUST_FIX, "Prior finding marked closed but fix is absent", prior.get("detail", "Tracker closure is not supported by the current document."), entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2", prior.get("confidence", 0.96), prior.get("citation", "quality-gate-criteria.md #7.1-#7.2"))
+    for index, assertion in enumerate(payload["assertions"]):
+        if assertion["scope_aligned"] is not True:
+            assertion_id = safe_token(assertion["assertion_id"], f"assertion-{index + 1}")
+            add_finding(findings, f"GC-G3-scope-{assertion_id}", "G3", RELEASE_BLOCKER, "Claim or recommendation falls outside signed scope", "Assertion is marked scope_aligned=false; claims and recommendations must stay inside the signed statement of work and documented evidence set.", assertion["location"], "quality-gate-criteria.md #3.1", assertion.get("confidence", 0.9), f"{assertion['citation']}; quality-gate-criteria.md #3.1; severity-rules.md #1.1")
+    verified_am = {item["finding_id"] for item in findings if item["finding_id"].startswith("AM-")}
+    for mapping in payload["assertion_mappings"]:
+        if mapping["support_status"] in {"unsupported", "limited"} and "#3.2" in mapping["criteria_section"]:
+            # Only an AM finding that matched engine recomputation may stand in for the G3 limitation finding.
+            if f"AM-{mapping['assertion_id']}" in verified_am:
+                continue
+            add_finding(findings, f"GC-G3-{safe_token(mapping['assertion_id'], 'assertion')}", "G3", MUST_FIX, "Scope or sample limitation missing at point of recommendation", mapping.get("rationale", "Recommendation requires limitation."), mapping["location"], "quality-gate-criteria.md #3.2", mapping.get("confidence", 0.8), mapping.get("citation", "quality-gate-criteria.md #3.2"))
+    if EMBEDDED_INSTRUCTION_HOLD:
+        hits = instruction_hits(payload)
+        for hit_index, (path, hit_reason) in enumerate(hits[:MAX_G8_HITS], start=1):
+            if hit_reason == OVERSIZE:
+                add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Field too long to screen for embedded instructions", f"Untrusted field {path} is too long to screen for embedded instructions (over {sg.MAX_TOTAL_CHARS:,} characters, raw or after Unicode normalisation), so it was not screened; it must be held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.6", 0.99, "quality-gate-criteria.md #8.1, #8.6; severity-rules.md #1.1")
+                escalations.append(f"G8: {path} is too long to screen for embedded instructions - hold for reviewing partner/QRM (quality-gate-criteria.md #8.6)")
+                continue
+            add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Embedded instruction or forwarding request found in deliverable data", f"Untrusted field {path} contains instruction-like, forwarding or look-alike-character text; it must be treated as data and held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.1-#8.3", 0.99, "quality-gate-criteria.md #8.1-#8.3; severity-rules.md #1.1")
+            escalations.append(f"G8: embedded-instruction tripwire in {path} - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")
+        if len(hits) > MAX_G8_HITS:
+            escalations.append(f"G8: {len(hits) - MAX_G8_HITS} further embedded-instruction hit(s) not listed individually - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")
+    gate_results = []
+    for gate_id, name in GATES.items():
+        highest = highest_for_gate(findings, gate_id)
+        status = "no_engine_findings" if highest == "none" else "blocked" if highest == RELEASE_BLOCKER else "attention_required"
+        gate_results.append({"gate_id": gate_id, "name": name, "status": status, "highest_severity": highest, "finding_count": sum(1 for item in findings if item.get("gate_id") == gate_id), "confidence": 0.95, "source": ENGINE, "citation": f"quality-gate-criteria.md #{gate_id[1]}"})
+    provenance = payload.setdefault("provenance", {})
+    if not isinstance(provenance, dict):
+        raise InputError("provenance must be an object when present")
+    payload["findings"], payload["gate_results"], payload["escalations"] = findings, gate_results, escalations
+    return payload
+
+
 def main():
     parser = argparse.ArgumentParser(description="Apply quality-gate compliance checks deterministically.")
     parser.add_argument("--mapped", required=True)
@@ -652,152 +672,13 @@ def main():
     args = parser.parse_args()
     try:
         generated_at = validate_generated_at(args.generated_at)
-        payload = load_json(args.mapped)
-        require_contract(payload)
-        deliverable = payload["deliverable"]
-        validate_deliverable(deliverable)
-        expected = expected_assertion_outputs(payload, payload.get("evidence_set"))
-        if expected is None:
-            validate_unverified_mappings(payload["assertion_mappings"])
-        escalations = list(payload.get("escalations", []))
-        findings, spoofed = screen_upstream_findings(payload.get("findings", []), expected)
-        altered = reconcile_assertion_outputs(payload, expected, findings, escalations)
-        if spoofed or altered:
-            parts = []
-            if spoofed:
-                parts.append(f"{len(spoofed)} upstream finding(s) used an engine-owned finding ID or engine source tag without matching engine recomputation and were ignored")
-            if altered:
-                parts.append(f"assertion_map output for {len(altered)} assertion(s) was missing or did not match recomputation and was restored")
-            add_finding(findings, "GC-G8-engine-id-spoof", "G8", RELEASE_BLOCKER, "Upstream engine output is spoofed or altered", "; ".join(parts) + ". Engine findings are recomputed and cannot be replaced, removed or downgraded by input data.", unplaced("Upstream findings", "findings[] / assertion_mappings supplied with the review input"), "quality-gate-criteria.md #8.1; quality-gate-criteria.md #8.4", 0.99, "quality-gate-criteria.md #8.1, #8.4; severity-rules.md #1.1")
-            if spoofed:
-                escalations.append(f"G8: upstream finding(s) {', '.join(spoofed)} reused engine-owned IDs or source tags without matching engine recomputation and were ignored - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
-            if altered:
-                escalations.append(f"G8: assertion_map output for {', '.join(altered)} was missing or altered upstream and was restored from recomputation - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
-        loaded = check_missing_registers(payload, deliverable, findings, escalations)
-        brand_checks = loaded.get("brand_checks") or []
-        licensed_content = loaded.get("licensed_content") or []
-        prior_findings = loaded.get("prior_findings") or []
-        required_language = loaded.get("required_language") or []
-        for index, section in enumerate(loaded.get("criteria_sections") or []):
-            if not isinstance(section, str) or not section.strip():
-                raise InputError(f"criteria.criteria_sections[{index}] must be a non-blank string, got {section!r}")
-        for index, item in enumerate(required_language):
-            if not isinstance(item, str):
-                raise InputError(f"deliverable.required_language[{index}] must be a string, got {item!r}")
-        validate_brand_checks(brand_checks)
-        validate_licensed_content(licensed_content)
-        validate_prior_findings(prior_findings)
-        rules.validate_contract(payload, "gate_check")
-        recipient_problem = recipient_list_problem(deliverable)
-        if recipient_problem:
-            add_finding(findings, "GC-G2-recipient-ambiguity", "G2", RELEASE_BLOCKER, "Recipient list is missing or ambiguous", f"{recipient_problem}; reliance language cannot be confirmed until the allowed recipient set is explicit.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
-            escalations.append(f"G2: {recipient_problem} - release blocker; reviewing partner/QRM must confirm the allowed recipients (quality-gate-criteria.md #2.2)")
-        recipients = recipient_classes(deliverable)
-        invalid_identities = invalid_client_identities(deliverable)
-        if invalid_identities:
-            names = ", ".join(f"{label}={value}" for label, value in invalid_identities)
-            add_finding(findings, "GC-G2-client-identity-external", "G2", MUST_FIX, "Client name or alias contains external-party vocabulary", f"{names} contains external-party vocabulary (counsel, lender, bank, investor, regulator, auditor, buyer, outside or third party), so it is not trusted to identify the client; recipients naming it are treated as external.", disclaimer_location(payload), "quality-gate-criteria.md #2.5", 0.9, "quality-gate-criteria.md #2.5; severity-rules.md #1.2")
-            escalations.append(f"G2: confirm client aliases {names} - contains external-party vocabulary and is not trusted as the client identity; reviewing partner/QRM must confirm the client name, aliases and recipients (quality-gate-criteria.md #2.5)")
-        if recipients["external"] and deliverable["third_party_recipient_named"] is False:
-            names = ", ".join(recipients["external"])
-            add_finding(findings, "GC-G2-recipient-third-party-conflict", "G2", RELEASE_BLOCKER, "External recipient conflicts with third_party_recipient_named=false", f"Recipient(s) {names} match external-party vocabulary (counsel, lender, investor, regulator, auditor, buyer, outside or third party) but third_party_recipient_named is false; the deliverable is treated as third-party and reliance-restriction language is required.", disclaimer_location(payload), "quality-gate-criteria.md #2.2; quality-gate-criteria.md #2.5", 0.97, "quality-gate-criteria.md #2.2, #2.5; severity-rules.md #1.1")
-            escalations.append(f"G2: recipient(s) {names} look external but third_party_recipient_named is false - release blocker; reviewing partner/QRM must confirm the recipients and reliance terms (quality-gate-criteria.md #2.5)")
-        if recipients["unclassified"] and not recipient_problem:
-            names = ", ".join(recipients["unclassified"])
-            reason = "no trusted deliverable.client_name or client_aliases entry is supplied, so no recipient can be positively matched to the client" if not client_identities(deliverable) else "they do not positively match the client named in deliverable.client_name/client_aliases or a defined internal role"
-            add_finding(findings, "GC-G2-recipient-unconfirmed", "G2", MUST_FIX, "Recipients not confirmed as client-only", f"Recipient(s) {names} are unclassified: {reason}. An unmatched recipient is never assumed to be client-only.", disclaimer_location(payload), "quality-gate-criteria.md #2.5", 0.9, "quality-gate-criteria.md #2.5; severity-rules.md #1.2")
-            escalations.append(f"G2: confirm recipients {names} - not positively matched to the client; must-fix until the reviewing partner/QRM confirms they are client-only (quality-gate-criteria.md #2.5)")
-        present_disclaimers = string_list(deliverable, "present_disclaimer_types", "deliverable.present_disclaimer_types")
-        disclaimer_type = deliverable.get("required_disclaimer_type")
-        third_party = is_third_party_context(deliverable)
-        if disclaimer_type not in DISCLAIMER_TYPES:
-            add_finding(findings, "GC-G2-disclaimer-type-unrecognised", "G2", RELEASE_BLOCKER, "Required disclaimer type is not determined", "required_disclaimer_type is absent, blank or not one of general_advice or reliance_restriction, so the required disclaimer cannot be confirmed; an unrecognised value is never treated as clean.", disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.2; quality-gate-criteria.md #2.4", 0.97, "quality-gate-criteria.md #2.1-#2.2, #2.4; severity-rules.md #1.1")
-            escalations.append("G2: required_disclaimer_type is absent, blank or unrecognised - release blocker; reviewing partner/QRM must confirm the required disclaimer (quality-gate-criteria.md #2.4)")
-        if third_party and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY and disclaimer_type in DISCLAIMER_TYPES and disclaimer_type != "reliance_restriction":
-            add_finding(findings, "GC-G2-required-disclaimer-wrong", "G2", RELEASE_BLOCKER, "Required disclaimer type is wrong for third-party context", "A third-party recipient or allowed user requires reliance-restriction language.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
-        if (disclaimer_type == "reliance_restriction" or (third_party and RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY)) and "reliance_restriction" not in present_disclaimers:
-            if third_party:
-                add_finding(findings, "GC-G2-reliance-language", "G2", RELEASE_BLOCKER, "Wrong disclaimer for third-party recipient", "A third-party recipient or allowed user is named but reliance-restriction language is absent; a general-advice disclaimer does not satisfy this gate.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")
-                escalations.append("G2: third-party recipient context and reliance-restriction language absent - release blocker (quality-gate-criteria.md #2.2)")
-            else:
-                add_finding(findings, "GC-G2-reliance-language", "G2", RELEASE_BLOCKER, "Required reliance-restriction disclaimer is absent", "required_disclaimer_type is reliance_restriction but reliance-restriction language is not in present_disclaimer_types.", disclaimer_location(payload), "quality-gate-criteria.md #2.2; quality-gate-criteria.md #2.4", 0.97, "quality-gate-criteria.md #2.2, #2.4; severity-rules.md #1.1")
-                escalations.append("G2: required reliance-restriction disclaimer absent from the deliverable - release blocker (quality-gate-criteria.md #2.4)")
-        if disclaimer_type == "general_advice" and "general_advice" not in present_disclaimers:
-            add_finding(findings, "GC-G2-general-advice-absent", "G2", MUST_FIX, "Required general-advice disclaimer is absent", "required_disclaimer_type is general_advice but general-advice language is not in present_disclaimer_types; a declared disclaimer requirement is only met when the disclaimer is present.", disclaimer_location(payload), "quality-gate-criteria.md #2.1; quality-gate-criteria.md #2.4", 0.95, "quality-gate-criteria.md #2.1, #2.4; severity-rules.md #1.2")
-            escalations.append("G2: required general-advice disclaimer absent from the deliverable - must-fix; reviewing partner/QRM must confirm the disclaimer before release (quality-gate-criteria.md #2.4)")
-        present_language = string_list(deliverable, "present_language", "deliverable.present_language")
-        for required in required_language:
-            if required not in present_language:
-                severity = RELEASE_BLOCKER if required == "reliance_restriction" else MUST_FIX
-                add_finding(findings, f"GC-G2-missing-{safe_token(required, 'language')}", "G2", severity, f"Missing required language: {safe_token(required, 'required language item')}", f"Required language `{safe_token(required, 'required language item')}` is not present in the deliverable.", disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.3", 0.94, "quality-gate-criteria.md #2.1-#2.3")
-        if CONFIDENTIALITY_MARK_REQUIRED and deliverable.get("confidentiality_marking") != "client confidential":
-            add_finding(findings, "GC-G4-confidentiality", "G4", RELEASE_BLOCKER, "Missing client-confidential marking", "Required client-confidential marking is absent from cover/footer.", loc("Cover", 1, 1, "Confidentiality mark"), "quality-gate-criteria.md #4.1", 0.97, "quality-gate-criteria.md #4.1; severity-rules.md #1.1")
-        check_client_data_value(deliverable, findings, escalations)
-        for index, check in enumerate(brand_checks):
-            check_id = safe_token(check["check_id"], f"brand-check-{index + 1}")
-            location = entry_location(check, "Brand-check register", f"Brand check {check_id}")
-            legal = check["legal_or_release_control"] and LEGAL_MARK_DEFECT_BLOCKS
-            status_value = check.get("status")
-            if status_value == "fail":
-                add_finding(findings, f"GC-G5-{check_id}", "G5", MUST_FIX if legal else ADVISORY, check.get("title", "Brand or formatting defect"), check.get("detail", "Brand check failed"), location, "quality-gate-criteria.md #5.1-#5.2", check.get("confidence", 0.9), check.get("citation", "quality-gate-criteria.md #5.1-#5.2"))
-            elif status_value not in BRAND_CHECK_STATUSES:
-                severity = RELEASE_BLOCKER if legal else MUST_FIX
-                add_finding(findings, f"GC-G5-{check_id}", "G5", severity, "Brand or release-control check not verified", f"Brand check {check_id} has status {safe_token(status_value, 'blank/unrecognised') if status_value else 'blank/missing'}; only pass or fail are recognised, so the check is treated as not verified{' for a legal, confidentiality or release-control mark' if legal else ''}.", location, "quality-gate-criteria.md #5.2-#5.3", 0.95, "quality-gate-criteria.md #5.2-#5.3")
-                escalations.append(f"G5: brand check {check_id} status is not pass or fail - {severity}; hold for reviewing partner/QRM (quality-gate-criteria.md #5.3)")
-        for index, item in enumerate(licensed_content):
-            content_id = safe_token(item["content_id"], f"licensed-content-{index + 1}")
-            license_known = item.get("license_status") == LICENSE_STATUS_KNOWN
-            if LICENSED_ATTRIBUTION_REQUIRED and item["attribution_present"] is not True:
-                severity = MUST_FIX if license_known else RELEASE_BLOCKER
-                add_finding(findings, f"GC-G6-{content_id}", "G6", severity, "Licensed content lacks attribution", item.get("detail", "Third-party content requires attribution."), entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.2", item.get("confidence", 0.93), item.get("citation", "quality-gate-criteria.md #6.1-#6.2"))
-                if not license_known:
-                    escalations.append(f"G6: unattributed licensed content {content_id} with license_status not known (unknown, blank or unrecognised) - release blocker; hold for reviewing partner/QRM (quality-gate-criteria.md #6.2-#6.3)")
-        for index, prior in enumerate(prior_findings):
-            if prior["claimed_closed"] is True and prior["document_fix_present"] is not True and PRIOR_FIX_MUST_LAND:
-                prior_id = safe_token(prior["finding_id"], f"prior-finding-{index + 1}")
-                add_finding(findings, f"GC-G7-{prior_id}", "G7", MUST_FIX, "Prior finding marked closed but fix is absent", prior.get("detail", "Tracker closure is not supported by the current document."), entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2", prior.get("confidence", 0.96), prior.get("citation", "quality-gate-criteria.md #7.1-#7.2"))
-        for index, assertion in enumerate(payload["assertions"]):
-            if assertion["scope_aligned"] is not True:
-                assertion_id = safe_token(assertion["assertion_id"], f"assertion-{index + 1}")
-                add_finding(findings, f"GC-G3-scope-{assertion_id}", "G3", RELEASE_BLOCKER, "Claim or recommendation falls outside signed scope", "Assertion is marked scope_aligned=false; claims and recommendations must stay inside the signed statement of work and documented evidence set.", assertion["location"], "quality-gate-criteria.md #3.1", assertion.get("confidence", 0.9), f"{assertion['citation']}; quality-gate-criteria.md #3.1; severity-rules.md #1.1")
-        verified_am = {item["finding_id"] for item in findings if item["finding_id"].startswith("AM-")}
-        for mapping in payload["assertion_mappings"]:
-            if mapping["support_status"] in {"unsupported", "limited"} and "#3.2" in mapping["criteria_section"]:
-                # Only an AM finding that matched engine recomputation may stand in for the G3 limitation finding.
-                if f"AM-{mapping['assertion_id']}" in verified_am:
-                    continue
-                add_finding(findings, f"GC-G3-{safe_token(mapping['assertion_id'], 'assertion')}", "G3", MUST_FIX, "Scope or sample limitation missing at point of recommendation", mapping.get("rationale", "Recommendation requires limitation."), mapping["location"], "quality-gate-criteria.md #3.2", mapping.get("confidence", 0.8), mapping.get("citation", "quality-gate-criteria.md #3.2"))
-        if EMBEDDED_INSTRUCTION_HOLD:
-            hits = instruction_hits(payload)
-            for hit_index, (path, hit_reason) in enumerate(hits[:MAX_G8_HITS], start=1):
-                if hit_reason == OVERSIZE:
-                    add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Field too long to screen for embedded instructions", f"Untrusted field {path} is too long to screen for embedded instructions (over {sg.MAX_TOTAL_CHARS:,} characters, raw or after Unicode normalisation), so it was not screened; it must be held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.6", 0.99, "quality-gate-criteria.md #8.1, #8.6; severity-rules.md #1.1")
-                    escalations.append(f"G8: {path} is too long to screen for embedded instructions - hold for reviewing partner/QRM (quality-gate-criteria.md #8.6)")
-                    continue
-                add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Embedded instruction or forwarding request found in deliverable data", f"Untrusted field {path} contains instruction-like, forwarding or look-alike-character text; it must be treated as data and held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.1-#8.3", 0.99, "quality-gate-criteria.md #8.1-#8.3; severity-rules.md #1.1")
-                escalations.append(f"G8: embedded-instruction tripwire in {path} - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")
-            if len(hits) > MAX_G8_HITS:
-                escalations.append(f"G8: {len(hits) - MAX_G8_HITS} further embedded-instruction hit(s) not listed individually - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")
-        gate_results = []
-        for gate_id, name in GATES.items():
-            highest = highest_for_gate(findings, gate_id)
-            status = "no_engine_findings" if highest == "none" else "blocked" if highest == RELEASE_BLOCKER else "attention_required"
-            gate_results.append({"gate_id": gate_id, "name": name, "status": status, "highest_severity": highest, "finding_count": sum(1 for item in findings if item.get("gate_id") == gate_id), "confidence": 0.95, "source": ENGINE, "citation": f"quality-gate-criteria.md #{gate_id[1]}"})
-        provenance = payload.setdefault("provenance", {})
-        if not isinstance(provenance, dict):
-            raise InputError("provenance must be an object when present")
-        # Upstream text that tripped G8 above is held by its finding; it is withheld from the output so severity_rank
-        # and the review packet never carry it forward (quality-gate-criteria.md #8.7).
-        primary, primary_tripped = primary_strings(payload)
-        withheld = []
-        findings, escalations, provenance = (withhold_derived(section, f"$.{name}", primary, primary_tripped, withheld) for name, section in (("findings", findings), ("escalations", escalations), ("provenance", provenance)))
-        payload["findings"], payload["gate_results"], payload["escalations"], payload["provenance"] = findings, gate_results, escalations, provenance
+        payload = evaluate(load_json(args.mapped))
+        findings, gate_results = payload["findings"], payload["gate_results"]
+        provenance = payload["provenance"]
         if generated_at:
             provenance["generated_at"] = generated_at
         provenance.setdefault("engines", []).append(f"gate_check/{ENGINE_VERSION}")
-        with open(args.out, "w", encoding="utf-8", newline="\n") as handle:
-            json.dump(payload, handle, indent=2, ensure_ascii=False)
-            handle.write("\n")
+        rules.write_json_atomic(args.out, payload)
         blockers = sum(1 for item in findings if item["severity"] == RELEASE_BLOCKER)
         must_fix = sum(1 for item in findings if item["severity"] == MUST_FIX)
         advisory = sum(1 for item in findings if item["severity"] == ADVISORY)
