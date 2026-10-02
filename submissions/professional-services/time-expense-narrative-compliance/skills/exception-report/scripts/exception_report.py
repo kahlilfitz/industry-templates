@@ -99,12 +99,17 @@ def main():
         data = deepcopy(load_governed(args.governed))
         signal_policy.enforce_timekeeper_scope(data, engine=ENGINE, strict=True)
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        problems, rerun = billing_rules.reconcile_governed(data, script_dir=script_dir, engine=ENGINE)
+        # The report's effective signal policy is applied inside the re-run, before anything is compared or
+        # rendered, so filtering, govern() and rendering all use the same configuration.
+        problems, rerun = billing_rules.reconcile_governed(data, script_dir=script_dir, engine=ENGINE,
+                                                           config_path=args.signal_config)
         if problems:
             raise InputError(
                 f"governed data does not match a re-run of the guideline-check rules ({billing_rules.RECONCILE_CITATION}): "
                 + "; ".join(problems[:6]) + (f"; and {len(problems) - 6} more" if len(problems) > 6 else "")
-                + ". No packet was written; re-run guideline_check.py on the coded data")
+                + (". No packet was written; re-run narrative_draft.py, code_map.py and guideline_check.py with the "
+                   "same --signal-config" if args.signal_config else
+                   ". No packet was written; re-run guideline_check.py on the coded data"))
         signal_policy.filter_packet(data, config_path=args.signal_config,
                                     script_dir=script_dir, engine=ENGINE)
     except (InputError, signal_policy.PolicyError) as exc:

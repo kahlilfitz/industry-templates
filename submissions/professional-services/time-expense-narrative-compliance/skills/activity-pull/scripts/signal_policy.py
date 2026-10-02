@@ -744,6 +744,22 @@ def _tripping_fields(fields):
     return bad | pairs
 
 
+def _context_trips(fields, context):
+    """Undeclared fields to withhold because they trip with a covered member's string (an instruction split between
+    a covered array such as citations and an undeclared sibling): each ordered pair, then the whole join. More
+    strings than PAIR_LIMIT is a hold on every field (fail closed)."""
+    context = [t for t in context if isinstance(t, str) and t.strip()]
+    if not fields or not context:
+        return set()
+    if len(fields) + len(context) > PAIR_LIMIT:
+        return set(fields)
+    bad = {k for k, t in fields.items() for c in context
+           if _scan_record({"a": c, "b": t}) or _scan_record({"a": t, "b": c})}
+    if not bad and _scan_record({**{f"c{i}": c for i, c in enumerate(context)}, **fields}):
+        bad = set(fields)
+    return bad
+
+
 class _Sweep:
     def __init__(self, root):
         self.root = root
@@ -778,6 +794,7 @@ class _Sweep:
         siblings = None
         rebuilt, swept, changed, used = [], {}, False, set(obj)
         undeclared = {}  # record field name -> undeclared member key, for the whole-object screen below
+        context = []  # strings of covered members (#11.3): paired with the undeclared members below
         for key, item in obj.items():
             if key not in props and not isinstance(extra, dict):
                 # A member the contract does not define: its name and content are screened as one record and with
@@ -804,6 +821,9 @@ class _Sweep:
                 key, changed = self.marker(used), True
             resolved = contract_check._resolve(sub, self.root) if isinstance(sub, dict) else {}
             covered = cover == COVERED_ALL or key in cover
+            if covered:
+                # Screened elsewhere on its own, but never with this object's undeclared members: kept as context.
+                context += [t for t in _member_texts("", item) if t not in ENGINE_LABELS]
             if isinstance(item, str):
                 if not covered and not _closed(resolved) and item.strip() and item not in ENGINE_LABELS:
                     swept[key] = item
@@ -811,6 +831,7 @@ class _Sweep:
                 self.walk(item, resolved, path + (key,), covered)
             rebuilt.append((key, item))
         bad = _tripping_fields(swept) if swept else set()
+        bad |= _context_trips({k: swept[k] for k in undeclared if k not in bad}, context)
         if bad:
             self.hold(path)
             members = {undeclared[k] for k in bad if k in undeclared}
@@ -1135,18 +1156,30 @@ def check_unique_ids(packet):
              ("provenance.excluded_signals", provenance.get("excluded_signals") or [], "activity_id"),
              ("provenance.excluded_entries", provenance.get("excluded_entries") or [], "entry_id"))
     for where, records, key in lists:
-        # Withheld excluded-signal IDs (#11.3) are all the same marker and are never used as an index key.
-        exempt = WITHHELD_TEXT if where == "provenance.excluded_signals" else None
+        # Withheld excluded IDs (#11.3) are all the same marker and are never used as an index key.
+        exempt = WITHHELD_TEXT if where.startswith("provenance.") else None
         repeat = _first_repeat([object() if exempt and r.get(key) == exempt else r.get(key) for r in records])
         if repeat:
             raise SchemaError(f"invalid input: {where}[{repeat[1]}].{key} repeats {where}[{repeat[0]}].{key}; "
                               "duplicate IDs are malformed (one record would silently replace the other)")
+    # A record is active or excluded, never both: an active record listed as excluded would be rendered while the
+    # report says it was excluded (or the exclusion would be silently ignored).
+    for (active, records, key), (excluded, dropped, _) in ((lists[0], lists[2]), (lists[1], lists[3])):
+        gone = {r.get(key): j for j, r in enumerate(dropped) if r.get(key) != WITHHELD_TEXT}
+        for i, record in enumerate(records):
+            if record.get(key) in gone:
+                raise SchemaError(f"invalid input: {active}[{i}].{key} is also listed in {excluded}"
+                                  f"[{gone[record.get(key)]}]; a record is either active or excluded, never both")
     for i, entry in enumerate(packet.get("time_entries") or []):
         for key in ("activity_ids", "excluded_activity_ids"):
             repeat = _first_repeat(entry.get(key) or [])
             if repeat:
                 raise SchemaError(f"invalid input: time_entries[{i}].{key}[{repeat[1]}] repeats "
                                   f"time_entries[{i}].{key}[{repeat[0]}]; a link is listed once")
+        both = [j for j, a in enumerate(entry.get("activity_ids") or []) if a in (entry.get("excluded_activity_ids") or [])]
+        if both:
+            raise SchemaError(f"invalid input: time_entries[{i}].activity_ids[{both[0]}] is also in "
+                              f"time_entries[{i}].excluded_activity_ids; a link is either active or excluded")
 
 
 def validate_packet(packet, stage):

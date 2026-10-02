@@ -581,7 +581,7 @@ def rendered_flags(recorded, rederived):
     return out
 
 
-def reconcile_governed(packet, script_dir=None, engine="engine:unknown"):
+def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_path=None):
     """Re-run govern() on a copy of governed data; return (problems, rerun). No problems = consistent (#13.2).
 
     - Entries: the recorded verdict may never be less severe than the re-run's, and every re-run
@@ -594,10 +594,14 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown"):
     - Exclusions: provenance.excluded_signals must cover every entry's excluded links, list no signal still
       present, be unchanged when the signal policy is re-applied, and carry only the engines' own reason and
       citation wording (signal_policy.exclusion_texts); provenance.excluded_entries only the #13.3 citation.
+    - Signal policy: the re-run applies the same effective policy the report uses (config_path, the report's
+      --signal-config), so a narrower report-time policy that excludes evidence an entry was governed on is a
+      mismatch, never a compliant entry rendered from excluded evidence.
+    - Records: no time entry is both active and listed in provenance.excluded_entries.
     Messages name fields, positions, verdicts and the re-run's flag names only; never supplied text.
     """
     rerun = deepcopy(packet)
-    signal_policy.filter_packet(rerun, script_dir=script_dir, engine=engine)
+    signal_policy.filter_packet(rerun, config_path=config_path, script_dir=script_dir, engine=engine)
     govern(rerun)
     problems = []
     rank = SEVERITY_ORDER
@@ -640,6 +644,9 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown"):
     present = {a.get("activity_id") for a in packet["activity_signals"]}
     if present & set(ids):
         problems.append("provenance.excluded_signals lists signal(s) still present in activity_signals")
+    dropped = {e.get("entry_id") for e in (packet.get("provenance") or {}).get("excluded_entries", [])}
+    if (dropped - {signal_policy.WITHHELD_TEXT}) & {e.get("entry_id") for e in supplied}:
+        problems.append("provenance.excluded_entries lists time entr(ies) still present in time_entries")
     for i, entry in enumerate(supplied):
         if set(entry.get("excluded_activity_ids") or []) - set(ids):
             problems.append(f"time_entries[{i}].excluded_activity_ids are not recorded in provenance.excluded_signals")

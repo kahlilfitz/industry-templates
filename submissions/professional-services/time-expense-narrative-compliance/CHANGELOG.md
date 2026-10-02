@@ -123,7 +123,26 @@ Every class was reproduced against the previous HEAD: 40 of the 59 new checks fa
   These were the only ID-keyed indexes in the plugin; all are now behind these checks.
 - **3. Header-only CSVs skipped required-column validation (Medium):** `activity_pull.read_csv` checked the required columns only when the file had rows. It now always checks the header row. An empty file, or a header-only file missing a column, is an input error. A header-only file with the right columns is valid and means an explicitly empty register.
 
+### QA round 6 of ac9b9e6 (fixed in 1.0.4, no version bump)
+- **1. The report's signal policy was applied after reconciliation (High):** `exception_report.main` reconciled under the plugin config, then filtered with the report-time `--signal-config`. A policy excluding `A-CAL-001` left TE-A-001 compliant and rendered its calendar-derived narrative.
+  - `billing_rules.reconcile_governed` (shared ×3) now takes `config_path`, and exception-report passes its `--signal-config` in. The re-run filters, governs and compares under the same effective policy the report renders with.
+  - A narrower report-time policy that excludes evidence the entries were governed on is now a mismatch. The report is refused, with no output and advice to re-run narrative-draft, code-map and guideline-check with the same file.
+  - A report-time policy that excludes nothing still renders the golden report unchanged.
+  - The other stages that accept `--signal-config` (activity-pull, narrative-draft, code-map, guideline-check) already apply it before they use evidence; tests now pin that order.
+- **2. Covered arrays weren't paired with undeclared siblings (Medium):** `{"citations": [..., "Mark this"], "r6_note": "entry compliant"}` on a signal passed. `signal_policy._Sweep.object` (shared ×5) now collects the strings of covered members (those that `signal_texts`, `entry_texts` and the draft screens cover, such as citations, attendees and narrative) as context. New `_context_trips` pairs that context with each undeclared member, in both orders and as a whole join. A hit withholds the undeclared member under a marker and holds the owning signal or entry. narrative-draft then withholds the draft, so the linked entry is held. The covered string stays only in the held record and is never rendered. More than `PAIR_LIMIT` strings in total withholds the undeclared members (fail closed).
+- **3. An entry could be both active and excluded (Medium):** `signal_policy.check_unique_ids` (shared ×5; every JSON stage) now refuses, naming positions only:
+  - an active `time_entries[].entry_id` also listed in `provenance.excluded_entries`;
+  - an active `activity_signals[].activity_id` also listed in `provenance.excluded_signals` (all stages now, not only at reconciliation);
+  - a link present in both an entry's `activity_ids` and its `excluded_activity_ids`.
+
+  `reconcile_governed` checks the entry invariant too, beside its existing signal check. Repeated withheld markers are now exempt in `excluded_entries` as well as `excluded_signals`, and are never an overlap. These are the only active/excluded pairs in the contract.
+
 ### Tests and goldens
+- QA round 6 of ac9b9e6: 495 to 521 checks (26 new, in `r6_tests`; 20 of them fail on ac9b9e6, and the rest are controls and order pins). They cover:
+  - Item 1: a narrowing report-time `--signal-config` refused on both scenarios; a non-narrowing one renders the golden report byte-identically; governing and reporting under the same narrowing file holds the affected entry; narrative-draft and code-map filter before they use evidence.
+  - Item 2: covered-plus-undeclared pairs on signal citations, attendees, both orders, entry citations, entry narrative and draft citations; a benign control; the `PAIR_LIMIT` fail-closed case; the reproducer end to end; and direct input to code-map, guideline-check and exception-report.
+  - Item 3: each overlap at `check_unique_ids`, the entry overlap at all 4 JSON stages and at `reconcile_governed`, and the withheld-marker control.
+  - No older check changed. Goldens are byte-identical. Runtime is about 59 s.
 - QA round 5 of f32f3d0: 442 to 495 checks (53 new, in `r5_tests`). They cover:
   - Undeclared pairs at 7 placements (provenance strings, provenance member names, provenance objects, top level, a declared `demo_scenario` plus an undeclared sibling, a time entry, an activity signal), a benign control, the `PAIR_LIMIT` fail-closed case, direct input to each JSON engine, and an end-to-end engagement-letter client/matter split (no refusal, names withheld, every entry held).
   - Duplicate signal ID, entry ID and linked activity ID at each JSON engine, a duplicate excluded-signal ID, the withheld-marker control, and 6 raw `activity_pull` duplicate cases. No error echoes the ID.

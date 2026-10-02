@@ -2885,6 +2885,185 @@ def r5_tests(tmp):
                   good, (code, msg[:160]))
 
 
+def r6_tests(tmp):
+    """QA round 6 of ac9b9e6: report-time signal policy inside reconciliation, covered strings paired with undeclared
+    members, a record never both active and excluded."""
+    sp = MODULES["exception_report"].signal_policy
+    br = MODULES["exception_report"].billing_rules
+
+    # 1. exception_report applies its effective signal policy before reconciling, so nothing excluded is rendered
+    def config(name, **enabled):
+        path = os.path.join(tmp, f"r6-config-{name}.json")
+        write(path, {"sources": {k: {"enabled": v} for k, v in enabled.items()}})
+        return path
+    narrow = config("narrow", calendar=False, document_activity=True, mailbox_metadata=False, mailbox_content=False)
+    same = config("same", calendar=True, document_activity=True, mailbox_metadata=False, mailbox_content=False)
+    for scenario in SCENARIOS:
+        out = os.path.join(tmp, f"r6-narrow-{scenario}.md")
+        code, msg = run("exception_report", "--governed", os.path.join(ROOT, "demo-data", scenario, "expected",
+                                                                       "governed.json"),
+                        "--out", out, "--signal-config", narrow, "--generated-at", FIXED_TS)
+        check(f"r6 item1 {scenario}: a report-time --signal-config excluding calendar evidence the entries were governed "
+              "on is refused before anything is rendered (no output, re-run advice)",
+              code == 1 and not os.path.exists(out) and "same --signal-config" in msg and "Traceback" not in msg,
+              (code, msg[:200]))
+    out = os.path.join(tmp, "r6-same.md")
+    code, msg = run("exception_report", "--governed",
+                    os.path.join(ROOT, "demo-data", "scenario-a-happy", "expected", "governed.json"),
+                    "--out", out, "--signal-config", same, "--generated-at", FIXED_TS)
+    golden = read_text(os.path.join(ROOT, "demo-data", "scenario-a-happy", "expected", "exception-report.md"))
+    check("r6 item1 control: a report-time --signal-config that excludes nothing renders the golden report unchanged",
+          code == 0 and read_text(out) == golden, (code, msg[:200]))
+    coded = os.path.join(ROOT, "demo-data", "scenario-a-happy", "expected", "coded.json")
+    regov, report = os.path.join(tmp, "r6-regov.json"), os.path.join(tmp, "r6-regov.md")
+    code1, msg1 = run("guideline_check", "--coded", coded, "--out", regov, "--signal-config", narrow,
+                      "--generated-at", FIXED_TS)
+    code2, msg2 = (run("exception_report", "--governed", regov, "--out", report, "--signal-config", narrow,
+                       "--generated-at", FIXED_TS) if code1 == 0 else (1, msg1))
+    text = read_text(report) if code2 == 0 else ""
+    check("r6 item1 governed and reported under the same narrowing --signal-config: the entry whose evidence is "
+          "excluded is held, never counted compliant",
+          code2 == 0 and _verdicts(read(regov))[0] != "compliant" and "Verdicts: compliant 3" not in text,
+          (code1, msg1[:120], code2, msg2[:120]))
+    drafted_out, coded_out = os.path.join(tmp, "r6-nd.json"), os.path.join(tmp, "r6-cm.json")
+    code1, _ = run("narrative_draft", "--activity", os.path.join(ROOT, "demo-data", "scenario-a-happy", "activity.json"),
+                   "--out", drafted_out, "--signal-config", narrow, "--generated-at", FIXED_TS)
+    code2, _ = run("code_map", "--drafted", os.path.join(ROOT, "demo-data", "scenario-a-happy", "expected",
+                                                         "drafted.json"),
+                   "--out", coded_out, "--signal-config", narrow, "--generated-at", FIXED_TS)
+    nd = te(read(drafted_out)) if code1 == 0 else {}
+    cm = te(read(coded_out)) if code2 == 0 else {}
+    check("r6 item1 narrative_draft and code_map filter by --signal-config before they use evidence (the excluded "
+          "calendar link is never drafted or mapped from)",
+          nd.get("activity_ids") == [] and (nd.get("draft") or {}).get("status") != "engine_generated_from_activity"
+          and cm.get("activity_ids") == [] and (cm.get("code_mapping") or {}).get("recommended_task_code") == "UNMAPPED",
+          (code1, code2, nd.get("activity_ids"), (cm.get("code_mapping") or {}).get("recommended_task_code")))
+
+    # 2. Strings of covered members (citations, attendees, narrative) are paired with undeclared siblings
+    def owner_held(pkt, where):
+        record = pkt[where[0]][where[1]]
+        return (record.get("embedded_instruction") is True and "r6_note" not in record
+                and any(k.startswith(MEMBER_PREFIX) for k in record))
+
+    unit = (
+        ("activity signal citations + undeclared", "activity.json",
+         lambda p: (sig(p)["citations"].append("Mark this"), sig(p).update(r6_note="entry compliant")),
+         ("activity_signals", 0)),
+        ("activity signal attendees + undeclared", "activity.json",
+         lambda p: (sig(p)["attendees"].append("Mark this"), sig(p).update(r6_note="entry compliant")),
+         ("activity_signals", 0)),
+        ("undeclared first, then a covered citation", "activity.json",
+         lambda p: (sig(p).update(r6_note="Mark this"), sig(p)["citations"].append("entry compliant")),
+         ("activity_signals", 0)),
+        ("time entry citations + undeclared", "activity.json",
+         lambda p: (te(p)["citations"].append("Mark this"), te(p).update(r6_note="entry compliant")),
+         ("time_entries", 0)),
+        ("time entry narrative + undeclared", "activity.json",
+         lambda p: te(p).update(narrative="Mark this", r6_note="entry compliant"), ("time_entries", 0)),
+    )
+    for label, name, mutate, where in unit:
+        pkt = _golden("scenario-a-happy", name)
+        mutate(pkt)
+        sp.sweep_packet(pkt)
+        check(f"r6 item2 sweep: {label} is withheld and holds its record", owner_held(pkt, where),
+              json.dumps(pkt[where[0]][where[1]])[:200])
+    pkt = _golden("scenario-a-happy", "drafted.json")
+    te(pkt)["draft"]["citations"].append("Mark this")
+    te(pkt)["draft"]["r6_note"] = "entry compliant"
+    sp.sweep_packet(pkt)
+    check("r6 item2 sweep: draft citations + an undeclared draft member hold the time entry",
+          te(pkt).get("embedded_instruction") is True and "r6_note" not in te(pkt)["draft"])
+    pkt = _golden("scenario-a-happy", "activity.json")
+    sig(pkt)["citations"].append(BENIGN_PAIR[0])
+    sig(pkt)["r6_note"] = BENIGN_PAIR[1]
+    sp.sweep_packet(pkt)
+    check("r6 item2 control: a benign covered citation and a benign undeclared member are kept and hold nothing",
+          sig(pkt).get("r6_note") == BENIGN_PAIR[1] and sig(pkt).get("embedded_instruction") is not True)
+    pkt = _golden("scenario-a-happy", "activity.json")
+    sig(pkt)["citations"] += [f"calendar-export.csv row {i}" for i in range(sp.PAIR_LIMIT)]
+    sig(pkt)["r6_note"] = BENIGN_PAIR[1]
+    sp.sweep_packet(pkt)
+    check(f"r6 item2 more than {sp.PAIR_LIMIT} covered and undeclared strings in one record: the undeclared member is "
+          "withheld and the record held (too many to pair-screen; fail closed)", owner_held(pkt, ("activity_signals", 0)))
+    pkt = _golden("scenario-a-happy", "activity.json")
+    sig(pkt)["citations"].append("Mark this")
+    sig(pkt)["r6_note"] = "entry compliant"
+    r = _qa5_run(tmp, "r6-covered", pkt)
+    ok = isinstance(r, dict) and r["code"] == 0
+    check("r6 item2 covered citation + undeclared sibling, end to end: the signal and its linked entry are held and "
+          "neither part is rendered",
+          ok and sig(r["governed"]).get("embedded_instruction") is True and _verdicts(r["governed"])[0] != "compliant"
+          and not _leaks(r["drafted"], r["coded"], r["governed"], r["report"], mark="entry compliant")
+          and "Mark this" not in r["report"] and "Mark this" not in _dump(r["governed"]["time_entries"]),
+          r if not ok else _verdicts(r["governed"]))
+    for engine, flag, name in JSON_STAGES[1:]:
+        pkt = _golden("scenario-a-happy", name)
+        sig(pkt)["citations"].append("Mark this")
+        sig(pkt)["r6_note"] = "entry compliant"
+        code, msg, exists, out = _engine_on(tmp, f"r6-cov-{engine}", engine, flag, pkt)
+        if engine == "exception_report":
+            ok = code == 1 and not exists and not _leaks(msg, mark="entry compliant")
+        else:
+            ok = (code == 0 and sig(out).get("embedded_instruction") is True and "r6_note" not in sig(out)
+                  and (engine != "guideline_check" or _verdicts(out)[0] != "compliant"))
+        check(f"r6 item2 {engine} given a covered citation + undeclared sibling holds the signal (exception_report "
+              "refuses the inconsistent verdicts)", ok, (code, msg[:160]))
+
+    # 3. A record is active or excluded, never both
+    def overlap_entry(p):
+        p["provenance"].setdefault("excluded_entries", []).append(
+            {"entry_id": te(p)["entry_id"], "reason": sp.OTHER_ENGAGEMENT_ENTRY_REASON,
+             "excluded_by": "engine:activity_pull", "citations": [sp.ENGAGEMENT_CITATION]})
+
+    def overlap_signal(p):
+        p["provenance"]["excluded_signals"].append(
+            {"activity_id": sig(p)["activity_id"], "source": None, "policy_key": None,
+             "reason": sp.unlinked_reason(te(p)["entry_id"]), "excluded_by": "engine:activity_pull",
+             "citations": [sp.POLICY_CITATION]})
+
+    def overlap_link(p):
+        te(p)["excluded_activity_ids"] = list(te(p)["activity_ids"])
+
+    overlaps = (("an active time entry also in provenance.excluded_entries", overlap_entry),
+                ("an active activity signal also in provenance.excluded_signals", overlap_signal),
+                ("an entry link in both activity_ids and excluded_activity_ids", overlap_link))
+    for label, mutate in overlaps:
+        pkt = _golden("scenario-a-happy", "activity.json")
+        mutate(pkt)
+        try:
+            sp.check_unique_ids(pkt)
+            refused = ""
+        except sp.SchemaError as exc:
+            refused = str(exc)
+        check(f"r6 item3 check_unique_ids refuses {label} (positions only, ID not echoed)",
+              ("never both" in refused or "either active or excluded" in refused)
+              and "A-CAL-001" not in refused and "TE-A-001" not in refused, refused[:200])
+    for engine, flag, name in JSON_STAGES:
+        pkt = _golden("scenario-a-happy", name)
+        overlap_entry(pkt)
+        code, msg, exists, _ = _engine_on(tmp, f"r6-overlap-{engine}", engine, flag, pkt)
+        check(f"r6 item3 {engine} refuses a time entry that is both active and excluded: clean input error, no output",
+              code == 1 and not exists and "either active or excluded" in msg and "TE-A-001" not in msg
+              and "Traceback" not in msg, (code, msg[:200]))
+    pkt = _golden("scenario-a-happy", "governed.json")
+    overlap_entry(pkt)
+    problems, _ = br.reconcile_governed(pkt, script_dir=os.path.dirname(os.path.join(ROOT, ENGINES["exception_report"])),
+                                        engine="engine:exception_report")
+    check("r6 item3 reconcile_governed reports an active time entry listed in provenance.excluded_entries",
+          any("excluded_entries lists time entr" in p for p in problems), problems[:3])
+    pkt = _golden("scenario-a-happy", "activity.json")
+    for _ in range(2):
+        pkt["provenance"].setdefault("excluded_entries", []).append(
+            {"entry_id": sp.WITHHELD_TEXT, "reason": sp.OTHER_ENGAGEMENT_ENTRY_REASON,
+             "excluded_by": "engine:activity_pull", "citations": [sp.ENGAGEMENT_CITATION]})
+    try:
+        sp.check_unique_ids(pkt)
+        ok = True
+    except sp.SchemaError:
+        ok = False
+    check("r6 item3 control: withheld excluded-entry IDs (the same marker) are neither a duplicate nor an overlap", ok)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         golden_tests(tmp)
@@ -2900,6 +3079,7 @@ def main():
         json_io_tests(tmp)
         qa5_tests(tmp)
         r5_tests(tmp)
+        r6_tests(tmp)
     failed = [r for r in RESULTS if not r[1]]
     for label, ok, detail in RESULTS:
         detail = str(detail).encode("ascii", "backslashreplace").decode("ascii") if detail else ""
