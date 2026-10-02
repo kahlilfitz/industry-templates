@@ -153,7 +153,7 @@
     },
     "ranked_findings": { "type": "array", "items": { "type": "object" } },
     "release_readiness": { "type": "object" },
-    "escalations": { "type": "array", "items": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object" }] }, "description": "Required by severity_rank; absent or non-array is an input error. Every escalation is a hold: escalations without any finding give not_ready_for_release, never partner_review_required_no_engine_findings (severity-rules.md #3.3)." },
+    "escalations": { "type": "array", "items": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object" }] }, "description": "Required by severity_rank; absent or non-array is an input error. Escalations without any finding give not_ready_for_release, never partner_review_required_no_engine_findings. With findings, the verdict follows the highest finding severity, each escalation still needs partner/QRM confirmation before release, and the summary states the escalation count (severity-rules.md #3.3)." },
     "provenance": { "type": "object" }
   },
   "definitions": {

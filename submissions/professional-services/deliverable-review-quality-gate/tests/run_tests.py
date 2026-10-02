@@ -1077,6 +1077,17 @@ def qa104_tests(tmp):
     check("Q3 no findings and no escalations is still the no-engine-findings verdict",
           code == 0 and status(ranked) == "partner_review_required_no_engine_findings")
 
+    for label, severity, expected_status in (("advisory", "advisory", "partner_review_required_advisories_only"),
+                                             ("must-fix", "must_fix", "partner_review_required_must_fix")):
+        packet = copy.deepcopy(gated_a)
+        packet["findings"] = [dict(gated_a["findings"][0], severity=severity, confidence=0.95)]
+        packet["escalations"] = ["G1: reviewer must confirm the appendix footer source (severity-rules.md #2.1)"]
+        code, ranked, _ = rank(packet, f"qa3-{label}-escalation")
+        summary = ranked["release_readiness"]["summary"] if ranked else ""
+        check(f"Q3 {label} plus an escalation keeps the {expected_status} verdict and the summary states the escalation",
+              code == 0 and status(ranked) == expected_status
+              and "1 escalation needs partner/QRM confirmation before release." in summary, summary)
+
     # Item 4: findings and escalations are required arrays.
     for label, mutate, expected in (
             ("findings absent", lambda p: p.pop("findings"), "missing required array: findings"),

@@ -721,7 +721,7 @@
     "release_blockers": 6,
     "must_fix": 3,
     "advisories": 0,
-    "summary": "6 release blocker(s) require reviewing-partner/QRM judgement before any client issue. Blockers cannot be auto-downgraded.",
+    "summary": "6 release blocker(s) require reviewing-partner/QRM judgement before any client issue. Blockers cannot be auto-downgraded. 5 escalations need partner/QRM confirmation before release.",
     "confidence": 0.96,
     "source": "engine:severity_rank",
     "citation": "severity-rules.md #3.1-#3.3; severity-rules.md #4.1-#4.2"

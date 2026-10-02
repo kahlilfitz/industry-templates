@@ -166,6 +166,10 @@ def main():
         else:
             status = STATUS_CLEAN
             summary = "No engine findings; partner/QRM judgement still required."
+        if escalations and (blockers or must_fix or advisories):
+            # The verdict follows the highest finding severity; the summary must still surface every escalation.
+            count = len(escalations)
+            summary += f" {count} escalation{' needs' if count == 1 else 's need'} partner/QRM confirmation before release."
         payload["ranked_findings"] = ranked
         payload["release_readiness"] = {"status": status, "release_blockers": blockers, "must_fix": must_fix, "advisories": advisories, "summary": summary, "confidence": 0.96, "source": ENGINE, "citation": "severity-rules.md #3.1-#3.3; severity-rules.md #4.1-#4.2"}
         provenance = payload.setdefault("provenance", {})
