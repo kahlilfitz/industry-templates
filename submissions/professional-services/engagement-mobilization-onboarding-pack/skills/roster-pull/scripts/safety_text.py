@@ -1,4 +1,4 @@
-import csv, functools, hashlib, json, math, os, re, tempfile, unicodedata
+import csv, functools, hashlib, json, math, os, re, shutil, tempfile, unicodedata
 import contract_validate as _cv
 from datetime import datetime
 CONTRACT_VERSION = "ps.engagement-mobilization-onboarding-pack.v1"
@@ -33,20 +33,49 @@ def json_bytes(p, o):
     return _encode(t, p)
 def text_bytes(p, t): return _encode(t if t.endswith("\n") else t + "\n", p)
 def write_atomic(items):
-    """Write [(path, bytes)] outputs serialised in full beforehand: each goes to a temp file in its own folder and all
-    are moved into place with os.replace only after every temp file is written, so on any error no output path is
-    created or truncated and no temp file is left behind (#1.3)."""
-    tmps = []
+    """Write [(path, bytes)] outputs, already serialised in full, all-or-nothing (#1.3):
+    1. check every destination first (not a directory, parent folder exists, no duplicates);
+    2. write every temp file in its destination's folder;
+    3. back up each existing destination, then replace each in turn;
+    4. on any failure restore every backup and remove every newly created file.
+    Temp files and backups are always removed, so a failed run never creates, truncates or half-updates an output."""
+    seen = set()
+    for p, _ in items:
+        full = os.path.abspath(p)
+        if os.path.isdir(full): raise InputError(f"output path {p} is a directory; nothing written; fail closed")
+        if not os.path.isdir(os.path.dirname(full)): raise InputError(f"output folder for {p} does not exist; nothing written; fail closed")
+        key = os.path.normcase(os.path.realpath(full))
+        if key in seen: raise InputError(f"output path {p} is given twice; nothing written; fail closed")
+        seen.add(key)
+    def scratch(p, suffix):
+        return tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(p)), prefix="." + os.path.basename(p) + ".", suffix=suffix)
+    tmps, backups, replaced = [], {}, []
     try:
         for p, b in items:
-            fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(p)), prefix="." + os.path.basename(p) + ".", suffix=".tmp"); tmps.append(tmp)
+            fd, tmp = scratch(p, ".tmp"); tmps.append(tmp)
             with os.fdopen(fd, "wb") as f: f.write(b)
             os.chmod(tmp, 0o666 & ~_UMASK)
-        for (p, _), tmp in zip(items, tmps): os.replace(tmp, p)
-    except OSError as e: raise InputError(f"cannot write output ({type(e).__name__}); nothing written; fail closed") from e
+        for p, _ in items:
+            if os.path.exists(p):
+                fd, bak = scratch(p, ".bak"); os.close(fd); backups[p] = bak
+                shutil.copy2(p, bak)
+        for (p, _), tmp in zip(items, tmps):
+            os.replace(tmp, p); replaced.append(p)
+    except BaseException as e:
+        kept = []
+        for p in reversed(replaced):  # roll back: restore what was there, remove what was not
+            try:
+                if p in backups: os.replace(backups[p], p); del backups[p]
+                else: os.remove(p)
+            except OSError: kept.append(backups.pop(p, p))  # never delete the only copy of a previous output
+        if kept: raise InputError(f"cannot write output ({type(e).__name__}) and rollback failed; previous output kept at {', '.join(kept)}; fail closed") from e
+        if isinstance(e, OSError): raise InputError(f"cannot write output ({type(e).__name__}); nothing written; fail closed") from e
+        raise
     finally:
-        for tmp in tmps:
-            if os.path.exists(tmp): os.remove(tmp)
+        for x in tmps + list(backups.values()):
+            try:
+                if os.path.exists(x): os.remove(x)
+            except OSError: pass
 def dump_json(p, o): write_atomic([(p, json_bytes(p, o))])
 def read_text(p):
     try:
