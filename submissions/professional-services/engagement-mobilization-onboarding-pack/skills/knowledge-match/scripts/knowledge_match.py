@@ -16,7 +16,7 @@ def check_lesson(l,w):
     field(l,"confidence","num01",w)
 def adapt(p):
     x=load_json(p)
-    if not isinstance(x,dict) or x.get("contract_version")!=CLOSE: raise InputError(f"closeout adapter expected contract {CLOSE}, got {(x.get('contract_version') if isinstance(x,dict) else type(x).__name__)!r}")
+    if not isinstance(x,dict) or x.get("contract_version")!=CLOSE: raise InputError(f"closeout adapter expected a JSON object with contract_version {CLOSE} (supplied value not repeated); fail closed")
     kr=x.get("knowledge_record")
     if not kr or not isinstance(kr,dict): raise InputError("closeout adapter requires top-level knowledge_record object; fail closed")
     if not isinstance(x.get("released_assets",[]),list) or any(not isinstance(r,dict) for r in x.get("released_assets",[])): raise InputError("closeout adapter requires released_assets[] of objects; fail closed")

@@ -56,6 +56,9 @@ def govern(p,register,inventory):
         status,reason,cit=hold_status("HOLD-MISSING-WALL-REGISTER",register,"missing ethical-wall register","#2.1")
     elif missing_columns(rows,REGISTER_COLUMNS):
         status,reason,cit=hold_status("HOLD-MALFORMED-WALL-REGISTER","raw/ethical-wall-register.csv header",f"ethical-wall register is missing required column(s): {', '.join(missing_columns(rows,REGISTER_COLUMNS))}","#2.1")
+    elif rows.duplicate_columns:
+        # A repeated column (status,status) is ambiguous: csv keeps only the last value (restricted,clear -> clear) (#2.1).
+        status,reason,cit=hold_status("HOLD-MALFORMED-WALL-REGISTER","raw/ethical-wall-register.csv header","ethical-wall register "+DUPLICATE_HEADER_REASON,"#2.1")
     else:
         if rows.malformed: hold_status("HOLD-MALFORMED-WALL-REGISTER","raw/ethical-wall-register.csv rows "+", ".join(map(str,rows.malformed)),"ethical-wall register row(s) carry more fields than the header","#2.1")
         holds+=scan_rows(rows,"raw/ethical-wall-register.csv"); terms=client_terms(other_names(rows,e,own),own)
@@ -84,11 +87,12 @@ def govern(p,register,inventory):
             if screened: esc.append(f"{screened} wall briefing topic(s) withheld from the pack; Risk/Conflicts brief the joiner directly (confidentiality-and-ethical-wall-rules.md #3.2)")
             may.append({"item":e.get("client_name") or e.get("matter_id"),"type":"client_or_matter","restriction":("may not access or discuss: "+"; ".join(dict.fromkeys(briefed))) if briefed else "restricted subject matter - confirm specifics with Risk/Conflicts before starting work","citation":f"{cit}; confidentiality-and-ethical-wall-rules.md #2.3,#3.1,#3.2"})
         elif unknown:
-            vals=sorted({k(r.get("status")) or "blank" for r in unknown})
-            status,reason,cit=hold_status("HOLD-UNKNOWN-WALL-STATUS","raw/ethical-wall-register.csv.status",f"unknown wall status value: {', '.join(vals)}","#2.2")
+            status,reason,cit=hold_status("HOLD-UNKNOWN-WALL-STATUS","raw/ethical-wall-register.csv.status","unknown wall status value (not repeated); treated as hold","#2.2")
         elif not named_clear:
             status,reason,cit=hold_status("HOLD-UNKNOWN-WALL-STATUS","raw/ethical-wall-register.csv","no wall register row clears this joiner for this client or matter","#2.2")
         else: cit="; ".join(row_cite(r) for r in named_clear)
+    if ws is not None and ws.duplicate_columns:
+        holds.append({"hold_id":"HOLD-MALFORMED-WORKSPACE-INVENTORY","path":"raw/workspace-inventory.csv header","reason":"workspace inventory "+DUPLICATE_HEADER_REASON+"; no access is requested","source":ENGINE,"confidence":.99,"citation":"workspace-inventory-rules.md #1.3"}); ws=Rows()
     if ws is not None:
         holds+=scan_rows(ws,"raw/workspace-inventory.csv")
         for i,w in enumerate(ws,2):

@@ -6,6 +6,7 @@ allOf, type, const, enum, pattern, minimum, maximum, minItems, required, propert
 nested objects and arrays. The stage schemas ($defs/stage_scope, stage_matched, stage_governed, stage_access) add
 what each point in the chain must carry, including the provenance engine prefixes. No coercion and no defaults: the
 first violation raises ContractViolation, which every engine turns into a clean InputError before writing anything
+(messages name the field path and the expected type, enum or pattern; a supplied value is never echoed)
 (confidentiality-and-ethical-wall-rules.md #1.3). Byte-identical in every skill's scripts/ folder
 (tests/check_shared_copies.py).
 """
@@ -35,14 +36,14 @@ def _target(ref, root):
     if ref.startswith("#/$defs/") and ref[8:] in root.get("$defs", {}): return root["$defs"][ref[8:]]
     raise ContractViolation(f"contract uses unsupported or unknown $ref {ref!r}; fail closed")
 def _walk(v, s, path, root):
-    if isinstance(v, float): _need(math.isfinite(v), f"{path} must be a finite number, got {v!r}; fail closed")  # NaN/inf never pass a range check
+    if isinstance(v, float): _need(math.isfinite(v), f"{path} must be a finite number; fail closed")  # NaN/inf never pass a range check
     if "$ref" in s: _walk(v, _target(s["$ref"], root), path, root)
     for sub in s.get("allOf", []): _walk(v, sub, path, root)
     if "type" in s:
         ts = s["type"] if isinstance(s["type"], list) else [s["type"]]
         _need(any(_type_ok(v, t) for t in ts), f"{path} must be {' or '.join(ts)}, got {type(v).__name__}; fail closed")
-    if "const" in s: _need(v == s["const"], f"{path} must be {s['const']!r}, got {v!r}; fail closed")
-    if "enum" in s: _need(v in s["enum"], f"{path} has unrecognised value {v!r}; expected one of {', '.join(map(str, s['enum']))}; fail closed")
+    if "const" in s: _need(v == s["const"], f"{path} must be the contract constant {s['const']!r}; the supplied value is not repeated; fail closed")
+    if "enum" in s: _need(v in s["enum"], f"{path} has an unrecognised value (not repeated); expected one of {', '.join(map(str, s['enum']))}; fail closed")
     if "pattern" in s and isinstance(v, str): _need(re.search(s["pattern"], v) is not None, f"{path} does not match the contract pattern {s['pattern']!r}; fail closed")
     if _num(v):
         if "minimum" in s: _need(v >= s["minimum"], f"{path} must be >= {s['minimum']}; fail closed")

@@ -13,15 +13,25 @@ def require_iso_z(v):
 def _no_constant(c): raise InputError(f"non-finite number {c} is not valid JSON; fail closed")
 def _finite_float(s):
     v = float(s)
-    if not math.isfinite(v): raise InputError(f"number {s[:24]} overflows to a non-finite value; fail closed")
+    if not math.isfinite(v): raise InputError("a number overflows to a non-finite value; fail closed")
     return v
+def _unique_keys(pairs):
+    """A JSON object may not repeat a member name: json.load would silently keep the last one (#1.3). The name is
+    not repeated in the error."""
+    out = {}
+    for k, v in pairs:
+        if k in out: raise InputError("a JSON object repeats a member name (not repeated here); duplicate keys are ambiguous; fail closed")
+        out[k] = v
+    return out
 def load_json(p):
-    """NaN, Infinity, -Infinity and overflowing literals (1e999) are rejected at parse time, never passed on (#1.3)."""
+    """NaN, Infinity, -Infinity, overflowing literals (1e999) and duplicate member names are rejected at parse time,
+    never passed on (#1.3). Errors name the position, never the offending input text."""
     try:
-        with open(p, encoding="utf-8-sig") as f: return json.load(f, parse_constant=_no_constant, parse_float=_finite_float)  # a BOM never hides the first key (#1.3)
+        with open(p, encoding="utf-8-sig") as f: return json.load(f, parse_constant=_no_constant, parse_float=_finite_float, object_pairs_hook=_unique_keys)  # a BOM never hides the first key (#1.3)
     except InputError as e: raise InputError(f"{e} ({p})") from e
     except FileNotFoundError as e: raise InputError(f"missing required JSON file: {p}") from e
-    except (json.JSONDecodeError, UnicodeDecodeError) as e: raise InputError(f"malformed JSON in {p} (must be UTF-8 JSON): {e}") from e
+    except json.JSONDecodeError as e: raise InputError(f"malformed JSON in {p} (must be UTF-8 JSON): {e.msg} at line {e.lineno} column {e.colno}") from e
+    except UnicodeDecodeError as e: raise InputError(f"malformed JSON in {p} (must be UTF-8 JSON): {e.reason} at byte {e.start}") from e
     except OSError as e: raise InputError(f"cannot read JSON file {p}: {type(e).__name__}") from e
 _UMASK = os.umask(0o022); os.umask(_UMASK)
 def _encode(text, p):
@@ -86,24 +96,33 @@ def read_text(p):
 def write_text(p, t): write_atomic([(p, text_bytes(p, t))])
 class Rows(list):
     """CSV rows with lower-cased, stripped header keys. `columns` lists the header; `malformed` lists data rows
-    (1-based file row numbers) that carry more fields than the header."""
+    (1-based file row numbers) that carry more fields than the header; `duplicate_columns` counts header names that
+    repeat after normalisation (csv.DictReader would silently keep only the last: `restricted,clear` -> clear)."""
     columns = ()
     malformed = ()
+    duplicate_columns = 0
 def read_csv(p, required=True):
     try:
         with open(p, encoding="utf-8-sig", newline="") as f:
             rd = csv.DictReader(f); out = Rows(); bad = []
+            cols = tuple((c or "").strip().lower() for c in (rd.fieldnames or ()))
+            out.columns = cols; out.duplicate_columns = len(cols) - len(set(cols))
             for i, r in enumerate(rd, 2):
                 if None in r: bad.append(i)
                 out.append({(k or "").strip().lower(): ("" if v is None else v) for k, v in r.items() if k is not None})
-            out.columns = tuple((c or "").strip().lower() for c in (rd.fieldnames or ())); out.malformed = tuple(bad)
+            out.malformed = tuple(bad)
             return out
     except FileNotFoundError as e:
         if required: raise InputError(f"missing required CSV file: {p}") from e
         return None
-    except (csv.Error, UnicodeDecodeError) as e: raise InputError(f"malformed CSV in {p} (must be UTF-8 CSV): {e}") from e
+    except UnicodeDecodeError as e: raise InputError(f"malformed CSV in {p} (must be UTF-8 CSV): {e.reason} at byte {e.start}") from e
+    except csv.Error as e: raise InputError(f"malformed CSV in {p} (must be UTF-8 CSV): {e}") from e
     except OSError as e: raise InputError(f"cannot read CSV file {p}: {type(e).__name__}") from e
 def missing_columns(rows, cols): return [c for c in cols if c not in rows.columns]
+def header_unusable(rows, cols):
+    """A header that misses a required column or repeats any column name is malformed (#1.3, #2.1)."""
+    return bool(missing_columns(rows, cols)) or rows.duplicate_columns > 0
+DUPLICATE_HEADER_REASON = "header repeats a column name (not repeated); the file is ambiguous and is not used"
 
 # ---------------------------------------------------------------- type / enum validation (fail closed)
 def need(ok, msg):
@@ -239,20 +258,28 @@ def hold(path, text, hit):
     why = ",".join(hit) if isinstance(hit, (list, tuple)) else hit
     reason = OVERSIZE_REASON if "oversize" in (hit if isinstance(hit, (list, tuple)) else [hit]) else f"embedded_instruction:{why}"
     return {"hold_id": f"HOLD-{d}", "path": path, "reason": reason, "source": "engine:safety_text", "confidence": 0.99, "citation": "confidentiality-and-ethical-wall-rules.md #4.1-#4.5"}
-def scan(v, path="$"):
-    """One hold per flagged string value (all matching families in one reason)."""
+def scan(v, path="$", key=None):
+    """One hold per flagged string value (all matching families in one reason), one per record whose fields only trip
+    when joined, and one per pair of adjacent prose items in an array that only trips when joined (#4.5)."""
     out = []
     if isinstance(v, dict):
-        for k, x in v.items(): out += scan(x, f"{path}.{k}")
+        for k, x in v.items(): out += scan(x, f"{path}.{k}", k)
         if not out:
             h = record_hits(free_text(v))
             if h: out.append(hold(f"{path} (fields joined)", json.dumps(free_text(v), sort_keys=True, ensure_ascii=False), h))
     elif isinstance(v, list):
-        for i, x in enumerate(v): out += scan(x, f"{path}[{i}]")
+        for i, x in enumerate(v): out += scan(x, f"{path}[{i}]", key)
+        for i in list_pairs(v, key): out.append(hold(f"{path}[{i}]+[{i + 1}]", v[i] + "\n" + v[i + 1], pair_hits(v[i], v[i + 1])))
     elif isinstance(v, str):
         h = hits(v)
         if h: out.append(hold(path, v, h))
     return out
+PAIR_SKIP = {"matched_terms", "tags", "engines", "sources", "evidence_citations"}
+def list_pairs(v, key):
+    """Indices i where the adjacent prose strings v[i], v[i + 1] trip the wire only when read together (#4.5). Lists of
+    identifiers, enums, citations or tokens are not prose and are never joined."""
+    if key is None or not prose_key(key) or key in PAIR_SKIP or str(key).endswith(("citation", "citations")): return []
+    return [i for i in range(len(v) - 1) if isinstance(v[i], str) and isinstance(v[i + 1], str) and pair_hits(v[i], v[i + 1])]
 # A claim can be split across two labelled lines or two adjacent fields ("...the ethical wall has been" /
 # "Key dates: lifted for Taylor Reed"). Pairs are read without their field labels; when a pair trips the wire and
 # neither half does on its own, both halves are withheld (confidentiality-and-ethical-wall-rules.md #4.5).
@@ -266,7 +293,7 @@ def prose_key(k):
     """Identifiers, enums, permissions, classifications, sources and citations are scanned cell by cell but are not
     prose: joining them ("clear" + "row 5") manufactures sentences no one wrote, so they never join a record or pair."""
     k = str(k)
-    return k not in SCREEN_SKIP and k not in STRUCTURED_KEYS and not k.endswith(("_id", "_ids", "_status", "_permission", "_classification", "_type"))
+    return k not in NON_PROSE_KEYS and k not in STRUCTURED_KEYS and not k.endswith(("_id", "_ids", "_status", "_permission", "_classification", "_type"))
 def free_text(d):
     """The free-text string fields of a record (see prose_key)."""
     return {k: v for k, v in d.items() if isinstance(v, str) and v.strip() and v not in (WITHHELD, OTHER_WITHHELD) and prose_key(k)}
@@ -295,17 +322,26 @@ def scan_lines(text, path):
     safe = [((LABEL_RE.match(l).group(0) if LABEL_RE.match(l) else "") + WITHHELD) if i in bad else l for i, l in enumerate(lines)]
     return out, "\n".join(safe) + ("\n" if (text or "").endswith("\n") else "")
 def scan_text(text, path): return scan_lines(text, path)[0]
+def col_label(k, n):
+    """A CSV column name appears in a hold path only when it is a plain identifier that does not itself trip the
+    wire; any other header is referred to by position, never echoed (#4.3)."""
+    return k if re.fullmatch(r"[a-z][a-z0-9_]{0,39}", k or "") and not hits(k) else f"column {n}"
 def scan_rows(rows, label):
     """One hold per flagged cell, plus pair holds for claims split across adjacent cells in a row or the same column
     in adjacent rows. Every flagged cell (single, pair or record) is replaced in place by the placeholder so it never
     travels into citations, briefings or checklists (#4.3, #4.5). In a ";"-separated list cell only the flagged items
-    are replaced when an item trips on its own; otherwise the whole cell is."""
+    are replaced when an item trips on its own; otherwise the whole cell is. A header name that trips is held too."""
     out = []; rows = rows or []; bad = []; part = {}
+    cols = list(getattr(rows, "columns", ()) or (rows[0].keys() if rows else ()))
+    lab = {k: col_label(k, n) for n, k in enumerate(cols, 1)}
+    for n, k in enumerate(cols, 1):
+        h = hits(k)
+        if h: out.append(hold(f"{label} header column {n}", k, h))
     for i, r in enumerate(rows, 2):
         for k, v in r.items():
             h = hits(v)
             if not h: continue
-            out.append(hold(f"{label} row {i}.{k}", v, h)); items = v.split(";") if isinstance(v, str) else []
+            out.append(hold(f"{label} row {i}.{lab.get(k, 'column')}", v, h)); items = v.split(";") if isinstance(v, str) else []
             flagged = [n for n, x in enumerate(items) if x.strip() and hits(x)] if len(items) > 1 else []
             if flagged and not hits(";".join(x for n, x in enumerate(items) if n not in flagged)): part[(i - 2, k)] = ";".join(WITHHELD if n in flagged else x for n, x in enumerate(items))
             else: bad.append((i - 2, k))
@@ -318,7 +354,7 @@ def scan_rows(rows, label):
     for (i, a), (j, b) in pairs:
         h = pair_hits(rows[i][a], rows[j][b])
         if h:
-            where = f"{label} row {i + 2}.{a}+{b}" if i == j else f"{label} rows {i + 2}-{j + 2}.{a}"
+            where = f"{label} row {i + 2}.{lab.get(a, 'column')}+{lab.get(b, 'column')}" if i == j else f"{label} rows {i + 2}-{j + 2}.{lab.get(a, 'column')}"
             out.append(hold(where, rows[i][a] + "\n" + rows[j][b], h)); bad += [(i, a), (j, b)]
     # A row is one record: when only the join of all its cells trips, every cell is withheld and the row held (#4.5).
     hit_rows = {i for i, _ in bad} | {i for i, _ in part}
@@ -331,13 +367,17 @@ def scan_rows(rows, label):
     for (i, k), v in part.items(): rows[i][k] = v
     for i, k in bad: rows[i][k] = WITHHELD
     return out
-def redact(v):
-    """Replace every flagged string with the neutral placeholder; flagged text never travels to any output (#4.3)."""
+def redact(v, key=None):
+    """Replace every flagged string with the neutral placeholder; flagged text never travels to any output (#4.3).
+    Adjacent array items that only trip when joined are both replaced (#4.5)."""
     if isinstance(v, dict):
-        r = {k: redact(x) for k, x in v.items()}; ft = free_text(r)
+        r = {k: redact(x, k) for k, x in v.items()}; ft = free_text(r)
         if ft and record_hits(ft): r.update({k: WITHHELD for k in ft})
         return r
-    if isinstance(v, list): return [redact(x) for x in v]
+    if isinstance(v, list):
+        r = [redact(x, key) for x in v]
+        for i in list_pairs(v, key): r[i] = r[i + 1] = WITHHELD
+        return r
     if isinstance(v, str) and hits(v): return WITHHELD
     return v
 
@@ -349,7 +389,61 @@ def redact(v):
 # (confidentiality-and-ethical-wall-rules.md #3.3).
 OTHER_WITHHELD = "[withheld - names another client or matter, see Escalations and holds]"
 GENERIC = {"the", "and", "for", "of", "bank", "banks", "credit", "union", "partners", "capital", "group", "holdings", "inc", "llc", "ltd", "limited", "corp", "corporation", "company", "insurance", "assurance", "mutual", "health", "healthcare", "clinic", "clinics", "hospital", "financial", "finance", "trust", "llp", "plc", "retail", "services", "systems", "solutions", "national", "first", "global", "engagement", "matter", "migration", "payments", "payment", "modernization", "modernisation", "program", "programme", "project", "workstream", "material", "design", "prior", "walled", "competitor", "client", "previously", "staffed", "restricted", "restriction", "risk", "conflicts", "register", "knowledge", "repository", "sharepoint", "teams", "planner", "channel", "delivery", "may", "not", "access", "discuss", "wall", "ethical", "new", "north", "south", "east", "west", "american", "international", "digital", "data"}
-SCREEN_SKIP = {"contract_version", "run_metadata", "provenance", "holds", "source", "confidence", "relevance_score", "fit_score", "status", "assignment_status", "review_status", "clearance_state", "requested_permission", "workspace_type", "type", "hold_reasons", "label", "sections"}
+# Keys whose values are identifiers, enums, scores or engine labels: never joined into records or pairs (#4.5).
+NON_PROSE_KEYS = {"contract_version", "run_metadata", "provenance", "holds", "source", "confidence", "relevance_score", "fit_score", "status", "assignment_status", "review_status", "clearance_state", "requested_permission", "workspace_type", "type", "hold_reasons", "label", "sections"}
+PACK_LABEL = "DRAFT - for internal review only. Do not send to the client or provision access."
+PACK_SECTIONS = {"client_context", "scope", "prior_knowledge", "team_roster", "access_checklist", "wall_briefing", "first_week_plan"}
+KNOWN_SOURCES = {"engine:safety_text", "engine:scope_digest", "engine:knowledge_match", "engine:wall_check", "engine:access_checklist", "adapter:closeout-governed.knowledge_record", "adapter:closeout-governed.knowledge_record.lessons", "adapter:staffing-slate", "raw:confirmed-roster.csv", "raw:engagement-letter-extract.md"}
+CLEARANCE_STATES = {"RELEASE_CANDIDATE_SANITISED", "RELEASE_CANDIDATE_SANITIZED", "LESSON_FOR_INTERNAL_DRAFT"}
+_ISO_Z = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
+_ENGINE_STAMP = re.compile(r"(?:scope_digest|knowledge_match|wall_check|access_checklist)/\d+\.\d+\.\d+")
+WITHHELD_KEY = "[withheld member name]"
+@functools.lru_cache(maxsize=1)
+def contract_vocab():
+    """(every property name in the shipped contract, {property: its closed enum/const string values})."""
+    names, enums = set(), {}
+    def walk(s):
+        if isinstance(s, dict):
+            for k, sub in (s.get("properties") or {}).items():
+                names.add(k)
+                if isinstance(sub, dict):
+                    items = sub.get("items") if isinstance(sub.get("items"), dict) else {}
+                    vals = list(sub.get("enum", [])) + ([sub["const"]] if "const" in sub else []) + list(items.get("enum", []))
+                    if vals: enums.setdefault(k, set()).update(v for v in vals if isinstance(v, str))
+            for x in s.values(): walk(x)
+        elif isinstance(s, list):
+            for x in s: walk(x)
+    walk(_cv.load_contract())
+    return frozenset(names), {k: frozenset(v) for k, v in enums.items()}
+def engine_scalar(k, v):
+    """True only for a scalar written from the engines' fixed vocabulary: the contract version, an ISO timestamp, an
+    engine/version stamp, a known source label, the pack label and sections, a closeout clearance state, or a value
+    of the contract's closed enum for that very field. Nothing else is exempt from the other-client screen (#3.3)."""
+    if not isinstance(v, str): return False
+    if k == "contract_version": return v == CONTRACT_VERSION
+    if k == "generated_at": return bool(_ISO_Z.fullmatch(v))
+    if k == "engines": return bool(_ENGINE_STAMP.fullmatch(v))
+    if k == "source": return v in KNOWN_SOURCES
+    if k == "label": return v == PACK_LABEL
+    if k == "sections": return v in PACK_SECTIONS
+    if k == "clearance_state": return v in CLEARANCE_STATES
+    return v in contract_vocab()[1].get(k, ())
+def screen_keys(v, path, terms, engine, new):
+    """JSON member names are input too. A name that is not a contract property and trips the wire or names another
+    client is dropped with its value and held at '<parent>.[withheld member name]'; it is never echoed in any output
+    or hold path (#3.3, #4.3)."""
+    if isinstance(v, dict):
+        out = {}
+        for k, x in v.items():
+            ks = str(k); where = f"{path}.{WITHHELD_KEY}" if path else WITHHELD_KEY
+            if ks not in contract_vocab()[0]:
+                h = hits(ks)
+                if h: new.append(hold(where, ks, h)); continue
+                if names_client(ks, terms): new.append(other_hold(where, ks, engine)); continue
+            out[k] = screen_keys(x, f"{path}.{k}" if path else k, terms, engine, new)
+        return out
+    if isinstance(v, list): return [screen_keys(x, f"{path}[{i}]", terms, engine, new) for i, x in enumerate(v)]
+    return v
 def words(*xs): return {w for x in xs for w in re.findall(r"[a-z0-9]+", id_spaced(norm(x or "")))}
 def client_terms(names, own):
     """[(normalised full name or ID, distinctive words)] for every other-client identity. IDs (anything with a digit)
@@ -370,15 +464,25 @@ def names_client(text, terms):
         if re.search(r"(?<![a-z0-9])" + re.escape(full) + r"(?![a-z0-9])", t) or dist & tw: return True
     return False
 def screen_other(doc, terms, engine, prefix=""):
-    """Withhold every string in doc that names another client or matter. Returns (screened doc, holds)."""
+    """Withhold every string in doc that names another client or matter, at any depth (run_metadata and provenance
+    included), and drop any member whose name does. Only the top-level holds (screened by screen_holds) and engine
+    scalars (engine_scalar) are exempt. Returns (screened doc, holds) (#3.3)."""
     holds = []
-    def walk(v, path):
-        if isinstance(v, dict): return {k: (x if k in SCREEN_SKIP else walk(x, f"{path}.{k}" if path else k)) for k, x in v.items()}
-        if isinstance(v, list): return [walk(x, f"{path}[{i}]") for i, x in enumerate(v)]
-        if isinstance(v, str) and v not in (WITHHELD, OTHER_WITHHELD) and names_client(v, terms):
+    if not terms: return doc, holds
+    def walk(v, path, key):
+        if isinstance(v, dict):
+            out = {}
+            for k, x in v.items():
+                if not path and k == "holds": out[k] = x; continue
+                if str(k) not in contract_vocab()[0] and names_client(str(k), terms):
+                    holds.append(other_hold(f"{prefix}{path}.{WITHHELD_KEY}" if path else f"{prefix}{WITHHELD_KEY}", str(k), engine)); continue
+                out[k] = walk(x, f"{path}.{k}" if path else k, k)
+            return out
+        if isinstance(v, list): return [walk(x, f"{path}[{i}]", key) for i, x in enumerate(v)]
+        if isinstance(v, str) and v not in (WITHHELD, OTHER_WITHHELD) and not engine_scalar(key, v) and names_client(v, terms):
             holds.append(other_hold(f"{prefix}{path}", v, engine)); return OTHER_WITHHELD
         return v
-    return (walk(doc, "") if terms else doc), holds
+    return walk(doc, "", None), holds
 def other_hold(path, text, engine):
     return {"hold_id": "HOLD-OTHER-CLIENT-" + hashlib.sha256(strip_cf(text).encode()).hexdigest()[:12], "path": path, "reason": OTHER_HOLD_REASON, "source": engine, "confidence": 0.97, "citation": "confidentiality-and-ethical-wall-rules.md #3.3"}
 # Engine-generated hold text is recognised only by matching the known engine templates below, never by a hold's
@@ -396,7 +500,9 @@ ENGINE_REASONS = {OVERSIZE_REASON, OTHER_HOLD_REASON,
     "unrecognised wall_decision status; treated as hold", "missing workspace inventory; no access is requested",
     "no joiner identified; wall status cannot be determined", "missing ethical-wall register",
     "ethical-wall register row(s) carry more fields than the header",
-    "no wall register row clears this joiner for this client or matter"}
+    "no wall register row clears this joiner for this client or matter",
+    "unknown wall status value (not repeated); treated as hold",
+    "ethical-wall register " + DUPLICATE_HEADER_REASON, "workspace inventory " + DUPLICATE_HEADER_REASON + "; no access is requested"}
 _PERM = r"(?:none|viewer|member|contributor|admin|owner)"
 ENGINE_REASON_RES = [re.compile(r"embedded_instruction:[a-z_]+(?:,[a-z_]+)*"),
     re.compile(r"\d+ declared client/firm domain\(s\) are malformed or consumer/file-sharing domains and are not trusted \(not repeated\)"),
@@ -438,14 +544,15 @@ def screen_holds(holds, terms, engine, prefix="holds"):
 def screen_upstream(doc, label, engine, terms=()):
     """Every string an engine receives in an upstream JSON document is screened before anything is derived from it:
     the body through scan() and redact() (every string at any depth, including run_metadata and provenance), the
-    supplied holds through screen_holds(). Flagged values are replaced by the placeholder and held at their path.
+    supplied holds through screen_holds(), and every JSON member name through screen_keys(). Flagged values are replaced by the placeholder and held at their path.
     Returns (screened document, new holds); any new hold forces the caller's hold / on-hold status (#4.1, #4.3)."""
     if not isinstance(doc, dict): return doc, []
+    kh = []; doc = screen_keys(doc, label, terms, engine, kh)  # member names first, so no hold path echoes one
     hk = isinstance(doc.get("holds"), list)
     body = {k: v for k, v in doc.items() if not (hk and k == "holds")}
     new = scan(body, label); red = redact(body)
     up, uh = screen_holds(doc["holds"], terms, engine, f"{label}.holds") if hk else ([], [])
-    return {k: (up if hk and k == "holds" else red[k]) for k in doc}, new + uh
+    return {k: (up if hk and k == "holds" else red[k]) for k in doc}, kh + new + uh
 def upstream_escalation(n): return f"{n} upstream field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)"
 def other_escalation(n): return f"{n} field(s) withheld because they name another client or matter; Risk/Conflicts review before the pack is shared (confidentiality-and-ethical-wall-rules.md #3.3)"
 
@@ -509,7 +616,7 @@ def check_digest(doc, where, wall_status=None):
     else:
         need(not doc.get("holds"), f"{where}.wall_decision is clear while holds are open; wall_check never clears with open holds; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #4.1)")
         exp, exp_items = ("ready" if cands else "empty"), cands
-    need(kd.get("status") == exp and items == exp_items, f"{where}.knowledge_digest (status {kd.get('status')!r}, {len(items)} item(s)) does not match the state re-derived from its holds, candidates and wall decision (expected {exp!r}, {len(exp_items)} item(s)); fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
+    need(kd.get("status") == exp and items == exp_items, f"{where}.knowledge_digest (status and {len(items)} item(s)) does not match the state re-derived from its holds, candidates and wall decision (expected status {exp}, {len(exp_items)} item(s)); fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
 
 # ---------------------------------------------------------------- other-client identities from the wall register
 # Every engine screens upstream text for other clients with the same identities wall_check uses: other register rows'
@@ -542,7 +649,7 @@ def register_terms(path, e, own):
     """Other-client terms from the wall register at path, read and screened exactly as wall_check reads it; an absent
     or malformed register yields none (wall_check then holds the pack)."""
     rows = read_csv(path, False)
-    if rows is None or missing_columns(rows, REGISTER_COLUMNS): return []
+    if rows is None or header_unusable(rows, REGISTER_COLUMNS): return []
     scan_rows(rows, "raw/ethical-wall-register.csv")
     return client_terms(other_names(rows, e, own), own)
 
@@ -558,4 +665,4 @@ def toks(*parts):
 def guard(fn):
     try: return fn()
     except InputError as e: raise SystemExit(f"InputError: {e}")
-    except (KeyError, TypeError, ValueError, AttributeError) as e: raise SystemExit(f"InputError: malformed input ({type(e).__name__}: {e}); fail closed")
+    except (KeyError, TypeError, ValueError, AttributeError) as e: raise SystemExit(f"InputError: malformed input ({type(e).__name__}; the input value is not repeated); fail closed")

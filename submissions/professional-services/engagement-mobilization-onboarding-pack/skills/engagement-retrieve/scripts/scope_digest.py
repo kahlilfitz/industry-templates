@@ -23,7 +23,7 @@ def items(line):
     return out if WITHHELD in out else [WITHHELD]
 def validate_staffing(st):
     need(isinstance(st,dict),f"staffing adapter expected a JSON object, got {type(st).__name__}; fail closed")
-    if st.get("contract_version")!=STAFF: raise InputError(f"staffing adapter expected contract {STAFF}, got {st.get('contract_version')!r}")
+    if st.get("contract_version")!=STAFF: raise InputError(f"staffing adapter expected contract {STAFF} at upstream/staffing.contract_version (supplied value not repeated); fail closed")
     W="upstream/staffing"
     field(st,"governed_roles","objlist",W,required=True)
     eng=field(st,"engagement","obj",W,default={})
@@ -61,6 +61,7 @@ def main():
     sow=read_text(sowp); letter=read_text(os.path.join(a.raw_dir,"engagement-letter-extract.md")); pursuit=read_text(os.path.join(a.raw_dir,"pursuit-record.md")); rows=read_csv(a.confirmed_roster); st=load_json(a.staffing)
     miss=missing_columns(rows,ROSTER_COLUMNS)
     if miss: raise InputError(f"confirmed roster is missing required column(s): {', '.join(miss)}; fail closed")
+    if rows.duplicate_columns: raise InputError("confirmed roster "+DUPLICATE_HEADER_REASON+"; fail closed")
     if rows.malformed: raise InputError(f"confirmed roster row(s) {', '.join(map(str,rows.malformed))} have more fields than the header; fail closed")
     validate_staffing(st)
     # The engagement's own client and firm domains, declared in the signed SOW or engagement letter, are the only
