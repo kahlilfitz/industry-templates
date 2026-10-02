@@ -14,7 +14,8 @@ def fld(t,n):
     # One labelled line: [ \t] and [^\r\n], never \s, so a blank "Client:" reads blank instead of consuming the next line (#1.2).
     m=re.search(rf"^{re.escape(n)}:[ \t]*([^\r\n]*)$",t,re.I|re.M); return m.group(1).strip() if m else ""
 def lst(v): return split_items(v)
-DOMAIN_LABELS=("Client domains","Client domain","Firm domains","Firm domain")  # confidentiality-and-ethical-wall-rules.md #4.4
+# A demo label only: a short slug, never free text, because it is copied into run_metadata (#1.3).
+SCENARIO_RE=re.compile(r"(?:|[A-Za-z0-9][A-Za-z0-9._-]{0,63})")
 def declarations(docs):
     """([(doc index, line index, [well-formed trustable domains])] for the first line of each domain label in each
     document whose value does not trip the wire on its own, the count of malformed or untrustable domains)."""
@@ -24,14 +25,9 @@ def declarations(docs):
         for lab in DOMAIN_LABELS:
             i=next((n for n,l in enumerate(ls) if re.match(rf"{re.escape(lab)}:",l,re.I)),None)
             if i is None: continue
-            line=ls[i].split(":",1)[1].strip()
+            line=declaration_value(ls[i])
             if not line or hits(line): continue
-            ds=[]
-            for d in re.split(r"[;,\s]+",canon_text(line)):
-                d=d.strip().lstrip("@.").rstrip(".")
-                if not d: continue
-                if domain_ok(d): ds.append(d)
-                else: bad+=1
+            ds,b=declared_domains(line); bad+=b  # one parser for scope_digest and every later stage's re-derivation (#4.4)
             out.append((di,i,ds))
     return out,bad
 def one(v): return WITHHELD if hits(v) else v
@@ -51,13 +47,23 @@ def validate_staffing(st):
     for k in ("engagement_id","client_name"): field(eng,k,"str",W+".engagement",nullable=True)
     field(eng,"affiliates","strlist",W+".engagement",nullable=True)
     for e in field(st,"escalations","list",W,default=[]): esc_text(e,W+".escalations")
+    # Every section and nested record any reader uses (statuses, staffing_links) is type-checked before screening or
+    # linking: a malformed section is a clean InputError, never silently skipped (#1.3, #1.5).
+    for i,c in enumerate(field(st,"bench_candidates","objlist",W,nullable=True,default=[]) or []):
+        cw=f"{W}.bench_candidates[{i}]"; field(c,"candidate_id","str",cw,nullable=True); field(c,"name","str",cw,nullable=True)
+    for sec,key,nk in (("scored_roles","candidate_scores","candidate_name"),("ranked_roles","candidate_slate","candidate_name")):
+        for i,r in enumerate(field(st,sec,"objlist",W,nullable=True,default=[]) or []):
+            w=f"{W}.{sec}[{i}]"; field(r,"role_title","str",w,nullable=True)
+            for j,c in enumerate(field(r,key,"objlist",w,nullable=True,default=[]) or []):
+                cw=f"{w}.{key}[{j}]"; field(c,"candidate_id","str",cw,nullable=True); field(c,nk,"str",cw,nullable=True)
     for i,r in enumerate(st["governed_roles"]):
         w=f"{W}.governed_roles[{i}]"; field(r,"role_title","str",w,nullable=True)
         for key in ("candidate_slate","recommended_candidates"):
             for j,c in enumerate(field(r,key,"objlist",w,default=[])):
-                cw=f"{w}.{key}[{j}]"; field(c,"candidate_name","str",cw,nullable=True); field(c,"confidence","num01",cw); field(c,"fit_score","num",cw,nullable=True); field(c,"citation","str",cw,nullable=True)
+                cw=f"{w}.{key}[{j}]"; field(c,"candidate_id","str",cw,nullable=True); field(c,"candidate_name","str",cw,nullable=True); field(c,"confidence","num01",cw); field(c,"fit_score","num",cw,nullable=True); field(c,"citation","str",cw,nullable=True)
                 el=field(c,"eligibility","obj",cw,nullable=True)
-                if el: field(el,"blocking_rule","str",cw+".eligibility",nullable=True); field(el,"citation","str",cw+".eligibility",nullable=True)
+                if el:
+                    for k in ("verdict","recommendation_status","blocking_rule","citation"): field(el,k,"str",cw+".eligibility",nullable=True)
 def staffing_links(st):
     """Staffing records name a candidate by candidate_id in several places (bench, scored, ranked and governed slates,
     recommendations). A candidate_id whose records state different people (canonical names, #1.3) links one person's
@@ -75,22 +81,38 @@ def staffing_links(st):
                 for j,c in enumerate(r[key]): add(f"{W}.{sec}[{i}].{key}[{j}].candidate_name",c,"candidate_name")
     bad={k for k,v in seen.items() if len(v)>1}
     return bad,[link_hold(first[k][1],ENGINE) for k in sorted(bad)]
+def slate_verdict(c,bad):
+    el=c.get("eligibility") or {}; v=el.get("verdict")
+    v=canon_text(v) if isinstance(v,str) else None
+    if v not in VERDICTS: v="unrecognised"  # blank, null or unknown verdicts fail closed (#3.4)
+    if canon_id(c.get("candidate_id")) in bad: v="unrecognised"  # a candidate_id naming two people is not evidence (#1.5)
+    return v
 def statuses(st,bad=frozenset()):
-    s={}; p=[]
+    """(verdicts by canonical person, proposed staffing, paths of recommendations not proposed). A recommendation is
+    proposed only when the slate holds a record for the same candidate (canonical candidate_id AND name, #1.3) and the
+    most restrictive verdict across those records and any other slate record for the same person is eligible.
+    Blocked, conflicted, ineligible, needs-review, unrecognised and unmatched recommendations are never proposed and
+    are held (role-access-matrix.md #3.2-#3.4; confidentiality-and-ethical-wall-rules.md #1.5)."""
+    s={}; p=[]; slate=[]; notp=[]
     for r in st["governed_roles"]:
         rt=r.get("role_title") if (r.get("role_title") or "").strip() else "role"
         for c in r.get("candidate_slate",[]):
             if not (c.get("candidate_name") or "").strip(): continue
-            el=c.get("eligibility") or {}; v=el.get("verdict")
-            v=canon_text(v) if isinstance(v,str) else None
-            if v not in VERDICTS: v="unrecognised"  # blank, null or unknown verdicts fail closed (#3.4)
-            if canon_id(c.get("candidate_id")) in bad: v="unrecognised"  # a candidate_id naming two people is not evidence (#1.5)
+            v=slate_verdict(c,bad)
             if is_withheld(c["candidate_name"]): continue  # a withheld name joins no roster row (confidentiality-and-ethical-wall-rules.md #4.3)
-            s.setdefault(canon_person(c["candidate_name"]),[]).append({"role_title":rt,"verdict":v,"blocking_rule":el.get("blocking_rule"),"confidence":c.get("confidence",.9),"citation":el.get("citation") or c.get("citation") or "staffing"})
-        for c in r.get("recommended_candidates",[]):
-            if canon_id(c.get("candidate_id")) in bad: continue  # never propose through an ID that names another person (#1.5)
-            if (c.get("candidate_name") or "").strip(): p.append({"candidate_name":c["candidate_name"],"role_title":rt,"fit_score":c.get("fit_score"),"assignment_status":"proposed_not_assigned","source":"adapter:staffing-slate","confidence":c.get("confidence",.9),"citation":c.get("citation") or "staffing recommended_candidates"})
-    return s,p
+            slate.append((canon_id(c.get("candidate_id")),canon_person(c["candidate_name"]),v))
+            s.setdefault(canon_person(c["candidate_name"]),[]).append({"role_title":rt,"verdict":v,"blocking_rule":(c.get("eligibility") or {}).get("blocking_rule"),"confidence":c.get("confidence",.9),"citation":(c.get("eligibility") or {}).get("citation") or c.get("citation") or "staffing"})
+    for i,r in enumerate(st["governed_roles"]):
+        rt=r.get("role_title") if (r.get("role_title") or "").strip() else "role"
+        for j,c in enumerate(r.get("recommended_candidates",[])):
+            if canon_id(c.get("candidate_id")) in bad: continue  # never propose through an ID that names another person; held as a link mismatch (#1.5)
+            nm=c.get("candidate_name")
+            if not (nm or "").strip() or is_withheld(nm) or is_withheld(c.get("candidate_id")): continue  # blank names nobody; withheld text is already held (#4.3)
+            same=[v for k,n,v in slate if k==canon_id(c.get("candidate_id")) and n==canon_person(nm)]
+            v=max(same+[v for k,n,v in slate if n==canon_person(nm)],key=lambda x:RANK.get(x,2.5)) if same else None
+            if v!="eligible": notp.append(f"upstream/staffing.governed_roles[{i}].recommended_candidates[{j}]"); continue
+            p.append({"candidate_name":nm,"role_title":rt,"fit_score":c.get("fit_score"),"assignment_status":"proposed_not_assigned","source":"adapter:staffing-slate","confidence":c.get("confidence",.9),"citation":c.get("citation") or "staffing recommended_candidates"})
+    return s,p,notp
 def verdict_for(entries,role):
     # Prefer the Scenario 02 verdict for the confirmed role; otherwise the most restrictive verdict across roles.
     same=[x for x in entries if canon_text(x.get("role_title"))==canon_text(role)] or entries
@@ -121,11 +143,14 @@ def main():
         if not drop: break
         for n in drop: del acc[n]
     while True:
+        # Only lines every later stage will also accept (domain_trust, the shared re-derivation) are carried (#1.4, #4.4).
+        lines={n:(sow,letter)[decl[n][0]].splitlines()[decl[n][1]].strip() for n in acc}; kept,_=domain_trust(list(lines.values())); acc={n:ds for n,ds in acc.items() if lines[n] in kept}
         trusted=list(set_trusted_domains([d for ds in acc.values() for d in ds]))
         h1,s1=scan_lines(sow,"raw/sow-extract.md"); h2,l1=scan_lines(letter,"raw/engagement-letter-extract.md")
         gone=[n for n in acc if (s1,l1)[decl[n][0]].splitlines()[decl[n][1]]!=(sow,letter)[decl[n][0]].splitlines()[decl[n][1]]]
         if not gone: break
         for n in gone: del acc[n]
+    decl_lines=[(sow,letter)[decl[n][0]].splitlines()[decl[n][1]].strip() for n in acc]
     sow,letter=s1,l1; h3,pursuit=scan_lines(pursuit,"raw/pursuit-record.md")
     st_raw=copy.deepcopy(st)  # identities are harvested from the UNMODIFIED staffing input, before screening redacts them (#3.3)
     st,sth=screen_upstream(st,"upstream/staffing",ENGINE,raw=True)  # every upstream string screened and redacted before use (#4.1, #4.3)
@@ -134,6 +159,9 @@ def main():
     # staffing affiliate never makes another client trusted (#3.3).
     own=engagement_words(fld(sow,"Client"),fld(sow,"Engagement ID"),fld(sow,"Matter ID"),fld(sow,"Title"))
     rterms=register_terms(os.path.join(a.raw_dir,"ethical-wall-register.csv"),{"client_name":fld(sow,"Client"),"matter_id":fld(sow,"Matter ID")},own)
+    # --scenario is copied into run_metadata: a short slug only, and never instruction-like or another client's name (#1.3, #3.3).
+    sc=re.sub(r"[._-]+"," ",a.scenario)
+    need(bool(SCENARIO_RE.fullmatch(a.scenario)) and not hits(sc) and not names_client(sc,rterms),"--scenario must be a short slug (letters, digits, '.', '_' or '-'; at most 64 characters) that is not instruction-like and names no other client (value not repeated); fail closed")
     st,soh=screen_other(st,rterms,ENGINE,"upstream/staffing.")
     rsh=scan_rows(rows,"raw/confirmed-roster.csv"); roh=screen_csv_other(rows,"raw/confirmed-roster.csv",rterms,ENGINE)
     # A register client_name/matter_id that trips the wire and names no usable identity holds anyway (#3.3).
@@ -141,7 +169,7 @@ def main():
     holds=h1+h2+h3+rsh+sth+soh
     # Linked staffing records must name the same person: read from the screened staffing input only (#1.5, #4.3).
     badlinks,lh=staffing_links(st); holds+=lh
-    smap,prop=statuses(st,badlinks); roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]+([other_escalation(len(soh))] if soh else [])
+    smap,prop,notp=statuses(st,badlinks); holds+=[rec_hold(x,ENGINE) for x in notp]; roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]+([other_escalation(len(soh))] if soh else [])
     for i,r in enumerate(rows,2):
         name=(r.get("person") or "").strip()
         if not name: continue
@@ -197,12 +225,13 @@ def main():
     # A staffing identity that trips the wire and names no usable identity cannot be confirmed: a mismatch (#1.2, #3.3).
     mism=[k_ for k_ in ("client_name","engagement_id") if other[k_] or identity_unreadable(reng.get(k_))]
     if lh: esc.append(link_escalation(len(lh)))
+    if notp: esc.append(rec_escalation(len(notp)))
     if mism:
         holds.append({"hold_id":"HOLD-STAFFING-ENGAGEMENT-MISMATCH","path":"upstream/staffing.engagement."+"/".join(mism),"reason":"staffing input names a different client or engagement than the SOW (name not repeated); staffing evidence not trusted","source":ENGINE,"confidence":.99,"citation":"confidentiality-and-ethical-wall-rules.md #3.3; role-access-matrix.md #3.1"})
         esc.append("Staffing input is for a different client or engagement than the SOW; staffing evidence held for the engagement manager (confidentiality-and-ethical-wall-rules.md #3.3)")
     affiliates=[x for x in (eng.get("affiliates") or []) if x.strip()] if not mism else []
     if any(h.get("source")=="engine:safety_text" for h in holds): esc.append(f"{sum(h.get('source')=='engine:safety_text' for h in holds)} source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
-    body={"engagement":{"engagement_id":one(sow_eid),"matter_id":one(fld(sow,"Matter ID")),"title":one(fld(sow,"Title")),"client_name":one(sow_client),"affiliates":affiliates,"sector":one(fld(pursuit,"Sector")),"region":one(fld(pursuit,"Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context",**({"trusted_domains":trusted} if trusted else {})},"joiner":joiner,"scope_summary":{"objectives":items(fld(sow,"Objectives")),"in_scope":items(fld(sow,"In scope")),"exclusions":exclusions,"deliverables":items(fld(sow,"Deliverables")),"key_dates":items(fld(sow,"Key dates")),"systems":items(fld(sow,"Systems")),"first_week_focus":items(fld(sow,"First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(fld(letter,"Confidentiality")),"ethical_wall_terms":items(fld(letter,"Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
+    body={"engagement":{"engagement_id":one(sow_eid),"matter_id":one(fld(sow,"Matter ID")),"title":one(fld(sow,"Title")),"client_name":one(sow_client),"affiliates":affiliates,"sector":one(fld(pursuit,"Sector")),"region":one(fld(pursuit,"Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context",**({"trusted_domains":trusted,"domain_declarations":decl_lines} if trusted else {})},"joiner":joiner,"scope_summary":{"objectives":items(fld(sow,"Objectives")),"in_scope":items(fld(sow,"In scope")),"exclusions":exclusions,"deliverables":items(fld(sow,"Deliverables")),"key_dates":items(fld(sow,"Key dates")),"systems":items(fld(sow,"Systems")),"first_week_focus":items(fld(sow,"First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(fld(letter,"Confidentiality")),"ethical_wall_terms":items(fld(letter,"Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
     body=redact(body)
     # Other clients named in the wall register never reach scope.json either: the same identities and own words every
     # later engine uses, whatever the register's validity for the wall decision (#2.1, #3.3).
@@ -211,6 +240,7 @@ def main():
     if mism:
         body,oh=screen_other(body,client_terms([x for k_ in mism for x in other[k_]],own),ENGINE,"scope.")  # only the identity that differs, from the raw input
         if oh: holds=dedup_holds(holds+oh); body["escalations"].append(other_escalation(len(oh)))
+    body=settle_trust(body)  # a declaration line screening withheld backs no trusted domain (#4.4)
     out={"contract_version":CONTRACT_VERSION,"run_metadata":{"generated_at":ts,"demo_scenario":a.scenario},**body,"holds":holds,"provenance":{"engines":[f"scope_digest/{VERSION}"],"generated_at":ts,"sources":["raw/sow-extract.md","raw/engagement-letter-extract.md","raw/pursuit-record.md","raw/confirmed-roster.csv","upstream/staffing"]}}
     check_contract(out,"scope","scope"); dump_json(a.out,out,"scope output")  # the document written is held to the contract (#1.3)
 if __name__=="__main__": guard(main)

@@ -33,7 +33,7 @@ def adapt(p):
     dup=duplicate_ids([(ra,"asset_id","released_assets")],W)+duplicate_ids([(kr.get("reusable_assets",[]),"asset_id","knowledge_record.reusable_assets"),(kr.get("lessons",[]),"cluster_id","knowledge_record.lessons")],W)
     if dup: raise InputError("closeout records keyed by ID must be unique (values not repeated): "+"; ".join(dup)+"; fail closed")
     ce=field(x,"engagement","obj",W,nullable=True,default={})
-    for k in ("engagement_id","client_name","title"): field(ce,k,"str",W+".engagement",nullable=True)
+    for k in ("engagement_id","client_name","matter_id","title"): field(ce,k,"str",W+".engagement",nullable=True)  # every field a reader uses (OWNER) is type-checked (#1.3)
     return {"knowledge_record":kr,"released_assets":ra,"engagement":ce,"provenance":x.get("provenance",x.get("run_metadata",{}))}
 def check_scope(s):
     need(isinstance(s,dict),f"scope input must be a JSON object, got {type(s).__name__}; fail closed")
@@ -53,7 +53,7 @@ def rel(scope,item):
     return (round(min(.99,.55+.08*len(over)),2) if over else .4),over
 def main():
     ap=ArgParser(); ap.add_argument("--scope",required=True); ap.add_argument("--closeout",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
-    s=load_json(a.scope,"scope input"); check_scope(s); set_trusted_domains((s.get("engagement") or {}).get("trusted_domains"))
+    s=load_json(a.scope,"scope input"); check_scope(s); reconcile_trusted(s,"scope")  # re-derived from the carried declaration lines, never the carried list (#1.4, #4.4)
     # Both upstream documents are screened whole (every string, holds included) and redacted before use (#4.1, #4.3).
     s,sh=screen_upstream(s,"scope",ENGINE)
     raw=adapt(a.closeout); ce=copy.deepcopy(raw["engagement"])  # the closed engagement's identity, harvested from the UNMODIFIED closeout before screening redacts it (#3.3)
@@ -82,7 +82,10 @@ def main():
     # Its identity comes from the raw closeout (ce): a client_name that also trips the wire still names the client,
     # and only the parts that are not this engagement's own become terms (identity_parts, #3.3).
     mine=s.get("engagement") or {}
-    terms=client_terms([x for k_ in ("client_name","engagement_id") for x in other_parts(ce.get(k_),mine.get(k_),k_,own_words(s))],own_words(s))
+    # The scope's engagement identity is carried state: a closed engagement for a different client is another
+    # client's in full, so its engagement ID is screened even when it equals the carried one (#1.4, #3.3).
+    cdiff=bool(other_parts(ce.get("client_name"),mine.get("client_name"),"client_name"))
+    terms=client_terms([x for k_ in ("client_name","engagement_id") for x in (identity_parts(ce.get(k_)) if cdiff and k_=="engagement_id" else other_parts(ce.get(k_),mine.get(k_),k_,own_words(s)))],own_words(s))
     # Every other client named in the wall register is screened out here too, not only at wall_check (#3.3).
     terms+=[t for t in register_terms(a.wall_register,mine,own_words(s)) if t[0] not in {x[0] for x in terms}]
     # Upstream scope holds are supplied content: screened for other-client names and steering text (#3.3, #4.3).
@@ -100,5 +103,5 @@ def main():
     status="ready" if inc and not holds else "hold" if holds else "empty"
     if not inc and not holds: s.setdefault("escalations",[]).append("No released, permissioned prior-knowledge records matched the engagement (knowledge-reuse-rules.md #2.1,#2.2,#3.1)")
     s["prior_knowledge_candidates"]=inc; s["knowledge_digest"]={"status":status,"items":inc,"excluded_items":exc,"source":ENGINE,"confidence":.92 if inc else .7,"citation":"knowledge-reuse-rules.md #1.1-#3.2"}; s["holds"]=holds; s.setdefault("provenance",{}).setdefault("engines",[]).append(f"knowledge_match/{VERSION}"); s["provenance"]["generated_at"]=ts
-    check_contract(s,"matched","matched"); dump_json(a.out,s,"matched output")  # the document written is held to the same contract (#1.3)
+    s=settle_trust(s); check_contract(s,"matched","matched"); dump_json(a.out,s,"matched output")  # the document written is held to the same contract (#1.3)
 if __name__=="__main__": guard(main)

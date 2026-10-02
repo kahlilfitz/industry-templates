@@ -68,7 +68,7 @@ def govern(p,register,inventory):
     if not canon_person(j.get("person")):
         status,reason,cit=hold_status("HOLD-NO-JOINER","scope.joiner","no joiner identified; wall status cannot be determined","#2.2"); holds+=scr
     elif rows is None:
-        status,reason,cit=hold_status("HOLD-MISSING-WALL-REGISTER",register,"missing ethical-wall register","#2.1"); holds+=scr
+        status,reason,cit=hold_status("HOLD-MISSING-WALL-REGISTER",REGISTER_LABEL,"missing ethical-wall register","#2.1"); holds+=scr  # a fixed label: a supplied path never reaches an output (#1.3)
     elif missing_columns(rows,REGISTER_COLUMNS):
         status,reason,cit=hold_status("HOLD-MALFORMED-WALL-REGISTER","raw/ethical-wall-register.csv header",f"ethical-wall register is missing required column(s): {', '.join(missing_columns(rows,REGISTER_COLUMNS))}","#2.1"); holds+=scr
     elif rows.duplicate_columns:
@@ -149,8 +149,8 @@ def govern(p,register,inventory):
     p["knowledge_digest"]=kd; p["holds"]=holds; return p
 def main():
     ap=ArgParser(); ap.add_argument("--matched",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
-    p=load_json(a.matched,"matched input"); check_matched(p); set_trusted_domains((p.get("engagement") or {}).get("trusted_domains"))
+    p=load_json(a.matched,"matched input"); check_matched(p); reconcile_trusted(p,"matched")  # re-derived from the carried declaration lines, never the carried list (#1.4, #4.4)
     p=govern(p,a.wall_register,a.workspace_inventory)
     p.setdefault("provenance",{}).setdefault("engines",[]).append(f"wall_check/{VERSION}"); p["provenance"]["generated_at"]=ts
-    check_contract(p,"governed","governed"); dump_json(a.out,p,"governed output")  # the document written is held to the same contract (#1.3)
+    p=settle_trust(p); check_contract(p,"governed","governed"); dump_json(a.out,p,"governed output")  # the document written is held to the same contract (#1.3)
 if __name__=="__main__": guard(main)

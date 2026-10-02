@@ -299,6 +299,60 @@ def set_trusted_domains(domains):
     _TRUSTED = tuple(sorted({canon_text(d).lstrip("@.") for d in (domains or []) if isinstance(d, str) and domain_ok(canon_text(d).lstrip("@."))}))
     return _TRUSTED
 def hooks(): return dict(HOOKS, trusted_domains=_TRUSTED)
+def _trust(ds): return tuple(sorted({canon_text(d).lstrip("@.") for d in (ds or []) if isinstance(d, str) and domain_ok(canon_text(d).lstrip("@."))}))
+# Trusted domains are re-derived at every stage, never taken from a carried list (#1.4, #4.4). scope_digest reads the
+# signed SOW and engagement letter and carries the declaration lines it accepted (engagement.domain_declarations) with
+# the domains they declare (engagement.trusted_domains). Every later stage re-derives the trusted set from those
+# carried lines, screened like every other string, with the same rule (domain_trust) and refuses a document whose
+# trusted_domains list names any domain the lines do not back, or that carries a line that is not an accepted
+# declaration. An edited trusted_domains list can therefore never switch off transfer screening.
+DOMAIN_LABELS = ("Client domains", "Client domain", "Firm domains", "Firm domain")  # confidentiality-and-ethical-wall-rules.md #4.4
+def declaration_value(line):
+    """The value of a labelled domain declaration line ("Client domains: a.example; b.example"), else None."""
+    if not isinstance(line, str): return None
+    for lab in DOMAIN_LABELS:
+        if re.match(rf"{re.escape(lab)}:", line, re.I): return line.split(":", 1)[1].strip()
+    return None
+def declared_domains(value):
+    """(well-formed trustable domains, count of malformed or untrustable ones) in a declaration value."""
+    ds, bad = [], 0
+    for d in re.split(r"[;,\s]+", canon_text(value or "")):
+        d = d.strip().lstrip("@.").rstrip(".")
+        if not d: continue
+        if domain_ok(d): ds.append(d)
+        else: bad += 1
+    return ds, bad
+def domain_trust(lines):
+    """(accepted declaration lines, trusted domains). A line counts only when it is a labelled domain declaration that
+    names at least one trustable domain and trips no wire when read with the trust of the OTHER accepted lines only,
+    so a declaration never vouches for itself ("Client domains: attacker.example" completing a transfer instruction);
+    iterated to a fixed point (#4.4, #4.5)."""
+    lines = list(lines or [])
+    acc = [n for n, l in enumerate(lines) if not is_withheld(l) and declared_domains(declaration_value(l))[0]]
+    while True:
+        drop = [n for n in acc if _hits(lines[n], _trust([d for m in acc if m != n for d in declared_domains(declaration_value(lines[m]))[0]]))]
+        if not drop: break
+        acc = [n for n in acc if n not in drop]
+    return [lines[n] for n in acc], list(_trust([d for n in acc for d in declared_domains(declaration_value(lines[n]))[0]]))
+def reconcile_trusted(doc, where):
+    """Re-derive the trusted domains of an intermediate document from its carried declaration lines and refuse it when
+    the carried trusted_domains list disagrees in any domain, or a carried line is not an accepted declaration
+    (values not repeated). Sets and returns the trusted domains (#1.4, #4.4)."""
+    e = doc.get("engagement") if isinstance(doc.get("engagement"), dict) else {}
+    carried = e.get("trusted_domains") or []; decls = e.get("domain_declarations") or []
+    acc, ds = domain_trust(decls)
+    need(len(acc) == len(decls) and {canon_text(d).lstrip("@.") for d in carried if isinstance(d, str)} == set(ds) and len(carried) == len(ds),
+        f"{where}.engagement.trusted_domains is not backed by the domain declarations it carries (every trusted domain must come from an accepted SOW or engagement-letter declaration line; values not repeated); intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #4.4)")
+    return list(set_trusted_domains(ds))
+def settle_trust(doc):
+    """Before an engine writes its document: drop any declaration line screening withheld and re-derive the carried
+    trusted domains from the lines left, so the next stage's reconcile_trusted always agrees (#1.4, #4.4)."""
+    e = doc.get("engagement") if isinstance(doc.get("engagement"), dict) else None
+    if e is None or ("domain_declarations" not in e and "trusted_domains" not in e): return doc
+    kept, ds = domain_trust([x for x in e.get("domain_declarations") or [] if not is_withheld(x)])
+    e.pop("trusted_domains", None); e.pop("domain_declarations", None)
+    if kept and ds: e["trusted_domains"] = ds; e["domain_declarations"] = kept
+    return doc
 OVERSIZE_REASON = "oversize: too long to screen for embedded instructions; not scanned, held for human review"
 WITHHELD = "[withheld - source text held for embedded-instruction review, see Escalations and holds]"  # #4.3
 def _families(found):
@@ -652,7 +706,7 @@ def other_hold(path, text, engine):
 # hex digests, counts, family names and permission enums); text that interpolates supplied values (column names,
 # status values, roles) is screened like any other string. Paths are always screened (#3.3, #4.3).
 ENGINE_SOURCES = {"engine:safety_text", "engine:scope_digest", "engine:knowledge_match", "engine:wall_check", "engine:access_checklist"}
-ENGINE_HOLD_ID_RE = re.compile(r"HOLD-(?:(?:OTHER-CLIENT|BRIEFING-TOPIC|SCREENED)-)?[0-9a-f]{12}|HOLD-(?:DOMAIN-NOT-TRUSTED|STAFFING-ENGAGEMENT-MISMATCH|UNKNOWN-ONBOARDING-STATUS|UNRECOGNISED-STAFFING-VERDICT|INVALID-WORKSPACE-ROW|MALFORMED-WORKSPACE-INVENTORY|MISSING-WORKSPACE-INVENTORY|PERMISSION-CLAMPED|ROLE-NOT-IN-MATRIX|UNKNOWN-WALL-DECISION|MALFORMED-WALL-REGISTER|MISSING-WALL-REGISTER|NO-JOINER|UNKNOWN-WALL-STATUS|LINKED-RECORD-MISMATCH)")
+ENGINE_HOLD_ID_RE = re.compile(r"HOLD-(?:(?:OTHER-CLIENT|BRIEFING-TOPIC|SCREENED)-)?[0-9a-f]{12}|HOLD-(?:DOMAIN-NOT-TRUSTED|STAFFING-ENGAGEMENT-MISMATCH|UNKNOWN-ONBOARDING-STATUS|UNRECOGNISED-STAFFING-VERDICT|INVALID-WORKSPACE-ROW|MALFORMED-WORKSPACE-INVENTORY|MISSING-WORKSPACE-INVENTORY|PERMISSION-CLAMPED|ROLE-NOT-IN-MATRIX|UNKNOWN-WALL-DECISION|MALFORMED-WALL-REGISTER|MISSING-WALL-REGISTER|NO-JOINER|UNKNOWN-WALL-STATUS|LINKED-RECORD-MISMATCH|STAFFING-RECOMMENDATION-NOT-ELIGIBLE)")
 OTHER_HOLD_REASON = "text names another client or matter (name not repeated); withheld from every output"
 # ---------------------------------------------------------------- linked records belong to the same subject (#1.5)
 # A record reached through another record's ID (a released-asset clearance through a reusable asset's asset_id, a
@@ -664,6 +718,11 @@ LINK_REASON = "a record linked by ID states a different person, asset, client or
 LINK_CITATION = "confidentiality-and-ethical-wall-rules.md #1.5"
 def link_hold(path, engine): return {"hold_id": LINK_HOLD_ID, "path": path, "reason": LINK_REASON, "source": engine, "confidence": 0.98, "citation": LINK_CITATION}
 def link_escalation(n): return f"{n} record(s) linked by ID state a different person, asset, client or engagement; not used as evidence - confirm the source records (confidentiality-and-ethical-wall-rules.md #1.5)"
+REC_HOLD_ID = "HOLD-STAFFING-RECOMMENDATION-NOT-ELIGIBLE"
+REC_REASON = "a staffing recommendation is not backed by an eligible slate verdict for the same candidate (blocked, conflicted, ineligible, needs review, unrecognised or no matching slate record; values not repeated); not proposed"
+REC_CITATION = "role-access-matrix.md #3.2"
+def rec_hold(path, engine): return {"hold_id": REC_HOLD_ID, "path": path, "reason": REC_REASON, "source": engine, "confidence": 0.98, "citation": REC_CITATION}
+def rec_escalation(n): return f"{n} staffing recommendation(s) are not backed by an eligible slate verdict for the same candidate; not proposed - confirm with the engagement manager (role-access-matrix.md #3.2)"
 def stated(v):
     """A subject value both records must agree on: a non-blank string that is not withheld text (withheld text is
     already held and never decides anything, #4.3)."""
@@ -684,7 +743,7 @@ ENGINE_REASONS = {OVERSIZE_REASON, OTHER_HOLD_REASON,
     "no wall register row clears this joiner for this client or matter",
     "unknown wall status value (not repeated); treated as hold",
     "ethical-wall register " + DUPLICATE_HEADER_REASON, "workspace inventory " + DUPLICATE_HEADER_REASON + "; no access is requested",
-    "workspace inventory workspace_id " + DUPLICATE_ID_REASON + "; no access is requested", LINK_REASON}
+    "workspace inventory workspace_id " + DUPLICATE_ID_REASON + "; no access is requested", LINK_REASON, REC_REASON}
 _PERM = r"(?:none|viewer|member|contributor|admin|owner)"
 ENGINE_REASON_RES = [re.compile(r"embedded_instruction:[a-z_]+(?:,[a-z_]+)*"),
     re.compile(r"\d+ declared client/firm domain\(s\) are malformed or consumer/file-sharing domains and are not trusted \(not repeated\)"),
@@ -791,7 +850,8 @@ _ESC_ID = [(re.compile(r"Confirmed roster row .+ has a blank or unrecognised Sce
     (re.compile(r"Roster row \d+ has a blank or unrecognised onboarding_status; .*"), "HOLD-UNKNOWN-ONBOARDING-STATUS"),
     (re.compile(r"A declared client/firm domain is malformed or a consumer/file-sharing domain; .*"), "HOLD-DOMAIN-NOT-TRUSTED"),
     (re.compile(r"Staffing input is for a different client or engagement than the SOW; .*"), "HOLD-STAFFING-ENGAGEMENT-MISMATCH"),
-    (re.compile(r"\d+ record\(s\) linked by ID state a different person, asset, client or engagement; .*"), LINK_HOLD_ID)]
+    (re.compile(r"\d+ record\(s\) linked by ID state a different person, asset, client or engagement; .*"), LINK_HOLD_ID),
+    (re.compile(r"\d+ staffing recommendation\(s\) are not backed by an eligible slate verdict for the same candidate; .*"), REC_HOLD_ID)]
 def _strings(v):
     if isinstance(v, dict):
         for x in v.values(): yield from _strings(x)
