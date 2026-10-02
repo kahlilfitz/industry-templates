@@ -12,14 +12,15 @@ flag detail, exclusion reason, engagement names) passes the shared embedded-inst
 tripwire; flagged text is replaced by a withheld marker and never printed (#11.2). The engagement
 header fields are screened together as one record, so an instruction split across them is withheld.
 
-Governed data is never taken on trust (client-billing-guidelines.md #13.2): before rendering, the
-engine re-runs the shared guideline rules (billing_rules.py) on a copy. An entry whose recorded verdict
-or flags are less severe than the rules', missing-time items that differ from the rules', or summary
-totals, verdict counts or missing-time hours that contradict the line items are refused: no packet
-is written, and the user is told to re-run guideline_check.py. A reject never renders as compliant.
-Summary figures are derived from the line items, excluded signal IDs from provenance.excluded_signals, and
-every printed flag detail and citation from the re-run (a supplied detail is never printed). An exclusion
-reason is printed only when it is the signal policy's own wording for that record.
+Governed data is never taken on trust (client-billing-guidelines.md #13.8): before rendering, the
+engine re-runs narrative-draft, code-map and guideline-check on the activity packet (--activity) and
+refuses a governed packet that differs from the result in any engine-owned field or section, provenance
+included (entries, verdicts, flags, missing time, summary, exclusion records): no packet is written and
+the message names no value, field or path. It then re-runs the guideline rules under the report's own
+signal policy and refuses a narrower report-time policy that changes a line item or exclusion (#13.2).
+A reject never renders as compliant. Summary figures are derived from the line items, excluded signal IDs
+from provenance.excluded_signals, and every printed flag detail and citation from the re-run (a supplied
+detail is never printed). An exclusion reason is printed only when it is the signal policy's own wording.
 
 Engagement identity (#13.3): the governed header must equal provenance.engagement_identity, which
 activity_pull recorded from the engagement letter, or the data is refused. Signals and time entries scoped
@@ -86,6 +87,8 @@ def flag_lines(flags):
 def main():
     ap = argparse.ArgumentParser(description="Write a DRAFT pre-bill exception packet (Markdown). Sends nothing.")
     ap.add_argument("--governed", required=True, help="governed.json from guideline_check")
+    ap.add_argument("--activity", required=True, help="The activity packet the governed packet was derived from (activity_pull's output); "
+                    "the governed packet must equal its re-derivation from it (client-billing-guidelines.md #13.8)")
     ap.add_argument("--out", required=True, help="Output Markdown draft")
     ap.add_argument("--requested-start", help="Period the user asked about (YYYY-MM-DD)")
     ap.add_argument("--requested-end", help="Period the user asked about (YYYY-MM-DD)")
@@ -102,6 +105,10 @@ def main():
         data = deepcopy(load_governed(args.governed))
         signal_policy.enforce_timekeeper_scope(data, engine=ENGINE, strict=True)
         script_dir = os.path.dirname(os.path.abspath(__file__))
+        activity = signal_policy.load_activity_root(args.activity, InputError)
+        # #13.8: the whole governed packet, provenance included, must equal narrative-draft, code-map and
+        # guideline-check re-run on the activity packet before anything is reconciled or rendered.
+        billing_rules.check_rederived(data, activity, "governed", script_dir)
         # The report's effective signal policy is applied inside the re-run, before anything is compared or
         # rendered, so filtering, govern() and rendering all use the same configuration.
         problems, rerun = billing_rules.reconcile_governed(data, script_dir=script_dir, engine=ENGINE,
@@ -243,7 +250,7 @@ def main():
     lines += ["", "## Privacy exclusions", ""]
     excluded = [x for x in data.get("provenance", {}).get("excluded_signals", [])
                 if signal_policy._id_key(x.get("activity_id")) not in other_ids]
-    # reconcile_governed has already matched every reason and citation to the engines' own wording (#13.2).
+    # check_rederived has already matched every reason and citation to the engines' own wording (#13.8).
     for x in excluded:
         lines.append(f"- {cell(x.get('activity_id'))}: {cell(x.get('reason'))} [{cells(x.get('citations', []))}]")
     if other_note:

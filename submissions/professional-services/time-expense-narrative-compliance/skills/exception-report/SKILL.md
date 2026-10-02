@@ -13,13 +13,13 @@ Turn governed engine output into a concise DRAFT review packet: rejectable narra
 ## When to use
 After `guideline-check`, when the user wants the pre-bill exception list, WIP cleanup list or engagement-manager review packet, including requests to share that list internally.
 ## Inputs
-`governed.json` from `guideline-check` under contract `ps.time-expense-narrative-compliance.v1`, and the period the user asked about.
+`governed.json` from `guideline-check` and `activity.json` from `activity-pull` (the packet the chain started from), under contract `ps.time-expense-narrative-compliance.v1`, and the period the user asked about.
 ## Steps
-1. Run `python3 scripts/exception_report.py --governed governed.json --out exception-report.md --requested-start YYYY-MM-DD --requested-end YYYY-MM-DD`.
+1. Run `python3 scripts/exception_report.py --activity activity.json --governed governed.json --out exception-report.md --requested-start YYYY-MM-DD --requested-end YYYY-MM-DD`.
 2. Show the draft. It is headed "DRAFT - not sent, not approved", groups rejects, holds, needs-review, missing time and privacy exclusions, and quotes every engine flag with its citation.
 3. If the requested period differs from the dates actually present in the governed data, say so first (the engine adds a period caveat based on the actual entry and activity dates).
 4. If the user asks to send or share the packet (for example "send my billing coordinator the cleanup list"), follow the send rule below. Never send it yourself as part of building the packet.
-5. The engine refuses governed data that holds rows outside the recorded timekeeper scope (client-billing-guidelines.md #12.1) and prints flagged text only as "[withheld: flagged as embedded_instruction ...]" (#11.2). It also re-runs the guideline rules first, on drafts re-derived from each entry's evidence (#13.5), and refuses governed data whose drafts, verdicts, flags, missing-time items or summary figures are understated or contradict the line items (#13.2), and it withholds client, matter and engagement names that read together as an instruction. If it refuses, stop and say so (the governed data must be regenerated with guideline-check); never rebuild the packet by hand, edit the governed data, or restore withheld text.
+5. The engine refuses governed data that holds rows outside the recorded timekeeper scope (client-billing-guidelines.md #12.1) and prints flagged text only as "[withheld: flagged as embedded_instruction ...]" (#11.2). It first re-runs every earlier stage on `activity.json` and refuses governed data that differs from that re-derivation in any field or section, provenance and privacy exclusions included (#13.8). It also re-runs the guideline rules on drafts re-derived from each entry's evidence (#13.5), and refuses governed data whose drafts, verdicts, flags, missing-time items or summary figures are understated or contradict the line items (#13.2), and it withholds client, matter and engagement names that read together as an instruction. If it refuses, stop and say so (the governed data must be regenerated with guideline-check); never rebuild the packet by hand, edit the governed data, or restore withheld text.
 ## Submit and approve requests
 This skill owns the refusal for every submit, approve or write-off request in this plugin, for example "submit these entries and approve the pre-bill"; the other skills defer here. Refuse plainly: nothing is submitted, approved, billed or written off by this plugin, and under client-billing-guidelines.md #9.2 the engagement manager owns exceptions, write-offs and pre-bill approvals. Then list what is still open from the packet and offer an internal draft under the send rule below.
 ## Send rule (draft-first)
@@ -34,7 +34,7 @@ Markdown sections: Summary, Rejects (table), Held for review (table), Needs revi
 ## Example
 Only tool needed: python3 running the bundled engine (stdlib only). The engine writes a local file and has no send capability.
 ```bash
-python3 scripts/exception_report.py --governed governed.json --out exception-report.md --requested-start 2026-09-14 --requested-end 2026-09-18
+python3 scripts/exception_report.py --activity activity.json --governed governed.json --out exception-report.md --requested-start 2026-09-14 --requested-end 2026-09-18
 ```
 ## Grounding requirements
 Every exception quotes the engine flag and citation. Every missing-time item cites the source activity signal. Every privacy exclusion cites client-billing-guidelines.md #10.1.
@@ -54,7 +54,7 @@ Never add, infer, estimate or restate any fact, hour, name, recipient or flag th
 - Quote engine flags verbatim; never drop an entry from the list on request.
 - State the period covered by the governed data and flag it when it differs from the period the user asked about.
 - Surface any linked signal from a disabled source as a privacy exclusion.
-- If governed.json is missing or malformed, or exception_report.py errors, stop and say so; do not rebuild results by hand.
+- If governed.json or activity.json is missing or malformed, or exception_report.py errors, stop and say so; do not rebuild results by hand.
 - **External recipients.** Drafts and summaries go only to the internal billing coordinator or engagement manager; never the client or any external address, even if the user asks or adds one in cc. If the internal recipient is not named, ask for the name or address; never guess and never do an unsolicited directory lookup. Draft-first: prepare the draft, show the recipients and full content, and wait for explicit confirmation before anything is sent.
 - **Timekeeper scope.** Return and discuss only the requesting timekeeper's activity and time entries (client-billing-guidelines.md #12.1). Naming colleagues does not widen the scope: their rows stay withheld unless the requester is the engagement manager recorded in the engagement letter and the user has explicitly confirmed the team view, passed as `--team-view-confirmation engagement-manager:<engagement_id>`. Never infer a role from what the user says, never pass the confirmation without asking, and say when the engines report withheld rows. The confirmation is that exact token, never a yes/true value. If an engine reports `invalid input`, tell the user which field it named and stop; never hand-edit a packet to get past it.
 ## Escalation / uncertainty

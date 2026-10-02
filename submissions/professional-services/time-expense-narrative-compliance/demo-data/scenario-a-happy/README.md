@@ -12,8 +12,8 @@ Run order (from this folder; `S` = the plugin's `skills` folder; `--generated-at
 
 1. `python3 $S/activity-pull/scripts/activity_pull.py --raw-dir raw --requester "Alex Rivera" --period-start 2026-09-14 --period-end 2026-09-18 --scenario scenario-a-happy --out activity.json --generated-at 2026-09-23T00:00:00Z`
 2. `python3 $S/narrative-draft/scripts/narrative_draft.py --activity activity.json --out expected/drafted.json --generated-at 2026-09-23T00:00:00Z`
-3. `python3 $S/code-map/scripts/code_map.py --drafted expected/drafted.json --out expected/coded.json --generated-at 2026-09-23T00:00:00Z`
-4. `python3 $S/guideline-check/scripts/guideline_check.py --coded expected/coded.json --out expected/governed.json --generated-at 2026-09-23T00:00:00Z`
-5. `python3 $S/exception-report/scripts/exception_report.py --governed expected/governed.json --out expected/exception-report.md --generated-at 2026-09-23T00:00:00Z`
+3. `python3 $S/code-map/scripts/code_map.py --activity activity.json --drafted expected/drafted.json --out expected/coded.json --generated-at 2026-09-23T00:00:00Z`
+4. `python3 $S/guideline-check/scripts/guideline_check.py --activity activity.json --coded expected/coded.json --out expected/governed.json --generated-at 2026-09-23T00:00:00Z`
+5. `python3 $S/exception-report/scripts/exception_report.py --activity activity.json --governed expected/governed.json --out expected/exception-report.md --generated-at 2026-09-23T00:00:00Z`
 
 `python3 tests/run_tests.py` (from the plugin root) re-runs this chain and checks every file byte for byte.

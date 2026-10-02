@@ -51,6 +51,11 @@
    (drafts, code mappings, compliance, missing time, exception list, summary IDs) are compared with their
    re-derivation instead.
 10. Exclusions hold in every section and blank keys never match (A20, A21, client-billing-guidelines.md #13.6).
+11. Whole-document re-derivation (A23, client-billing-guidelines.md #13.8). Each stage's whole derivation is one
+   shared function (draft_stage here; code_stage and govern_stage in billing_rules.py) that the engine and every
+   later stage's re-derivation both run. A later stage re-runs every upstream stage on the activity packet
+   (load_activity_root) and refuses a carried document that differs from the result in any field outside
+   NOT_ENGINE_OWNED (document_differences), provenance included.
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
@@ -118,6 +123,8 @@ ID_NAMESPACE_KEYS = {"cal": ("calendar",), "doc": ("document_activity",),
                      "mail": ("mailbox_metadata", "mailbox_content")}
 # The engines that read a record first; only they may exclude it as another engagement's (#13.3).
 FIRST_READERS = frozenset({"engine:activity_pull", "engine:narrative_draft"})
+# The label provenance.signal_policy.policies_applied gives a --signal-config file (never its file name, A18).
+ADDITIONAL_POLICY = "--signal-config (additional)"
 
 # Documented default posture when no policy file or packet policy is available.
 NARROW_DEFAULT = {
@@ -301,12 +308,14 @@ def load_policy_file(path, label):
     return sources
 
 
-def effective_sources(packet, config_path=None, script_dir=None):
+def effective_sources(packet, config_path=None, script_dir=None, extra_sources=None):
     """Return ({source_key: enabled}, [policy names used]); most restrictive wins.
 
     The plugin config (or, stand-alone, the narrow default floor) is ALWAYS applied. A
     --signal-config file and a packet signal_config are additional policies: they can narrow
-    the allowed sources but never widen or replace the plugin config.
+    the allowed sources but never widen or replace the plugin config. extra_sources is an
+    upstream stage's --signal-config as recovered by a re-derivation (stage_policy): it is applied
+    in that file's place, and it disables only the keys it lists as disabled.
     """
     policies = []
     found = find_plugin_config(script_dir) if script_dir else None
@@ -314,16 +323,23 @@ def effective_sources(packet, config_path=None, script_dir=None):
         policies.append(("config/signal-sources.json", load_policy_file(found, "config/signal-sources.json")))
     else:
         policies.append(("narrow default", NARROW_DEFAULT))
-    if config_path:
+    if extra_sources is not None:
+        check_sources(extra_sources, "recorded signal policy")
+        policies.append((ADDITIONAL_POLICY, extra_sources))
+    elif config_path:
         same = found and os.path.normcase(os.path.realpath(config_path)) == os.path.normcase(os.path.realpath(found))
         if not same:
-            policies.append(("--signal-config (additional)", load_policy_file(config_path, "--signal-config")))
+            policies.append((ADDITIONAL_POLICY, load_policy_file(config_path, "--signal-config")))
     packet_sources = (packet.get("signal_config") or {}).get("sources")
     if isinstance(packet_sources, dict):
         policies.append(("packet signal_config", packet_sources))
     keys = set(NARROW_DEFAULT)
     for _, sources in policies:
         keys.update(sources)
+    if extra_sources is not None:
+        # A recorded policy lists only the keys that stage narrowed; it leaves every other key as the rest decide.
+        policies = [(name, {**{k: {"enabled": True} for k in keys}, **sources}) if sources is extra_sources
+                    else (name, sources) for name, sources in policies]
     enabled = {}
     for key in sorted(keys):
         # A key missing from any policy counts as disabled in that policy (fail closed).
@@ -331,7 +347,7 @@ def effective_sources(packet, config_path=None, script_dir=None):
     return enabled, [name for name, _ in policies]
 
 
-def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unknown"):
+def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unknown", extra_sources=None):
     """Drop disabled/unknown-source signals in place and record every exclusion.
 
     - packet["activity_signals"] keeps only signals from enabled sources.
@@ -340,7 +356,7 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
       excluded_activity_ids, so no engine can count them as evidence.
     Returns the set of excluded activity IDs.
     """
-    enabled, used = effective_sources(packet, config_path, script_dir)
+    enabled, used = effective_sources(packet, config_path, script_dir, extra_sources)
     provenance = packet.setdefault("provenance", {})
     engagement_id = (packet.get("engagement") or {}).get("engagement_id")
     # #13.3: another engagement's time entries are dropped first and recorded without their text.
@@ -1155,7 +1171,7 @@ def sweep_packet(packet):
 LEDGER_KEY = "withheld_fields"
 LEDGER_CITATION = "client-billing-guidelines.md #11.4"
 LEDGER_RECORDS = ("activity_signals", "time_entries")
-RECORD_DERIVED = ("draft", "code_mapping", "compliance")  # re-derived and compared whole (#13.2, #13.5)
+RECORD_DERIVED = ("draft", "code_mapping", "compliance")  # re-derived and compared whole (#13.5, #13.8)
 # Packet-level sections that are re-derived and compared exactly at the report (#13.2), or ledgered per record.
 PACKET_DERIVED = (("activity_signals",), ("time_entries",), ("missing_time_report",), ("exception_list",),
                   ("prebill_summary", "excluded_signal_ids"), ("provenance", LEDGER_KEY))
@@ -2326,22 +2342,6 @@ def derive_drafts(packet, only=None):
             entry["draft"] = derive_draft(entry, by_id, packet, hold)
 
 
-def check_drafts(packet):
-    """Every carried draft equals its re-derivation from the packet (#13.5); used on drafted and coded packets.
-    A difference in any field is refused with no output, so no edited narrative, status, confidence, reason, link or
-    rewrite reaches a rule. Messages name the entry position and the differing field names only."""
-    by_id = signal_index(packet.get("activity_signals", []))
-    hold = draft_hold(packet)
-    for i, entry in enumerate(packet.get("time_entries") or []):
-        want, got = derive_draft(entry, by_id, packet, hold), entry["draft"]
-        if got != want:
-            # Only the engine's own field names are named; a supplied extra member is counted, never echoed.
-            fields = [k for k in want if got.get(k) != want.get(k)]
-            extra = len(set(got) - set(want))
-            fields += [f"{extra} unexpected field(s)"] if extra else []
-            raise SchemaError(f"invalid input: time_entries[{i}].draft does not match its re-derivation from the entry "
-                              f"and its linked activity (differing: {', '.join(fields)}) ({DERIVED_CITATION})")
-
 
 def validate_packet(packet, stage):
     """Validate every field the engines read, for a packet at `stage` (activity, drafted, coded, governed).
@@ -2415,11 +2415,113 @@ def validate_packet(packet, stage):
     check_exclusions(packet, level)
     check_link_state(packet, level)
     check_signal_annotations(packet)
-    if level in (1, 2):
-        check_drafts(packet)
+    # Carried drafts are not compared here: every later stage compares the whole document, drafts included, with its
+    # re-derivation from the activity packet (#13.8, billing_rules.check_rederived).
     if level >= 3:
         summary = check_fields(packet["prebill_summary"], "prebill_summary", SUMMARY_SPEC)
         for verdict, count in summary["verdict_counts"].items():
             check_enum(verdict, VERDICTS, "prebill_summary.verdict_counts key")
             check_number(count, f"prebill_summary.verdict_counts.{verdict}", low=0, integer=True)
     return packet
+
+
+# --- Whole-document re-derivation (client-billing-guidelines.md #13.8, hardening checklist A23) -----------------
+# Per-field reconciliation kept leaving the next carried field unchecked. Each stage's whole derivation is therefore
+# one shared function (draft_stage below; code_stage and govern_stage in billing_rules.py) that the engine runs and
+# that every later stage re-runs on the activity packet, comparing the whole carried document with the result.
+REDERIVE_CITATION = "client-billing-guidelines.md #13.8"
+CONTRACT_VERSION = "ps.time-expense-narrative-compliance.v1"
+STAGE_VERSIONS = {"activity": "activity_pull/1.0.4", "drafted": "narrative_draft/1.0.4", "coded": "code_map/1.0.4",
+                  "governed": "guideline_check/1.0.4"}
+STAGE_ENGINES = {"drafted": "engine:narrative_draft", "coded": "engine:code_map", "governed": "engine:guideline_check"}
+# Carried fields no engine derives from its inputs, left out of the whole-document comparison (and only these). Each
+# is still validated by the contract walk and validate_packet and screened by the next stage's sweep_packet.
+NOT_ENGINE_OWNED = {
+    ("provenance", "generated_at"): "the writing run's own timestamp (--generated-at or the clock), a run parameter no "
+                                    "input determines; it can only be an ISO-8601 date-time with seconds and an offset",
+}
+
+
+def finish_stage(packet, version, stamp):
+    """Every engine's last step: its version, the run's timestamp and the ledgers for the packet as written (#11.4;
+    the stamp replaces a withheld generated_at)."""
+    packet.setdefault("provenance", {}).setdefault("engines", []).append(version)
+    packet["provenance"]["generated_at"] = stamp
+    write_ledgers(packet)
+    return packet
+
+
+def draft_stage(packet, stamp, config_path=None, script_dir=None, extra_sources=None,
+                version=STAGE_VERSIONS["drafted"]):
+    """narrative-draft's whole derivation, in place: timekeeper scope (#12.1), signal policy (#10.1), every draft
+    (#13.5), provenance. narrative_draft.py and every later stage's re-derivation (#13.8) run this one function."""
+    enforce_timekeeper_scope(packet, engine=STAGE_ENGINES["drafted"])
+    filter_packet(packet, config_path=config_path, script_dir=script_dir, engine=STAGE_ENGINES["drafted"],
+                  extra_sources=extra_sources)
+    derive_drafts(packet)
+    return finish_stage(packet, version, stamp)
+
+
+def stage_policy(carried, stage, writer):
+    """The additional signal policy (--signal-config) an upstream stage ran with, recovered from the carried document
+    for its re-derivation; None when it had none. A run parameter, never trusted as such: an additional policy can only
+    narrow the plugin's (effective_sources), and the whole re-derived document must still equal the carried one. The
+    stage that wrote the document records its policy in provenance.signal_policy; an earlier stage's narrowing shows
+    only in the exclusion records it wrote (a narrowing that excluded nothing changes nothing a later stage keeps)."""
+    provenance = carried.get("provenance") if isinstance(carried.get("provenance"), dict) else {}
+    if writer:
+        policy = provenance.get("signal_policy")
+        if not isinstance(policy, dict) or ADDITIONAL_POLICY not in (policy.get("policies_applied") or []):
+            return None
+        sources = {k: {"enabled": True} for k in policy.get("enabled_sources") or [] if isinstance(k, str)}
+        sources.update({k: {"enabled": False} for k in policy.get("disabled_sources") or [] if isinstance(k, str)})
+        return sources
+    engine = STAGE_ENGINES[stage]
+    disabled = {r["policy_key"] for r in provenance.get("excluded_signals") or []
+                if isinstance(r, dict) and r.get("excluded_by") == engine and isinstance(r.get("policy_key"), str)
+                and r.get("reason") == disabled_source_reason(r["policy_key"])}
+    return {k: {"enabled": False} for k in sorted(disabled)} or None
+
+
+def load_activity_root(path, error):
+    """The activity packet a later stage re-derives from (#13.8): activity_pull's output, read strictly and validated
+    in full like any input. A packet a later engine has written is not an activity packet."""
+    payload = read_json(path, error, "activity input")
+    if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT_VERSION:
+        raise error(f"expected a {CONTRACT_VERSION} object as the activity input (contract_version must be the "
+                    "contract constant)")
+    validate_packet(payload, "activity")
+    if payload["provenance"].get("engines") != [STAGE_VERSIONS["activity"]] \
+            or any(k in payload for k in DRAFT_ONLY_SECTIONS) \
+            or any(isinstance(e, dict) and any(k in e for k in RECORD_DERIVED) for e in payload["time_entries"]):
+        raise SchemaError("invalid input: --activity must be the activity packet activity_pull wrote, before any later "
+                          f"stage ({REDERIVE_CITATION}) - no output was written")
+    return payload
+
+
+def _canonical_json(value):
+    """Canonical JSON text: sorted keys, exact types (true is not 1, 1 is not 1.0), nothing coerced."""
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+
+
+def _strip_path(node, path):
+    if not path or not isinstance(node, dict) or path[0] not in node:
+        return node
+    node = dict(node)
+    if len(path) == 1:
+        del node[path[0]]
+    else:
+        node[path[0]] = _strip_path(node[path[0]], path[1:])
+    return node
+
+
+def document_differences(want, got):
+    """How many top-level members of a carried document (got) differ from its re-derivation (want): missing, extra or
+    changed anywhere below, compared as canonical JSON with only the NOT_ENGINE_OWNED paths left out (#13.8). A count
+    only: no member name, path or value is returned, so no message can echo one (A18)."""
+    for path in NOT_ENGINE_OWNED:
+        want, got = _strip_path(want, path), _strip_path(got, path)
+    if not isinstance(want, dict) or not isinstance(got, dict):
+        return int(_canonical_json(want) != _canonical_json(got))
+    return sum(1 for key in set(want) | set(got)
+               if key not in want or key not in got or _canonical_json(want[key]) != _canonical_json(got[key]))

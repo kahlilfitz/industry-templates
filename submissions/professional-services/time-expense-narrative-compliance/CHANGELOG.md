@@ -346,7 +346,52 @@ All five classes reproduced before the fix. New guidelines are client-billing-gu
 - **Already refused (no change):** an exclusion record's reason or policy key, a stricter verdict with an inconsistent exception list, `code_mapping.source` and `basis`, a missing-time item's `source`, evidence hours, a signal relabelled to a disabled or skipped source, and items matched by canonical key (drafts, missing time, the exception list, IDs).
 - **Not changed:** at the activity stage a relabelled or unknown source is still excluded and listed by ID (`unknown or unapproved signal source`). That stage is the record's first read, and the exclusion is equivalent to deleting the row.
 
+### QA round 11 of e308eaa: whole-document re-derivation at every stage (1.0.4, no version bump; hardening checklist A19-A22, B5, D21; new guideline #13.8)
+- **Reproduced (High): `provenance.excluded_entries` was never re-derived or verified.** `reconcile_governed` only checked that an excluded record did not overlap an active entry. Deleting the excluded record from governed data produced a report that said "Privacy exclusions - None", and renaming `TE-OTHER-1` to `TE-FORGED-999` was rendered as given. Both exited 0.
+- **Root cause, and the class it belongs to.** Almost every confirmed defect in earlier rounds had the same cause: one field or section of a carried intermediate was not re-derived or compared, so a one-field edit changed the final report. Those rounds fixed one field at a time.
+- **Structural fix (#13.8): every downstream stage re-derives the whole document.**
+  - `code_map.py`, `guideline_check.py` and `exception_report.py` now require `--activity activity.json`, the activity-pull packet the chain started from. It is loaded, validated and screened as an activity packet, so a drafted, coded or governed packet, or another engagement's activity packet, is refused.
+  - Each stage re-runs every earlier engine in-process on that packet through shared stage functions. These are the same functions the engines' `main()` calls:
+    - `signal_policy.draft_stage` (narrative-draft);
+    - `billing_rules.code_stage` (code-map);
+    - `billing_rules.govern_stage` (guideline-check).
+  - The re-run uses the run parameters the carried packet records: its `generated_at`, and any narrower policy an earlier stage applied. That policy is recovered from `provenance.signal_policy`, or from the disabled-source exclusion records an earlier engine wrote.
+  - `billing_rules.check_rederived` then requires the carried packet to be deep-equal, in canonical JSON (sorted keys, exact types, no NaN), to the re-derivation. It covers every engine-owned field and section of the whole document, provenance included.
+  - Any missing, extra or changed field or section is refused with no output. The message gives only the count of top-level sections that differ, plus the #13.8 citation and the instruction to re-run the chain. It echoes no value, field name or path.
+  - Engine and contract versions come from one table (`signal_policy.STAGE_VERSIONS`), so the re-derivation and the engines cannot drift apart.
+- **Allow-list of carried fields that are not engine-owned (`signal_policy.NOT_ENGINE_OWNED`).** It has one entry:
+  - `provenance.generated_at`: the writing run's own timestamp (`--generated-at` or the clock), a run parameter that no input determines. It is still validated by the contract and `validate_packet` (an ISO-8601 date-time with seconds and an offset) and screened like every other string. The re-derivation reuses it as its stamp.
+- **Per-field checks removed as redundant.** Legitimate runs behave identically.
+  - `signal_policy.check_drafts`: the drafted-stage draft comparison, now covered by the whole-document comparison.
+  - The per-field body of `billing_rules.reconcile_governed`. It now only checks that a report-time `--signal-config` excludes none of the evidence the entries were governed on, and supplies the re-run the report renders from.
+  - The unused `billing_rules._flag_keys`.
+  - `validate_packet`, the contract walk, the scope checks and the screening still run first, so a malformed or out-of-scope packet gets the same specific input error as before.
+- **Behaviour changes** (legitimate chain runs and the 10 goldens are unchanged):
+  - The three downstream CLIs need `--activity`; without it argparse exits with a usage error.
+  - Any hand-edited intermediate is now refused with no output (#13.8). This covers edits that were previously held or passed with output written, such as a forged code mapping (held as `code_mapping_mismatch`) or a field that is never rendered, and edits that were refused with a message naming the differing fields (for example "differing: confidence"). It also covers `engagement.source`, a packet `signal_config`, extra undeclared members, and a scope narrowed only in an intermediate. Refusals now give a count only.
+  - Re-running a stage on its own output is refused. A stage whose skills folder lacks the plugin config while the others have it now fails closed, because the re-derived policy differs.
+  - guideline-check's "supplied code mapping(s) rejected" count is always 0 for accepted input, since a disagreeing mapping is refused first. In-process, `govern()` still discards and holds one (defence in depth).
+  - A consistent edit that matches a legitimate narrower `--signal-config` run is accepted by design. A coordinated forgery that also changes the activity packet is out of scope.
+- **Unchanged accepted designs:**
+  - any e-mail address or URL holds;
+  - a withheld draft with no narrative becomes a reject;
+  - integers beyond ±2**53 are refused;
+  - exact comparison of submitted codes, the team-view token and role, engine and source labels, and engagement identity;
+  - a metadata hit holds every entry;
+  - an object with more than 40 strings is withheld whole;
+  - any `connector:<slug>` source is accepted;
+  - `shared/steering-guard` is not edited.
+- **Docs.** Guideline #13.8 is added and #13.1 updated, in every shipped copy. The README, the code-map, guideline-check and exception-report SKILL.md files, and both demo READMEs carry the new `--activity` argument.
+
 ### Tests and goldens
+- QA round 11: 906 to 957 checks. `qa11_tests` adds 47 checks, and the retargeted tests below add 4 more (net):
+  - the round-11 reproducer (`provenance.excluded_entries` deleted, renamed or extended, its writer or citations changed, the section removed, an unrelated steering reason) at all three downstream stages, each refused with no output and nothing echoed, plus an unchanged-golden control;
+  - the allow-list: only `provenance.generated_at` is excluded, with a one-line justification, and it is a contract path; in the end-to-end walk, changing it to another valid timestamp is the only single-field edit that passes;
+  - schema coverage: a walk of the shipped contract (`contracts/ps.time-expense-narrative-compliance.v1.json`, every object, array item and `additionalProperties`) that fails if any field path is neither compared nor allow-listed, and that changes, deletes, adds and retypes each path;
+  - an end-to-end edit and delete at the first occurrence of every path in the goldens, each refused by validation or by the comparison;
+  - CLI guards: a missing `--activity`, a drafted packet or another scenario's activity packet passed as `--activity`, a non-JSON `--activity`, and code-map run on its own output;
+  - stage-function source and version consistency with the engines.
+  - Retargeted: tests that expected a per-field #13.1, #13.4 or #13.5 message, or a `code_mapping_mismatch` hold with output, for an edit to an intermediate now expect the #13.8 refusal. Controls that narrowed scope or `signal_config` in an intermediate now make that change in the activity packet instead. The test harness passes `--activity` from the recorded lineage of each intermediate.
 - Mobilization round 13: 857 to 906 checks. There are 48 new checks in `r13_tests`, plus one `rendered_flags` unit check:
   - 16 single-field edits at the report, each refused with no report and nothing echoed: the exclusion record's source and writer (including a writer added together with a widened `provenance.engines`), the compliance source, confidence and citations, a flag's source and confidence, the summary source and citations, an entry source and scope, and a missing-time signal's source and scope;
   - a carried extra flag that leaves the verdict unchanged;

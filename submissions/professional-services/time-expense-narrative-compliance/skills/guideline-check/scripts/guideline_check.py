@@ -28,6 +28,8 @@ v1.0.4 rules (billing_rules.govern):
   subject is replaced by the neutral withheld marker before output.
 - #7.1 near-duplicate = SequenceMatcher ratio or token Jaccard >= 0.92 against earlier
   narratives for the same meeting.
+- #13.8 the coded packet must equal narrative-draft and code-map re-run on the activity packet
+  (--activity) in every engine-owned field, provenance included, or nothing is written.
 """
 import argparse
 import datetime
@@ -71,6 +73,8 @@ def load_packet(path):
 def main():
     ap = argparse.ArgumentParser(description="Govern time-entry narratives against client billing guidelines.")
     ap.add_argument("--coded", required=True, help="Input coded contract JSON")
+    ap.add_argument("--activity", required=True, help="The activity packet the coded packet was derived from (activity_pull's output); "
+                    "the coded packet must equal its re-derivation from it (client-billing-guidelines.md #13.8)")
     ap.add_argument("--out", required=True, help="Output governed contract JSON")
     ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     ap.add_argument("--generated-at", help="Fixed ISO-8601 UTC timestamp for reproducible golden files")
@@ -78,21 +82,19 @@ def main():
 
     try:
         stamp = generated_at(args.generated_at)
-        out = deepcopy(load_packet(args.coded))
-        signal_policy.enforce_timekeeper_scope(out, engine=ENGINE)
-        signal_policy.filter_packet(out, config_path=args.signal_config,
-                                    script_dir=os.path.dirname(os.path.abspath(__file__)), engine=ENGINE)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        coded = load_packet(args.coded)
+        activity = signal_policy.load_activity_root(args.activity, InputError)
+        # #13.8: the whole coded packet must equal narrative-draft and code-map re-run on the activity packet.
+        out = deepcopy(billing_rules.check_rederived(coded, activity, "coded", script_dir))
+        rejected = billing_rules.govern_stage(out, stamp, config_path=args.signal_config, script_dir=script_dir,
+                                              version=ENGINE_VERSION)
     except (InputError, signal_policy.PolicyError) as exc:
         sys.exit(f"guideline_check: {signal_policy.error_text(exc)}")
 
-    rejected = billing_rules.govern(out)
     exception_list = out["exception_list"]
     missing_time = out["missing_time_report"]
     excluded = out.get("provenance", {}).get("excluded_signals", [])
-    out.setdefault("provenance", {}).setdefault("engines", []).append(ENGINE_VERSION)
-    out["provenance"]["generated_at"] = stamp
-    # #11.4: the ledgers describe the packet as written (the stamp replaces a withheld generated_at).
-    signal_policy.write_ledgers(out)
     try:
         signal_policy.write_output(args.out, signal_policy.dump_json(out))
     except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError

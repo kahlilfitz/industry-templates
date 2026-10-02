@@ -4,9 +4,13 @@
 - code_map.py builds every entry's code_mapping with code_mapping() (task-phase-codes.md).
 - guideline_check.py runs govern(). It recomputes every entry's code mapping and holds an entry whose
   supplied mapping disagrees (client-billing-guidelines.md #13.1), then applies #1-#9 and #11.
-- exception_report.py runs reconcile_governed(): govern() again on a copy of the governed data. It lists
-  every entry, missing-time item, summary figure and exclusion the supplied data understates or contradicts
-  (#13.2), and prints only the re-derived flag detail and citations (rendered_flags).
+- Each stage's whole derivation is one function here (code_stage, govern_stage; signal_policy.draft_stage for
+  narrative-draft) that the engine runs. code_map.py, guideline_check.py and exception_report.py each re-run
+  every upstream stage on the activity packet (rederive) and refuse a carried document that differs from the
+  result in any engine-owned field, provenance included (check_rederived, #13.8).
+- exception_report.py then runs reconcile_governed(): govern() again under the report's own signal policy, so a
+  narrower report-time policy that excludes evidence the entries were governed on is refused (#13.2), and prints
+  only the re-derived flag detail and citations (rendered_flags).
 
 Constants mirror references/task-phase-codes.md and references/client-billing-guidelines.md section
 by section. The model reports these results; it never decides, suppresses or downgrades them.
@@ -649,10 +653,6 @@ def summary_figures(entries, missing_time):
     }
 
 
-def _flag_keys(flags):
-    return {(f.get("flag"), f.get("severity")) for f in flags or [] if isinstance(f, dict)}
-
-
 def excluded_ids(packet):
     """The excluded signal IDs, derived from provenance.excluded_signals (#10.1)."""
     return [e.get("activity_id") for e in (packet.get("provenance") or {}).get("excluded_signals", [])]
@@ -660,134 +660,96 @@ def excluded_ids(packet):
 
 def rendered_flags(recorded, rederived):
     """The flags exception_report prints for one entry (#13.2): the re-run's flags with their re-derived detail
-    and citations. reconcile_governed has already refused any recorded flag the re-run does not raise (#13.7), so
-    nothing carried is kept; supplied detail and citation text is never printed."""
+    and citations. check_rederived has already refused any recorded flag that differs from the re-derivation (#13.8),
+    so nothing carried is kept; supplied detail and citation text is never printed."""
     return [{"flag": f["flag"], "severity": f["severity"], "detail": f.get("detail", ""),
              "citations": list(f.get("citations", []))} for f in rederived]
 
 
-def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_path=None):
-    """Re-run govern() on a copy of governed data; return (problems, rerun). No problems = consistent (#13.2).
+# The sections a report-time signal policy could change by excluding evidence (#13.2).
+REPORT_POLICY_SECTIONS = ("activity_signals", "time_entries", "missing_time_report", "exception_list", "prebill_summary")
 
-    - Entries: the recorded verdict may never be less severe than the re-run's, every re-run (flag, severity)
-      must be recorded, and then the whole compliance object must equal the re-run's (#13.7): no carried extra
-      flag, stricter verdict, source, confidence or citation is kept. An entry whose draft was withheld (#11.2)
-      is re-checked on its own narrative like any other, with the embedded_instruction hold merged in: a reject
-      stays a reject.
-    - Drafts: every entry's draft must equal the re-run's, which starts from the draft re-derived from the entry and
-      its linked activity (signal_policy.derive_draft) and applies guideline-check's withholding (#13.5).
-    - Missing time: the recorded items must equal the re-run's exactly.
-    - Summary: totals, hours, verdict counts, missing-time hours, the exception count, the period and the
-      excluded signal IDs must match the line items, the packet period and provenance.excluded_signals, and the
-      whole summary (source, confidence, citations) must equal the re-run's.
-    - Exclusions: provenance.excluded_signals must cover every entry's excluded links, list no signal still
-      present, be unchanged when the signal policy is re-applied, and carry only the engines' own reason and
-      citation wording with a source, policy key and writer that agree (signal_policy.exclusion_record_agrees);
-      provenance.excluded_entries only the #13.3 citation and an engine that reads entries first.
-    - Signal policy: the re-run applies the same effective policy the report uses (config_path, the report's
-      --signal-config), so a narrower report-time policy that excludes evidence an entry was governed on is a
-      mismatch, never a compliant entry rendered from excluded evidence.
-    - Records: no time entry is both active and listed in provenance.excluded_entries.
-    Messages name fields, positions, verdicts and the re-run's flag names only; never supplied text.
+
+def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_path=None):
+    """The report-time signal policy check, run after check_rederived has matched the whole governed document with
+    its re-derivation from the activity packet (#13.8). Returns (problems, rerun); no problems = consistent (#13.2).
+
+    The report's own effective policy (config_path, the report's --signal-config) is applied to a copy, starting from
+    drafts re-derived from each entry's evidence (#13.5), and the guideline rules are re-run. A narrower report-time
+    policy that excludes evidence an entry was governed on changes a line item or an exclusion record and is refused,
+    never rendered as a compliant entry built on excluded evidence; a policy that excludes nothing changes nothing.
+    Every other field was already compared whole by check_rederived, so nothing else is reconciled field by field
+    here. Messages name sections only, never supplied text.
     """
     rerun = deepcopy(packet)
-    # #13.5: the re-run starts from each entry's draft re-derived from its own evidence, never the carried draft.
     signal_policy.derive_drafts(rerun)
     signal_policy.filter_packet(rerun, config_path=config_path, script_dir=script_dir, engine=engine)
     govern(rerun)
-    problems = []
-    rank = SEVERITY_ORDER
-    supplied = packet["time_entries"]
-    if len(supplied) != len(rerun["time_entries"]):
-        problems.append("time_entries: the entry count changed on re-run")
-    for i, (got, want) in enumerate(zip(supplied, rerun["time_entries"])):
-        where = f"time_entries[{i}]"
-        recorded = got["compliance"]
-        have = _flag_keys(recorded.get("flags"))
-        need = _flag_keys(want["compliance"]["flags"])
-        floor = want["compliance"]["verdict"]
-        if signal_policy.is_withheld((got.get("draft") or {}).get("narrative")):
-            need.add(("embedded_instruction", "hold_for_review"))
-            floor = max(floor, "hold_for_review", key=rank.__getitem__)
-        absent = sorted({f for f, _ in need - have})
-        if rank[recorded["verdict"]] < rank[floor] or absent:
-            problems.append(f"{where}: recorded verdict {recorded['verdict']}, the rules give {floor}"
-                            + (f" (flags not recorded: {', '.join(absent)})" if absent else ""))
-        elif recorded != want["compliance"]:
-            # #13.7: the whole compliance object is compared (verdict, every flag with its detail and citations,
-            # source, confidence, required elements, evidence hours, citations); a carried extra flag or a stricter
-            # verdict the rules do not give is not kept either. Only the engine's own field names are named.
-            fields = [k for k in want["compliance"] if recorded.get(k) != want["compliance"].get(k)]
-            extra = len(set(recorded) - set(want["compliance"]))
-            problems.append(f"{where}.compliance does not match its re-derivation (differing: "
-                            f"{', '.join(fields + ([f'{extra} unexpected field(s)'] if extra else []))}; "
-                            f"{signal_policy.RECORD_CITATION})")
-    for i, (got, want) in enumerate(zip(supplied, rerun["time_entries"])):
-        if got.get("draft") != want["draft"]:
-            fields = [k for k in want["draft"] if (got.get("draft") or {}).get(k) != want["draft"].get(k)]
-            extra = len(set(got.get("draft") or {}) - set(want["draft"]))
-            problems.append(f"time_entries[{i}].draft does not match its re-derivation from the entry and its linked "
-                            f"activity (differing: {', '.join(fields + ([f'{extra} unexpected field(s)'] if extra else []))}; "
-                            f"{signal_policy.DERIVED_CITATION})")
-    if packet["missing_time_report"] != rerun["missing_time_report"]:
-        problems.append(f"missing_time_report: {len(packet['missing_time_report'])} recorded item(s) do not match "
-                        f"the {len(rerun['missing_time_report'])} item(s) the rules give")
-    summary = packet["prebill_summary"]
-    for key, value in summary_figures(supplied, packet["missing_time_report"]).items():
-        if summary.get(key) != value:
-            problems.append(f"prebill_summary.{key} does not match the line items")
-    derived_exceptions = sum(1 for e in supplied if e["compliance"].get("flags")) + bool(packet["missing_time_report"])
-    if "exception_count" in summary and summary["exception_count"] != derived_exceptions:
-        problems.append("prebill_summary.exception_count does not match the line items")
-    if summary != rerun["prebill_summary"]:
-        # #13.7: every summary field (source, confidence and citations included) equals the re-run's.
-        fields = [k for k in rerun["prebill_summary"] if summary.get(k) != rerun["prebill_summary"].get(k)]
-        extra = len(set(summary) - set(rerun["prebill_summary"]))
-        problems.append(f"prebill_summary does not match its re-derivation (differing: "
-                        f"{', '.join(fields + ([f'{extra} unexpected field(s)'] if extra else []))}; "
-                        f"{signal_policy.RECORD_CITATION})")
-    if len(packet["exception_list"]) != derived_exceptions:
-        problems.append("exception_list does not match the line items")
-    else:
-        # A22: compared item by item, IDs and persons included; a matching count is not enough.
-        rebuilt = exception_items(supplied, packet["missing_time_report"])
-        for n, (got, want) in enumerate(zip(packet["exception_list"], rebuilt)):
-            if got != want:
-                problems.append(f"exception_list[{n}] does not match its rebuild from the line items (compared item "
-                                f"by item, {RECONCILE_CITATION})")
-                break
-    if "period" in summary and summary["period"] != packet.get("period"):
-        problems.append("prebill_summary.period does not match the packet period")
-    ids = excluded_ids(packet)
-    if "excluded_signal_ids" in summary and summary["excluded_signal_ids"] != ids:
-        problems.append("prebill_summary.excluded_signal_ids does not match provenance.excluded_signals")
-    if excluded_ids(rerun) != ids:
-        problems.append("activity_signals hold signal(s) the signal policy excludes, or provenance.excluded_signals "
-                        "is incomplete")
-    key = signal_policy._id_key
-    present = {key(a.get("activity_id")) for a in packet["activity_signals"]}
-    if present & {key(x) for x in ids if x != signal_policy.WITHHELD_TEXT}:
-        problems.append("provenance.excluded_signals lists signal(s) still present in activity_signals")
-    dropped = {key(e.get("entry_id")) for e in (packet.get("provenance") or {}).get("excluded_entries", [])
-               if e.get("entry_id") != signal_policy.WITHHELD_TEXT}
-    if dropped & {key(e.get("entry_id")) for e in supplied}:
-        problems.append("provenance.excluded_entries lists time entr(ies) still present in time_entries")
-    recorded = {signal_policy.WITHHELD_TEXT if x == signal_policy.WITHHELD_TEXT else key(x) for x in ids}
-    for i, entry in enumerate(supplied):
-        if any((signal_policy.WITHHELD_TEXT if a == signal_policy.WITHHELD_TEXT else key(a)) not in recorded
-               for a in entry.get("excluded_activity_ids") or []):
-            problems.append(f"time_entries[{i}].excluded_activity_ids are not recorded in provenance.excluded_signals")
-    # Exclusion reasons and citations are printed only when they are the engines' own wording (#13.2).
-    provenance = packet.get("provenance") or {}
-    for i, record in enumerate(provenance.get("excluded_signals", [])):
-        if not signal_policy.exclusion_record_agrees(record, packet):
-            problems.append(f"provenance.excluded_signals[{i}] reason, citations, source or writer are not the "
-                            "signal policy's own record")
-    first_readers = signal_policy.FIRST_READERS
-    for i, record in enumerate(provenance.get("excluded_entries", [])):
-        if record.get("citations") != [signal_policy.ENGAGEMENT_CITATION]:
-            problems.append(f"provenance.excluded_entries[{i}] citations are not the engagement-identity rule's")
-        if record.get("excluded_by") not in first_readers:
-            problems.append(f"provenance.excluded_entries[{i}] names a writer that does not read entries first "
-                            f"({signal_policy.RECORD_CITATION})")
+    problems = [f"{key} changes when the report's signal policy is applied" for key in REPORT_POLICY_SECTIONS
+                if signal_policy.document_differences({key: packet.get(key)}, {key: rerun.get(key)})]
+    for key in ("excluded_signals", "excluded_entries"):
+        if signal_policy.document_differences({key: (packet.get("provenance") or {}).get(key)},
+                                              {key: (rerun.get("provenance") or {}).get(key)}):
+            problems.append(f"provenance.{key} changes when the report's signal policy is applied")
     return problems, rerun
+
+
+# --- Stage derivations and whole-document re-derivation (client-billing-guidelines.md #13.8) ---------------------
+
+def code_stage(packet, stamp, config_path=None, script_dir=None, extra_sources=None,
+               version=signal_policy.STAGE_VERSIONS["coded"]):
+    """code-map's whole derivation, in place: timekeeper scope (#12.1), signal policy (#10.1), every entry's code
+    mapping, provenance. code_map.py and every later stage's re-derivation run this one function."""
+    signal_policy.enforce_timekeeper_scope(packet, engine=CODE_MAP_ENGINE)
+    signal_policy.filter_packet(packet, config_path=config_path, script_dir=script_dir, engine=CODE_MAP_ENGINE,
+                                extra_sources=extra_sources)
+    by_id = signal_policy.signal_index(packet["activity_signals"])
+    for entry in packet["time_entries"]:
+        entry["code_mapping"] = code_mapping(entry, signal_policy.linked_signals(entry, by_id))
+    return signal_policy.finish_stage(packet, version, stamp)
+
+
+def govern_stage(packet, stamp, config_path=None, script_dir=None, extra_sources=None,
+                 version=signal_policy.STAGE_VERSIONS["governed"]):
+    """guideline-check's whole derivation, in place: timekeeper scope (#12.1), signal policy (#10.1), govern(),
+    provenance. Returns govern()'s count of rejected supplied mappings. guideline_check.py and exception_report.py's
+    re-derivation run this one function."""
+    signal_policy.enforce_timekeeper_scope(packet, engine=GUIDELINE_ENGINE)
+    signal_policy.filter_packet(packet, config_path=config_path, script_dir=script_dir, engine=GUIDELINE_ENGINE,
+                                extra_sources=extra_sources)
+    rejected = govern(packet)
+    signal_policy.finish_stage(packet, version, stamp)
+    return rejected
+
+
+UPSTREAM_STAGES = (("drafted", signal_policy.draft_stage), ("coded", code_stage), ("governed", govern_stage))
+
+
+def rederive(activity, carried, stage, script_dir=None):
+    """The document the engines write at `stage` (drafted, coded or governed) from this activity packet: every stage
+    up to it re-run in order, each with the run parameters the carried document records (its timestamp and each
+    stage's additional signal policy, signal_policy.stage_policy). The stage is fixed by the engine asking, never by
+    the carried provenance.engines list."""
+    stamp = (carried.get("provenance") or {}).get("generated_at")
+    packet = deepcopy(activity)
+    for name, run_stage in UPSTREAM_STAGES:
+        run_stage(packet, stamp, script_dir=script_dir,
+                  extra_sources=signal_policy.stage_policy(carried, name, writer=name == stage))
+        if name == stage:
+            return packet
+    raise ValueError("unknown stage")
+
+
+def check_rederived(carried, activity, stage, script_dir=None):
+    """Refuse a carried document that differs from its re-derivation from the activity packet in any field outside
+    signal_policy.NOT_ENGINE_OWNED - missing, extra or changed, provenance included (#13.8). Returns the re-derived
+    document. The message counts the differing top-level sections and names no value, field or path."""
+    want = rederive(activity, carried, stage, script_dir)
+    differ = signal_policy.document_differences(want, carried)
+    if differ:
+        raise signal_policy.SchemaError(
+            f"invalid input: the {stage} packet does not equal its re-derivation from the activity packet "
+            f"({differ} top-level section(s) differ; every engine-owned field and section, provenance included, is "
+            f"re-derived by re-running the earlier stages and compared whole, {signal_policy.REDERIVE_CITATION}) - no "
+            "output was written; re-run the chain from narrative_draft.py on the same activity packet")
+    return want

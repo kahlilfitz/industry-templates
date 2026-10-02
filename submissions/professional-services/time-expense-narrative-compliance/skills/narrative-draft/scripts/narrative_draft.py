@@ -24,6 +24,9 @@ v1.0.4 rules:
 - Sufficiency (#1.2) is NOT asserted here; guideline-check alone determines it (#1.3).
 - The drafting rules live in the shared signal_policy.py (derive_draft), so every later stage
   re-derives each draft from the same evidence and refuses a carried draft that differs (#13.5).
+- The whole stage is one shared function (signal_policy.draft_stage). code_map, guideline_check and
+  exception_report re-run it on the same activity packet (their --activity) and refuse a drafted packet
+  that differs from the result in any engine-owned field, provenance included (#13.8).
 - Existing narratives are preserved for compliance review. Separately labeled suggested
   rewrites are generated only from cited enabled-source activity and never replace them.
 """
@@ -37,7 +40,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = signal_policy.DRAFT_ENGINE  # "engine:narrative_draft"
-ENGINE_VERSION = "narrative_draft/1.0.4"
+ENGINE_VERSION = signal_policy.STAGE_VERSIONS["drafted"]  # "narrative_draft/1.0.4", shared with later re-derivations
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 
 
@@ -74,20 +77,14 @@ def main():
     try:
         stamp = generated_at(args.generated_at)
         out = deepcopy(load_packet(args.activity))
-        signal_policy.enforce_timekeeper_scope(out, engine=ENGINE)
-        signal_policy.filter_packet(out, config_path=args.signal_config,
-                                    script_dir=os.path.dirname(os.path.abspath(__file__)), engine=ENGINE)
+        # The whole derivation is shared (signal_policy.draft_stage: scope, signal policy, every draft, provenance), so
+        # every later stage re-runs exactly this on the activity packet and refuses a carried copy that differs (#13.8).
+        signal_policy.draft_stage(out, stamp, config_path=args.signal_config,
+                                  script_dir=os.path.dirname(os.path.abspath(__file__)), version=ENGINE_VERSION)
     except (InputError, signal_policy.PolicyError) as exc:
         sys.exit(f"narrative_draft: {signal_policy.error_text(exc)}")
 
-    # The drafting rules are shared (signal_policy.derive_draft) so that every later stage re-derives the same
-    # draft from the same evidence and refuses a carried draft that differs (#13.5).
-    signal_policy.derive_drafts(out)
     drafted_count = sum(e["draft"]["status"] in signal_policy.GROUNDED_STATUSES for e in out["time_entries"])
-    out.setdefault("provenance", {}).setdefault("engines", []).append(ENGINE_VERSION)
-    out["provenance"]["generated_at"] = stamp
-    # #11.4: the ledgers describe the packet as written (the stamp replaces a withheld generated_at).
-    signal_policy.write_ledgers(out)
     try:
         signal_policy.write_output(args.out, signal_policy.dump_json(out))
     except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError

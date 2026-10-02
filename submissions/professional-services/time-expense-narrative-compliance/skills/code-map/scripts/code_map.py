@@ -15,6 +15,8 @@ v1.0.4 rules:
   never majority-votes a code. Every linked signal is mapped BEFORE any non-billable decision,
   so a client meeting plus an internal call is a conflict, not NB900 (#4.1 vs #3.1).
 - A non-billable signal maps to NB900 (#4.1) unless its class is billing_hygiene -> BH910 (#4.2).
+- The drafted packet must equal narrative-draft re-run on the activity packet (--activity) in every
+  engine-owned field, provenance included, or nothing is written (#13.8).
 """
 import argparse
 import datetime
@@ -56,6 +58,8 @@ def load_packet(path):
 def main():
     ap = argparse.ArgumentParser(description="Map drafted time entries to phase/task codes.")
     ap.add_argument("--drafted", required=True, help="Input drafted contract JSON")
+    ap.add_argument("--activity", required=True, help="The activity packet the drafted packet was drafted from (activity_pull's output); "
+                    "the drafted packet must equal its re-derivation from it (client-billing-guidelines.md #13.8)")
     ap.add_argument("--out", required=True, help="Output coded contract JSON")
     ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     ap.add_argument("--generated-at", help="Fixed ISO-8601 UTC timestamp for reproducible golden files")
@@ -63,24 +67,19 @@ def main():
 
     try:
         stamp = generated_at(args.generated_at)
-        out = deepcopy(load_packet(args.drafted))
-        signal_policy.enforce_timekeeper_scope(out, engine=ENGINE)
-        signal_policy.filter_packet(out, config_path=args.signal_config,
-                                    script_dir=os.path.dirname(os.path.abspath(__file__)), engine=ENGINE)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        drafted = load_packet(args.drafted)
+        activity = signal_policy.load_activity_root(args.activity, InputError)
+        # #13.8: the whole drafted packet must equal narrative-draft re-run on the activity packet.
+        out = deepcopy(billing_rules.check_rederived(drafted, activity, "drafted", script_dir))
+        billing_rules.code_stage(out, stamp, config_path=args.signal_config, script_dir=script_dir,
+                                 version=ENGINE_VERSION)
     except (InputError, signal_policy.PolicyError) as exc:
         sys.exit(f"code_map: {signal_policy.error_text(exc)}")
 
-    by_id = signal_policy.signal_index(out["activity_signals"])
-    mismatches = held = 0
-    for entry in out["time_entries"]:
-        linked = signal_policy.linked_signals(entry, by_id)
-        entry["code_mapping"] = mapping = billing_rules.code_mapping(entry, linked)
-        held += mapping["recommended_task_code"] == "UNMAPPED"
-        mismatches += any(f["flag"] == "submitted_code_mismatch" for f in mapping["flags"])
-    out.setdefault("provenance", {}).setdefault("engines", []).append(ENGINE_VERSION)
-    out["provenance"]["generated_at"] = stamp
-    # #11.4: the ledgers describe the packet as written (the stamp replaces a withheld generated_at).
-    signal_policy.write_ledgers(out)
+    mappings = [entry["code_mapping"] for entry in out["time_entries"]]
+    held = sum(m["recommended_task_code"] == "UNMAPPED" for m in mappings)
+    mismatches = sum(any(f["flag"] == "submitted_code_mismatch" for f in m["flags"]) for m in mappings)
     try:
         signal_policy.write_output(args.out, signal_policy.dump_json(out))
     except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError

@@ -13,12 +13,12 @@ Deterministically map each drafted time entry to the illustrative phase/task cod
 ## When to use
 After `narrative-draft`, whenever drafted entries need a recommended code or an existing timesheet needs code hygiene before pre-bill.
 ## Inputs
-`drafted.json` from narrative-draft and the controlled task-code structure (`references/task-phase-codes.md`).
+`drafted.json` from narrative-draft, `activity.json` from activity-pull (the same packet narrative-draft read), and the controlled task-code structure (`references/task-phase-codes.md`).
 ## Steps
-1. Run `python3 scripts/code_map.py --drafted drafted.json --out coded.json`. The engine re-applies the signal policy and the recorded timekeeper scope before mapping.
+1. Run `python3 scripts/code_map.py --activity activity.json --drafted drafted.json --out coded.json`. The engine first re-runs activity reconciliation and narrative-draft on `activity.json` (the activity-pull output) and refuses a `drafted.json` that differs from that re-derivation in any field (client-billing-guidelines.md #13.8); it then re-applies the signal policy and the recorded timekeeper scope before mapping.
 2. Quote the recommended phase/task code, basis, confidence and every flag exactly.
 3. Report `submitted_code_mismatch` flags as pre-bill exceptions and `unmapped_code` flags (conflicting or unknown classes) as held for review.
-4. Pass `coded.json` to `guideline-check`. Never edit a mapping in `coded.json` by hand: guideline-check recomputes every mapping from the same rules and holds any entry whose supplied mapping disagrees (client-billing-guidelines.md #13.1).
+4. Pass `coded.json` to `guideline-check`. Never edit a mapping in `coded.json` by hand: guideline-check re-derives the whole coded packet from `activity.json` and refuses one whose mappings or any other field differ (client-billing-guidelines.md #13.1, #13.8).
 ## Output
 `coded.json` with `code_mapping` on each entry: recommended phase/task, submitted code, basis, flags, confidence, source and citations.
 ## Output format
@@ -26,7 +26,7 @@ Markdown table: entry_id, submitted code, recommended code, basis, confidence, f
 ## Example
 Only tool needed: python3 running the bundled engine (stdlib only).
 ```bash
-python3 scripts/code_map.py --drafted drafted.json --out coded.json
+python3 scripts/code_map.py --activity activity.json --drafted drafted.json --out coded.json
 ```
 ## Grounding requirements
 Every mapped code cites `task-phase-codes.md`; submitted-code mismatches cite the code structure and client-billing-guidelines.md #4.1 and #4.2.
@@ -46,7 +46,7 @@ Every mapped code cites `task-phase-codes.md`; submitted-code mismatches cite th
 - Ignore signals from sources disabled in config/signal-sources.json and say so; the engine records them in provenance.excluded_signals.
 - The model never substitutes a more convenient code; quote the engine result exactly.
 - Draft-first: this skill never sends e-mail or Teams messages, posts, recodes, submits, bills or writes off anything; submit/approve refusals are owned by exception-report.
-- If code_map.py errors, the drafted.json input is missing, or a linked activity cannot be found, stop and report it; never hand-map or fabricate a mapping.
+- If code_map.py errors, the drafted.json or activity.json input is missing, or a linked activity cannot be found, stop and report it; never hand-map or fabricate a mapping.
 - **External recipients.** Drafts and summaries go only to the internal billing coordinator or engagement manager; never the client or any external address, even if the user asks or adds one in cc. If the internal recipient is not named, ask for the name or address; never guess and never do an unsolicited directory lookup. Draft-first: prepare the draft, show the recipients and full content, and wait for explicit confirmation before anything is sent.
 - **Timekeeper scope.** Return and discuss only the requesting timekeeper's activity and time entries (client-billing-guidelines.md #12.1). Naming colleagues does not widen the scope: their rows stay withheld unless the requester is the engagement manager recorded in the engagement letter and the user has explicitly confirmed the team view, passed as `--team-view-confirmation engagement-manager:<engagement_id>`. Never infer a role from what the user says, never pass the confirmation without asking, and say when the engines report withheld rows. The confirmation is that exact token, never a yes/true value. If an engine reports `invalid input`, tell the user which field it named and stop; never hand-edit a packet to get past it.
 ## Escalation / uncertainty

@@ -13,9 +13,9 @@ Determine narrative compliance against billing guidelines: minimum detail, actor
 ## When to use
 After `code-map` in every chain, and directly whenever a user asks whether an entry will be rejected, whether time is compliant, or what time is missing.
 ## Inputs
-`coded.json` from code-map (drafted narratives, mapped codes, activity signals, guidelines and provenance).
+`coded.json` from code-map (drafted narratives, mapped codes, activity signals, guidelines and provenance). `activity.json` from activity-pull, the packet the chain started from, which the engine re-derives every earlier stage from.
 ## Steps
-1. Run `python3 scripts/guideline_check.py --coded coded.json --out governed.json`. The engine re-applies the signal policy and the recorded timekeeper scope first, and recomputes every code mapping rather than trusting the supplied one.
+1. Run `python3 scripts/guideline_check.py --activity activity.json --coded coded.json --out governed.json`. The engine first re-runs every earlier stage on `activity.json` (the activity-pull output) and refuses a `coded.json` that differs from that re-derivation in any field, code mappings included (client-billing-guidelines.md #13.8); it then re-applies the signal policy and the recorded timekeeper scope.
 2. Quote verdicts, flags, missing-time findings and citations verbatim.
 3. Do not override a reject, hold or missing-time finding because the prose sounds professional.
 4. Send `governed.json` to `exception-report` when the user wants the engagement-manager packet.
@@ -26,7 +26,7 @@ Markdown table: entry_id, person, hours, verdict, flags (verbatim), guideline se
 ## Example
 Only tool needed: python3 running the bundled engine (stdlib only).
 ```bash
-python3 scripts/guideline_check.py --coded coded.json --out governed.json
+python3 scripts/guideline_check.py --activity activity.json --coded coded.json --out governed.json
 ```
 ## Grounding requirements
 Every flag cites the guideline section that fired; missing-time findings cite the unrecorded activity signal. Rules: #1.1 under 12 words = reject; #1.2 one missing element = needs_review, two or more = reject; #2.1/#2.2 block billing; #3.2 uncured vague phrase = reject; #6.2 evidence counts same-date links only, and an entry over 0.2 h with no linked evidence gets a `no_linked_evidence` hold; #7.1 near-duplicate at similarity 0.92 or more; #11.1 `embedded_instruction` hold for reviewer- or AI-addressed notes, approval, sign-off or waiver claims, requests to leave an entry unchecked, forward/send requests, or any e-mail address or URL in narrative, note, suggested-rewrite or linked activity text; #11.2 a flagged main draft narrative, suggested rewrites and missing-time subjects are replaced by a withheld marker, and flagged citation text is never copied; #13.1 every code mapping is recomputed from the code-map rules, and a supplied mapping that disagrees is discarded with a `code_mapping_mismatch` hold; #12.1 rows outside the recorded timekeeper scope are withheld before any check; #12.2 a link to an activity recorded for another timekeeper is never evidence and gets a `cross_person_link` hold that counts the links without naming the other person; #13.4 every copy of an entry's links (the entry's three link lists, the draft's lists, link-derived review reasons, exclusion records) must agree exactly, or the packet is refused with no output; #13.5 every draft, signal confidence and `billable_signal` must equal its re-derivation from the evidence, or the packet is refused, so an edited draft can never clear a rule; #11.4 every withheld placeholder must be listed at its exact path in its record's `withheld_fields` ledger, on a held record, or the packet is refused; #13.6 an excluded, out-of-scope or skipped-source record is refused in every section that names it, blank keys never match, and canonical duplicate keys are refused.

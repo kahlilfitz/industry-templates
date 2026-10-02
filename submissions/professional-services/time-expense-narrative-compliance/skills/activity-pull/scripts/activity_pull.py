@@ -43,7 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:activity_pull"
-ENGINE_VERSION = "activity_pull/1.0.4"
+ENGINE_VERSION = signal_policy.STAGE_VERSIONS["activity"]  # "activity_pull/1.0.4"; later stages require it (#13.8)
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 POLICY_CITATION = signal_policy.POLICY_CITATION
 MATCHED_CONFIDENCE = signal_policy.MATCHED_CONFIDENCE  # shared: later stages re-derive it (#13.5)
