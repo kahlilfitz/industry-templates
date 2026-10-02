@@ -113,6 +113,17 @@ How to read a report:
   example 64 levels) at load time with a clean input error, so no recursive walker or `deepcopy`
   can raise an uncaught `RecursionError`. [Wave 1 pre-freeze QA round 7]
   Test: a valid JSON document nested 1,200 levels deep in an undeclared metadata field.
+- [ ] **A15. Contracts require what later stages use.** Every `$defs` object in the contract
+  lists in `required` each field a later stage renders or relies on, and display fields may not be
+  `null`. Line-oriented parsers match one line (`[ \t]`, `[^\r\n]`), never `\s`, so a blank field
+  cannot swallow the next labelled line. [Wave 1 pre-freeze QA round 9]
+  Test: a knowledge item with only its ID; a SOW with an empty `Client:` line.
+- [ ] **A16. Harvest before you redact.** Identities and redaction terms (other-client names,
+  mismatched engagement identities) are taken from an unmodified copy of the raw input before any
+  screening replaces text with placeholders. A malformed register or inventory is still screened
+  cell by cell before it is discarded for decisions. [Wave 1 pre-freeze QA round 9]
+  Test: a register restriction holding both an instruction and another client's name; the name
+  must still be withheld everywhere.
 
 ## B. Finding integrity (engines)
 
