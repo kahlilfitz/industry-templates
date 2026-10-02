@@ -385,6 +385,27 @@ The structural patterns described at the top of this entry are replaced, not sup
 - Docs: quality-gate-criteria.md #8.4, #8.9 and #8.11, and severity-rules.md #3.4 and #3.8, updated in all six copies.
 - Tests: 939 checks (were 909): 34 new in `qa104_round10_tests`, and the 4 IDS differing-`findings` checks removed. They cover the four reproducers; exact and fold-equivalent collisions at each stage, end to end and on re-runs; an exact copy; an edited spoof hold; the reserved assertion ID; non-engine duplicates still refused; the number boundary; ID-free and value-free messages; and planted leaks the static check must flag. Both demos' goldens are byte-identical. Old tests changed for the intended behaviour: Q5 and QR4-1 (a differing duplicate of an engine finding is now held, not refused), QR6-1 (refusal counts instead of IDs), the IDS differing-`findings` row (moved to QR10-1 for non-engine IDs), and the G4b, repeated-page-marker and QR8-3 message texts.
 
+### Class sweeps from Mobilization round 11 (carried trust is re-derived; every section is validated before use)
+
+- Carried trust and allow-lists (#8.16; checklist A19). DRQG keeps no derived trust list: client name and aliases are primary review-input fields that only widen client-name matching and are screened at every stage, every e-mail or URL destination holds under G8, evidence provenance is checked against the closed prefix list, and no supplied path reaches holds or outputs. The A19 test (one domain added to `client_aliases`, text sent to that domain) is withheld and held at every stage. Four carried fields could still relax a screen and are now re-derived and reconciled, with a refusal on any mismatch:
+  - severity_rank judged whether a primary-field G8 hit was already held against the carried `GC-G8` findings and overflow escalation, so a pasted history hold or overflow note could silence a hit. It now uses only the findings and escalations gate_check re-derives (severity-rules.md #3.6);
+  - severity_rank re-derivation ignored gate_check's escalations, so deleting or softening one went unnoticed. Every derived escalation must now be present unchanged, counted by gate in the refusal (severity-rules.md #3.7);
+  - `gate_results` name, confidence, source and citation were not reconciled. They must now equal gate_check's own (severity-rules.md #3.5, #3.7);
+  - with a null `evidence_set`, gate_check used carried `assertion_mappings` unverified for G1/G3. It now recomputes them with an empty index, so every claim is unsupported and the recomputed `AM-` findings replace any carried ones (plus the G1 register-missing and G8 spoof holds).
+- Validate everything a reader touches (#8.16). A probe replacing every node of each stage's demo input with a wrong type found 30 generic "malformed input (TypeError)" refusals, raised by readers that ran before the contract check (evidence index, citations, mapping IDs, upstream finding gate and severity). assertion_map, gate_check and severity_rank now validate the whole input against the contract before any reader runs, and the verifier validates the review input before comparing. Contract messages now read in plain English ("must be a string", "true or false", "an integer of 1 or more, or null", with the page-label hint on locations).
+- Docs: quality-gate-criteria.md #8.16 (new), and severity-rules.md #3.6 and #3.7, updated in all six copies.
+- Tests: 972 checks (were 939), with 33 new in `mobilization_round11_sweep_tests`. They cover:
+  - deleting or softening an AM or G2 escalation, and an extra escalation that only adds;
+  - each edited gate field on clean and blocked runs;
+  - a pasted overflow note and a pasted history hold;
+  - null evidence with forged supported mappings in both demos, through severity_rank;
+  - the A19 domain test at gate_check, severity_rank and end to end;
+  - every node of every stage's input in both demos set to a wrong type (only clean contract or input errors, or contract-valid acceptance);
+  - verifier refusals of wrongly typed sections;
+  - both demos end to end.
+
+  Goldens are byte-identical. Old tests changed only to the contract wording now reported first: A4, S4, T2, T3, A15, QR3 and IDS expectations, 12 QR7-4 and 4 QR8-3 verifier expectations. S3's null-evidence case now expects recomputed unsupported AM findings instead of none. The QR3-5 gate_results-name placement moved to the refused list.
+
 ## 1.0.3 - 2026-10-01
 
 Fixes every FAIL, WEAK and should-fix item in the Cowork 1.0.2 evaluation (42/50, Blocked).

@@ -673,6 +673,22 @@ def contract_schema():
     return _CONTRACT_SCHEMA[0]
 
 
+_TYPE_PHRASES = {"object": "an object", "array": "an array", "string": "a string", "boolean": "true or false", "null": "null", "number": "a number", "integer": "an integer"}
+
+
+def _type_phrase(types, node):
+    """Plain-English expected type for a contract message, e.g. `an integer of 1 or more, or null`."""
+    phrases = [f"an integer of {node['minimum']} or more" if name == "integer" and "minimum" in node else _TYPE_PHRASES[name] for name in types]
+    if len(phrases) == 1:
+        return phrases[0]
+    joiner = ", or " if any(" or " in phrase for phrase in phrases) else " or "
+    return joiner.join(phrases)
+
+
+def _is_position_path(path):
+    return path.endswith((".location.page", ".location.paragraph"))
+
+
 def _contract_errors(value, node, path, root):
     """Yield the first violation of `node` (a draft-07 subset: $ref, const, oneOf, type, enum, required, properties,
     items, minLength, pattern, minimum, maximum, and format: date-time checked by is_timestamp). x-unrecognised: hold marks an enum the gates judge themselves: any
@@ -691,7 +707,7 @@ def _contract_errors(value, node, path, root):
     if types is not None:
         types = [types] if isinstance(types, str) else types
         if not any(_JSON_TYPES[name](value) for name in types):
-            yield f"{path} must be {' or '.join(types)}, got {describe(value)}"
+            yield f"{path} must be {_type_phrase(types, node)}, got {describe(value)}" + (f"; {PAGE_LABEL_HINT}" if _is_position_path(path) else "")
             return
     if "enum" in node and value not in node["enum"]:
         if node.get("x-unrecognised") == "hold":

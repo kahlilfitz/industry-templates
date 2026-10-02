@@ -137,10 +137,10 @@ def validate_upstream_finding(item, index):
     rules.validate_location(item.get("location"), label, required=False)
 
 def expected_assertion_outputs(payload, evidence_set):
-    """Recompute assertion_map output; None when the evidence index was not loaded (nothing to verify against)."""
-    if evidence_set is None:
-        return None
-    evidence_by_id = rules.evidence_index(evidence_set)
+    """Recompute assertion_map output from the carried assertions and evidence index. A null or absent index links
+    nothing, so every claim is recomputed as unsupported: carried mappings and AM- findings are never trusted unverified,
+    and the G1 register-missing blocker also holds (quality-gate-criteria.md #8.16)."""
+    evidence_by_id = rules.evidence_index(evidence_set if evidence_set is not None else [])
     subject = rules.review_subject(payload)
     mappings, findings, escalations = [], {}, []
     for assertion in payload["assertions"]:
@@ -247,20 +247,6 @@ def reconcile_assertion_outputs(payload, expected, kept, escalations):
         if escalation not in escalations:
             escalations.append(escalation)
     return [safe_token(item, "assertion") for item in dict.fromkeys(altered)]
-
-def validate_unverified_mappings(mappings):
-    for index, mapping in enumerate(mappings):
-        if not isinstance(mapping, dict):
-            raise InputError(f"assertion_mappings[{index}] must be an object")
-        label = f"assertion_mappings[{index}]"
-        for key in ("assertion_id", "support_status", "criteria_section"):
-            rules.require_text(mapping, key, label)
-        if mapping["support_status"] not in {"supported", "limited", "unsupported"}:
-            raise InputError(f"{label}.support_status must be supported, limited or unsupported, got {rules.describe(mapping['support_status'])}")
-        for key in ("rationale", "citation"):
-            rules.require_text(mapping, key, label, required=False, allow_blank=True)
-        rules.require_confidence(mapping, label)
-        rules.validate_location(mapping.get("location"), label)
 
 def highest_for_gate(findings, gate_id):
     gated = [item for item in findings if item.get("gate_id") == gate_id]
@@ -545,6 +531,9 @@ def evaluate(payload):
     from the mapped input that gate-checked.json carries (severity-rules.md #3.7)."""
     require_contract(payload)
     raw = copy.deepcopy(payload)
+    # Every section and nested record is checked against the contract before any reader touches it, so a wrongly typed
+    # section is a clean input error, never iterated or skipped (quality-gate-criteria.md #8.16).
+    rules.validate_contract(raw, "gate_check")
     # Withhold flagged text before any computation, so every derived field, finding and output carries the numbered
     # marker instead of the text (quality-gate-criteria.md #8.7). The contract is still checked on the raw input.
     rules.withhold_untrusted(payload)
@@ -554,8 +543,6 @@ def evaluate(payload):
     deliverable = payload["deliverable"]
     validate_deliverable(deliverable)
     expected = expected_assertion_outputs(payload, payload.get("evidence_set"))
-    if expected is None:
-        validate_unverified_mappings(payload["assertion_mappings"])
     escalations = list(payload.get("escalations", []))
     findings, spoofed, claimed = screen_upstream_findings(payload.get("findings", []), expected, raw.get("findings", []))
     altered = reconcile_assertion_outputs(payload, expected, findings, escalations)
@@ -574,7 +561,6 @@ def evaluate(payload):
     validate_brand_checks(brand_checks)
     validate_licensed_content(licensed_content)
     validate_prior_findings(prior_findings)
-    rules.validate_contract(raw, "gate_check")
     recipient_problem = recipient_list_problem(deliverable)
     if recipient_problem:
         add_finding(findings, "GC-G2-recipient-ambiguity", "G2", RELEASE_BLOCKER, "Recipient list is missing or ambiguous", f"{recipient_problem}; reliance language cannot be confirmed until the allowed recipient set is explicit.", disclaimer_location(payload), "quality-gate-criteria.md #2.2", 0.98, "quality-gate-criteria.md #2.2; severity-rules.md #1.1")

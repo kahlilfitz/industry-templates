@@ -45,7 +45,9 @@ SAFE_NAMES = {
     # composed messages and caught engine errors (their own text is checked where it is built)
     "error", "exc", "name", "problems", "mismatches",
 }
-SAFE_FUNCS = {"str", "sorted", "min", "max", "abs"}
+SAFE_FUNCS = {"str", "sorted", "min", "max", "abs",
+              # plain-English expected type built from the shipped contract schema node (arguments are checked)
+              "_type_phrase"}
 # Content-free whatever their argument: a length, a count, a JSON type and size, an OS reason, a path whose member
 # names pass path_key, a demo-scenario label, or positions.
 DESCRIBERS = {"len", "sum", "describe", "show", "plural", "os_reason", "format_path", "path_key", "scenario_label",

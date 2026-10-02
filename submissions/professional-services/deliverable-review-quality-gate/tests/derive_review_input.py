@@ -564,6 +564,12 @@ def check_scenario(scenario_dir):
         return [f"review input is malformed: {exc}"]
     if not isinstance(payload, dict):
         return [f"review input must be a JSON object, got {show(payload)}"]
+    # Every section compare reads is validated against the contract first, so a wrongly typed section is a clean
+    # refusal, never iterated or skipped (quality-gate-criteria.md #8.16).
+    try:
+        rules.validate_contract(payload, "assertion_map")
+    except rules.InputError as exc:
+        return [f"review input: {exc}"]
     try:
         return compare(scenario_dir, payload)
     except PackError as exc:

@@ -57,9 +57,10 @@ def main():
         generated_at = validate_generated_at(args.generated_at)
         payload = load_json(args.input)
         require_contract(payload)
-        evidence_by_id = rules.evidence_index(payload["evidence_set"])
-        rules.validate_assertions(payload["assertions"])
+        # Every section is checked against the contract before any reader touches it (quality-gate-criteria.md #8.16).
         rules.validate_contract(payload, "assertion_map")
+        rules.evidence_index(payload["evidence_set"])
+        rules.validate_assertions(payload["assertions"])
         # Ownership of a supplied finding ID is read before withholding (quality-gate-criteria.md #8.4).
         raw_findings = copy.deepcopy(payload.get("findings", []))
         # Flagged text is withheld before mapping, so no mapping, finding or later stage repeats it
