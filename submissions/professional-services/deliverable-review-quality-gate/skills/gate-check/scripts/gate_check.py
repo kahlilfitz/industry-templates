@@ -205,10 +205,13 @@ def expected_assertion_outputs(payload, evidence_set):
 def screen_upstream_findings(upstream, expected):
     """Keep legitimate upstream findings; drop any engine-owned finding that engine recomputation does not reproduce.
 
-    GC- and SR- findings are always recomputed by their engines. An AM- finding is kept only when it is byte-for-byte what assertion_map
-    emits for the current assertions and evidence (`expected`); a self-declared source tag proves nothing. Any other
-    finding carrying an engine source tag is spoofed. Returns (kept, spoofed IDs) (quality-gate-criteria.md #8.4)."""
-    kept, spoofed = [], []
+    An engine-owned finding stands only when the engine's own recomputation reproduces it exactly. An AM- finding is kept
+    only when it is byte-for-byte what assertion_map emits for the current assertions and evidence (`expected`). A GC-
+    finding is returned in `claimed` and checked at the end of the run against what gate_check computes
+    (`check_claimed_findings`), so re-running gate_check on its own output reproduces it. SR- findings cannot precede
+    severity_rank, and any other finding carrying an engine source tag is spoofed; a self-declared source tag proves
+    nothing. Returns (kept, spoofed labels, claimed (label, finding) pairs) (quality-gate-criteria.md #8.4)."""
+    kept, spoofed, claimed = [], [], []
     expected_am = expected["findings"] if expected else None
     for index, item in enumerate(upstream):
         validate_upstream_finding(item, index)
@@ -216,6 +219,9 @@ def screen_upstream_findings(upstream, expected):
         source = normalize_text(item.get("source", ""))
         owner = next((tag for prefix, tag in ENGINE_OWNED_PREFIXES.items() if finding_id.startswith(prefix)), None)
         label = safe_token(item["finding_id"], f"findings[{index}]")
+        if owner == ENGINE:
+            claimed.append((label, item))
+            continue
         if (owner is not None and owner != rules.AM_ENGINE) or source in (ENGINE, SR_ENGINE):
             spoofed.append(label)
             continue
@@ -233,7 +239,32 @@ def screen_upstream_findings(upstream, expected):
             kept.append(item)
         elif SEVERITY_RANK[item["severity"]] > SEVERITY_RANK[kept[duplicate]["severity"]]:
             kept[duplicate] = item
-    return kept, spoofed
+    return kept, spoofed, claimed
+
+def check_claimed_findings(claimed, findings):
+    """Labels of upstream GC- findings that this run's computation does not reproduce exactly (same ID and every field
+    equal). A reproduced claim is already present as the engine's own finding; any other is spoofed (#8.4)."""
+    computed = {item["finding_id"]: item for item in findings}
+    return [label for label, item in claimed if computed.get(item["finding_id"]) != item]
+
+def claim_finding_id(findings, owners, base, owner):
+    """A finding ID unique to one register entry, required-language item or assertion (quality-gate-criteria.md #8.4).
+
+    `base` comes from safe_token, which falls back to a fixed or indexed label for long, unsafe or flagged values, so
+    two distinct items could otherwise share an ID and add_finding would merge them. The same owner always gets the
+    same ID; a different owner, or an ID already used by another finding, gets the first free `-2`, `-3`, ... suffix."""
+    taken = {item["finding_id"] for item in findings}
+    candidate, suffix = base, 2
+    while owners.get(candidate, owner if candidate not in taken else None) != owner:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    owners[candidate] = owner
+    return candidate
+
+def language_excerpt(text, limit=120):
+    """Identify one required-language item in a finding: the text itself (or its withheld marker), shortened."""
+    text = re.sub(r"\s+", " ", text).strip()
+    return text if len(text) <= limit or rules.is_withheld(text) else text[:limit].rstrip() + "..."
 
 def reconcile_assertion_outputs(payload, expected, kept, escalations):
     """Restore assertion_map output that was removed or altered upstream. Returns the assertion IDs that differed."""
@@ -518,6 +549,21 @@ def check_client_data_value(deliverable, findings, escalations):
     shown = value if value in {"attention", "breach", "unknown"} else "blank/unrecognised"
     escalations.append(f"G4: client_data_handling is {shown}, not ok - {severity}; hold for reviewing partner/QRM (quality-gate-criteria.md #4.2-#4.3)")
 
+def add_spoof_hold(findings, escalations, spoofed, altered):
+    """One G8 release blocker and escalations for spoofed engine findings and restored assertion_map output (#8.4)."""
+    if not (spoofed or altered):
+        return
+    parts = []
+    if spoofed:
+        parts.append(f"{len(spoofed)} upstream finding(s) used an engine-owned finding ID or engine source tag without matching engine recomputation and were ignored")
+    if altered:
+        parts.append(f"assertion_map output for {len(altered)} assertion(s) was missing or did not match recomputation and was restored")
+    add_finding(findings, "GC-G8-engine-id-spoof", "G8", RELEASE_BLOCKER, "Upstream engine output is spoofed or altered", "; ".join(parts) + ". Engine findings are recomputed and cannot be replaced, removed or downgraded by input data.", unplaced("Upstream findings", "findings[] / assertion_mappings supplied with the review input"), "quality-gate-criteria.md #8.1; quality-gate-criteria.md #8.4", 0.99, "quality-gate-criteria.md #8.1, #8.4; severity-rules.md #1.1")
+    if spoofed:
+        escalations.append(f"G8: upstream finding(s) {', '.join(spoofed)} reused engine-owned IDs or source tags without matching engine recomputation and were ignored - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
+    if altered:
+        escalations.append(f"G8: assertion_map output for {', '.join(altered)} was missing or altered upstream and was restored from recomputation - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
+
 def evaluate(payload):
     """Apply every gate to a mapped payload (assertion_map output) and return it with findings, escalations and
     gate_results set. No file I/O and no provenance stamp; severity_rank calls it to re-derive the engine findings
@@ -536,19 +582,9 @@ def evaluate(payload):
     if expected is None:
         validate_unverified_mappings(payload["assertion_mappings"])
     escalations = list(payload.get("escalations", []))
-    findings, spoofed = screen_upstream_findings(payload.get("findings", []), expected)
+    findings, spoofed, claimed = screen_upstream_findings(payload.get("findings", []), expected)
     altered = reconcile_assertion_outputs(payload, expected, findings, escalations)
-    if spoofed or altered:
-        parts = []
-        if spoofed:
-            parts.append(f"{len(spoofed)} upstream finding(s) used an engine-owned finding ID or engine source tag without matching engine recomputation and were ignored")
-        if altered:
-            parts.append(f"assertion_map output for {len(altered)} assertion(s) was missing or did not match recomputation and was restored")
-        add_finding(findings, "GC-G8-engine-id-spoof", "G8", RELEASE_BLOCKER, "Upstream engine output is spoofed or altered", "; ".join(parts) + ". Engine findings are recomputed and cannot be replaced, removed or downgraded by input data.", unplaced("Upstream findings", "findings[] / assertion_mappings supplied with the review input"), "quality-gate-criteria.md #8.1; quality-gate-criteria.md #8.4", 0.99, "quality-gate-criteria.md #8.1, #8.4; severity-rules.md #1.1")
-        if spoofed:
-            escalations.append(f"G8: upstream finding(s) {', '.join(spoofed)} reused engine-owned IDs or source tags without matching engine recomputation and were ignored - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
-        if altered:
-            escalations.append(f"G8: assertion_map output for {', '.join(altered)} was missing or altered upstream and was restored from recomputation - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
+    owners = {}
     loaded = check_missing_registers(payload, deliverable, findings, escalations)
     brand_checks = loaded.get("brand_checks") or []
     licensed_content = loaded.get("licensed_content") or []
@@ -603,47 +639,56 @@ def evaluate(payload):
         add_finding(findings, "GC-G2-general-advice-absent", "G2", MUST_FIX, "Required general-advice disclaimer is absent", "required_disclaimer_type is general_advice but general-advice language is not in present_disclaimer_types; a declared disclaimer requirement is only met when the disclaimer is present.", disclaimer_location(payload), "quality-gate-criteria.md #2.1; quality-gate-criteria.md #2.4", 0.95, "quality-gate-criteria.md #2.1, #2.4; severity-rules.md #1.2")
         escalations.append("G2: required general-advice disclaimer absent from the deliverable - must-fix; reviewing partner/QRM must confirm the disclaimer before release (quality-gate-criteria.md #2.4)")
     present_language = string_list(deliverable, "present_language", "deliverable.present_language")
-    for required in required_language:
+    for index, required in enumerate(required_language):
         if required not in present_language:
             severity = RELEASE_BLOCKER if required == "reliance_restriction" else MUST_FIX
-            add_finding(findings, f"GC-G2-missing-{safe_token(required, 'language')}", "G2", severity, f"Missing required language: {safe_token(required, 'required language item')}", f"Required language `{safe_token(required, 'required language item')}` is not present in the deliverable.", disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.3", 0.94, "quality-gate-criteria.md #2.1-#2.3")
+            token = safe_token(required, "")
+            finding_id = claim_finding_id(findings, owners, f"GC-G2-missing-{token or f'language-{index + 1}'}", ("required_language", required))
+            if token:
+                title, detail = f"Missing required language: {token}", f"Required language `{token}` is not present in the deliverable."
+            else:
+                # Long, unsafe or withheld items are named by position and excerpt, so each missing item is identifiable.
+                title = f"Missing required language: item {index + 1}"
+                detail = f"Required language item {index + 1} (deliverable.required_language[{index}]: \"{language_excerpt(required)}\") is not present in the deliverable."
+            add_finding(findings, finding_id, "G2", severity, title, detail, disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.3", 0.94, "quality-gate-criteria.md #2.1-#2.3")
     if CONFIDENTIALITY_MARK_REQUIRED and deliverable.get("confidentiality_marking") != "client confidential":
         add_finding(findings, "GC-G4-confidentiality", "G4", RELEASE_BLOCKER, "Missing client-confidential marking", "Required client-confidential marking is absent from cover/footer.", loc("Cover", 1, 1, "Confidentiality mark"), "quality-gate-criteria.md #4.1", 0.97, "quality-gate-criteria.md #4.1; severity-rules.md #1.1")
     check_client_data_value(deliverable, findings, escalations)
     for index, check in enumerate(brand_checks):
         check_id = safe_token(check["check_id"], f"brand-check-{index + 1}")
+        finding_id = claim_finding_id(findings, owners, f"GC-G5-{check_id}", ("brand_checks", index))
         location = entry_location(check, "Brand-check register", f"Brand check {check_id}")
         legal = check["legal_or_release_control"] and LEGAL_MARK_DEFECT_BLOCKS
         status_value = check.get("status")
         if status_value == "fail":
-            add_finding(findings, f"GC-G5-{check_id}", "G5", MUST_FIX if legal else ADVISORY, check.get("title", "Brand or formatting defect"), check.get("detail", "Brand check failed"), location, "quality-gate-criteria.md #5.1-#5.2", check.get("confidence", 0.9), check.get("citation", "quality-gate-criteria.md #5.1-#5.2"))
+            add_finding(findings, finding_id, "G5", MUST_FIX if legal else ADVISORY, check.get("title", "Brand or formatting defect"), check.get("detail", "Brand check failed"), location, "quality-gate-criteria.md #5.1-#5.2", check.get("confidence", 0.9), check.get("citation", "quality-gate-criteria.md #5.1-#5.2"))
         elif status_value not in BRAND_CHECK_STATUSES:
             severity = RELEASE_BLOCKER if legal else MUST_FIX
-            add_finding(findings, f"GC-G5-{check_id}", "G5", severity, "Brand or release-control check not verified", f"Brand check {check_id} has status {safe_token(status_value, 'blank/unrecognised') if status_value else 'blank/missing'}; only pass or fail are recognised, so the check is treated as not verified{' for a legal, confidentiality or release-control mark' if legal else ''}.", location, "quality-gate-criteria.md #5.2-#5.3", 0.95, "quality-gate-criteria.md #5.2-#5.3")
+            add_finding(findings, finding_id, "G5", severity, "Brand or release-control check not verified", f"Brand check {check_id} has status {safe_token(status_value, 'blank/unrecognised') if status_value else 'blank/missing'}; only pass or fail are recognised, so the check is treated as not verified{' for a legal, confidentiality or release-control mark' if legal else ''}.", location, "quality-gate-criteria.md #5.2-#5.3", 0.95, "quality-gate-criteria.md #5.2-#5.3")
             escalations.append(f"G5: brand check {check_id} status is not pass or fail - {severity}; hold for reviewing partner/QRM (quality-gate-criteria.md #5.3)")
     for index, item in enumerate(licensed_content):
         content_id = safe_token(item["content_id"], f"licensed-content-{index + 1}")
         license_known = item.get("license_status") == LICENSE_STATUS_KNOWN
         if LICENSED_ATTRIBUTION_REQUIRED and item["attribution_present"] is not True:
             severity = MUST_FIX if license_known else RELEASE_BLOCKER
-            add_finding(findings, f"GC-G6-{content_id}", "G6", severity, "Licensed content lacks attribution", item.get("detail", "Third-party content requires attribution."), entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.2", item.get("confidence", 0.93), item.get("citation", "quality-gate-criteria.md #6.1-#6.2"))
+            add_finding(findings, claim_finding_id(findings, owners, f"GC-G6-{content_id}", ("licensed_content", index)), "G6", severity, "Licensed content lacks attribution", item.get("detail", "Third-party content requires attribution."), entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.2", item.get("confidence", 0.93), item.get("citation", "quality-gate-criteria.md #6.1-#6.2"))
             if not license_known:
                 escalations.append(f"G6: unattributed licensed content {content_id} with license_status not known (unknown, blank or unrecognised) - release blocker; hold for reviewing partner/QRM (quality-gate-criteria.md #6.2-#6.3)")
     for index, prior in enumerate(prior_findings):
         if prior["claimed_closed"] is True and prior["document_fix_present"] is not True and PRIOR_FIX_MUST_LAND:
             prior_id = safe_token(prior["finding_id"], f"prior-finding-{index + 1}")
-            add_finding(findings, f"GC-G7-{prior_id}", "G7", MUST_FIX, "Prior finding marked closed but fix is absent", prior.get("detail", "Tracker closure is not supported by the current document."), entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2", prior.get("confidence", 0.96), prior.get("citation", "quality-gate-criteria.md #7.1-#7.2"))
+            add_finding(findings, claim_finding_id(findings, owners, f"GC-G7-{prior_id}", ("prior_findings", index)), "G7", MUST_FIX, "Prior finding marked closed but fix is absent", prior.get("detail", "Tracker closure is not supported by the current document."), entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2", prior.get("confidence", 0.96), prior.get("citation", "quality-gate-criteria.md #7.1-#7.2"))
     for index, assertion in enumerate(payload["assertions"]):
         if assertion["scope_aligned"] is not True:
             assertion_id = safe_token(assertion["assertion_id"], f"assertion-{index + 1}")
-            add_finding(findings, f"GC-G3-scope-{assertion_id}", "G3", RELEASE_BLOCKER, "Claim or recommendation falls outside signed scope", "Assertion is marked scope_aligned=false; claims and recommendations must stay inside the signed statement of work and documented evidence set.", assertion["location"], "quality-gate-criteria.md #3.1", assertion.get("confidence", 0.9), f"{assertion['citation']}; quality-gate-criteria.md #3.1; severity-rules.md #1.1")
+            add_finding(findings, claim_finding_id(findings, owners, f"GC-G3-scope-{assertion_id}", ("scope", index)), "G3", RELEASE_BLOCKER, "Claim or recommendation falls outside signed scope", "Assertion is marked scope_aligned=false; claims and recommendations must stay inside the signed statement of work and documented evidence set.", assertion["location"], "quality-gate-criteria.md #3.1", assertion.get("confidence", 0.9), f"{assertion['citation']}; quality-gate-criteria.md #3.1; severity-rules.md #1.1")
     verified_am = {item["finding_id"] for item in findings if item["finding_id"].startswith("AM-")}
-    for mapping in payload["assertion_mappings"]:
+    for index, mapping in enumerate(payload["assertion_mappings"]):
         if mapping["support_status"] in {"unsupported", "limited"} and "#3.2" in mapping["criteria_section"]:
             # Only an AM finding that matched engine recomputation may stand in for the G3 limitation finding.
             if f"AM-{mapping['assertion_id']}" in verified_am:
                 continue
-            add_finding(findings, f"GC-G3-{safe_token(mapping['assertion_id'], 'assertion')}", "G3", MUST_FIX, "Scope or sample limitation missing at point of recommendation", mapping.get("rationale", "Recommendation requires limitation."), mapping["location"], "quality-gate-criteria.md #3.2", mapping.get("confidence", 0.8), mapping.get("citation", "quality-gate-criteria.md #3.2"))
+            add_finding(findings, claim_finding_id(findings, owners, f"GC-G3-{safe_token(mapping['assertion_id'], f'assertion-{index + 1}')}", ("limitation", index)), "G3", MUST_FIX, "Scope or sample limitation missing at point of recommendation", mapping.get("rationale", "Recommendation requires limitation."), mapping["location"], "quality-gate-criteria.md #3.2", mapping.get("confidence", 0.8), mapping.get("citation", "quality-gate-criteria.md #3.2"))
     if EMBEDDED_INSTRUCTION_HOLD:
         hits = instruction_hits(payload)
         hits += [hit for hit in screened_hits if hit not in hits]
@@ -656,6 +701,10 @@ def evaluate(payload):
             escalations.append(f"G8: embedded-instruction tripwire in {path} - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")
         if len(hits) > MAX_G8_HITS:
             escalations.append(f"G8: {len(hits) - MAX_G8_HITS} further embedded-instruction hit(s) not listed individually - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")
+    spoofed += check_claimed_findings(claimed, findings)
+    add_spoof_hold(findings, escalations, spoofed, altered)
+    # Escalations already carried in the input are not repeated, so a re-run on gate_check's own output reproduces it.
+    escalations = rules.unique_entries(escalations)
     gate_results = []
     for gate_id, name in GATES.items():
         highest = highest_for_gate(findings, gate_id)
@@ -681,7 +730,7 @@ def main():
         provenance = payload["provenance"]
         if generated_at:
             provenance["generated_at"] = generated_at
-        provenance.setdefault("engines", []).append(f"gate_check/{ENGINE_VERSION}")
+        rules.record_engine(payload, f"gate_check/{ENGINE_VERSION}")
         rules.write_json_atomic(args.out, payload)
         blockers = sum(1 for item in findings if item["severity"] == RELEASE_BLOCKER)
         must_fix = sum(1 for item in findings if item["severity"] == MUST_FIX)

@@ -139,14 +139,23 @@ class _DuplicateFields(dict):
     """A JSON object with two member names that are equal exactly or after normalisation; rejected after loading."""
 
 
+class _OverlongFieldName(dict):
+    """A JSON object with a member name longer than MAX_FIELD_NAME_CHARS; rejected after loading."""
+
+
+MAX_FIELD_NAME_CHARS = 512  # far above any contract field name or withheld marker (quality-gate-criteria.md #8.10)
+
+
 @functools.lru_cache(maxsize=4096)
 def field_name_key(name):
-    """Comparison form of a member name: the detector's fold (NFKC, format characters, confusables, case, separators).
-    Very long names are compared case-folded only, which keeps loading fast; they are screened (and held) anyway."""
-    return sg.normalize(name) if len(name) <= 512 else name.casefold()
+    """Comparison form of a member name: the detector's full fold (NFKC, format characters, confusables, case and
+    separators), applied at every length. Names longer than MAX_FIELD_NAME_CHARS never get here; they are refused."""
+    return sg.normalize(name)
 
 
 def _object_pairs(pairs):
+    if any(len(key) > MAX_FIELD_NAME_CHARS for key, _ in pairs):
+        return _OverlongFieldName(pairs)
     seen, duplicate = set(), False
     for key, _ in pairs:
         folded = field_name_key(key)
@@ -161,6 +170,8 @@ def _check_loaded(value):
     stack = [(value, ())]
     while stack:
         item, parts = stack.pop()
+        if isinstance(item, _OverlongFieldName):
+            raise InputError(f"{format_path(parts)} has a field name longer than {MAX_FIELD_NAME_CHARS} characters, which no contract field needs and which cannot be checked for duplicates safely; the input is malformed")
         if isinstance(item, _DuplicateFields):
             raise InputError(f"{format_path(parts)} has duplicate field names (equal exactly or after Unicode, case and separator folding), so a later value could overwrite an earlier one; the input is malformed")
         if isinstance(item, dict):
@@ -178,6 +189,31 @@ def _check_encodable_text(text, path):
         text.encode("utf-8")
     except UnicodeEncodeError as exc:
         raise InputError(f"{path()} contains a lone surrogate code point, which is not valid Unicode text") from exc
+
+
+def unique_entries(entries):
+    """The entries in order without repeats (strings or objects), so re-running an engine on its own output never
+    duplicates an escalation or finding it already carries."""
+    seen, kept = set(), []
+    for entry in entries:
+        key = json.dumps(entry, sort_keys=True, ensure_ascii=False)
+        if key not in seen:
+            seen.add(key)
+            kept.append(entry)
+    return kept
+
+
+def record_engine(payload, tag):
+    """Append the engine/version tag to provenance.engines unless this engine was the last to run (idempotent re-run)."""
+    provenance = payload.setdefault("provenance", {})
+    if not isinstance(provenance, dict):
+        raise InputError("provenance must be an object when present")
+    engines = provenance.setdefault("engines", [])
+    if not isinstance(engines, list):
+        raise InputError("provenance.engines must be an array when present")
+    if engines[-1:] != [tag]:
+        engines.append(tag)
+    return provenance
 
 
 def load_json_file(path):

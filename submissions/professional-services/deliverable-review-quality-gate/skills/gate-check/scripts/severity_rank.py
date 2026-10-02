@@ -3,6 +3,7 @@
 import argparse
 import copy
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -23,6 +24,11 @@ STATUS_CLEAN = "partner_review_required_no_engine_findings"  # severity-rules.md
 GATE_IDS = tuple(gc.GATES)
 MAX_G8_HITS = gc.MAX_G8_HITS
 SR_G8_PREFIX = "SR-G8-embedded-instruction-"
+SR_SPOOF_ID = "SR-G8-engine-id-spoof"
+# G8 holds that re-derivation cannot reproduce from gate-checked.json alone: gate_check's spoof and pre-restoration hits
+# depend on input it has since corrected, and severity_rank's own holds come from an earlier severity_rank run. Each is
+# accepted only as a G8 release blocker carrying its own engine's source tag, so accepting one can only hold the run.
+HISTORY_HOLD_ID = re.compile(r"^(?:GC|SR)-G8-(?:engine-id-spoof|embedded-instruction-[1-9][0-9]{0,5})$")
 
 InputError = rules.InputError
 
@@ -157,6 +163,61 @@ def rederive_gate_findings(payload):
     if problems:
         shown = "; ".join(problems[:10]) + (f"; and {len(problems) - 10} more" if len(problems) > 10 else "")
         raise InputError(f"findings[] do not contain every finding gate_check derives from the carried mapped input: {shown}. Re-run gate_check; engine findings cannot be removed or downgraded after the gate run (severity-rules.md #3.7)")
+    return derived
+
+
+def engine_owner(item):
+    """The engine source tag an incoming finding claims, by finding-ID prefix or source tag; None for other findings."""
+    finding_id = gc.normalize_text(item["finding_id"]).upper()
+    owner = next((tag for prefix, tag in gc.ENGINE_OWNED_PREFIXES.items() if finding_id.startswith(prefix)), None)
+    source = gc.normalize_text(item.get("source", ""))
+    return owner or (source if source.startswith("engine:") else None)
+
+
+def remove_forged_engine_findings(payload, derived):
+    """Hold every engine-owned finding to re-derivation (severity-rules.md #3.8, quality-gate-criteria.md #8.4).
+
+    A finding with an engine-owned ID prefix (AM-, GC-, SR-) or an engine source tag stands only when gate_check
+    re-derivation produces exactly that finding (same ID and every field equal), or when it is a G8 history hold
+    (HISTORY_HOLD_ID) carried as a release blocker under its own engine's tag. Anything else is forged: it is removed,
+    and when its ID is one re-derivation produces and no exact copy remains, the derived finding is restored in its
+    place. Returns the labels of the forged findings (never their text)."""
+    derived_by_id = {item["finding_id"]: item for item in derived}
+    kept, forged = [], []
+    for index, item in enumerate(payload["findings"]):
+        owner = engine_owner(item)
+        if owner is None or derived_by_id.get(item["finding_id"]) == item:
+            kept.append(item)
+            continue
+        if HISTORY_HOLD_ID.match(item["finding_id"]) and item["gate_id"] == "G8" and item["severity"] == "release_blocker" \
+                and item.get("source") == (ENGINE if item["finding_id"].startswith("SR-") else gc.ENGINE):
+            kept.append(item)
+            continue
+        forged.append((index, item))
+    labels = []
+    for index, item in forged:
+        labels.append(gc.safe_token(item["finding_id"], f"findings[{index}]"))
+        restored = derived_by_id.get(item["finding_id"])
+        if restored is not None and restored not in kept:
+            kept.append(copy.deepcopy(restored))
+    payload["findings"] = kept
+    return labels
+
+
+def add_spoof_hold(payload, forged):
+    """One SR-G8 release blocker and an escalation for forged engine findings (severity-rules.md #3.8)."""
+    payload["findings"].append({"finding_id": SR_SPOOF_ID, "gate_id": "G8", "severity": "release_blocker", "title": "Engine finding forged or altered after the gate run",
+                                "detail": f"{len(forged)} finding(s) carried an engine-owned finding ID or engine source tag but are not what gate_check re-derives from the carried mapped input; they were removed and any engine finding they replaced was restored. Engine findings cannot be added, replaced or edited after the gate run.",
+                                "location": gc.unplaced("Gate-check findings", "findings[] supplied to severity_rank"), "criteria_section": "quality-gate-criteria.md #8.4", "confidence": 0.99, "source": ENGINE,
+                                "citation": "quality-gate-criteria.md #8.1, #8.4; severity-rules.md #1.1, #3.8"})
+    payload["escalations"].append(f"G8: finding(s) {', '.join(forged)} used engine-owned IDs or source tags without matching gate_check re-derivation and were removed - hold for reviewing partner/QRM (severity-rules.md #3.8)")
+
+
+def refresh_gate_results(payload):
+    """Recompute every gate's status, highest severity and count from the final findings, after forged findings are
+    removed, G8 holds added and duplicates collapsed, so the output always passes its own validation (#3.5)."""
+    for item in payload["gate_results"]:
+        item["status"], item["highest_severity"], item["finding_count"] = gate_summary(payload["findings"], item["gate_id"])
 
 
 def covered_by_gate_check(findings, escalations, path):
@@ -196,9 +257,6 @@ def add_g8_findings(payload, hits):
         findings.append({"finding_id": f"{SR_G8_PREFIX}{hit_index}", "gate_id": "G8", "severity": "release_blocker", "title": title, "detail": detail, "location": location, "criteria_section": section, "confidence": 0.99, "source": ENGINE, "citation": "quality-gate-criteria.md #8.1-#8.3, #8.7; severity-rules.md #1.1, #3.6"})
     if len(hits) > MAX_G8_HITS:
         escalations.append(f"G8: {len(hits) - MAX_G8_HITS} further embedded-instruction hit(s) at severity_rank not listed individually - hold for reviewing partner/QRM (severity-rules.md #3.6)")
-    for item in payload["gate_results"]:
-        if item["gate_id"] == "G8":
-            item["status"], item["highest_severity"], item["finding_count"] = gate_summary(findings, "G8")
 
 def main():
     parser = argparse.ArgumentParser(description="Rank gate findings and compute release-readiness status.")
@@ -214,12 +272,17 @@ def main():
             validate_finding(index, item)
         rules.validate_contract(payload, "severity_rank")
         reconcile_gate_results(payload["findings"], payload["gate_results"])
-        rederive_gate_findings(payload)
+        derived = rederive_gate_findings(payload)
+        # Screen first, so instruction text planted in a forged finding still raises its own G8 hold before removal.
         g8_hits = screen_embedded_instructions(payload)
         if g8_hits:
             add_g8_findings(payload, g8_hits)
+        forged = remove_forged_engine_findings(payload, derived)
+        if forged:
+            add_spoof_hold(payload, forged)
         findings, duplicates = collapse_duplicates(payload["findings"])
         payload["findings"] = findings
+        refresh_gate_results(payload)
         escalations = payload["escalations"]
         for finding_id, count in duplicates.items():
             kept = next(item for item in findings if item["finding_id"] == finding_id)
@@ -227,6 +290,8 @@ def main():
         for item in findings:
             if float(item.get("confidence", 1.0)) < CONFIDENCE_FLOOR:
                 escalations.append(f"{item['finding_id']}: confidence {item.get('confidence')} below {CONFIDENCE_FLOOR} - human confirmation required (severity-rules.md #2.1)")
+        # Escalations already carried in the input are not repeated, so a re-run on severity_rank's own output reproduces it.
+        escalations[:] = rules.unique_entries(escalations)
         ranked = []
         for index, item in enumerate(sorted(findings, key=sort_key), start=1):
             ranked_item = dict(item)
@@ -259,9 +324,9 @@ def main():
         payload["ranked_findings"] = ranked
         payload["release_readiness"] = {"status": status, "release_blockers": blockers, "must_fix": must_fix, "advisories": advisories, "summary": summary, "confidence": 0.96, "source": ENGINE, "citation": "severity-rules.md #3.1-#3.3; severity-rules.md #4.1-#4.2"}
         provenance = payload.setdefault("provenance", {})
-        if generated_at:
+        if generated_at and isinstance(provenance, dict):
             provenance["generated_at"] = generated_at
-        provenance.setdefault("engines", []).append(f"severity_rank/{ENGINE_VERSION}")
+        rules.record_engine(payload, f"severity_rank/{ENGINE_VERSION}")
         rules.write_json_atomic(args.out, payload)
         print(f"severity_rank: status={status}, ranked_findings={len(ranked)} -> {os.path.basename(args.out)}")
         return 0

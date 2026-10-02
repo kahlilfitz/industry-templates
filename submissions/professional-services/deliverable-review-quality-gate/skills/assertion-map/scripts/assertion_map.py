@@ -79,14 +79,16 @@ def main():
         for assertion in payload["assertions"]:
             mapping, finding, escalation = rules.map_assertion(assertion, evidence_by_id)
             mappings.append(mapping)
-            if finding:
+            # Appended once: re-running assertion_map on its own output reproduces it instead of duplicating findings.
+            if finding and finding not in findings:
                 findings.append(finding)
+            if finding and escalation not in escalations:
                 escalations.append(escalation)
         payload["assertion_mappings"], payload["findings"], payload["escalations"] = mappings, findings, escalations
         provenance = payload.setdefault("provenance", {})
-        if generated_at:
+        if generated_at and isinstance(provenance, dict):
             provenance["generated_at"] = generated_at
-        provenance.setdefault("engines", []).append(f"assertion_map/{ENGINE_VERSION}")
+        rules.record_engine(payload, f"assertion_map/{ENGINE_VERSION}")
         rules.write_json_atomic(args.out, payload)
         unsupported = sum(1 for item in mappings if item["support_status"] == "unsupported")
         limited = sum(1 for item in mappings if item["support_status"] == "limited")
