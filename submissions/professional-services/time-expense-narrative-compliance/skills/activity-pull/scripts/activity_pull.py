@@ -90,10 +90,11 @@ def read_csv(path, required):
             rows = list(reader)
     except (OSError, UnicodeError, csv.Error) as exc:
         raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
-    if rows:
-        missing = [c for c in required if c not in rows[0]]
-        if missing:
-            raise InputError(f"{os.path.basename(path)} is missing column(s): {', '.join(missing)}")
+    # The header row is checked even when there are no data rows: a header-only file with the right columns is an
+    # explicitly empty register; an empty file or a wrong header is malformed.
+    missing = [c for c in required if c not in header]
+    if missing:
+        raise InputError(f"{os.path.basename(path)} is missing column(s): {', '.join(missing)}")
     for idx, row in enumerate(rows, start=2):
         # csv.DictReader stores surplus cells under None and fills short rows with None: never guess.
         if None in row or any(row.get(c) is None for c in required):
@@ -137,6 +138,16 @@ def cell_id(row, key, cite):
     if not value:
         raise InputError(f"{cite} {key} must not be empty")
     return value
+
+
+def unique(index, key, cite, what, value=None):
+    """Record `key` in `index`; a repeat is malformed input (an index would silently keep only one row). The error
+    cites both rows, never the value."""
+    if key in index:
+        first = index[key][0] if isinstance(index[key], tuple) else index[key]
+        raise InputError(f"{cite} repeats the {what} of {first if isinstance(first, str) else 'row ' + str(first)}; "
+                         "duplicate IDs are malformed, never silently merged")
+    index[key] = value if value is not None else cite
 
 
 def read_engagement(path):
@@ -301,12 +312,19 @@ def main():
 
     def allowed(person):
         return people is None or signal_policy.person_key(person) in people
-    workplan = {}
+    workplan, workplan_ids = {}, {}
     for idx, row in enumerate(workplan_rows, start=2):
-        if row["engagement_id"] == eng_id:
-            workplan[(row["item_type"], row["match_key"])] = (idx, row)
+        cite = f"raw/engagement-workplan.csv row {idx}"
+        try:
+            unique(workplan_ids, row["workplan_id"].strip(), cite, "workplan_id")
+            if row["engagement_id"] == eng_id:
+                unique(workplan, (row["item_type"], row["match_key"]), cite, "item_type and match_key",
+                       value=(idx, row))
+        except InputError as exc:
+            sys.exit(f"activity_pull: {exc}")
 
     signals, skipped_sources, out_of_scope = [], [], []
+    activity_rows = {}
     read_keys = set()
     for key, filename, source in SOURCE_FILES:
         path = os.path.join(args.raw_dir, filename)
@@ -333,6 +351,7 @@ def main():
                 continue  # #12.1: other timekeepers' rows are never read into the packet
             try:
                 cell_id(row, "activity_id", cite)
+                unique(activity_rows, row["activity_id"].strip(), cite, "activity_id")
                 cell_id(row, "person", cite)
                 row["date"] = cell_date(row, "date", cite)
             except InputError as exc:
@@ -408,23 +427,27 @@ def main():
             signals.append(signal)
 
     kept_ids = {s["activity_id"] for s in signals}
-    entries, excluded = [], []
+    entries, excluded, entry_rows = [], [], {}
     for idx, row in enumerate(timesheet_rows, start=2):
         if not allowed(row["person"]):
             continue
         cite = f"raw/timesheet.csv row {idx}"
         try:
             cell_id(row, "entry_id", cite)
+            unique(entry_rows, row["entry_id"].strip(), cite, "entry_id")
             cell_id(row, "person", cite)
             row["date"] = cell_date(row, "date", cite)
             hours = cell_hours(row, "hours", cite)
+            links = [a.strip() for a in (row["activity_ids"] or "").split(";") if a.strip()]
+            linked = {}
+            for link in links:
+                unique(linked, link, cite, "activity_ids link")
         except InputError as exc:
             sys.exit(f"activity_pull: {exc}")
         dates_available.add(row["date"])
         if not in_period(row["date"], period):
             continue
         dates_in_period.add(row["date"])
-        links = [a.strip() for a in (row["activity_ids"] or "").split(";") if a.strip()]
         kept_links, dropped = [], []
         for activity_id in links:
             if activity_id in kept_ids:

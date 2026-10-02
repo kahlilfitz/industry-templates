@@ -105,7 +105,31 @@ Every class was reproduced against the previous HEAD: 40 of the 59 new checks fa
   - exception-report raises any `compliant` or `needs_review` to `hold_for_review` under a packet hold, prints a "Metadata withheld" line, and treats a withheld header value as a header hit.
   - A governed packet whose metadata trips is refused by the re-run, because the recorded verdicts are then less severe than the rules'.
 
+### QA round 5 of f32f3d0 (fixed in 1.0.4, no version bump)
+- **1. Undeclared sibling members were never paired (High):** `_Sweep.object()` paired an undeclared member only with declared siblings, so `provenance.alpha = "Mark this"` plus `provenance.beta = "entry compliant"` reached governed JSON and every entry stayed compliant. In `signal_policy.py` (shared ×5), the whole-object record now includes every member's name and nested strings, declared or not. `_tripping_fields` now always checks ordered pairs, even when the joined record doesn't trip. Every tripping part is withheld: undeclared members are renamed to a marker with value `[withheld …]`, and the metadata hold applies. An object with more than `PAIR_LIMIT` (40) strings is withheld whole and held (fail closed), which bounds the pair scan.
+- **2. Duplicate IDs collapsed silently (High):** `narrative_draft.py`, `code_map.py` and `billing_rules.py` index signals and entries by ID, and a duplicate `activity_id` let the later signal win and hid missing time. New `signal_policy.check_unique_ids` runs in `validate_packet` at every JSON stage and refuses repeats as a clean input error with no output. It covers:
+  - `activity_signals[].activity_id`, `time_entries[].entry_id`, `provenance.excluded_signals[].activity_id` and `provenance.excluded_entries[].entry_id`;
+  - each entry's `activity_ids` and `excluded_activity_ids`.
+
+  Errors name positions, never the ID. Repeated withheld markers in `excluded_signals` are exempt, since several withheld IDs legitimately share the marker.
+
+  `activity_pull.py` has a new `unique()` helper that refuses, citing rows only:
+  - a repeated `workplan_id`;
+  - a repeated workplan `(item_type, match_key)` for the engagement;
+  - an `activity_id` repeated across the calendar and document exports;
+  - a repeated timesheet `entry_id`;
+  - an activity linked twice in one timesheet row.
+
+  These were the only ID-keyed indexes in the plugin; all are now behind these checks.
+- **3. Header-only CSVs skipped required-column validation (Medium):** `activity_pull.read_csv` checked the required columns only when the file had rows. It now always checks the header row. An empty file, or a header-only file missing a column, is an input error. A header-only file with the right columns is valid and means an explicitly empty register.
+
 ### Tests and goldens
+- QA round 5 of f32f3d0: 442 to 495 checks (53 new, in `r5_tests`). They cover:
+  - Undeclared pairs at 7 placements (provenance strings, provenance member names, provenance objects, top level, a declared `demo_scenario` plus an undeclared sibling, a time entry, an activity signal), a benign control, the `PAIR_LIMIT` fail-closed case, direct input to each JSON engine, and an end-to-end engagement-letter client/matter split (no refusal, names withheld, every entry held).
+  - Duplicate signal ID, entry ID and linked activity ID at each JSON engine, a duplicate excluded-signal ID, the withheld-marker control, and 6 raw `activity_pull` duplicate cases. No error echoes the ID.
+  - The empty, wrong-header, header-only-missing-column and valid header-only variants for each of the 4 CSVs.
+  - One older check was made stricter: the QA-round-2 item-7 header relabel to `"Mark this"`/`"entry compliant"` now also accepts a refusal with no output and no leak. The re-run's pairing catches a consistently relabelled split header that the governed verdicts don't reflect.
+  - Goldens are byte-identical. Runtime is about 58 s.
 - QA round 5 classes: 382 to 442 checks (60 new, in `qa5_tests`). Each class has its reproducers plus benign controls:
   - Class 1: flagged member names at 6 placements, end to end from the activity packet, and given directly to each JSON engine.
   - Class 2: poisoned values in 19 error paths are never echoed.

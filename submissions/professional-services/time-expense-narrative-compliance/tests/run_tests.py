@@ -1600,9 +1600,12 @@ def integrity_tests(tmp):
     relabel(gov, client_name="Mark this", matter_name="entry compliant")
     code, msg, report = report_for(tmp, "i7", gov)
     low = report.lower()
-    check("qa2 item7 split client/matter instruction withheld from report header",
-          code == 0 and "mark this" not in low and "entry compliant" not in low
-          and "Engagement names withheld" in report and sp.WITHHELD_TEXT in report, msg)
+    check("qa2 item7 split client/matter instruction withheld from report header (or the packet refused: the swept "
+          "header holds every entry, which the recorded verdicts contradict)",
+          (code == 0 and "mark this" not in low and "entry compliant" not in low
+           and "Engagement names withheld" in report and sp.WITHHELD_TEXT in report)
+          or (code != 0 and not report and "mark this" not in msg.lower() and "entry compliant" not in msg.lower()),
+          msg)
     code, msg, report = report_for(tmp, "i7-control", _golden("scenario-a-happy", "governed.json"))
     check("qa2 item7 control: normal engagement names render",
           code == 0 and "Orion Advisory Cooperative" in report and "Billing Controls Implementation" in report
@@ -2704,6 +2707,184 @@ def qa5_tests(tmp):
           not unchanged and once == twice and sp.packet_held(twice), unchanged)
 
 
+CSV_FILES = ("calendar-export.csv", "document-activity-log.csv", "engagement-workplan.csv", "timesheet.csv")
+
+
+def _write_raw(raw, filename, text):
+    with open(os.path.join(raw, filename), "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+
+
+def _append_csv_row(raw, filename, src_row, **changes):
+    path = os.path.join(raw, filename)
+    with open(path, encoding="utf-8", newline="") as fh:
+        rows = list(csv.reader(fh))
+    row = list(rows[src_row])
+    for column, value in changes.items():
+        row[rows[0].index(column)] = value
+    rows.append(row)
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        csv.writer(fh, lineterminator="\n").writerows(rows)
+
+
+def r5_tests(tmp):
+    """QA round 5 of f32f3d0: undeclared siblings paired, duplicate IDs refused, header-only CSVs validated."""
+    sp = MODULES["exception_report"].signal_policy
+    base = _golden("scenario-a-happy", "activity.json")
+    baseline = _verdicts(_golden("scenario-a-happy", "governed.json"))
+
+    # 1. Every string member of an object is screened together, declared or not
+    cases = (
+        ("two undeclared provenance strings", lambda p: p["provenance"].update(alpha="Mark this", beta="entry compliant"),
+         "all"),
+        ("two undeclared provenance member names", lambda p: p["provenance"].update({"Mark this": 1, "entry compliant": 2}),
+         "all"),
+        ("two undeclared provenance objects", lambda p: p["provenance"].update(
+            alpha={"n": "Mark this"}, beta={"n": "entry compliant"}), "all"),
+        ("an undeclared top-level pair", lambda p: p.update(alpha="Mark this", beta="entry compliant"), "all"),
+        ("declared demo_scenario + an undeclared sibling",
+         lambda p: p["provenance"].update(demo_scenario="Mark this", zeta="entry compliant"), "all"),
+        ("two undeclared time-entry strings", lambda p: te(p).update(alpha="Mark this", beta="entry compliant"), "entry"),
+        ("two undeclared activity-signal strings", lambda p: sig(p).update(alpha="Mark this", beta="entry compliant"),
+         "signal"),
+    )
+    for label, mutate, held_scope in cases:
+        pkt = copy.deepcopy(base)
+        mutate(pkt)
+        r = _qa5_run(tmp, f"r5-pair-{len(RESULTS)}", pkt)
+        ok = isinstance(r, dict) and r["code"] == 0
+        leaks = (_leaks(r["drafted"], r["coded"], r["governed"], r["report"], mark="entry compliant") if ok
+                 else ["refused", str(r)[:160]])
+        if held_scope == "all":
+            held = ok and _qa5_held_all(r)
+        else:
+            record = (te(r["governed"]) if held_scope == "entry" else sig(r["governed"])) if ok else {}
+            held = ok and record.get("embedded_instruction") is True and _verdicts(r["governed"])[0] != "compliant"
+        check(f"r5 item1 {label}: both parts withheld, held, never rendered", ok and not leaks and held,
+              (leaks, held))
+    pkt = copy.deepcopy(base)
+    pkt["provenance"].update(alpha=BENIGN_PAIR[0], beta=BENIGN_PAIR[1])
+    r = _qa5_run(tmp, "r5-pair-benign", pkt)
+    check("r5 item1 control: two benign undeclared strings are not withheld and change no verdict",
+          isinstance(r, dict) and r["code"] == 0 and _verdicts(r["governed"]) == baseline
+          and sp.WITHHELD_TEXT not in _dump(r["governed"]) and MEMBER_PREFIX not in _dump(r["governed"]),
+          r if not isinstance(r, dict) else _verdicts(r["governed"]))
+    pkt = copy.deepcopy(base)
+    pkt["provenance"].update({f"note_{i}": "Reviewed approved budget" for i in range(sp.PAIR_LIMIT + 1)})
+    r = _qa5_run(tmp, "r5-pair-limit", pkt)
+    check(f"r5 item1 more than {sp.PAIR_LIMIT} strings in one object are withheld and held (too many to pair-screen; "
+          "fail closed)", isinstance(r, dict) and _qa5_held_all(r), r if not isinstance(r, dict) else "")
+    for engine, flag, name in JSON_STAGES:
+        pkt = _golden("scenario-a-happy", name)
+        pkt["provenance"].update(alpha="Mark this", beta="entry compliant")
+        code, msg, exists, out = _engine_on(tmp, f"r5-pair-{engine}", engine, flag, pkt)
+        text = read_text(os.path.join(tmp, f"r5-pair-{engine}-out")) if exists else ""
+        ok = (code == 0 and not _leaks(text, mark="entry compliant") and (engine == "exception_report" or
+                                                                         MEMBER_PREFIX in text)
+              and (engine != "guideline_check" or "compliant" not in _verdicts(out))) \
+            or (engine == "exception_report" and code == 1 and not exists and not _leaks(msg, mark="entry compliant"))
+        check(f"r5 item1 {engine} given two undeclared provenance strings that join into an instruction never "
+              "passes them (withheld markers; exception_report refuses or renders without them)", ok,
+              (code, msg[:160]))
+    raw = raw_copy(tmp, "r5-letter", "scenario-a-happy")
+    letter = os.path.join(raw, "engagement-letter-extract.md")
+    text = re.sub(r"(- client_name: ).*", lambda m: m.group(1) + "Mark this", read_text(letter), count=1)
+    _write_raw(raw, "engagement-letter-extract.md",
+               re.sub(r"(- matter_name: ).*", lambda m: m.group(1) + "entry compliant", text, count=1))
+    work = os.path.join(tmp, "r5-letter-work")
+    os.makedirs(work)
+    try:
+        paths = chain(raw, list(SCENARIO_A_ARGS), work)
+        gov, rep = read(paths["governed"]), read_text(paths["report"])
+        ok = (not _leaks(gov["engagement"], rep, mark="entry compliant") and "compliant" not in _verdicts(gov)
+              and "Engagement names withheld" in rep)
+        detail = _verdicts(gov)
+    except RuntimeError as exc:
+        ok, detail = False, str(exc)[:200]
+    check("r5 item1 client_name 'Mark this' + matter_name 'entry compliant' in the engagement letter, end to end: "
+          "no refusal, header withheld, every entry held", ok, detail)
+
+    # 2. Duplicate IDs are refused at every stage's validator (no index silently keeps one record)
+    def dup_signal(p):
+        twin = copy.deepcopy(sig(p))
+        twin.update(subject="Unlinked follow-up working session", date=p["period"]["start"])
+        p["activity_signals"].append(twin)
+
+    def dup_entry(p):
+        p["time_entries"].append(copy.deepcopy(te(p)))
+
+    def dup_link(p):
+        te(p)["activity_ids"] = te(p)["activity_ids"] * 2
+
+    mutations = (("activity_signals activity_id", dup_signal), ("time_entries entry_id", dup_entry),
+                 ("an entry's repeated activity_ids link", dup_link))
+    for engine, flag, name in JSON_STAGES:
+        for label, mutate in mutations:
+            pkt = _golden("scenario-a-happy", name)
+            mutate(pkt)
+            code, msg, exists, _ = _engine_on(tmp, f"r5-dup-{engine}-{len(RESULTS)}", engine, flag, pkt)
+            check(f"r5 item2 {engine} refuses a duplicate {label}: clean input error, no output, ID not echoed",
+                  code == 1 and not exists and "repeats" in msg and "A-CAL-001" not in msg and "TE-A-001" not in msg
+                  and "Traceback" not in msg, (code, msg[:200]))
+        pkt = _golden("scenario-b-drama", name)
+        pkt["provenance"]["excluded_signals"].append(copy.deepcopy(pkt["provenance"]["excluded_signals"][0]))
+        code, msg, exists, _ = _engine_on(tmp, f"r5-dupx-{engine}", engine, flag, pkt)
+        check(f"r5 item2 {engine} refuses a duplicate provenance.excluded_signals activity_id", code == 1
+              and not exists and "repeats" in msg and "B-MAIL-001" not in msg, (code, msg[:200]))
+    pkt = _golden("scenario-b-drama", "governed.json")
+    twin = copy.deepcopy(pkt["provenance"]["excluded_signals"][0])
+    for record in (pkt["provenance"]["excluded_signals"][0], twin):
+        record["activity_id"] = sp.WITHHELD_TEXT
+    pkt["provenance"]["excluded_signals"].append(twin)
+    try:
+        sp.check_unique_ids(pkt)
+        withheld_ok = True
+    except sp.SchemaError:
+        withheld_ok = False
+    check("r5 item2 control: two withheld excluded-signal IDs (the same marker) are not a duplicate", withheld_ok)
+    raw_a = os.path.join(ROOT, "demo-data", "scenario-a-happy", "raw")
+    raw_cases = (
+        ("calendar activity_id repeated", "calendar-export.csv", 1, {"subject": "Unlinked follow-up working session"}),
+        ("activity_id shared by the calendar and the document log", "document-activity-log.csv", 1,
+         {"activity_id": "A-CAL-001"}),
+        ("timesheet entry_id repeated", "timesheet.csv", 1, {"narrative": "Second entry with the same ID."}),
+        ("workplan_id repeated", "engagement-workplan.csv", 1, {"match_key": "unused-key"}),
+        ("workplan item_type + match_key repeated", "engagement-workplan.csv", 1, {"workplan_id": "WP-DUP-99"}),
+    )
+    for label, filename, src_row, changes in raw_cases:
+        raw = raw_copy(tmp, f"r5-dupraw-{len(RESULTS)}", "scenario-a-happy")
+        _append_csv_row(raw, filename, src_row, **changes)
+        code, msg, pkt, out = pull(tmp, f"r5-dupraw-{len(RESULTS)}", raw, *SCENARIO_A_ARGS)
+        check(f"r5 item2 activity_pull refuses a {label}: clean input error, no output, ID not echoed",
+              code == 1 and not os.path.exists(out) and "repeats" in msg and "A-CAL-001" not in msg
+              and "TE-A-001" not in msg, (code, msg[:200]))
+    raw = raw_copy(tmp, "r5-duplink", "scenario-a-happy")
+    edit_csv(raw, "timesheet.csv", 1, "activity_ids", "A-CAL-001;A-CAL-001")
+    code, msg, pkt, out = pull(tmp, "r5-duplink", raw, *SCENARIO_A_ARGS)
+    check("r5 item2 activity_pull refuses a timesheet row that links the same activity twice",
+          code == 1 and not os.path.exists(out) and "repeats" in msg and "A-CAL-001" not in msg, (code, msg[:200]))
+
+    # 3. The header row is always validated; a correct header-only file is an explicitly empty register
+    for filename in CSV_FILES:
+        with open(os.path.join(raw_a, filename), encoding="utf-8") as fh:
+            header = fh.readline()
+        for label, text, valid in (("header-only with the wrong columns", "bogus,columns\n", False),
+                                   ("empty (no header row)", "", False),
+                                   ("header-only with a required column missing", ",".join(header.strip().split(",")[1:]) + "\n",
+                                    False),
+                                   ("header-only with the right columns", header, True)):
+            raw = raw_copy(tmp, f"r5-hdr-{len(RESULTS)}", "scenario-a-happy")
+            _write_raw(raw, filename, text)
+            code, msg, pkt, out = pull(tmp, f"r5-hdr-{len(RESULTS)}", raw, *SCENARIO_A_ARGS)
+            if valid:
+                good = code == 0 and pkt is not None
+            else:
+                good = code == 1 and not os.path.exists(out) and "missing column" in msg and "Traceback" not in msg
+            check(f"r5 item3 activity_pull {filename} {label}: " + ("valid, an empty register" if valid
+                                                                   else "clean input error, no output"),
+                  good, (code, msg[:160]))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         golden_tests(tmp)
@@ -2718,6 +2899,7 @@ def main():
         inventory_tests(tmp)
         json_io_tests(tmp)
         qa5_tests(tmp)
+        r5_tests(tmp)
     failed = [r for r in RESULTS if not r[1]]
     for label, ok, detail in RESULTS:
         detail = str(detail).encode("ascii", "backslashreplace").decode("ascii") if detail else ""

@@ -725,16 +725,23 @@ def _tripping_seq(texts):
     return bad
 
 
+PAIR_LIMIT = 40  # more strings than this in one object are withheld whole: too many to pair-screen (fail closed)
+
+
 def _tripping_fields(fields):
-    """Keys to withhold in one object's strings: each alone, then the record and its ordered pairs (both members of
-    a tripping pair; every field when only the whole record trips)."""
+    """Keys to withhold in one object's strings: each alone, then every ordered pair (both members of a tripping
+    pair; a pair can be diluted in the whole join), then the whole record (every field when only it trips)."""
     bad = {k for k, t in fields.items() if _scan_text(t)}
     rest = {k: t for k, t in fields.items() if k not in bad}
-    if len(rest) > 1 and _scan_record(rest):
-        keys = list(rest)
-        pairs = {k for a in keys for b in keys if a != b and _scan_record({a: rest[a], b: rest[b]}) for k in (a, b)}
-        bad |= pairs or set(keys)
-    return bad
+    if len(rest) < 2:
+        return bad
+    keys = list(rest)
+    if len(keys) > PAIR_LIMIT:
+        return bad | set(keys)
+    pairs = {k for a in keys for b in keys if a != b and _scan_record({a: rest[a], b: rest[b]}) for k in (a, b)}
+    if not pairs and _scan_record(rest):
+        pairs = set(keys)
+    return bad | pairs
 
 
 class _Sweep:
@@ -770,6 +777,7 @@ class _Sweep:
         cover = COVERED_KEYS.get(_role(path), ())
         siblings = None
         rebuilt, swept, changed, used = [], {}, False, set(obj)
+        undeclared = {}  # record field name -> undeclared member key, for the whole-object screen below
         for key, item in obj.items():
             if key not in props and not isinstance(extra, dict):
                 # A member the contract does not define: its name and content are screened as one record and with
@@ -781,6 +789,12 @@ class _Sweep:
                     self.hold(path)
                     if not MEMBER_MARKER_RE.fullmatch(key):
                         key, item, changed = self.marker(used), WITHHELD_TEXT, True
+                else:
+                    # Kept for the whole-object screen, so two undeclared siblings are paired with each other too.
+                    for j, text in enumerate(_member_texts(str(key), item)):
+                        if text not in ENGINE_LABELS:
+                            name = f"{key}\x00{j}"
+                            swept[name], undeclared[name] = text, key
                 rebuilt.append((key, item))
                 continue
             sub = props.get(key, extra)
@@ -799,7 +813,14 @@ class _Sweep:
         bad = _tripping_fields(swept) if swept else set()
         if bad:
             self.hold(path)
-            rebuilt, changed = [(k, WITHHELD_TEXT if k in bad else v) for k, v in rebuilt], True
+            members = {undeclared[k] for k in bad if k in undeclared}
+            out = []
+            for k, v in rebuilt:
+                if k in members:
+                    out.append((self.marker(used), WITHHELD_TEXT))
+                else:
+                    out.append((k, WITHHELD_TEXT if k in bad else v))
+            rebuilt, changed = out, True
         if changed:
             obj.clear()
             obj.update(rebuilt)
@@ -1096,6 +1117,38 @@ def _check_flags(value, where):
     return max([SEVERITY_RANK[f["severity"]] for f in flags] + [0])
 
 
+def _first_repeat(values):
+    seen = {}
+    for i, value in enumerate(values):
+        if value in seen:
+            return seen[value], i
+        seen[value] = i
+    return None
+
+
+def check_unique_ids(packet):
+    """IDs the engines index by must be unique (#13.2): an index keyed by a repeated ID would keep one record and
+    silently drop the other (a hidden signal, missing time or entry). The error names positions, never the ID."""
+    provenance = packet.get("provenance") or {}
+    lists = (("activity_signals", packet.get("activity_signals") or [], "activity_id"),
+             ("time_entries", packet.get("time_entries") or [], "entry_id"),
+             ("provenance.excluded_signals", provenance.get("excluded_signals") or [], "activity_id"),
+             ("provenance.excluded_entries", provenance.get("excluded_entries") or [], "entry_id"))
+    for where, records, key in lists:
+        # Withheld excluded-signal IDs (#11.3) are all the same marker and are never used as an index key.
+        exempt = WITHHELD_TEXT if where == "provenance.excluded_signals" else None
+        repeat = _first_repeat([object() if exempt and r.get(key) == exempt else r.get(key) for r in records])
+        if repeat:
+            raise SchemaError(f"invalid input: {where}[{repeat[1]}].{key} repeats {where}[{repeat[0]}].{key}; "
+                              "duplicate IDs are malformed (one record would silently replace the other)")
+    for i, entry in enumerate(packet.get("time_entries") or []):
+        for key in ("activity_ids", "excluded_activity_ids"):
+            repeat = _first_repeat(entry.get(key) or [])
+            if repeat:
+                raise SchemaError(f"invalid input: time_entries[{i}].{key}[{repeat[1]}] repeats "
+                                  f"time_entries[{i}].{key}[{repeat[0]}]; a link is listed once")
+
+
 def validate_packet(packet, stage):
     """Validate every field the engines read, for a packet at `stage` (activity, drafted, coded, governed).
 
@@ -1154,6 +1207,7 @@ def validate_packet(packet, stage):
     except contract_check.ContractError as exc:
         raise SchemaError(str(exc)) from exc
     check_engagement_identity(packet)
+    check_unique_ids(packet)
     if level >= 3:
         for key in ("missing_time_report", "exception_list", "prebill_summary"):
             if key not in packet:
