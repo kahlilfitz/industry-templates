@@ -334,6 +334,19 @@ The structural patterns described at the top of this entry are replaced, not sup
   - both demos byte-identical.
 - One old test changed, and it is stricter: the QR5 provenance-subtree case appended an object to `provenance.engines`, which is now an input error. It now appends the attack as a string entry and still checks that the entry is screened and withheld; the new refusal test covers the object form.
 
+### QA round 9 on 1.0.4 (forged markers, multi-entry splits, ID digits, dropped register rows, timestamps; 5 reproduced defects)
+
+- Embedded withheld marker downgraded the verdict (High; #8.7). `contains_withheld()` matched a marker inside a longer string and suppressed `is_definitive_conclusion()`, but `withheld_kind()` matched only exact markers, so no G8 was raised and the run fell from release_blocker to must_fix. Input can no longer supply a marker:
+  - in the review input (assertion_map) any marker-shaped text, exact or embedded, is tampering: the whole string is withheld under a new engine marker and held under G8;
+  - at later stages an exact marker is accepted as engine-emitted, and an embedded marker only when the same marker also stands alone in the payload (as the engines' own embedding always leaves it); any other embedded marker is tampering and holds the same way;
+  - `contains_withheld` is now the single predicate for both decision suppression and the G8 hit (`forged_marker`, `exact_markers`), and gate_check's recipient and note checks use it too.
+- Instruction text split across three or more array entries (High; #8.5). `array_pairs()` screened only adjacent pairs. `array_runs()` now screens every contiguous run of non-breaking string entries in sliding windows of up to 8 entries, plus the whole run joined in order when it is longer, so the cost stays linear. A tripping window is narrowed to the contiguous entries the note needs, and every one is withheld with a split marker.
+- Evidence-ID digits substantiated a sample size (High; checklist G4b). `tests/derive_review_input.py` read numbers from whole evidence lines, so `EV-X30` supported `sample_size: 30`. It now reads numbers only from the evidence title and description and the deliverable paragraph, as standalone tokens. The engines never extract numbers from text (checked).
+- Malformed register rows were silently dropped (Medium; checklist G4b). A non-blank, record-shaped line in a known section (brand-check register, licensed-content register, evidence index, prior-review findings) that fails its parser is now a `PackError`. The handling-status line is parsed strictly and may not repeat.
+- Invalid `provenance.generated_at` passed (Medium; #8.14). Every contract copy now declares `format: date-time`, and every stage validates it as an RFC 3339 date-time (calendar date and offset ranges checked), whether it is carried in the input or given with `--generated-at` (shared `rules.validate_generated_at`). The verifier uses the same `rules.is_timestamp`. The error never echoes the value.
+- Docs: quality-gate-criteria.md #8.5, #8.7 and #8.14 updated in all six copies.
+- Tests: 861 checks (were 797), 64 new in `qa104_round9_tests`. They cover the reproducers; exact, embedded, twinned and orphan markers at each engine (an orphan at a later stage may also be refused by re-derivation); 3-, 5- and 10-entry splits plus window narrowing; five benign split-prose sets that must not trip; evidence-ID digits; seven malformed record lines; and date-time values carried at each stage, in `--generated-at` and in the verifier. Both demos' goldens are byte-identical, and no old test changed.
+
 ## 1.0.3 - 2026-10-01
 
 Fixes every FAIL, WEAK and should-fix item in the Cowork 1.0.2 evaluation (42/50, Blocked).

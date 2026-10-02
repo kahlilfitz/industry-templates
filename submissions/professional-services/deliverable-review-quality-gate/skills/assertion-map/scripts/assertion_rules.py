@@ -333,6 +333,30 @@ def unique_entries(entries):
     return kept
 
 
+# RFC 3339 date-time (the contract's "format": "date-time"), ASCII digits only: 2026-10-01T00:00:00Z or with an offset.
+TIMESTAMP = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]{1,9})?(?:Z|[+-]([0-9]{2}):([0-9]{2}))")
+
+
+def is_timestamp(value):
+    """True when value is an RFC 3339 date-time with a real calendar date and time and a Z or +/-HH:MM offset
+    (quality-gate-criteria.md #8.14). Dates alone, free text and impossible dates such as month 13 are not."""
+    match = TIMESTAMP.fullmatch(value) if isinstance(value, str) else None
+    if match is None:
+        return False
+    try:
+        datetime(*(int(part) for part in match.group(1, 2, 3, 4, 5, 6)))
+    except ValueError:
+        return False
+    return match.group(7) is None or (int(match.group(7)) < 24 and int(match.group(8)) < 60)
+
+
+def validate_generated_at(value):
+    """The --generated-at flag, checked exactly as the contract checks provenance.generated_at."""
+    if value is not None and not is_timestamp(value):
+        raise InputError("--generated-at must be an ISO-8601 (RFC 3339) date-time such as 2026-10-01T00:00:00Z")
+    return value
+
+
 def record_engine(payload, tag, generated_at=None):
     """Append the engine/version tag to provenance.engines unless this engine was the last to run (idempotent re-run),
     and stamp generated_at: the --generated-at value, else the value already present, else the current UTC time. The
@@ -541,7 +565,7 @@ def contract_schema():
 
 def _contract_errors(value, node, path, root):
     """Yield the first violation of `node` (a draft-07 subset: $ref, const, oneOf, type, enum, required, properties,
-    items, minLength, pattern, minimum, maximum). x-unrecognised: hold marks an enum the gates judge themselves: any
+    items, minLength, pattern, minimum, maximum, and format: date-time checked by is_timestamp). x-unrecognised: hold marks an enum the gates judge themselves: any
     string or null passes here and the gate holds on an unrecognised value. x-normalise: provenance compares a source
     after normalise_provenance, as the evidence rule does."""
     if "$ref" in node:
@@ -567,6 +591,11 @@ def _contract_errors(value, node, path, root):
             yield f"{path} must be one of {', '.join(node['enum'])}, got {describe(value)}"
         return
     if isinstance(value, str):
+        if node.get("format") == "date-time":
+            # Checked before the withheld skip: a genuine timestamp never trips the screen, so a marker here is not one.
+            if not is_timestamp(value):
+                yield f"{path} must be an ISO-8601 (RFC 3339) date-time such as 2026-10-01T00:00:00Z, got {describe(value)}"
+            return
         if is_withheld(value):
             # Withheld marker: the embedded-instruction screen replaced text that was validated raw before withholding.
             return
@@ -661,8 +690,34 @@ def validate_unique_ids(payload):
 def contains_withheld(value):
     """True when value is a string carrying a withheld marker. Withheld text decides nothing
     (quality-gate-criteria.md #8.13): no rule reads it to match evidence, satisfy a requirement, identify the client,
-    place a finding or set a severity. It produces the G8 hold and nothing else."""
+    place a finding or set a severity. It produces the G8 hold and nothing else. This is the one predicate for both
+    sides: every rule that sets text aside uses it, and instruction_hits raises a G8 hit for every string it is true of
+    (an exact marker, a forged marker, or an embedded marker whose exact twin is itself a hit), so setting text aside
+    can never lower a verdict without a G8 release blocker (#8.7)."""
     return isinstance(value, str) and WITHHELD_PATTERN.search(value) is not None
+
+
+def marker_texts(value):
+    """Every marker-shaped substring of value, in order."""
+    return [match.group(0) for match in WITHHELD_PATTERN.finditer(value)] if isinstance(value, str) else []
+
+
+def exact_markers(payload):
+    """Every string in payload (member names included) that is exactly a withheld marker."""
+    return {text for _, text in iter_strings(payload, "$") if is_withheld(text)}
+
+
+def forged_marker(value, emitted):
+    """True when value carries a marker-shaped substring the engines cannot have produced (quality-gate-criteria.md
+    #8.7). In the raw review input (emitted is None) every marker, exact or embedded, is forged: only an engine
+    withholds text. At a later stage an exact marker is accepted as an engine marker (and is itself a G8 hit), and a
+    marker inside a longer string is genuine only when the same marker also stands alone in the payload (`emitted`, from
+    exact_markers), as the engines' embedded replacement always leaves it. Anything else is tampering and a G8 hold."""
+    if not contains_withheld(value):
+        return False
+    if emitted is None:
+        return True
+    return not is_withheld(value) and any(marker not in emitted for marker in marker_texts(value))
 
 
 def is_withheld_reference(evidence_by_id, evidence_id):
@@ -871,6 +926,7 @@ WITHHELD_WORDING = {
 }
 # Marker numbers are 1 to 9 digits, so reading one back (int) is always bounded; a longer number is not a marker.
 WITHHELD_PATTERN = re.compile(r"\[withheld ([1-9][0-9]{0,8})(?: \((oversize|split)\))?: [a-z -]+; see the G8 finding\]")
+MAX_MARKER_NUMBER = 999_999_999
 
 
 def withheld_marker(number, kind=INSTRUCTION):
@@ -974,17 +1030,66 @@ def scan_sections(payload):
     return primary, derived
 
 
-def array_pairs(payload):
-    """Yield (path, fields, refs, derived) for each pair of adjacent non-blank string entries in any array, so prose
-    split across array entries is screened joined (quality-gate-criteria.md #8.5), as an assertion's fields are."""
+ARRAY_WINDOW = 8
+
+
+def _entries(items, first, last):
+    """(fields, refs) for items[first..last]: fields maps 'entry N' to the text, refs to the (container, index)."""
+    names = [f"entry {index}" for index in range(first, last + 1)]
+    return dict(zip(names, items[first:last + 1])), dict(zip(names, ((items, index) for index in range(first, last + 1))))
+
+
+def _run_trips(items, first, last):
+    return screen_fields(_entries(items, first, last)[0])
+
+
+def array_runs(payload, breaks):
+    """Yield (path, fields, refs, derived, found) for each run of adjacent array entries that trips only when joined, so
+    prose split across any number of entries is screened as one text (quality-gate-criteria.md #8.5).
+
+    Entries for which breaks(value) is true (non-strings, blanks, and text already flagged or withheld) split an array
+    into runs. Each run is screened in sliding windows of up to ARRAY_WINDOW entries, and, when it is longer than that,
+    joined whole, so the cost stays linear in the array. A tripping window is narrowed to the entries the note needs
+    (dropping an end entry stops the hit); a whole-run hit that no window shows withholds the whole run."""
     for _, path, child, derived in top_level_sections(payload):
         for list_path, items in iter_arrays(child, path):
-            for index in range(len(items) - 1):
-                first, second = items[index], items[index + 1]
-                if isinstance(first, str) and isinstance(second, str) and first.strip() and second.strip():
-                    names = (f"entry {index}", f"entry {index + 1}")
-                    yield (f"{list_path}[{index}]+[{index + 1}]{PAIR_SUFFIX}", dict(zip(names, (first, second))),
-                           dict(zip(names, ((items, index), (items, index + 1)))), derived)
+            start = 0
+            while start < len(items):
+                if breaks(items[start]):
+                    start += 1
+                    continue
+                end = start
+                while end + 1 < len(items) and not breaks(items[end + 1]):
+                    end += 1
+                yield from _run_hits(list_path, items, start, end, derived)
+                start = end + 1
+
+
+def _run_hits(list_path, items, start, end, derived):
+    if end == start:
+        return
+    first, flagged = start, False
+    while first < end:
+        last = min(first + ARRAY_WINDOW - 1, end)
+        if _run_trips(items, first, last):
+            low, high = first, last
+            while high - low > 1 and _run_trips(items, low + 1, high):
+                low += 1
+            while high - low > 1 and _run_trips(items, low, high - 1):
+                high -= 1
+            fields, refs = _entries(items, low, high)
+            flagged = True
+            yield f"{list_path}[{low}]+[{high}]{PAIR_SUFFIX}", fields, refs, derived, screen_fields(fields)
+            first = high + 1
+            continue
+        if last == end:
+            break
+        first += 1
+    if not flagged and end - start + 1 > ARRAY_WINDOW:
+        fields, refs = _entries(items, start, end)
+        found = screen_fields(fields)
+        if found:
+            yield f"{list_path}[{start}]+[{end}]{PAIR_SUFFIX}", fields, refs, derived, found
 
 
 def collect_scan_text(payload):
@@ -1049,6 +1154,7 @@ def instruction_hits(payload):
     primary string) is a hit. A derived string that merely contains a marker or embeds tripped primary text is the same
     note and is not counted again (quality-gate-criteria.md #8.1-#8.7)."""
     hits, tripped, pending_split = [], set(), []
+    emitted = exact_markers(payload)
     for path, text, derived in collect_scan_text(payload):
         kind = withheld_kind(text)
         if kind == SPLIT and (not derived or path.endswith("]")):
@@ -1056,6 +1162,9 @@ def instruction_hits(payload):
             continue
         if kind:
             reason = OVERSIZE if kind == OVERSIZE else INSTRUCTION
+        elif forged_marker(text, emitted):
+            # A marker the engines cannot have produced (embedded with no exact twin): tampering, held under G8 (#8.7).
+            reason = INSTRUCTION
         else:
             found = screen_text(text)
             if not found:
@@ -1102,15 +1211,12 @@ def _array_hits(payload, tripped, covered):
                 hits.append((f"{list_path}[{index}]+[{last}]{PAIR_SUFFIX}" if last > index else f"{list_path}[{index}]", INSTRUCTION))
                 index = last + 1
     used = set()
-    for path, fields, refs, _ in array_pairs(payload):
-        values = list(fields.values())
+    for path, fields, refs, _, found in array_runs(payload, lambda value: not (isinstance(value, str) and value.strip()) or contains_withheld(value) or value in tripped or bool(screen_text(value)) or any(source in value for source in tripped)):
         slots = {(id(container), key) for container, key in refs.values()}
-        if used & slots or any(is_withheld(value) or value in tripped or screen_text(value) or any(source in value for source in tripped) for value in values):
+        if used & slots:
             continue
-        found = screen_fields(fields)
-        if found:
-            used |= slots
-            hits.append((path, hit_reason(found)))
+        used |= slots
+        hits.append((path, hit_reason(found)))
     return hits
 
 
@@ -1123,10 +1229,11 @@ def _next_marker_number(payload):
 
 
 def _replace_text(value, exact, embedded):
-    if is_withheld(value):
-        return value
+    # Exact first: in the raw input a forged marker is itself the text being withheld.
     if value in exact:
         return exact[value]
+    if is_withheld(value):
+        return value
     for source, marker in embedded:
         if source in value:
             value = value.replace(source, marker)
@@ -1158,24 +1265,31 @@ def _replace_withheld(value, exact, embedded):
     return _replace_text(value, exact, embedded) if isinstance(value, str) else value
 
 
-def withhold_untrusted(payload):
+def withhold_untrusted(payload, raw_input=False):
     """Screen the whole payload and replace every string that trips the detector with a numbered withheld marker,
     everywhere that text appears, so no stage, output or review packet repeats it (quality-gate-criteria.md #8.7).
 
     Detection runs on the original text first; nothing is stripped or rewritten before screening. Then:
     - a tripped primary or derived string is replaced wherever it appears exactly, and wherever it is embedded in a
       longer string (for example the assertion citation inside assertion_mappings[].citation);
+    - a string carrying a forged marker (forged_marker: any marker at all in the raw review input, raw_input=True, or
+      at a later stage a marker inside a longer string with no exact twin) is tampering: it is withheld whole under a
+      new marker and is a G8 hit, so input can never supply a marker that sets text aside without a hold;
     - when only an assertion's joined fields trip, each of those fields gets a split marker wherever it appears exactly;
-    - when only two adjacent array entries trip joined, both get split markers;
+    - when only a run of adjacent array entries trips joined (array_runs), every entry of the run gets a split marker;
     - member names are screened like values, and a flagged name is replaced by its marker in place (order kept).
-    Markers already present are left alone and are not new hits. The payload is updated in place. Returns
+    Engine markers already present are left alone and are not new hits. The payload is updated in place. Returns
     (path, reason, derived) for each newly withheld hit, in the order instruction_hits reports them."""
     primary, derived = scan_sections(payload)
-    number = [_next_marker_number(payload)]
+    emitted = None if raw_input else exact_markers(payload)
+    # In the raw input every marker is forged and is replaced, so numbering starts at 1.
+    number = [1 if raw_input else _next_marker_number(payload)]
     markers, embedded, new = {}, [], []
 
     def mark(text, kind):
         if text not in markers:
+            if number[0] > MAX_MARKER_NUMBER:
+                raise InputError("the input carries more withheld markers than can be numbered; it is malformed")
             markers[text] = withheld_marker(number[0], kind)
             number[0] += 1
             if kind != SPLIT:
@@ -1183,6 +1297,11 @@ def withhold_untrusted(payload):
 
     tripped = set()
     for path, text in primary:
+        if forged_marker(text, emitted):
+            mark(text, INSTRUCTION)
+            tripped.add(text)
+            new.append((path, INSTRUCTION, False))
+            continue
         if is_withheld(text):
             continue
         found = screen_text(text)
@@ -1193,6 +1312,10 @@ def withhold_untrusted(payload):
     primary_texts = {text for _, text in primary}
     derived_new = []
     for path, text in derived:
+        if forged_marker(text, emitted) and text not in primary_texts:
+            mark(text, INSTRUCTION)
+            derived_new.append((path, INSTRUCTION, True))
+            continue
         if is_withheld(text) or text in primary_texts or any(source in text for source in tripped):
             continue
         found = screen_text(text)
@@ -1214,19 +1337,14 @@ def withhold_untrusted(payload):
             own = [name for name in needed if not name.startswith("evidence title")]
             split_refs.extend(refs[name] for name in (own or needed))
             combined.append((path, hit_reason(found), False))
-    # Prose split across adjacent array entries: each entry passes alone, the joined pair trips. Both entries are
-    # withheld with split markers; an entry already part of a flagged pair is not paired again.
-    paired = set()
-    for path, fields, refs, is_derived in array_pairs(payload):
-        values = list(fields.values())
-        slots = {(id(container), key) for container, key in refs.values()}
-        if paired & slots or any(value in markers or is_withheld(value) or any(source in value for source in embedded) for value in values):
-            continue
-        found = screen_fields(fields)
-        if found:
-            paired |= slots
-            split_refs.extend(refs.values())
-            combined.append((path, hit_reason(found), is_derived))
+    # Prose split across adjacent array entries: each entry passes alone, a run of them trips joined (array_runs). Every
+    # entry of the run is withheld with a split marker; an entry already flagged or withheld splits the array into runs.
+    def breaks(value):
+        return not (isinstance(value, str) and value.strip()) or value in markers or contains_withheld(value) or any(source in value for source in embedded)
+
+    for path, fields, refs, is_derived, found in array_runs(payload, breaks):
+        split_refs.extend(refs.values())
+        combined.append((path, hit_reason(found), is_derived))
     split_exact = {}
     for container, key in split_refs:
         value = container[key]

@@ -16,7 +16,10 @@ deliverable-ingest / criteria-retrieve rule from, that scenario's raw pack:
 
 Source fields are rebuilt and compared exactly. Assertions are traced instead: the text must be
 quoted from the located paragraph under the stated section and page, sample and population sizes
-must appear in that paragraph or in a linked evidence entry, and every evidence ID must be indexed.
+must appear as a standalone number in that paragraph or in a linked evidence entry's title or
+description (never in an ID, type, source or confidence), and every evidence ID must be indexed.
+In a known register section every record-shaped line (a list item, or a line carrying one of that
+register's field labels) must parse; one that does not is an error, never silently dropped.
 Classification fields (class, label, hedging_present, limitation_present, stated_basis,
 scope_aligned), prior-finding detail and extraction confidence are ingest judgements: they are
 listed in JUDGEMENT_KEYS and are not re-derived, but each is type- and range-checked by
@@ -43,7 +46,6 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skills", "assertion-map", "scripts"))
@@ -63,7 +65,19 @@ BRAND = re.compile(r"^- (?P<id>[\w-]+): (?P<status>\w+)\. (?P<title>.+?)\. (?P<d
 LICENSED = re.compile(r"^- (?P<id>[\w-]+): (?P<detail>.+?) Attribution present: (?P<attr>yes|no)\. License status: (?P<status>[\w ]+)\. Location: (?P<loc>.+?)\. Confidence: (?P<conf>" + CONF + r")\. Register: (?P<register>.+?)\. Criteria: (?P<crit>.+?)\.$")
 NO_ASSURANCE = re.compile(r"\bnot (?:provide |be treated as |an? )?assurance\b", re.IGNORECASE)
 RELIANCE = re.compile(r"\bmay not be relied (?:up)?on\b|\breliance\b", re.IGNORECASE)
-NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+# A number is a standalone token: digits glued to a letter, digit, "_" or "." (EV-X30, v0.7) are part of an ID or label.
+NUMBER = re.compile(r"(?<![\w.])[0-9][0-9,]*(?:\.[0-9]+)?")
+# A record-shaped line: a list item, or a line carrying one of its section's field labels. In a known section every one
+# must parse; a line that does not is a PackError, never silently dropped.
+RECORD_ITEM = re.compile(r"^(?:[-*+]|[0-9]{1,9}[.)])[ \t]")
+HANDLING_LINE = re.compile(r"^handling[ \t]+status\b", re.IGNORECASE)
+HANDLING = re.compile(r"^Handling status: (\w+)$")
+RECORD_LABELS = {
+    "brand-check register": ("Legal or release control:", "Criteria:"),
+    "licensed-content register": ("Attribution present:", "License status:", "Register:"),
+    "evidence index": ("Type:", "Source:", "Confidence:"),
+    "prior-review findings": ("Tracker status:", "Document check:", "Location:"),
+}
 MISSING = object()
 
 JUDGEMENT_KEYS = {
@@ -80,6 +94,15 @@ REGISTER_IDS = {"brand_checks": "check_id", "licensed_content": "content_id"}
 
 class PackError(ValueError):
     """A raw pack that cannot be parsed. Messages name a line or position, never the pack's text."""
+
+
+def record_match(pattern, line, kind, where):
+    """Parse one line of a known register section. A record-shaped line (a list item, or one carrying a field label of
+    that register) that the pattern does not match raises PackError naming only its position; prose lines return None."""
+    match = pattern.match(line)
+    if match is None and (RECORD_ITEM.match(line) or any(label in line for label in RECORD_LABELS[kind])):
+        raise PackError(f"{where} is a record line of the {kind} that does not follow the documented line format; fix or remove it")
+    return match
 
 
 def show(value):
@@ -194,16 +217,21 @@ def register_sections(text):
 def parse_registers(path):
     """Return client_data_handling, brand_checks and licensed_content; a missing register is unknown/None."""
     sections = register_sections(read_text(path)) if os.path.exists(path) else {}
-    handling = "unknown"
-    for line in sections.get("Client-data handling register", []):
-        match = re.match(r"^Handling status: (\w+)$", line)
-        if match:
-            handling = match.group(1)
+    handling, seen = "unknown", False
+    for number, line in enumerate(sections.get("Client-data handling register", []), 1):
+        if not HANDLING_LINE.match(line):
+            continue
+        match = HANDLING.match(line)
+        if match is None:
+            raise PackError(f"client-data handling register entry {number} is a Handling status line that does not follow 'Handling status: <status>'")
+        if seen:
+            raise PackError(f"client-data handling register entry {number} repeats the Handling status line; a later value would overwrite the earlier")
+        handling, seen = match.group(1), True
     brand = None
     if "Brand and formatting checks" in sections:
         brand = []
         for number, line in enumerate(sections["Brand and formatting checks"], 1):
-            match = BRAND.match(line)
+            match = record_match(BRAND, line, "brand-check register", f"brand check entry {number}")
             if match:
                 brand.append({"check_id": match["id"], "status": match["status"], "legal_or_release_control": match["legal"] == "yes",
                               "title": match["title"], "detail": match["detail"], "location": parse_location(match["loc"], f"brand check entry {number}"),
@@ -212,7 +240,7 @@ def parse_registers(path):
     if "Licensed and third-party content register" in sections:
         licensed = []
         for number, line in enumerate(sections["Licensed and third-party content register"], 1):
-            match = LICENSED.match(line)
+            match = record_match(LICENSED, line, "licensed-content register", f"licensed-content entry {number}")
             if match:
                 licensed.append({"content_id": match["id"], "attribution_present": match["attr"] == "yes", "license_status": match["status"],
                                  "detail": match["detail"], "location": parse_location(match["loc"], f"licensed-content entry {number}"), "confidence": float(match["conf"]),
@@ -221,24 +249,26 @@ def parse_registers(path):
 
 
 def parse_evidence(text):
-    """Return (items, {canonical evidence ID: index line}); IDs are compared in canonical form (rules.canonical_id)."""
+    """Return (items, {canonical evidence ID: title and description}); IDs are compared in canonical form
+    (rules.canonical_id). Only the title and description are kept for the size check: a number in the evidence ID,
+    type, source or confidence is metadata and never substantiates a sample or population size."""
     items, lines = [], {}
     for number, line in enumerate(text.splitlines(), 1):
-        match = EVIDENCE.match(line.strip())
+        match = record_match(EVIDENCE, line.strip(), "evidence index", f"supporting-evidence-index.md line {number}")
         if match:
             items.append({"evidence_id": match["id"], "type": match["type"], "title": match["title"], "confidence": float(match["conf"]),
                           "source": "connector:" + match["source"].strip().lower().replace(" ", "-"),
                           "citation": f"supporting-evidence-index.md {match['id']}"})
             if rules.canonical_id(match["id"]) in lines:
                 raise PackError(f"supporting evidence index repeats an evidence ID (line {number}, equal exactly or after folding); evidence IDs must be unique")
-            lines[rules.canonical_id(match["id"])] = line
+            lines[rules.canonical_id(match["id"])] = f"{match['title']}. {match['desc']}"
     return items, lines
 
 
 def parse_prior(text):
     items = []
     for number, line in enumerate(text.splitlines(), 1):
-        match = PRIOR.match(line.strip())
+        match = record_match(PRIOR, line.strip(), "prior-review findings", f"prior-review-findings.md line {number}")
         if match:
             closed, fixed = match["status"] == "closed", match["fix"] == "present"
             citation = f"prior-review-findings.md {match['id']}"
@@ -450,13 +480,8 @@ def is_confidence(value):
 
 
 def is_iso_timestamp(value):
-    if not isinstance(value, str):
-        return False
-    try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    return True
+    """The contract's format: date-time, checked by the engines' own rule (rules.is_timestamp, RFC 3339)."""
+    return rules.is_timestamp(value)
 
 
 def judgement_problems(label, kind, item):
@@ -489,7 +514,7 @@ def judgement_problems(label, kind, item):
     if kind == "prior_finding" and "detail" in item and not isinstance(item["detail"], str):
         problems.append(f"{label}.detail: must be a string, got {rules.describe(item['detail'])}")
     if kind == "provenance" and "generated_at" in item and not is_iso_timestamp(item["generated_at"]):
-        problems.append(f"{label}.generated_at: must be an ISO-8601 timestamp, got {rules.describe(item['generated_at'])}")
+        problems.append(f"{label}.generated_at: must be an ISO-8601 timestamp (RFC 3339 date-time such as 2026-10-01T00:00:00Z), got {rules.describe(item['generated_at'])}")
     return problems
 
 

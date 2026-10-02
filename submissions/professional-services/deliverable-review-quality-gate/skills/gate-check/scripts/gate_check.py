@@ -5,7 +5,6 @@ import copy
 import os
 import re
 import sys
-from datetime import datetime
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
@@ -80,14 +79,7 @@ InputError = rules.InputError
 def load_json(path):
     return rules.load_json_file(path)
 
-def validate_generated_at(value):
-    if value is None:
-        return None
-    try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise InputError("--generated-at must be an ISO-8601 timestamp") from exc
-    return value
+validate_generated_at = rules.validate_generated_at
 
 def require_contract(payload):
     if not isinstance(payload, dict):
@@ -310,7 +302,7 @@ def classify_recipient(recipient, identities):
     word. Anything else is unclassified; nothing is inferred from the absence of a keyword. A recipient the
     embedded-instruction screen withheld (quality-gate-criteria.md #8.7) cannot be read or confirmed, and look-alike
     characters may hide external vocabulary, so it is treated as external."""
-    if rules.WITHHELD_PATTERN.search(recipient):
+    if rules.contains_withheld(recipient):
         return "external"
     text = recipient_words(recipient)
     if text in INTERNAL_RECIPIENTS:
@@ -573,7 +565,7 @@ def evaluate(payload):
         escalations.append(f"G2: confirm client aliases {names} - contains external-party vocabulary and is not trusted as the client identity; reviewing partner/QRM must confirm the client name, aliases and recipients (quality-gate-criteria.md #2.5)")
     if recipients["external"] and deliverable["third_party_recipient_named"] is False:
         names = ", ".join(recipients["external"])
-        withheld_note = " or were withheld by the embedded-instruction screen" if any(rules.WITHHELD_PATTERN.search(item) for item in recipients_of(deliverable)) else ""
+        withheld_note = " or were withheld by the embedded-instruction screen" if any(rules.contains_withheld(item) for item in recipients_of(deliverable)) else ""
         add_finding(findings, "GC-G2-recipient-third-party-conflict", "G2", RELEASE_BLOCKER, "External recipient conflicts with third_party_recipient_named=false", f"Recipient(s) {names} match external-party vocabulary (counsel, lender, investor, regulator, auditor, buyer, outside or third party){withheld_note} but third_party_recipient_named is false; the deliverable is treated as third-party and reliance-restriction language is required.", disclaimer_location(payload), "quality-gate-criteria.md #2.2; quality-gate-criteria.md #2.5", 0.97, "quality-gate-criteria.md #2.2, #2.5; severity-rules.md #1.1")
         escalations.append(f"G2: recipient(s) {names} look external but third_party_recipient_named is false - release blocker; reviewing partner/QRM must confirm the recipients and reliance terms (quality-gate-criteria.md #2.5)")
     if recipients["unclassified"] and not recipient_problem:

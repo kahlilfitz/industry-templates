@@ -5,7 +5,6 @@ import copy
 import os
 import re
 import sys
-from datetime import datetime
 
 import assertion_rules as rules
 import gate_check as gc
@@ -37,14 +36,7 @@ InputError = rules.InputError
 def load_json(path):
     return rules.load_json_file(path)
 
-def validate_generated_at(value):
-    if value is None:
-        return None
-    try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise InputError("--generated-at must be an ISO-8601 timestamp") from exc
-    return value
+validate_generated_at = rules.validate_generated_at
 
 def require_contract(payload):
     if not isinstance(payload, dict):

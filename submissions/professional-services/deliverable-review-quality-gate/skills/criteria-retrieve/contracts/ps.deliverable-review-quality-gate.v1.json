@@ -257,11 +257,11 @@
     },
     "provenance": {
       "type": "object",
-      "description": "Optional on the review input; every engine output carries it. Each engine appends its tag to engines and stamps generated_at (from --generated-at, else the value already present, else the current UTC time), so the review packet never renders a missing value. When supplied, both members are required.",
+      "description": "Optional on the review input; every engine output carries it. Each engine appends its tag to engines and stamps generated_at (from --generated-at, else the value already present, else the current UTC time), so the review packet never renders a missing value. generated_at is an RFC 3339 date-time (for example 2026-10-01T00:00:00Z) at every stage, including a value carried in the input and the --generated-at flag. When supplied, both members are required.",
       "required": ["engines", "generated_at"],
       "properties": {
         "engines": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "generated_at": { "type": "string", "minLength": 1 }
+        "generated_at": { "type": "string", "minLength": 1, "format": "date-time" }
       }
     }
   },

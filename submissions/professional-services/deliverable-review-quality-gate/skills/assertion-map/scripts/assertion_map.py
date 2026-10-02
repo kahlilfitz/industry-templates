@@ -3,7 +3,6 @@
 import argparse
 import os
 import sys
-from datetime import datetime
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
@@ -20,15 +19,7 @@ def load_json(path):
     return rules.load_json_file(path)
 
 
-def validate_generated_at(value):
-    if value is None:
-        return None
-    candidate = value.replace("Z", "+00:00")
-    try:
-        datetime.fromisoformat(candidate)
-    except ValueError as exc:
-        raise InputError("--generated-at must be an ISO-8601 timestamp") from exc
-    return value
+validate_generated_at = rules.validate_generated_at
 
 
 def require_contract(payload):
@@ -71,7 +62,7 @@ def main():
         rules.validate_contract(payload, "assertion_map")
         # Flagged text is withheld before mapping, so no mapping, finding or later stage repeats it
         # (quality-gate-criteria.md #8.7); gate_check raises the G8 hold for every marker.
-        rules.withhold_untrusted(payload)
+        rules.withhold_untrusted(payload, raw_input=True)
         evidence_by_id = rules.evidence_index(payload["evidence_set"])
         findings = list(payload.get("findings", []))
         escalations = list(payload.get("escalations", []))
