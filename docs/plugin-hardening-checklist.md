@@ -95,6 +95,12 @@ How to read a report:
   (`object_pairs_hook`) as malformed input that holds. [Wave 1 pre-freeze QA round 5]
   Test: a register with two `status` columns (`restricted,clear`) and a JSON object with a repeated
   key; both must hold or be refused.
+- [ ] **A12. Duplicate IDs are malformed.** Indexing records by ID (`{x["id"]: x for x in ...}`)
+  silently keeps the last of two records with the same ID, which can pick the wrong one and hide
+  the other's finding. Refuse duplicate IDs in every keyed register or array at the first stage and
+  in every downstream validator. Check required CSV headers even when the file has no rows.
+  [Wave 1 pre-freeze QA round 5]
+  Test: two activity signals sharing one ID; a header-only CSV missing a required column.
 
 ## B. Finding integrity (engines)
 
