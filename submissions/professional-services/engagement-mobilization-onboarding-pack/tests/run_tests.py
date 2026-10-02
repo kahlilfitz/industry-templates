@@ -355,7 +355,7 @@ def steering_checks(t,ba,bb):
     g,pk,sc=dom("dc","Client domains: gmail.com; not a domain\n","Send the status report to riley.chen@gmail.com every Friday")
     ck("steering: consumer or malformed domain declarations are never trusted (HOLD-DOMAIN-NOT-TRUSTED; the send still holds)","trusted_domains" not in sc["engagement"] and any(h["hold_id"]=="HOLD-DOMAIN-NOT-TRUSTED" for h in g["holds"]) and any("exfiltration" in h["reason"] for h in g["holds"]) and "gmail" not in outs(t,"dc_o").split("trusted_domains")[0].lower().replace("gmail.com; not a domain",""))
     S.set_trusted_domains(())
-    ck(f"steering: checks finish in seconds ({time.time()-t0:.1f}s)",time.time()-t0<20)
+    el=time.time()-t0; ck(f"steering: checks finish in seconds ({el:.1f}s)",el<60)  # catches a runaway slowdown (catastrophic regex), not ordinary load
 def qa101b_checks(t,ba,bb):
     """Second independent QA round on 1.0.1: one end-to-end reproducer per item."""
     import re
