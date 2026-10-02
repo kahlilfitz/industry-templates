@@ -45,7 +45,7 @@ def rel(scope,item):
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--scope",required=True); ap.add_argument("--closeout",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
     s=load_json(a.scope); check_scope(s); set_trusted_domains((s.get("engagement") or {}).get("trusted_domains"))
-    c=adapt(a.closeout); holds=dedup_holds(list(s.get("holds",[]))+scan(c["knowledge_record"],"upstream/closeout.knowledge_record")+scan(c["released_assets"],"upstream/closeout.released_assets")); rels={x.get("asset_id"):x for x in c["released_assets"] if x.get("clearance_state") in STATES}
+    c=adapt(a.closeout); own_h=scan(c["engagement"],"upstream/closeout.engagement")+scan(c["knowledge_record"],"upstream/closeout.knowledge_record")+scan(c["released_assets"],"upstream/closeout.released_assets"); rels={x.get("asset_id"):x for x in c["released_assets"] if x.get("clearance_state") in STATES}
     inc=[]; exc=[]; kr=c["knowledge_record"]
     for asset in kr.get("reusable_assets",[]):
         aid=asset.get("asset_id")
@@ -65,6 +65,9 @@ def main():
     # The closed engagement is usually another client: its name and IDs never reach this pack (#3.3).
     ce=c["engagement"]; mine=s.get("engagement") or {}
     terms=client_terms([v for k_,v in (("client_name",ce.get("client_name")),("engagement_id",ce.get("engagement_id"))) if v and norm(v)!=norm(mine.get(k_) or "")],own_words(s))
+    # Upstream scope holds are supplied content: screened for other-client names and steering text (#3.3, #4.3).
+    up,uh=screen_holds(s.get("holds",[]),terms,ENGINE,"scope.holds"); holds=dedup_holds(up+own_h+uh)
+    if any(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh): s.setdefault("escalations",[]).append(other_escalation(sum(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh)))
     if terms:
         s["prior_knowledge_candidates"]=inc; s,oh=screen_other(s,terms,ENGINE,"matched."); inc=s.pop("prior_knowledge_candidates")
         if oh: holds=dedup_holds(holds+oh); s.setdefault("escalations",[]).append(other_escalation(len(oh)))

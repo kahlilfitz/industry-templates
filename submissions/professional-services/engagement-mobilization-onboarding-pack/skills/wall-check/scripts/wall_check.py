@@ -56,7 +56,7 @@ def check_matched(p):
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--matched",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
     p=load_json(a.matched); check_matched(p); set_trusted_domains((p.get("engagement") or {}).get("trusted_domains"))
-    rows=read_csv(a.wall_register,False); ws=read_csv(a.workspace_inventory,False); holds=list(p.get("holds",[])); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
+    rows=read_csv(a.wall_register,False); ws=read_csv(a.workspace_inventory,False); up=list(p.get("holds",[])); holds=[]; deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
     status="clear"; reason="wall register marks joiner clear for this client/matter"; cit="confidentiality-and-ethical-wall-rules.md #2.2"
     own=words(e.get("client_name"),e.get("matter_id"),e.get("engagement_id"),e.get("title"),*(e.get("affiliates") or []),j.get("person"),*[r.get("person") for r in p.get("team_roster",[])],*(p.get("scope_summary") or {}).get("systems",[])); own_ids={k(e.get("matter_id")),k(e.get("engagement_id"))}-{""}
     def hold_status(hid,path,why,rule):
@@ -72,7 +72,8 @@ def main():
         if rows.malformed: hold_status("HOLD-MALFORMED-WALL-REGISTER","raw/ethical-wall-register.csv rows "+", ".join(map(str,rows.malformed)),"ethical-wall register row(s) carry more fields than the header","#2.1")
         holds+=scan_rows(rows,"raw/ethical-wall-register.csv"); terms=client_terms(other_names(rows,e,own),own)
         p,oh=screen_other(p,terms,ENGINE,"matched.")  # every text field, not only the briefing (#3.3)
-        if oh: holds+=oh; esc=p.setdefault("escalations",[]); esc.append(other_escalation(len(oh)))
+        esc=p.setdefault("escalations",[])  # screen_other returns a new document: always rebind (#3.2)
+        if oh: holds+=oh; esc.append(other_escalation(len(oh)))
         j=p.get("joiner") or {}; e=p.get("engagement") or {}
         matches=[(i,r) for i,r in enumerate(rows,2) if applies(r,e,j)]
         restricted=[(i,r) for i,r in matches if k(r.get("status")) in RESTRICT]
@@ -87,7 +88,7 @@ def main():
             briefed=[]; screened=0
             for i,r in restricted:
                 for t in topics(r):
-                    if hits(t): briefed.append(WITHHELD); screened+=1; continue  # tripwire hold already raised by scan_rows (#4.3)
+                    if t==WITHHELD or hits(t): briefed.append(WITHHELD); screened+=1; continue  # tripwire hold already raised by scan_rows (#4.3)
                     if names_other(t,terms,own,own_ids):
                         briefed.append(TOPIC_WITHHELD); screened+=1
                         holds.append({"hold_id":"HOLD-BRIEFING-TOPIC-"+hashlib.sha256(strip_cf(t).encode()).hexdigest()[:12],"path":f"raw/ethical-wall-register.csv row {i}.briefing_topics","reason":"briefing topic names another client, matter or identifying detail; withheld from the pack","source":ENGINE,"confidence":.97,"citation":"confidentiality-and-ethical-wall-rules.md #3.1,#3.2"}); continue
@@ -106,7 +107,10 @@ def main():
             nm=w.get("name") or ""
             if names_client(nm,terms): holds.append(other_hold(f"raw/workspace-inventory.csv row {i}.name",nm,ENGINE))
             if (hits(nm) or nm==WITHHELD or names_client(nm,terms)) and w.get("workspace_id") and w["workspace_id"] not in withheld_names: withheld_names.append(w["workspace_id"])
-    holds=dedup_holds(holds)
+    # Upstream holds are supplied content: another client's name or steering text in them never travels (#3.3, #4.3).
+    up,uh=screen_holds(up,terms,ENGINE,"matched.holds")
+    if any(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh): esc.append(other_escalation(sum(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh)))
+    holds=dedup_holds(up+holds+uh)
     if holds and status=="clear": status="hold"; reason="source holds require review before knowledge/access release"; cit="confidentiality-and-ethical-wall-rules.md #4.1"
     odd=[]
     for i,w in enumerate(ws or [],2):

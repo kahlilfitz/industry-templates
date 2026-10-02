@@ -11,7 +11,7 @@ def require_iso_z(v):
     return v
 def load_json(p):
     try:
-        with open(p, encoding="utf-8") as f: return json.load(f)
+        with open(p, encoding="utf-8-sig") as f: return json.load(f)  # a BOM never hides the first key (#1.3)
     except FileNotFoundError as e: raise InputError(f"missing required JSON file: {p}") from e
     except (json.JSONDecodeError, UnicodeDecodeError) as e: raise InputError(f"malformed JSON in {p} (must be UTF-8 JSON): {e}") from e
     except OSError as e: raise InputError(f"cannot read JSON file {p}: {type(e).__name__}") from e
@@ -19,7 +19,7 @@ def dump_json(p, o):
     with open(p, "w", encoding="utf-8", newline="\n") as f: json.dump(o, f, indent=2, ensure_ascii=False); f.write("\n")
 def read_text(p):
     try:
-        with open(p, encoding="utf-8") as f: return f.read()
+        with open(p, encoding="utf-8-sig") as f: return f.read()  # a BOM never hides the first "Engagement ID:" (#1.3)
     except FileNotFoundError as e: raise InputError(f"missing required file: {p}") from e
     except UnicodeDecodeError as e: raise InputError(f"file is not UTF-8 text: {p} ({e.reason} at byte {e.start})") from e
     except OSError as e: raise InputError(f"cannot read file {p}: {type(e).__name__}") from e
@@ -125,7 +125,16 @@ HOOKS = {"extra_verdict_words": ("wall cleared", "unrestricted", "access approve
 _TRUSTED = ()
 DOMAIN_RE = re.compile(r"^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 UNTRUSTABLE_DOMAINS = {"gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com", "yahoo.com", "ymail.com", "aol.com", "icloud.com", "me.com", "mac.com", "proton.me", "protonmail.com", "pm.me", "gmx.com", "gmx.net", "mail.com", "zoho.com", "yandex.com", "tutanota.com", "dropbox.com", "wetransfer.com", "box.com", "google.com", "drive.google.com", "onedrive.live.com", "1drv.ms", "sharepoint.com", "onmicrosoft.com", "github.com", "pastebin.com", "example.com", "example.net", "example.org"}
-def domain_ok(d): return isinstance(d, str) and bool(DOMAIN_RE.match(d)) and d not in UNTRUSTABLE_DOMAINS
+# Multi-tenant hosts: a single-label tenant (contoso.sharepoint.com) is that organisation's own identity; the bare
+# host and any deeper subdomain stay untrustable.
+TENANT_HOSTS = {"sharepoint.com", "onmicrosoft.com"}
+def _blocked(d, b):
+    if d == b: return True
+    if not d.endswith("." + b): return False
+    return not (b in TENANT_HOSTS and "." not in d[: -len(b) - 1])
+def domain_ok(d):
+    """Well-formed and neither an untrustable domain nor any subdomain of one (uploads.dropbox.com) (#4.4)."""
+    return isinstance(d, str) and bool(DOMAIN_RE.match(d)) and not any(_blocked(d.lower(), b) for b in UNTRUSTABLE_DOMAINS)
 def set_trusted_domains(domains):
     """Trust only well-formed, non-consumer domains; anything else is ignored (trusting less only holds more)."""
     global _TRUSTED
@@ -222,32 +231,38 @@ def scan_lines(text, path):
 def scan_text(text, path): return scan_lines(text, path)[0]
 def scan_rows(rows, label):
     """One hold per flagged cell, plus pair holds for claims split across adjacent cells in a row or the same column
-    in adjacent rows. Pair-flagged cells are replaced in place by the placeholder so they never travel (#4.5)."""
-    out = []; rows = rows or []
+    in adjacent rows. Every flagged cell (single, pair or record) is replaced in place by the placeholder so it never
+    travels into citations, briefings or checklists (#4.3, #4.5). In a ";"-separated list cell only the flagged items
+    are replaced when an item trips on its own; otherwise the whole cell is."""
+    out = []; rows = rows or []; bad = []; part = {}
     for i, r in enumerate(rows, 2):
         for k, v in r.items():
             h = hits(v)
-            if h: out.append(hold(f"{label} row {i}.{k}", v, h))
+            if not h: continue
+            out.append(hold(f"{label} row {i}.{k}", v, h)); items = v.split(";") if isinstance(v, str) else []
+            flagged = [n for n, x in enumerate(items) if x.strip() and hits(x)] if len(items) > 1 else []
+            if flagged and not hits(";".join(x for n, x in enumerate(items) if n not in flagged)): part[(i - 2, k)] = ";".join(WITHHELD if n in flagged else x for n, x in enumerate(items))
+            else: bad.append((i - 2, k))
     pairs = []
     for i, r in enumerate(rows):
         ks = [k for k in r if prose_key(k) and (r.get(k) or "").strip()]
         pairs += [((i, a), (i, b)) for a, b in zip(ks, ks[1:])]
         if i + 1 < len(rows):
             pairs += [((i, k), (i + 1, k)) for k in ks if (rows[i + 1].get(k) or "").strip()]
-    bad = []
     for (i, a), (j, b) in pairs:
         h = pair_hits(rows[i][a], rows[j][b])
         if h:
             where = f"{label} row {i + 2}.{a}+{b}" if i == j else f"{label} rows {i + 2}-{j + 2}.{a}"
             out.append(hold(where, rows[i][a] + "\n" + rows[j][b], h)); bad += [(i, a), (j, b)]
     # A row is one record: when only the join of all its cells trips, every cell is withheld and the row held (#4.5).
-    hit_rows = {i for i, _ in bad} | {i - 2 for i, r in enumerate(rows, 2) for v in r.values() if hits(v)}
+    hit_rows = {i for i, _ in bad} | {i for i, _ in part}
     for i, r in enumerate(rows):
         if i in hit_rows: continue
         ft = free_text(r); h = record_hits(ft) if len(ft) > 1 else []
         if h:
             out.append(hold(f"{label} row {i + 2} (fields joined)", "\n".join(ft.values()), h))
             bad += [(i, k) for k in ft]
+    for (i, k), v in part.items(): rows[i][k] = v
     for i, k in bad: rows[i][k] = WITHHELD
     return out
 def redact(v):
@@ -300,6 +315,25 @@ def screen_other(doc, terms, engine, prefix=""):
     return (walk(doc, "") if terms else doc), holds
 def other_hold(path, text, engine):
     return {"hold_id": "HOLD-OTHER-CLIENT-" + hashlib.sha256(strip_cf(text).encode()).hexdigest()[:12], "path": path, "reason": "text names another client or matter (name not repeated); withheld from every output", "source": engine, "confidence": 0.97, "citation": "confidentiality-and-ethical-wall-rules.md #3.3"}
+HOLD_TEXT_FIELDS = ("hold_id", "path", "reason", "citation")
+def screen_holds(holds, terms, engine, prefix="holds"):
+    """Screen holds supplied by an upstream document (never this engine's own): another client's name or steering
+    text in a hold's id, path, reason or citation is replaced, never echoed, and itself held. Returns (screened holds,
+    new holds) (confidentiality-and-ethical-wall-rules.md #3.3, #4.3)."""
+    out, new = [], []
+    for n, h in enumerate(holds or []):
+        if not isinstance(h, dict): out.append(h); continue
+        h = dict(h)
+        for k in HOLD_TEXT_FIELDS:
+            v = h.get(k)
+            if not isinstance(v, str) or v in (WITHHELD, OTHER_WITHHELD): continue
+            d = hashlib.sha256(strip_cf(v).encode()).hexdigest()[:12]
+            if names_client(v, terms): new.append(other_hold(f"{prefix}[{n}].{k}", v, engine)); h[k] = "HOLD-SCREENED-" + d if k == "hold_id" else OTHER_WITHHELD
+            else:
+                f = hits(v)
+                if f: new.append(hold(f"{prefix}[{n}].{k}", v, f)); h[k] = "HOLD-SCREENED-" + d if k == "hold_id" else WITHHELD
+        out.append(h)
+    return out, new
 def other_escalation(n): return f"{n} field(s) withheld because they name another client or matter; Risk/Conflicts review before the pack is shared (confidentiality-and-ethical-wall-rules.md #3.3)"
 
 # ---------------------------------------------------------------- contract validation of pipeline inputs
@@ -311,7 +345,7 @@ def _contract():
     import os
     p = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "contracts", CONTRACT_VERSION + ".json")
     try:
-        with open(p, encoding="utf-8") as f: return json.load(f)
+        with open(p, encoding="utf-8-sig") as f: return json.load(f)
     except (OSError, ValueError) as e: raise InputError(f"bundled contract schema unreadable ({p}); fail closed") from e
 def _type_ok(v, t):
     if t == "number": return is_num(v)

@@ -9,6 +9,7 @@ ADMIN_EXCLUDED=True  # workspace-inventory-rules.md #3.2
 WALL_STATUSES={"clear","denied","hold"}  # confidentiality-and-ethical-wall-rules.md #2.2
 INVENTORY_COLUMNS=("workspace_id","workspace_type","default_permission","depends_on_knowledge","data_classification")  # workspace-inventory-rules.md #1.3
 KNOWN_CLASSIFICATIONS={"client_confidential","confidential","restricted","internal","public"}  # workspace-inventory-rules.md #2.3
+GOVERNED_META=("contract_version","run_metadata","provenance","holds")
 def low(v): return (v or "").strip().lower()
 def safe(x): return WITHHELD if hits(x) else x  # confidentiality-and-ethical-wall-rules.md #4.3
 def pack(p):
@@ -23,7 +24,7 @@ def pack(p):
     L += ["","## Access-request checklist"] + ([f"- {i.get('workspace_name')} ({i.get('workspace_id')}): {i.get('status')} - {i.get('requested_permission','none')} - {i.get('reason')}" for i in p.get("access_checklist",[])] or ["- No access is requested in this run; see Escalations and holds."])
     L += ["","## Confidentiality and ethical-wall briefing"] + ([f"- May not access/discuss {i.get('type')}: {i.get('item')} - {i.get('restriction')}" for i in (p.get("wall_decision") or {}).get("may_not_access_discuss",[])] or ["- No wall restriction was found for the joiner, subject to human review of this draft."])
     L += ["","## First-week plan"] + [f"{n}. {x}" for n,x in enumerate(s.get("first_week_focus",[]),1)] + ["","## Escalations and holds"] + [f"- {x}" for x in p.get("escalations",[])] + [f"- HOLD {h.get('hold_id')}: {h.get('reason')} at {h.get('path')} ({h.get('citation')})" for h in p.get("holds",[])]
-    return "\n".join(L[:5]+[x if x.startswith(("#","- HOLD ","Status:")) or not x else safe(x) for x in L[5:]])+"\n"
+    return "\n".join(L[:5]+[x if x.startswith(("#","Status:")) or not x else safe(x) for x in L[5:]])+"\n"  # hold lines are screened too (#4.3)
 def check_governed(p):
     need(isinstance(p,dict),f"governed input must be a JSON object, got {type(p).__name__}; fail closed")
     if p.get("contract_version")!=CONTRACT_VERSION: raise InputError(f"expected contract {CONTRACT_VERSION} in governed input")
@@ -33,11 +34,21 @@ def check_governed(p):
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--governed",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--pack-out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
     p=load_json(a.governed); check_governed(p); set_trusted_domains((p.get("engagement") or {}).get("trusted_domains"))
-    holds=list(p.get("holds",[])); esc=p.setdefault("escalations",[]); role=low((p.get("joiner") or {}).get("role")); allowed=M.get(role,{}); wall=p["wall_decision"]; denied=set(wall.get("denied_workspace_ids",[])); held=set(wall.get("held_workspace_ids",[])); hidden=set(wall.get("name_withheld_workspace_ids",[])); out=[]
+    # The governed document is untrusted input: its upstream holds and every content field are screened and flagged text
+    # withheld before anything is derived from it (confidentiality-and-ethical-wall-rules.md #4.1, #4.3).
+    up,uh=screen_holds(p.get("holds",[]),[],ENGINE,"governed.holds"); body={k_:v for k_,v in p.items() if k_ not in GOVERNED_META}; gh=scan(body,"governed"); p.update(redact(body))
+    holds=dedup_holds(up+uh+gh); esc=p.setdefault("escalations",[])
+    if uh or gh: esc.append(f"{len(uh)+len(gh)} governed field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
+    role=low((p.get("joiner") or {}).get("role")); allowed=M.get(role,{}); wall=p["wall_decision"]; denied=set(wall.get("denied_workspace_ids",[])); held=set(wall.get("held_workspace_ids",[])); hidden=set(wall.get("name_withheld_workspace_ids",[])); out=[]
     def add_hold(hid,path,why,cit): holds.append({"hold_id":hid,"path":path,"reason":why,"source":ENGINE,"confidence":.99,"citation":cit})
     wstat=wall.get("status")
     if wstat not in WALL_STATUSES:
-        add_hold("HOLD-UNKNOWN-WALL-DECISION","governed.wall_decision.status",f"unrecognised wall_decision status {wstat!r}; treated as hold","confidentiality-and-ethical-wall-rules.md #2.2"); wstat="hold"
+        add_hold("HOLD-UNKNOWN-WALL-DECISION","governed.wall_decision.status","unrecognised wall_decision status; treated as hold","confidentiality-and-ethical-wall-rules.md #2.2"); wstat="hold"
+    if wstat in {"hold","denied"}:
+        # No knowledge is released while the effective wall status is hold or denied, whatever the digest says (#2.2, #2.3).
+        kd=p.get("knowledge_digest") or {}
+        if kd.get("status") not in {"hold","denied_by_wall"}: kd["status"]="denied_by_wall" if wstat=="denied" else "hold"
+        kd["items"]=[]; p["knowledge_digest"]=kd; wall["allowed_knowledge_ids"]=[]
     rows=read_csv(a.workspace_inventory,False)
     if rows is None:
         add_hold("HOLD-MISSING-WORKSPACE-INVENTORY",a.workspace_inventory,"missing workspace inventory; no access is requested","workspace-inventory-rules.md #1.2"); rows=[]
