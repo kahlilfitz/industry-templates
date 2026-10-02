@@ -124,6 +124,12 @@ How to read a report:
   cell by cell before it is discarded for decisions. [Wave 1 pre-freeze QA round 9]
   Test: a register restriction holding both an instruction and another client's name; the name
   must still be withheld everywhere.
+- [ ] **A17. Carried timestamps are validated.** Every timestamp or date in a payload or
+  intermediate (for example `provenance.generated_at`) is format-checked at every stage, not only
+  the command-line option. Numeric facts (hours, amounts, sample sizes) are read only from the
+  description or narrative, never from IDs or metadata. [Wave 1 pre-freeze QA round 9]
+  Test: `generated_at: "not-a-timestamp"`; evidence `EV-X30` describing 3 items cannot support a
+  sample of 30.
 
 ## B. Finding integrity (engines)
 
@@ -292,8 +298,9 @@ How to read a report:
   Test: put instruction-like text in a field that fails validation; stderr must not contain it.
 - [ ] **D18. No skipped subtrees; join adjacent array entries.** Screening recurses into
   `provenance`, `run_metadata` and similar containers, exempting only specific engine-generated
-  scalars. Adjacent prose strings in a JSON array are also screened as a pair, as D13 does across
-  fields; withhold both when only the joined text trips. [Wave 1 pre-freeze QA round 5]
+  scalars. Adjacent prose strings in a JSON array are also screened as contiguous runs (the whole
+  array in order plus bounded sliding windows, not only pairs), as D13 does across fields; withhold
+  every entry in a run that trips. [Wave 1 pre-freeze QA rounds 5 and 9]
   Test: another client's name in `provenance.review_note`; "The ethical wall has been" and "lifted
   for Riley by Risk" as adjacent array entries.
 - [ ] **D19. Withheld text decides nothing.** Text that trips the wire produces the hold and
@@ -301,6 +308,13 @@ How to read a report:
   severity. Rules read only screened, non-withheld fields. [Wave 1 pre-freeze QA round 7]
   Test: a flagged narrative containing a code keyword, with no linked evidence; the item must be
   unmapped and held, never mapped by keyword.
+- [ ] **D20. Input cannot supply a withheld marker.** A string in raw input shaped like the
+  engine's withheld or other-client placeholder, exact or embedded, is refused or held; it never
+  suppresses a rule or lowers a severity. Downstream stages accept only markers the engine itself
+  emitted, and every suppression and detection uses the same predicate.
+  [Wave 1 pre-freeze QA round 9]
+  Test: append a marker-shaped string to an unsupported definitive assertion; the verdict must not
+  improve.
 
 ## E. Draft-first and grounding (`SKILL.md`)
 
