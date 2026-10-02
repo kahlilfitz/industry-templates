@@ -4,9 +4,11 @@
 It walks the contract JSON itself, so the schema is the only definition of shape: $ref ("#" or "#/$defs/<name>"),
 allOf, type, const, enum, pattern, minimum, maximum, minItems, required, properties, prefixItems and items, through
 nested objects and arrays. The extension keyword x-uniqueKeys on an array of records names the keys that identify a
-record: a repeat (NFKC, case-folded, whitespace collapsed; blanks and withheld placeholders are not identifiers) is a
-violation, so no stage ever indexes records last-wins. The stage schemas ($defs/stage_scope, stage_matched, stage_governed, stage_access) add
-what each point in the chain must carry, including the provenance engine prefixes. No coercion and no defaults: the
+record: a repeat (unique_key, i.e. canon_id: NFKC, Cf stripped, case-folded, whitespace and -_. separators
+collapsed; blanks and withheld placeholders are not identifiers) is a violation, so no stage ever indexes records
+last-wins. canon_text / canon_person / canon_id / canon_header defined here are the plugin's one canonical comparison
+form (safety_text re-exports them). The stage schemas ($defs/stage_scope, stage_matched, stage_governed, stage_access)
+add what each point in the chain must carry, including the provenance engine prefixes. No coercion and no defaults: the
 first violation raises ContractViolation, which every engine turns into a clean InputError before writing anything
 (messages name the field path and the expected type, enum or pattern; a supplied value is never echoed)
 (confidentiality-and-ethical-wall-rules.md #1.3). Byte-identical in every skill's scripts/ folder
@@ -33,10 +35,27 @@ def _type_ok(v, t):
     return isinstance(v, _JT[t])
 def _need(ok, msg):
     if not ok: raise ContractViolation(msg)
-def _id(v):
-    if not isinstance(v, str): return None
-    t = " ".join(unicodedata.normalize("NFKC", v).casefold().split())
+# The one canonical comparison form for identities, IDs, enums and CSV header names, shared by the contract walker
+# and every engine (safety_text re-exports it). Comparisons use it; outputs keep the supplied value.
+def _strip_cf(s): return "".join(c for c in s if unicodedata.category(c) != "Cf")
+def canon_text(v):
+    """NFKC, format (Cf) characters stripped, case-folded, whitespace collapsed; "" for a non-string."""
+    if not isinstance(v, str): return ""
+    return " ".join(_strip_cf(unicodedata.normalize("NFKC", _strip_cf(v))).casefold().split())
+def canon_person(v):
+    """A person's or client's name: `Taylor  Reed`, ` taylor reed ` and `Tay\u200blor Reed` compare equal."""
+    return canon_text(v)
+def canon_id(v):
+    """An identifier: canon_text with the -, _ and . separators folded to spaces (`ws-a-plan` == `WS_A_PLAN`)."""
+    return " ".join(re.sub(r"[-_.]+", " ", canon_text(v)).split())
+def canon_header(v):
+    """A CSV header name: canon_id joined with underscores (`ｃｌｉｅｎｔ＿ｎａｍｅ`, `Client Name` -> `client_name`)."""
+    return canon_id(v).replace(" ", "_")
+def unique_key(v):
+    """canon_id for duplicate detection; blanks and withheld placeholders are not identifiers (None)."""
+    t = canon_id(v)
     return None if not t or t.startswith("[withheld") else t
+_id = unique_key
 def _target(ref, root):
     if ref == "#": return root
     if ref.startswith("#/$defs/") and ref[8:] in root.get("$defs", {}): return root["$defs"][ref[8:]]

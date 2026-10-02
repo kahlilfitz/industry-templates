@@ -10,21 +10,22 @@ FREE_TEXT_NOT_BRIEFED=True  # confidentiality-and-ethical-wall-rules.md #3.1
 BRIEFING_TOPICS_SCREENED=True  # confidentiality-and-ethical-wall-rules.md #3.2
 KNOWN_CLASSIFICATIONS={"client_confidential","confidential","restricted","internal","public"}  # workspace-inventory-rules.md #2.3
 OTHER_CLIENTS_SCREENED=True  # confidentiality-and-ethical-wall-rules.md #3.3
-def k(v): return key_low(v)
 def applies(r,e,j):
     # Every populated field must match; blank person = engagement-wide row; a row must name this client or matter.
-    p,c,m=k(r.get("person")),k(r.get("client_name")),k(r.get("matter_id"))
-    if p and p!=k(j.get("person")): return False
-    if c and c!=k(e.get("client_name")): return False
-    if m and m!=k(e.get("matter_id")): return False
+    # One canonical comparison (canon_person / canon_id): `Taylor  Reed` and `taylor reed` are the same joiner (#1.3).
+    p,c,m=canon_person(r.get("person")),canon_person(r.get("client_name")),canon_id(r.get("matter_id"))
+    if p and p!=canon_person(j.get("person")): return False
+    if c and c!=canon_person(e.get("client_name")): return False
+    if m and m!=canon_id(e.get("matter_id")): return False
     return bool(c or m)
+def cin(v,xs): return canon_id(v) in {canon_id(x) for x in xs}  # ID membership by canonical form (#1.3)
 def row_cite(r): return r.get("citation") or "raw/ethical-wall-register.csv"
 def topics(r): return [x.strip() for x in (r.get("briefing_topics") or "").split(";") if x.strip()]
 def names_other(text,terms,own,own_ids):
     """Briefing topics get the strictest screen: known identities, any other matter-like ID and any capitalised name
     that is not this engagement's own (#3.2)."""
     if names_client(text,terms): return True
-    if any(x.lower() not in own_ids for x in re.findall(r"\b[A-Za-z]{2,}(?:-[A-Za-z0-9]+)*-\d{2,}[A-Za-z0-9-]*\b",text or "")): return True
+    if any(canon_id(x) not in own_ids for x in re.findall(r"\b[A-Za-z]{2,}(?:-[A-Za-z0-9]+)*-\d{2,}[A-Za-z0-9-]*\b",text or "")): return True
     for run,start in cap_runs(text):
         ws=words(run)
         if not ws or ws<=own|ALLOW_CAPS or (start and len(run.split())==1): continue
@@ -46,7 +47,7 @@ def govern(p,register,inventory):
     if mh: p.setdefault("escalations",[]).append(upstream_escalation(len(mh)))
     rows=read_csv(register,False); ws=read_csv(inventory,False); up=list(p.get("holds",[])); holds=list(mh); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
     status="clear"; reason="wall register marks joiner clear for this client/matter"; cit="confidentiality-and-ethical-wall-rules.md #2.2"
-    own=own_words(p); own_ids={k(e.get("matter_id")),k(e.get("engagement_id"))}-{""}
+    own=own_words(p); own_ids={canon_id(e.get("matter_id")),canon_id(e.get("engagement_id"))}-{""}
     def hold_status(hid,path,why,rule):
         holds.append({"hold_id":hid,"path":path,"reason":why,"source":ENGINE,"confidence":.99,"citation":f"confidentiality-and-ethical-wall-rules.md {rule}"}); return "hold",why,f"confidentiality-and-ethical-wall-rules.md {rule}"
     # Other-client identities are harvested whatever the register's validity for the decision: a register with a
@@ -57,7 +58,7 @@ def govern(p,register,inventory):
     esc=p.setdefault("escalations",[])  # screen_other returns a new document: always rebind (#3.2)
     if oh: esc.append(other_escalation(len(oh)))
     scr+=oh; j=p.get("joiner") or {}; e=p.get("engagement") or {}
-    if not k(j.get("person")):
+    if not canon_person(j.get("person")):
         status,reason,cit=hold_status("HOLD-NO-JOINER","scope.joiner","no joiner identified; wall status cannot be determined","#2.2"); holds+=scr
     elif rows is None:
         status,reason,cit=hold_status("HOLD-MISSING-WALL-REGISTER",register,"missing ethical-wall register","#2.1"); holds+=scr
@@ -75,15 +76,15 @@ def govern(p,register,inventory):
         # source of the identities; briefing topics have the stricter screen below (#3.2, #3.3).
         rh=screen_csv_other(rows,REGISTER_LABEL,terms,ENGINE,only={i for i,_ in matches},skip=("restriction","briefing_topics"))
         if rh: holds+=rh; esc.append(other_escalation(len(rh)))
-        restricted=[(i,r) for i,r in matches if k(r.get("status")) in RESTRICT]
-        unknown=[r for i,r in matches if k(r.get("status")) not in RESTRICT|CLEAR]
-        named_clear=[r for i,r in matches if k(r.get("status")) in CLEAR and k(r.get("person"))]
+        restricted=[(i,r) for i,r in matches if canon_text(r.get("status")) in RESTRICT]
+        unknown=[r for i,r in matches if canon_text(r.get("status")) not in RESTRICT|CLEAR]
+        named_clear=[r for i,r in matches if canon_text(r.get("status")) in CLEAR and canon_person(r.get("person"))]
         if restricted:
             status="denied"; reason="joiner restricted by ethical-wall register; restriction details are held by Risk/Conflicts (need-to-know)"; cit="; ".join(row_cite(r) for i,r in restricted)
             deniedk=[x.get("knowledge_id") for x in p.get("prior_knowledge_candidates",[])]
             for i,r in restricted:
                 for w in (r.get("restricted_workspaces") or "").split(";"):
-                    if w.strip() and w.strip() not in deniedw and w.strip() not in (WITHHELD,OTHER_WITHHELD): deniedw.append(w.strip())  # a withheld ID is held, never published (#3.3)
+                    if w.strip() and not cin(w,deniedw) and w.strip() not in (WITHHELD,OTHER_WITHHELD): deniedw.append(w.strip())  # a withheld ID is held, never published (#3.3); the register's spelling is kept, compared canonically (#1.3)
             briefed=[]; screened=0
             for i,r in restricted:
                 for t in topics(r):
@@ -111,7 +112,7 @@ def govern(p,register,inventory):
         if ih: holds+=ih; esc.append(other_escalation(len(ih)))
         for i,w in enumerate(ws,2):
             nm=w.get("name") or ""; wid=w.get("workspace_id")
-            if (hits(nm) or nm in (WITHHELD,OTHER_WITHHELD)) and wid and wid not in (WITHHELD,OTHER_WITHHELD) and wid not in withheld_names: withheld_names.append(wid)
+            if (hits(nm) or nm in (WITHHELD,OTHER_WITHHELD)) and wid and wid not in (WITHHELD,OTHER_WITHHELD) and not cin(wid,withheld_names): withheld_names.append(wid)
     # Upstream holds are supplied content: another client's name or steering text in them never travels (#3.3, #4.3).
     up,uh=screen_holds(up,terms,ENGINE,"matched.holds")
     if any(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh): esc.append(other_escalation(sum(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh)))
@@ -122,11 +123,11 @@ def govern(p,register,inventory):
         wid=w.get("workspace_id")
         if wid in (WITHHELD,OTHER_WITHHELD): continue  # never requested (access_checklist: invalid row) and never published
         conf=client_confidential(w.get("data_classification")); dep=depends_on_knowledge(w.get("depends_on_knowledge"))  # blank/unknown fail closed (workspace-inventory-rules.md #2.3)
-        if k(w.get("data_classification")) not in KNOWN_CLASSIFICATIONS or k(w.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES: odd.append(str(i))
-        if status=="denied" and wid in deniedw:
-            name=wid if wid in withheld_names else (w.get("name") or wid)
+        if not cin(w.get("data_classification"),KNOWN_CLASSIFICATIONS) or canon_text(w.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES: odd.append(str(i))
+        if status=="denied" and cin(wid,deniedw):
+            name=wid if cin(wid,withheld_names) else (w.get("name") or wid)
             may.append({"item":name,"type":"workspace","restriction":"workspace restricted by ethical-wall register","citation":f"{w.get('citation') or 'raw/workspace-inventory.csv'}; confidentiality-and-ethical-wall-rules.md #2.3; workspace-inventory-rules.md #2.2"})
-        elif status in {"denied","hold"} and (conf or dep) and wid not in heldw: heldw.append(wid)
+        elif status in {"denied","hold"} and (conf or dep) and not cin(wid,heldw): heldw.append(wid)
     if odd: esc.append(f"Workspace inventory row(s) {', '.join(odd)} have a blank or unrecognised data_classification/depends_on_knowledge; treated as client-confidential and knowledge-dependent (workspace-inventory-rules.md #2.3)")
     allowed=[] if status in {"denied","hold"} else p.get("prior_knowledge_candidates",[])
     p["wall_decision"]={"status":status,"reason":reason,"allowed_knowledge_ids":[x.get("knowledge_id") for x in allowed],"denied_knowledge_ids":deniedk,"denied_workspace_ids":deniedw,"held_workspace_ids":heldw,"name_withheld_workspace_ids":withheld_names,"may_not_access_discuss":may,"source":ENGINE,"confidence":.98 if status!="hold" else .8,"citation":cit}

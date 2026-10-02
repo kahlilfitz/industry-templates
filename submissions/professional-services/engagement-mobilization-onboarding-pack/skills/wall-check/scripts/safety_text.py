@@ -1,5 +1,6 @@
 import csv, functools, hashlib, json, math, os, re, shutil, tempfile, unicodedata
 import contract_validate as _cv
+from contract_validate import canon_text, canon_person, canon_id, canon_header  # the one canonical comparison form (#1.3)
 from datetime import datetime
 CONTRACT_VERSION = "ps.engagement-mobilization-onboarding-pack.v1"
 VERSION = "1.0.1"
@@ -95,15 +96,21 @@ def read_text(p):
     except OSError as e: raise InputError(f"cannot read file {p}: {type(e).__name__}") from e
 def write_text(p, t): write_atomic([(p, text_bytes(p, t))])
 class Rows(list):
-    """CSV rows with lower-cased, stripped header keys. `columns` lists the header; `malformed` lists data rows
-    (1-based file row numbers) that carry more fields than the header; `duplicate_columns` counts header names that
-    repeat after normalisation. A repeated column is never collapsed (csv.DictReader keeps only the last copy:
+    """CSV rows keyed by canonical header names (canon_header: NFKC, Cf stripped, case-folded, separators folded, so
+    `ｃｌｉｅｎｔ＿ｎａｍｅ` and `Client Name` both read as `client_name`). `columns` lists the canonical header and
+    `raw_columns` the header as written (screened too); `malformed` lists data rows (1-based file row numbers) that
+    carry more fields than the header, whose extra cells are kept under positional keys `(extra column N)` so they
+    are screened and harvested, never dropped; `duplicate_columns` counts header names that repeat after
+    canonicalisation. A repeated column is never collapsed (csv.DictReader keeps only the last copy:
     `restricted,clear` -> clear): its first copy keeps the name and later copies are kept as `<name> (copy N)`, so a
     malformed register still yields every value it holds for identity harvesting (#2.1, #3.3)."""
     columns = ()
+    raw_columns = ()
     malformed = ()
     duplicate_columns = 0
 _COPY_RE = re.compile(r"(.*) \(copy \d+\)")
+def extra_col(n): return f"(extra column {n + 1})"  # an overflow cell's key: its 1-based position (#2.1, #3.3)
+def is_extra(k): return str(k).startswith("(extra column ")
 def base_col(k):
     """The header name a (possibly repeated) column was read under: `client_name (copy 2)` -> `client_name`."""
     m = _COPY_RE.fullmatch(str(k)); return m.group(1) if m else str(k)
@@ -111,19 +118,21 @@ def read_csv(p, required=True):
     try:
         with open(p, encoding="utf-8-sig", newline="") as f:
             rd = csv.reader(f); out = Rows(); bad = []
-            raw = [(c or "").strip().lower() for c in (next(rd, None) or ())]
+            hdr = list(next(rd, None) or ()); raw = [canon_header(c or "") for c in hdr]
             cols = []
             for c in raw:
                 n, m = c, 1
                 while n in cols: m += 1; n = f"{c} (copy {m})"
                 cols.append(n)
-            out.columns = tuple(cols); out.duplicate_columns = len(raw) - len(set(raw))
+            out.columns = tuple(cols); out.raw_columns = tuple((c or "").strip() for c in hdr); out.duplicate_columns = len(raw) - len(set(raw))
             i = 1
             for row in rd:
                 if not row: continue  # blank lines are skipped, as csv.DictReader does
                 i += 1
-                if len(row) > len(cols): bad.append(i)
-                out.append({k: (row[n] if n < len(row) else "") for n, k in enumerate(cols)})
+                d = {k: (row[n] if n < len(row) else "") for n, k in enumerate(cols)}
+                if len(row) > len(cols):
+                    bad.append(i); d.update({extra_col(n): row[n] for n in range(len(cols), len(row))})
+                out.append(d)
             out.malformed = tuple(bad)
             return out
     except FileNotFoundError as e:
@@ -139,11 +148,9 @@ def header_unusable(rows, cols):
 DUPLICATE_HEADER_REASON = "header repeats a column name (not repeated); the file is ambiguous and is not used"
 DUPLICATE_ID_REASON = "repeats an identifier on more than one record (value not repeated); the file is ambiguous and is not used"
 def id_key(v):
-    """Identity of an ID value for duplicate detection: NFKC, case-folded, whitespace collapsed. Blank values and
-    withheld placeholders are not identifiers (None)."""
-    if not isinstance(v, str): return None
-    t = " ".join(unicodedata.normalize("NFKC", v).casefold().split())
-    return None if not t or t.startswith("[withheld") else t
+    """Identity of an ID value for duplicate detection (contract_validate.unique_key: canon_id; blanks and withheld
+    placeholders are not identifiers)."""
+    return _cv.unique_key(v)
 def duplicate_rows(rows, col):
     """1-based file row numbers of every CSV row whose `col` repeats another row's (id_key). Records keyed by an ID
     are never indexed last-wins: a repeat is refused or held, never resolved by picking one (#1.3)."""
@@ -198,10 +205,10 @@ TRUE_VALUES = {"true", "yes", "1", "y"}; FALSE_VALUES = {"false", "no", "0", "n"
 NON_CONFIDENTIAL = {"internal", "public"}  # workspace-inventory-rules.md #2.3
 def depends_on_knowledge(v):
     """Only an explicit false/no/0 is independent of prior knowledge; blank or unknown is dependent (#2.3)."""
-    return (v or "").strip().lower() not in FALSE_VALUES
+    return canon_text(v) not in FALSE_VALUES
 def client_confidential(v):
     """Only internal/public are non-confidential; blank or unknown classifications are treated as confidential."""
-    return (v or "").strip().lower() not in NON_CONFIDENTIAL
+    return canon_id(v) not in {canon_id(x) for x in NON_CONFIDENTIAL}
 
 # ---------------------------------------------------------------- normalisation
 # Look-alike letters folded to Latin after Cf stripping and NFKC. Used for identifier matching (other-client names and
@@ -255,11 +262,11 @@ def _blocked(d, b):
     return not (b in TENANT_HOSTS and "." not in d[: -len(b) - 1])
 def domain_ok(d):
     """Well-formed and neither an untrustable domain nor any subdomain of one (uploads.dropbox.com) (#4.4)."""
-    return isinstance(d, str) and bool(DOMAIN_RE.match(d)) and not any(_blocked(d.lower(), b) for b in UNTRUSTABLE_DOMAINS)
+    return isinstance(d, str) and bool(DOMAIN_RE.match(d)) and not any(_blocked(canon_text(d), b) for b in UNTRUSTABLE_DOMAINS)
 def set_trusted_domains(domains):
     """Trust only well-formed, non-consumer domains; anything else is ignored (trusting less only holds more)."""
     global _TRUSTED
-    _TRUSTED = tuple(sorted({d.strip().lower().lstrip("@.") for d in (domains or []) if isinstance(d, str) and domain_ok(d.strip().lower().lstrip("@."))}))
+    _TRUSTED = tuple(sorted({canon_text(d).lstrip("@.") for d in (domains or []) if isinstance(d, str) and domain_ok(canon_text(d).lstrip("@."))}))
     return _TRUSTED
 def hooks(): return dict(HOOKS, trusted_domains=_TRUSTED)
 OVERSIZE_REASON = "oversize: too long to screen for embedded instructions; not scanned, held for human review"
@@ -365,10 +372,22 @@ def scan_lines(text, path):
     safe = [((LABEL_RE.match(l).group(0) if LABEL_RE.match(l) else "") + WITHHELD) if i in bad else l for i, l in enumerate(lines)]
     return out, "\n".join(safe) + ("\n" if (text or "").endswith("\n") else "")
 def scan_text(text, path): return scan_lines(text, path)[0]
+KNOWN_COLUMNS = {"person", "client_name", "matter_id", "status", "restriction", "briefing_topics", "restricted_workspaces", "citation",
+    "workspace_id", "name", "workspace_type", "system", "default_permission", "requested_permission", "depends_on_knowledge",
+    "data_classification", "role", "responsibilities", "point_of_contact", "onboarding_status", "assignment_status"}
 def col_label(k, n):
-    """A CSV column name appears in a hold path only when it is a plain identifier that does not itself trip the
-    wire; any other header is referred to by position, never echoed (#4.3)."""
-    return k if re.fullmatch(r"[a-z][a-z0-9_]{0,39}", k or "") and not hits(k) else f"column {n}"
+    """A CSV column name appears in a hold path only when it is one of the plugin's own column names; any other
+    header (which could name another client or carry an instruction) is referred to by position, never echoed (#3.3,
+    #4.3). Overflow cells are labelled `extra column N`."""
+    return k if k in KNOWN_COLUMNS else str(k).strip("()") if is_extra(k) else f"column {n}"
+def cell_labels(rows):
+    """{key: hold-path label} for every key a CSV row can carry, overflow cells included."""
+    cols = list(getattr(rows, "columns", ()) or (rows[0].keys() if rows else ()))
+    lab = {k: col_label(k, n) for n, k in enumerate(cols, 1)}
+    for r in rows or []:
+        for k in r:
+            if k not in lab: lab[k] = col_label(k, 0)
+    return lab
 def scan_rows(rows, label):
     """One hold per flagged cell, plus pair holds for claims split across adjacent cells in a row or the same column
     in adjacent rows. Every flagged cell (single, pair or record) is replaced in place by the placeholder so it never
@@ -376,9 +395,9 @@ def scan_rows(rows, label):
     are replaced when an item trips on its own; otherwise the whole cell is. A header name that trips is held too."""
     out = []; rows = rows or []; bad = []; part = {}
     cols = list(getattr(rows, "columns", ()) or (rows[0].keys() if rows else ()))
-    lab = {k: col_label(k, n) for n, k in enumerate(cols, 1)}
+    lab = cell_labels(rows); raws = getattr(rows, "raw_columns", ())
     for n, k in enumerate(cols, 1):
-        h = hits(k)
+        h = hits(k) or (hits(raws[n - 1]) if n <= len(raws) else [])  # the canonical and the written header (#4.3)
         if h: out.append(hold(f"{label} header column {n}", k, h))
     for i, r in enumerate(rows, 2):
         for k, v in r.items():
@@ -670,19 +689,37 @@ TOPIC_WITHHELD = "[briefing topic withheld - it names another client or matter, 
 def cap_runs(text):
     for m in re.finditer(r"[A-Z][A-Za-z0-9&'.-]*(?:\s+(?:&\s+)?[A-Z][A-Za-z0-9&'.-]*)*", text or ""):
         start = m.start() == 0 or bool(re.search(r"[.;:!?]\s*$", text[:m.start()])); yield m.group(0).strip(" .'-"), start
-def key_low(v): return (v or "").strip().lower()
 IDENTITY_COLUMNS = ("client_name", "matter_id", "restriction")
+def canon_for(col): return canon_id if col.endswith("_id") else canon_person  # IDs fold separators; names do not
+# Overflow cells (a row with more fields than the header) may hold any column's value shifted right: harvested
+# conservatively as identities, except vocabulary that names no one (statuses, enums, citations) (#2.1, #3.3).
+OVERFLOW_VOCAB = {"clear", "cleared", "restricted", "walled", "conflicted", "deny", "denied", "hold", "true", "false", "yes", "no",
+    "internal", "public", "confidential", "client confidential", "none", "viewer", "member", "contributor", "admin", "owner"}
+_MATTER_ID_RE = re.compile(r"\b[A-Za-z]{2,}(?:-[A-Za-z0-9]+)*-\d{2,}[A-Za-z0-9-]*\b")
+def overflow_names(v, own):
+    """Identities in an overflow cell: matter-like IDs and capitalised runs (a whole-cell single word included) that
+    are not this engagement's own words, generic words or status/enum vocabulary."""
+    out = [m.group(0) for m in _MATTER_ID_RE.finditer(v)]
+    for run, start in cap_runs(v):
+        ws = words(run)
+        if not ws or ws <= own | GENERIC | ALLOW_CAPS or canon_text(run) in OVERFLOW_VOCAB: continue
+        if start and len(run.split()) == 1 and canon_text(run) != canon_text(v.strip(" .;")): continue
+        out.append(run)
+    return list(dict.fromkeys(out))
 def other_names(rows, e, own):
     """Every other client's identity in the register: other rows' client_name/matter_id and proper-noun runs in
     restriction free text (confidentiality-and-ethical-wall-rules.md #3.2,#3.3). Withheld cells name nobody."""
     names = []
     for r in rows:
+        # Overflow cells of a malformed row are harvested conservatively: they are never dropped (#2.1, #3.3).
+        for kk, v in r.items():
+            if is_extra(kk) and isinstance(v, str) and v.strip() and v not in (WITHHELD, OTHER_WITHHELD): names += overflow_names(v, own)
         # Every copy of a repeated identity column counts: a malformed register never yields fewer identities (#2.1).
         for col in IDENTITY_COLUMNS:
             for kk, v in r.items():
                 if base_col(kk) != col or not isinstance(v, str) or not v.strip() or v in (WITHHELD, OTHER_WITHHELD): continue
                 if col != "restriction":
-                    if key_low(v) != key_low(e.get(col)): names.append(v.strip())
+                    if canon_for(col)(v) != canon_for(col)(e.get(col)): names.append(v.strip())
                     continue
                 for run, start in cap_runs(v):
                     ws = words(run)
@@ -711,8 +748,7 @@ def screen_csv_other(rows, label, terms, engine, only=None, skip=()):
     exempts columns with their own screen. Returns holds (#3.3)."""
     out = []
     if not terms or not rows: return out
-    cols = list(getattr(rows, "columns", ()) or rows[0].keys())
-    lab = {k: col_label(k, n) for n, k in enumerate(cols, 1)}
+    lab = cell_labels(rows)
     for i, r in enumerate(rows, 2):
         if only is not None and i not in only: continue
         for k, v in list(r.items()):

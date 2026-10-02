@@ -49,16 +49,16 @@ def main():
     s=load_json(a.scope); check_scope(s); set_trusted_domains((s.get("engagement") or {}).get("trusted_domains"))
     # Both upstream documents are screened whole (every string, holds included) and redacted before use (#4.1, #4.3).
     s,sh=screen_upstream(s,"scope",ENGINE)
-    c,own_h=screen_upstream(adapt(a.closeout),"upstream/closeout",ENGINE); rels={x.get("asset_id"):x for x in c["released_assets"] if x.get("clearance_state") in STATES}
+    c,own_h=screen_upstream(adapt(a.closeout),"upstream/closeout",ENGINE); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES}  # joined by canon_id (#1.3)
     inc=[]; exc=[]; kr=c["knowledge_record"]
     for asset in kr.get("reusable_assets",[]):
         aid=asset.get("asset_id")
-        if aid not in rels: exc.append({"asset_id":aid,"reason":"not_in_released_assets","citation":"knowledge-reuse-rules.md #2.1"}); continue
-        perm=asset.get("confidentiality_permission",rels[aid].get("confidentiality_permission"))
+        if canon_id(aid) not in rels: exc.append({"asset_id":aid,"reason":"not_in_released_assets","citation":"knowledge-reuse-rules.md #2.1"}); continue
+        perm=asset.get("confidentiality_permission",rels[canon_id(aid)].get("confidentiality_permission"))
         if perm is not None and perm!=PERM: exc.append({"asset_id":aid,"reason":"confidentiality_permission_not_internal_reuse","citation":"knowledge-reuse-rules.md #2.2"}); continue
         score,over=rel(s,asset)
         if score<.5: exc.append({"asset_id":aid,"reason":"below_relevance_floor","citation":"knowledge-reuse-rules.md #3.1"}); continue
-        inc.append({"knowledge_id":aid,"title":asset.get("title"),"summary":asset.get("description") or "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.","relevance_score":score,"matched_terms":over,"clearance_state":rels[aid].get("clearance_state"),"confidentiality_permission":perm or "release_candidate_state","review_status":review_status(asset,rels[aid]),"source":"adapter:closeout-governed.knowledge_record","confidence":min(asset.get("confidence",.9),rels[aid].get("confidence",.9)),"citations":[asset.get("citation") or "knowledge_record.reusable_assets",rels[aid].get("citation") or "released_assets","knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"]})
+        inc.append({"knowledge_id":aid,"title":asset.get("title"),"summary":asset.get("description") or "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.","relevance_score":score,"matched_terms":over,"clearance_state":rels[canon_id(aid)].get("clearance_state"),"confidentiality_permission":perm or "release_candidate_state","review_status":review_status(asset,rels[canon_id(aid)]),"source":"adapter:closeout-governed.knowledge_record","confidence":min(asset.get("confidence",.9),rels[canon_id(aid)].get("confidence",.9)),"citations":[asset.get("citation") or "knowledge_record.reusable_assets",rels[canon_id(aid)].get("citation") or "released_assets","knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"]})
     for lesson in kr.get("lessons",[]):
         lp=lesson.get("confidentiality_permission")
         if lp is not None and lp!=PERM: exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"confidentiality_permission_not_internal_reuse","citation":"knowledge-reuse-rules.md #2.2"}); continue
@@ -68,7 +68,7 @@ def main():
     inc=redact(inc)  # flagged Closeout text never travels (confidentiality-and-ethical-wall-rules.md #4.3)
     # The closed engagement is usually another client: its name and IDs never reach this pack (#3.3).
     ce=c["engagement"]; mine=s.get("engagement") or {}
-    terms=client_terms([v for k_,v in (("client_name",ce.get("client_name")),("engagement_id",ce.get("engagement_id"))) if v and norm(v)!=norm(mine.get(k_) or "")],own_words(s))
+    terms=client_terms([v for k_,v in (("client_name",ce.get("client_name")),("engagement_id",ce.get("engagement_id"))) if v and (canon_id if k_.endswith("_id") else canon_person)(v)!=(canon_id if k_.endswith("_id") else canon_person)(mine.get(k_))],own_words(s))
     # Every other client named in the wall register is screened out here too, not only at wall_check (#3.3).
     terms+=[t for t in register_terms(a.wall_register,mine,own_words(s)) if t[0] not in {x[0] for x in terms}]
     # Upstream scope holds are supplied content: screened for other-client names and steering text (#3.3, #4.3).
