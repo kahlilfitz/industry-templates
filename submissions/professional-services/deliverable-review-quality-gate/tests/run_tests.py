@@ -1029,7 +1029,8 @@ def qa104_tests(tmp):
     assertion_id = base_a["assertions"][0]["assertion_id"]
     for label, source in (("self-declared", "self-declared:trust-me"), ("absent", ...), ("blank", ""),
                           ("free text", "user supplied"), ("empty connector slug", "connector:"),
-                          ("upper-case connector", "Connector:Engagement Workspace"), ("unknown skill", "skill:trust-me")):
+                          ("whitespace-only connector slug", "Connector:   "), ("unknown skill", "skill:trust-me"),
+                          ("unknown prefix", "Upload:Engagement Workspace"), ("slug punctuation", "connector:share/point")):
         ranked = read(chain_packet(with_source(source), tmp, f"qa2-{label.replace(' ', '-')}")["ranked"])
         mapping = next(item for item in ranked["assertion_mappings"] if item["assertion_id"] == assertion_id)
         check(f"Q2 evidence source {label} cannot establish support (assertion unsupported, held, escalated)",
@@ -1037,10 +1038,12 @@ def qa104_tests(tmp):
               and f"AM-{assertion_id}" in finding_ids(ranked) and status(ranked) == "not_ready_for_release"
               and any(entry.startswith(f"{assertion_id} at ") for entry in ranked["escalations"])
               and "GC-G8-engine-id-spoof" not in finding_ids(ranked), (mapping["support_status"], status(ranked)))
-    for source in ("connector:engagement-workspace", "connector:sharepoint_online.v2", "skill:deliverable-ingest"):
+    for source in ("connector:engagement-workspace", "connector:sharepoint_online.v2", "skill:deliverable-ingest",
+                   "connector:SharePoint", "Connector:Engagement Workspace", "  CONNECTOR : Engagement \t Workspace ",
+                   "Skill:Deliverable Ingest"):
         ranked = read(chain_packet(with_source(source), tmp, "qa2-recognised")["ranked"])
         mapping = next(item for item in ranked["assertion_mappings"] if item["assertion_id"] == assertion_id)
-        check(f"Q2 recognised provenance {source!r} still supports the assertion",
+        check(f"Q2 recognised provenance {source!r} (after normalisation) still supports the assertion",
               mapping["support_status"] == "supported" and status(ranked) == "partner_review_required_advisories_only", status(ranked))
     rules = MODULES["assertion_map"].rules
     assertion = {"assertion_id": "A-SELF", "class": "factual", "text": "Revenue is 10.", "citation": "draft p1",

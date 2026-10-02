@@ -198,10 +198,22 @@ def evidence_relevance(assertion, evidence):
     return by_type.get(evidence.get("type", "unknown"), 2)
 
 
-def recognised_provenance(evidence):
-    """True only for ingest provenance: `connector:<lower-case slug>` or an ingest skill tag (quality-gate-criteria.md #1.5)."""
-    source = evidence.get("source")
+def normalise_provenance(source):
+    """Fold presentation differences a model-driven ingest may introduce: surrounding whitespace, case, and internal
+    whitespace runs (to `-`), so `Connector:Engagement Workspace` reads as `connector:engagement-workspace`.
+    Case adds no trust, because any lower-case slug is accepted. Returns None for a non-string."""
     if not isinstance(source, str):
+        return None
+    prefix, separator, slug = source.strip().partition(":")
+    if not separator:
+        return source.strip().lower()
+    return f"{prefix.strip().lower()}:{'-'.join(slug.lower().split())}"
+
+
+def recognised_provenance(evidence):
+    """True only for ingest provenance after normalisation: `connector:<slug>` or an ingest skill tag (quality-gate-criteria.md #1.5)."""
+    source = normalise_provenance(evidence.get("source"))
+    if source is None:
         return False
     if source in EVIDENCE_SOURCE_SKILLS:
         return True
