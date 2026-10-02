@@ -352,11 +352,13 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
             seen.add(signal.get("activity_id"))
     packet["activity_signals"] = kept
     kept_ids = {s.get("activity_id") for s in kept}
-    for entry in packet.get("time_entries", []):
+    moved = set()
+    for n, entry in enumerate(packet.get("time_entries", [])):
         links = entry.get("activity_ids") or []
         dropped = [a for a in links if a not in kept_ids]
         if not dropped:
             continue
+        moved.add(n)
         entry["activity_ids"] = [a for a in links if a in kept_ids]
         prior = entry.get("excluded_activity_ids") or []
         entry["excluded_activity_ids"] = prior + [a for a in dropped if a not in prior]
@@ -380,7 +382,12 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
         "engine": SIGNAL_POLICY_VERSION,
         "citations": [POLICY_CITATION],
     }
-    sweep_packet(packet)  # last: screens member names and metadata, including what this function recorded (#11.3)
+    sweep_packet(packet)  # screens member names and metadata, including what this function recorded (#11.3)
+    # A drafted entry whose links this policy moved is re-drafted from its remaining evidence, so no draft built from
+    # now-excluded activity is carried on and every later stage re-derives the same draft (#13.4, #13.5).
+    redraft = {n for n in moved if isinstance(packet["time_entries"][n].get("draft"), dict)}
+    if redraft:
+        derive_drafts(packet, only=redraft)
     return {e.get("activity_id") for e in excluded}
 
 
@@ -1622,7 +1629,8 @@ def check_link_state(packet, level):
     """Every copy of an entry's link state agrees exactly (#13.4, B5): a partial edit that deletes or changes one
     copy is refused with no output, never governed on the copy that was left. Messages name fields and positions only.
 
-    - every stage: excluded links are recorded in provenance.excluded_signals, and an exclusion record that names a
+    - every stage: every evidence link names a signal in the packet; excluded links are recorded in
+      provenance.excluded_signals, and an exclusion record that names a
       present entry as its linker is listed in that entry's excluded_activity_ids; a cross-person link never names
       the timekeeper's own activity;
     - drafted on: the draft's linked, excluded and covered lists, the rewrites' links, the draft status and every
@@ -1636,8 +1644,15 @@ def check_link_state(packet, level):
     signals = {_id_key(s.get("activity_id")): s for s in packet.get("activity_signals") or []}
     exceptions = {_id_key(x.get("entry_id")): x for x in packet.get("exception_list") or []
                   if isinstance(x.get("entry_id"), str) and x.get("entry_id") != WITHHELD_TEXT}
+    renamed = any(is_withheld(s.get("activity_id")) for s in packet.get("activity_signals") or [])
     for i, entry in enumerate(packet.get("time_entries") or []):
         where = f"time_entries[{i}]"
+        # An evidence link always names a signal in the packet (activity-pull keeps only resolved links, and a link
+        # to an excluded signal is moved to excluded_activity_ids); a dangling link means one copy was edited.
+        for j, link in enumerate(entry["activity_ids"]):
+            if not renamed and not is_withheld(link) and _id_key(link) not in signals:
+                raise SchemaError(f"invalid input: {where}.activity_ids[{j}] does not name an activity signal in the "
+                                  f"packet ({LINK_STATE_CITATION})")
         for j, link in enumerate(entry["excluded_activity_ids"]):
             if link != WITHHELD_TEXT and _id_key(link) not in recorded:
                 raise SchemaError(f"invalid input: {where}.excluded_activity_ids[{j}] is not recorded in "
@@ -1678,6 +1693,289 @@ def check_link_state(packet, level):
             if entry["compliance"].get("evidence_hours_same_date", hours) != hours:
                 raise SchemaError(f"invalid input: {where}.compliance.evidence_hours_same_date does not match the "
                                   f"entry's linked activity ({LINK_STATE_CITATION})")
+
+
+
+# --- Engine-derived values are re-derived at every stage (client-billing-guidelines.md #13.5) ----------------
+# A value an engine derives from the packet is never trusted as carried: every later stage derives it again from the
+# screened fields it came from and refuses a packet whose carried copy differs (B5). That covers the signal
+# annotations activity-pull derives (billable_signal from the activity class, confidence from the workplan match)
+# and every draft narrative-draft builds (narrative, status, confidence, review reasons, links, citations and the
+# suggested rewrites). The drafting rules live here so that narrative-draft and every later stage run the same code.
+
+DERIVED_CITATION = "client-billing-guidelines.md #13.5"
+DRAFT_ENGINE = "engine:narrative_draft"
+NON_BILLABLE_CLASSES = ("internal_admin", "billing_hygiene")  # client-billing-guidelines.md #5.1
+MATCHED_CONFIDENCE = {"calendar": 0.96, "document_activity": 0.94}  # a workplan row states the purpose
+UNMATCHED_CONFIDENCE = 0.70  # below the client-billing-guidelines.md #9.1 floor -> held for review
+DRAFT_MIN_WORDS = 12  # client-billing-guidelines.md #1.1
+EXISTING_NARRATIVE_CONFIDENCE = 0.94
+NO_EVIDENCE_CONFIDENCE = 0.35
+VERB_BY_CLASS = (
+    ("document_analysis", "Analyzed"),
+    ("research", "Researched"),
+    ("deliverable_drafting", "Drafted"),
+    ("internal_admin", "Coordinated"),
+    ("billing_hygiene", "Reviewed"),
+)
+DRAFT_ONLY_SECTIONS = ("prebill_summary", "missing_time_report", "exception_list")  # written after drafting
+
+
+def billable_class(activity_class):
+    """billable_signal as activity-pull derives it from the activity class (#5.1)."""
+    return not class_in(activity_class, NON_BILLABLE_CLASSES)
+
+
+def signal_confidence(key, purpose):
+    """A signal's confidence as activity-pull derives it: a workplan row that states the purpose, or the floor."""
+    return MATCHED_CONFIDENCE[key] if purpose is not None else UNMATCHED_CONFIDENCE
+
+
+def check_signal_annotations(packet):
+    """billable_signal and confidence on every signal from an activity-pull source equal their derivation (#13.5).
+    A signal from any other source is excluded by the signal policy before any rule reads it."""
+    for i, signal in enumerate(packet.get("activity_signals") or []):
+        key = source_key(signal.get("source"))
+        if key not in MATCHED_CONFIDENCE:
+            continue
+        if signal["billable_signal"] is not billable_class(signal.get("activity_class")):
+            raise SchemaError(f"invalid input: activity_signals[{i}].billable_signal does not match its activity "
+                              f"class ({DERIVED_CITATION})")
+        if signal["confidence"] != signal_confidence(key, signal.get("purpose")):
+            raise SchemaError(f"invalid input: activity_signals[{i}].confidence does not match its workplan match "
+                              f"({DERIVED_CITATION})")
+
+
+def draft_words(text):
+    # Same whitespace word count as guideline_check (client-billing-guidelines.md #1.1).
+    return (text or "").split()
+
+
+def join_names(names):
+    if len(names) <= 1:
+        return "".join(names)
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def is_calendar(activity):
+    return (source_key(activity.get("source")) == "calendar" or bool(activity.get("meeting_id"))
+            or class_in(activity.get("activity_class"), ("client_meeting",)))
+
+
+def flagged_activities(linked):
+    """(IDs, hits) of linked activities whose free text trips the embedded-instruction tripwire or is
+    too long to screen (#11.1)."""
+    ids, hits = [], []
+    for a in linked:
+        found = screen(signal_texts(a))
+        if a.get("embedded_instruction") is True or found:
+            ids.append(a.get("activity_id"))
+            hits += found
+    return ids, hits
+
+
+def clause(entry, activity):
+    """One grounded clause for one activity. Returns (text without final period, reasons)."""
+    person = entry.get("person")
+    reasons = []
+    if is_calendar(activity):
+        verb = "Led" if activity.get("organizer") and same_person(activity.get("organizer"), person) else "Attended"
+    else:
+        verb = next((v for c, v in VERB_BY_CLASS if class_in(activity.get("activity_class"), (c,))), "Prepared")
+    subject, purpose, deliverable = (activity.get(k).strip() if isinstance(activity.get(k), str) else ""
+                                     for k in ("subject", "purpose", "deliverable"))
+    attendees = activity.get("attendees") if isinstance(activity.get("attendees"), list) else []
+    others = [a for a in attendees if isinstance(a, str) and a.strip() and not same_person(a, person)]
+    text = f"{verb} {subject}"
+    if others:
+        text += f" with {join_names(others)}"
+    # Avoid "... for client decision for the X": put the deliverable first when the purpose has "for".
+    deliverable_first = bool(deliverable and purpose and " for " in f" {purpose.lower()} ")
+    if deliverable_first:
+        text += f" for the {deliverable}"
+    if purpose:
+        text += f" to {purpose}"
+    else:
+        reasons.append(f"{activity.get('activity_id')} has no recorded purpose; purpose not invented")
+    if deliverable and not deliverable_first:
+        text += f" for the {deliverable}"
+    return text, reasons
+
+
+def grounded_narrative(entry, linked):
+    """Return (narrative, status, confidence, reasons, covered_ids) grounded only in linked activity."""
+    if not linked:
+        return ("", "needs_activity_evidence", NO_EVIDENCE_CONFIDENCE,
+                ["no cited activity signal from an enabled source is linked; nothing to draft from"], [])
+    flagged, hits = flagged_activities(linked)
+    if flagged:
+        why = hold_reason(hits, "linked activity text flagged as embedded_instruction")
+        return ("", "needs_review_embedded_instruction", NO_EVIDENCE_CONFIDENCE,
+                [f"{why} ({', '.join(flagged)}); "
+                 "treated as data and withheld - no narrative drafted from it (client-billing-guidelines.md #11.1, #11.2)"],
+                [])
+    ordered = sorted(linked, key=lambda a: 0 if class_in(a.get("activity_class"), ("client_meeting",)) else 1)
+    parts, reasons = [], []
+    for activity in ordered:
+        text, why = clause(entry, activity)
+        parts.append(text if not parts else text[0].lower() + text[1:])
+        reasons.extend(why)
+    narrative = "; ".join(parts[:-1]) + ("; and " if len(parts) > 1 else "") + parts[-1] + "."
+    if len(parts) == 1:
+        narrative = parts[0] + "."
+    if len(linked) > 1:
+        reasons.append(multi_link_reason(len(linked)))
+    status = "engine_generated_from_activity"
+    if len(draft_words(narrative)) < DRAFT_MIN_WORDS:
+        status = "needs_review_insufficient_detail"
+        reasons.append(f"{len(draft_words(narrative))} words from cited metadata; left short rather than padded "
+                       "(client-billing-guidelines.md #1.1)")
+    elif reasons:
+        status = "needs_review"
+    confidence = round(min([a.get("confidence", 0.8) for a in linked] + [0.9]), 2)
+    return narrative, status, confidence, reasons, [a.get("activity_id") for a in ordered]
+
+
+def build_narrative(entry, linked):
+    """Return (narrative, status, confidence, review_reasons, suggested_rewrites, covered_ids)."""
+    existing = (entry.get("narrative") or "").strip()
+    if not existing:
+        narrative, status, confidence, reasons, covered = grounded_narrative(entry, linked)
+        return narrative, status, confidence, reasons, [], covered
+
+    reasons = []
+    hits = screen(entry_texts(entry, linked))
+    existing_flagged = entry.get("embedded_instruction") is True or bool(hits)
+    if existing_flagged:
+        reasons.append(hold_reason(hits, "existing narrative flagged as embedded_instruction")
+                       + "; withheld from the "
+                       "draft and left in the source entry only as evidence for guideline-check, never obeyed "
+                       "(client-billing-guidelines.md #11.1, #11.2)")
+    suggestions = []
+    for activity in linked:
+        narrative, status, confidence, why, covered = grounded_narrative(entry, [activity])
+        if status == "needs_review_embedded_instruction":
+            reasons.extend(why)
+            continue
+        if not narrative or embedded_instruction(narrative):
+            continue
+        if len(linked) > 1:
+            why = why + [rewrite_scope_reason(
+                activity.get("activity_id"), [a.get("activity_id") for a in linked if a is not activity])]
+            if status == "engine_generated_from_activity":
+                status = "needs_review"
+        suggestions.append({
+            "narrative": narrative,
+            "status": status,
+            "review_reasons": why,
+            "linked_activity_ids": [activity.get("activity_id")],
+            "confidence": confidence,
+            "source": DRAFT_ENGINE,
+            "citations": sorted(set(safe_citations(activity.get("citations", []))[0])),
+        })
+    covered = [a for s_ in suggestions for a in s_["linked_activity_ids"]]
+    if existing_flagged:
+        return "", "needs_review_embedded_instruction", NO_EVIDENCE_CONFIDENCE, reasons, suggestions, covered
+    return existing, "existing_timesheet_narrative", EXISTING_NARRATIVE_CONFIDENCE, reasons, suggestions, covered
+
+
+def draft_hold(packet):
+    """packet_held() over the packet as narrative-draft saw it (the sections written after drafting left out)."""
+    if not isinstance(packet, dict):
+        return False
+    return packet_held({k: v for k, v in packet.items() if k not in DRAFT_ONLY_SECTIONS})
+
+
+def derive_draft(entry, by_id, packet, packet_hold):
+    """The draft narrative-draft builds for one entry from the entry, its linked signals and the packet (#13.5).
+    by_id maps activity IDs to the packet's signals; packet_hold is draft_hold(packet)."""
+    linked = [by_id[a] for a in entry.get("activity_ids", []) if a in by_id]
+    narrative, status, confidence, reasons, suggestions, covered = build_narrative(entry, linked)
+    # The entry's own text, citations included, is screened like signal text (#11.1): when it trips, the
+    # draft is withheld and no flagged entry citation is copied (#11.2).
+    entry_hits = screen(entry_texts(entry))
+    entry_flagged = entry.get("embedded_instruction") is True or bool(entry_hits)
+    entry_citations, entry_citations_dropped = safe_citations(entry.get("citations", []), entry_flagged)
+    if (entry_flagged or entry_citations_dropped) and status != "needs_review_embedded_instruction":
+        narrative, status, confidence = "", "needs_review_embedded_instruction", NO_EVIDENCE_CONFIDENCE
+        reasons.append(hold_reason(entry_hits, "time entry text or citation flagged as embedded_instruction")
+                       + "; draft withheld and the flagged text never copied or obeyed "
+                       "(client-billing-guidelines.md #11.1, #11.2)")
+    excluded_links = entry.get("excluded_activity_ids") or []
+    if excluded_links:
+        reasons.append(excluded_links_reason(excluded_links, packet))
+    cross = entry.get("cross_person_activity_ids") or []
+    if cross:
+        reasons.append(cross_person_reason(len(cross)))
+    uncovered = [a.get("activity_id") for a in linked if a.get("activity_id") not in covered]
+    if uncovered and status != "needs_review_embedded_instruction":
+        reasons.append(uncovered_reason(uncovered))
+    if packet_hold:
+        reasons.append(PACKET_HOLD_REASON + f" ({METADATA_CITATION})")
+    # Reasons found after the draft was built still gate it: a draft with any reason is never left as a clean
+    # engine draft (B6).
+    if status == "engine_generated_from_activity" and reasons:
+        status = "needs_review"
+    if any(INJECTION_CITATION in r for r in reasons):
+        citations_extra = [INJECTION_CITATION, WITHHOLD_CITATION]
+    else:
+        citations_extra = []
+    if packet_hold:
+        citations_extra.append(METADATA_CITATION)
+    citations = []
+    for item in linked:
+        # Citations are signal text too: flagged citation text is never copied into the draft (#11.2).
+        item_flagged = item.get("embedded_instruction") is True or embedded_instruction(signal_texts(item))
+        kept, dropped = safe_citations(item.get("citations", []), item_flagged)
+        citations.extend(kept)
+        if dropped:
+            citations_extra = sorted(set(citations_extra + [INJECTION_CITATION, WITHHOLD_CITATION]))
+    if excluded_links:
+        citations.append(POLICY_CITATION)
+    citations.extend(citations_extra)
+    draft = {
+        "narrative": narrative,
+        "status": status,
+        "needs_review": bool(reasons) or status not in ("engine_generated_from_activity", "existing_timesheet_narrative"),
+        "review_reasons": reasons,
+        "word_count": len(draft_words(narrative)),
+        "sufficiency": "determined_by_guideline_check (client-billing-guidelines.md #1.3)",
+        "linked_activity_ids": list(entry.get("activity_ids", [])),
+        "covered_activity_ids": covered,
+        "excluded_activity_ids": list(excluded_links),
+        "confidence": confidence,
+        "source": DRAFT_ENGINE,
+        "citations": sorted(set(citations)) or entry_citations,
+    }
+    if suggestions:
+        draft["suggested_rewrites"] = suggestions
+    return draft
+
+
+def derive_drafts(packet, only=None):
+    """Draft (or re-draft) every entry in place, or only the entries at the positions in `only`."""
+    by_id = {a["activity_id"]: a for a in packet.get("activity_signals", [])}
+    hold = draft_hold(packet)
+    for n, entry in enumerate(packet.get("time_entries", [])):
+        if only is None or n in only:
+            entry["draft"] = derive_draft(entry, by_id, packet, hold)
+
+
+def check_drafts(packet):
+    """Every carried draft equals its re-derivation from the packet (#13.5); used on drafted and coded packets.
+    A difference in any field is refused with no output, so no edited narrative, status, confidence, reason, link or
+    rewrite reaches a rule. Messages name the entry position and the differing field names only."""
+    by_id = {a["activity_id"]: a for a in packet.get("activity_signals", [])}
+    hold = draft_hold(packet)
+    for i, entry in enumerate(packet.get("time_entries") or []):
+        want, got = derive_draft(entry, by_id, packet, hold), entry["draft"]
+        if got != want:
+            # Only the engine's own field names are named; a supplied extra member is counted, never echoed.
+            fields = [k for k in want if got.get(k) != want.get(k)]
+            extra = len(set(got) - set(want))
+            fields += [f"{extra} unexpected field(s)"] if extra else []
+            raise SchemaError(f"invalid input: time_entries[{i}].draft does not match its re-derivation from the entry "
+                              f"and its linked activity (differing: {', '.join(fields)}) ({DERIVED_CITATION})")
 
 
 def validate_packet(packet, stage):
@@ -1747,6 +2045,9 @@ def validate_packet(packet, stage):
         check_list(packet["missing_time_report"], "missing_time_report", MISSING_SPEC)
         check_list(packet["exception_list"], "exception_list", EXCEPTION_SPEC)
     check_link_state(packet, level)
+    check_signal_annotations(packet)
+    if level in (1, 2):
+        check_drafts(packet)
     if level >= 3:
         summary = check_fields(packet["prebill_summary"], "prebill_summary", SUMMARY_SPEC)
         for verdict, count in summary["verdict_counts"].items():

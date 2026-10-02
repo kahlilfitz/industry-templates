@@ -189,7 +189,7 @@ BLOCK_BILLING_CLASS_LIMIT = 1  # client-billing-guidelines.md #2.1
 RELATED_CLASS_LIMIT = 2  # client-billing-guidelines.md #2.2
 PROHIBITED_TERMS = ("attention to", "various matters", "miscellaneous", "work on file", "general follow up")  # #3.1
 VAGUE_PHRASES = ("review and revise", "work on", "handle", "follow up", "touch base")  # #3.2
-NON_BILLABLE_CLASSES = ("internal_admin", "billing_hygiene")  # client-billing-guidelines.md #5.1
+NON_BILLABLE_CLASSES = signal_policy.NON_BILLABLE_CLASSES  # client-billing-guidelines.md #5.1
 NON_BILLABLE_TASK_CODES = ("NB900", "BH910")  # task-phase-codes.md #4.1 / #4.2
 ROUNDING_INCREMENT = Decimal("0.1")  # client-billing-guidelines.md #6.1
 EVIDENCE_OVERRUN_HOURS = 0.2  # client-billing-guidelines.md #6.2
@@ -663,6 +663,8 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_
       (flag, severity) must be recorded. Extra recorded flags are allowed (a stricter earlier run). An entry
       whose draft was withheld (#11.2) is re-checked on its own narrative like any other, with the
       embedded_instruction hold merged in: a reject stays a reject.
+    - Drafts: every entry's draft must equal the re-run's, which starts from the draft re-derived from the entry and
+      its linked activity (signal_policy.derive_draft) and applies guideline-check's withholding (#13.5).
     - Missing time: the recorded items must equal the re-run's exactly.
     - Summary: totals, hours, verdict counts, missing-time hours, the exception count, the period and the
       excluded signal IDs must match the line items, the packet period and provenance.excluded_signals.
@@ -676,6 +678,8 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_
     Messages name fields, positions, verdicts and the re-run's flag names only; never supplied text.
     """
     rerun = deepcopy(packet)
+    # #13.5: the re-run starts from each entry's draft re-derived from its own evidence, never the carried draft.
+    signal_policy.derive_drafts(rerun)
     signal_policy.filter_packet(rerun, config_path=config_path, script_dir=script_dir, engine=engine)
     govern(rerun)
     problems = []
@@ -696,6 +700,13 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_
         if rank[recorded["verdict"]] < rank[floor] or absent:
             problems.append(f"{where}: recorded verdict {recorded['verdict']}, the rules give {floor}"
                             + (f" (flags not recorded: {', '.join(absent)})" if absent else ""))
+    for i, (got, want) in enumerate(zip(supplied, rerun["time_entries"])):
+        if got.get("draft") != want["draft"]:
+            fields = [k for k in want["draft"] if (got.get("draft") or {}).get(k) != want["draft"].get(k)]
+            extra = len(set(got.get("draft") or {}) - set(want["draft"]))
+            problems.append(f"time_entries[{i}].draft does not match its re-derivation from the entry and its linked "
+                            f"activity (differing: {', '.join(fields + ([f'{extra} unexpected field(s)'] if extra else []))}; "
+                            f"{signal_policy.DERIVED_CITATION})")
     if packet["missing_time_report"] != rerun["missing_time_report"]:
         problems.append(f"missing_time_report: {len(packet['missing_time_report'])} recorded item(s) do not match "
                         f"the {len(rerun['missing_time_report'])} item(s) the rules give")

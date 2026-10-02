@@ -46,10 +46,10 @@ ENGINE = "engine:activity_pull"
 ENGINE_VERSION = "activity_pull/1.0.4"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 POLICY_CITATION = signal_policy.POLICY_CITATION
-MATCHED_CONFIDENCE = {"calendar": 0.96, "document_activity": 0.94}
-UNMATCHED_CONFIDENCE = 0.70  # below client-billing-guidelines.md #9.1 floor -> held for review
+MATCHED_CONFIDENCE = signal_policy.MATCHED_CONFIDENCE  # shared: later stages re-derive it (#13.5)
+UNMATCHED_CONFIDENCE = signal_policy.UNMATCHED_CONFIDENCE  # below the #9.1 floor -> held for review
 TIMESHEET_CONFIDENCE = 0.97
-NON_BILLABLE_CLASSES = ("internal_admin", "billing_hygiene")  # client-billing-guidelines.md #5.1
+NON_BILLABLE_CLASSES = signal_policy.NON_BILLABLE_CLASSES  # client-billing-guidelines.md #5.1
 DOCUMENT_CLASS = {"analyze": "document_analysis", "research": "research", "draft": "deliverable_drafting"}
 # Activity-ID namespaces used by connectors: lets a disabled source's links be recognised
 # without opening the disabled export.
@@ -415,7 +415,7 @@ def main():
                 citations.append(f"raw/engagement-workplan.csv row {match[0]}")
                 purpose = match[1]["purpose"].strip() or None
                 deliverable = match[1]["deliverable"].strip() or None
-            billable = not signal_policy.class_in(activity_class, NON_BILLABLE_CLASSES)
+            billable = signal_policy.billable_class(activity_class)
             citations.append(POLICY_CITATION)
             if not billable:
                 citations.append("client-billing-guidelines.md #5.1")
@@ -434,7 +434,7 @@ def main():
             signal.update(extra)
             signal.update({
                 "source": source,
-                "confidence": MATCHED_CONFIDENCE[key] if (match and purpose) else UNMATCHED_CONFIDENCE,
+                "confidence": signal_policy.signal_confidence(key, purpose if match else None),
                 "citations": citations,
             })
             reasons = []

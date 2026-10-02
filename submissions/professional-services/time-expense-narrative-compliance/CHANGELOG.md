@@ -243,7 +243,46 @@ New `signal_policy.canon_text` (NFKC, `Cf` format characters stripped, casefold,
   - New guideline section client-billing-guidelines.md #13.4 (shared ×6); contract field descriptions updated (×6).
 - **Goldens changed (justified):** `activity.json` and `expected/drafted.json`, `coded.json` and `governed.json` in both scenarios gain `"excluded_activity_ids": []` and/or `"cross_person_activity_ids": []` on entries that had none. These are the newly required lists and nothing else changed. Both `exception-report.md` goldens are byte-identical, and both scenarios run end to end with no refusal.
 
+### Mobilization round 11 class sweeps (applied here; 1.0.4, no version bump; hardening checklist B5)
+- **1. Carried trust and allow-lists.** Swept every intermediate field that widens trust or relaxes a check.
+  - Reproduced, and fixed by re-derivation at every stage (new guideline client-billing-guidelines.md #13.5, shared ×6):
+    - `billable_signal: false` on B-DOC-003 hid its missing time at the activity, drafted and coded stages. `billable_signal: true` on an internal_admin signal was carried too.
+    - A rewritten `draft.narrative` on TE-B-004 or TE-B-001 at the drafted stage cleared their text rejects (`minimum_detail`, `prohibited_term`, `vague_phrase`, `required_elements_missing`).
+    - A raised signal `confidence` (activity stage) or `draft.confidence` (drafted stage) dropped the #9.1 `confidence_floor` hold.
+  - Fix: the drafting rules move from narrative-draft into the shared `signal_policy.py` (×5) as `derive_draft`, and narrative-draft now drafts through it, so drafting and re-deriving are one code path. `validate_packet` gains `check_signal_annotations` (every stage: `billable_signal` from the activity class, calendar and document `confidence` from the workplan match) and `check_drafts` (drafted and coded: every draft equals its re-derivation). activity-pull and `billing_rules.py` use the same shared constants.
+  - Exception-report's re-run (`reconcile_governed`) starts from drafts re-derived from each entry's evidence, then applies guideline-check's withholding, and refuses a governed draft that differs.
+  - A stage whose own narrower `--signal-config` moves a drafted entry's link now re-drafts that entry from its remaining evidence (amended #13.4), so every packet leaving a stage satisfies the check.
+  - Errors name the entry position and the engine's own differing field names only; an undeclared member is counted, never named.
+  - Not reproduced, confirmed safe:
+    - Enabling a source in the packet's `signal_config` cannot widen any engine's own policy.
+    - The team view is re-validated structurally at every stage: the requester must be the engagement manager, and the token must match the engagement ID.
+    - `timekeeper_scope.people` only narrows rows that activity-pull already filtered.
+    - Carried `embedded_instruction` flags are OR-ed with a fresh screen.
+    - Code mappings, missing time and compliance are already re-derived (#13.1, #13.2).
+- **2. Validate everything a reader touches.** A fuzz substituted an object, a list, a string, a number and null at every path of every stage's goldens, plus every contract path including optional containers absent from the goldens.
+  - Result: no traceback, and no wrong JSON type accepted. Every wrong-typed section is a clean input error with no output.
+  - The only accepted values are ones the contract allows: null where nullable, an integer for a number, and any string for free text, which is screened or re-derived downstream.
+  - Fixed: an evidence link renamed out from under its entry (a signal's `activity_id` edited at the activity stage) was accepted. It is now refused at every stage, because an evidence link must name a signal in the packet (#13.4).
+- Docs:
+  - narrative-draft's SKILL.md: polished prose is shown beside the engine's draft and never written into `drafted.json`, which is passed to code-map unchanged.
+  - guideline-check's and exception-report's SKILL.md, and the README, describe #13.5.
+
 ### Tests and goldens
+- Mobilization round 11: 758 to 794 checks. 29 are new in `r11_tests`:
+  - `billable_signal` flipped both ways at every stage.
+  - A forged draft narrative at drafted, coded and governed.
+  - Draft status, reasons, citations, rewrite and word count forged one at a time, plus an undeclared draft member (never echoed).
+  - The confidence reproducer chain, with signal and draft confidence raised and a purpose removed.
+  - The `signal_config` enable control.
+  - A renamed linked signal.
+  - 21 wrong-typed sections at every engine.
+  - An in-process contract walk: 4,047 wrong-typed values, each a clean `SchemaError`.
+  - A control that the shared derivation reproduces every golden draft and annotation.
+- Older checks that forged a draft, signal or entry after drafting now expect a refusal (#13.5) with nothing echoed. govern()'s own screens stay tested in-process through `_govern_forged`, or the same text is injected at the activity stage as a real run would (QA round 2 items 5–6, QA round 3 item 1, QA round 4 item 5, the oversize narrative, the injected entry ID, r6 item 2 at later stages).
+  - Four fixtures use derived values: a purpose on an added calendar signal, an internal_admin class for a `billable_signal: false` control, 0.70 confidence for a blanked purpose, and the derived `billable_signal` for `Internal_Admin`.
+  - The inventory reclassifies `draft.sufficiency`, `draft.source` and `suggested_rewrites[].source` from never rendered to reconciled.
+  - The r9 narrower-policy control now expects the moved entry to be re-drafted.
+- Goldens: all 10 are byte-identical (the shared derivation equals the original drafting), and both scenarios run end to end with no refusal. Runtime is about 84 s; the new group adds about 9 s.
 - QA round 9: 667 to 758 checks (91 new, in `r9qa_tests`). They cover:
   - Both reproducers at every later stage (code-map, guideline-check, exception-report).
   - The cross-person list deleted, emptied, extended, its reason removed, and both removed together; and the governed `cross_person_link` flag removed alone.
