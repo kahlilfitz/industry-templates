@@ -39,6 +39,12 @@ RELEVANCE_BY_CLASS = {
     "forward_looking": {"analysis_model": 4, "financial_model": 4, "workshop_note": 3, "interview_summary": 3},
     "recommendation": {"analysis_model": 4, "financial_model": 4, "signed_client_data": 4, "system_export": 4, "interview_summary": 3, "workshop_note": 2, "statement_of_work": 1},
 }
+# Recognised evidence provenance (quality-gate-criteria.md #1.5): deliverable-ingest records every evidence item as
+# `connector:<slug>` or as extracted by an ingest skill. Any other value, including a self-declared tag, cannot
+# establish support for any assertion class.
+EVIDENCE_SOURCE_CONNECTOR_PREFIX = "connector:"
+EVIDENCE_SOURCE_SKILLS = {"skill:deliverable-ingest", "skill:criteria-retrieve"}
+CONNECTOR_SLUG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_.")
 ASSERTION_BOOLEANS = ("hedging_present", "limitation_present", "stated_basis", "scope_aligned")
 ASSERTION_COUNTS = ("sample_size", "population_size")
 PAGE_LABEL_HINT = "record the physical page number and keep printed labels such as roman numerals in location.label"
@@ -192,8 +198,19 @@ def evidence_relevance(assertion, evidence):
     return by_type.get(evidence.get("type", "unknown"), 2)
 
 
+def recognised_provenance(evidence):
+    """True only for ingest provenance: `connector:<lower-case slug>` or an ingest skill tag (quality-gate-criteria.md #1.5)."""
+    source = evidence.get("source")
+    if not isinstance(source, str):
+        return False
+    if source in EVIDENCE_SOURCE_SKILLS:
+        return True
+    slug = source[len(EVIDENCE_SOURCE_CONNECTOR_PREFIX):] if source.startswith(EVIDENCE_SOURCE_CONNECTOR_PREFIX) else ""
+    return bool(slug) and slug[0].isalnum() and set(slug) <= CONNECTOR_SLUG_CHARS
+
+
 def acceptable_support(assertion, evidence):
-    return evidence.get("type") in SUPPORT_TYPES_BY_CLASS.get(assertion.get("class"), ())
+    return recognised_provenance(evidence) and evidence.get("type") in SUPPORT_TYPES_BY_CLASS.get(assertion.get("class"), ())
 
 
 def evidence_type_label(ev_type):
@@ -203,7 +220,7 @@ def evidence_type_label(ev_type):
 def best_evidence(assertion, linked_items):
     if not linked_items:
         return None
-    return max(linked_items, key=lambda item: (acceptable_support(assertion, item), evidence_relevance(assertion, item), item.get("confidence", 0.0)))
+    return max(linked_items, key=lambda item: (acceptable_support(assertion, item), recognised_provenance(item), evidence_relevance(assertion, item), item.get("confidence", 0.0)))
 
 
 def linked_evidence_citation(assertion, evidence_by_id):
@@ -241,6 +258,9 @@ def classify(assertion, evidence, missing_ids=()):
     if missing_ids:
         # Declared support must exist: a dangling evidence reference is never ignored (quality-gate-criteria.md #1.1).
         return "unsupported", confidence, f"{len(missing_ids)} linked evidence ID(s) are not in the evidence index, so the declared support cannot be verified", "quality-gate-criteria.md #1.1"
+    if not recognised_provenance(evidence):
+        # A type or confidence the evidence item declares about itself proves nothing without ingest provenance.
+        return "unsupported", confidence, "No linked evidence item has recognised provenance (connector:<slug>, skill:deliverable-ingest or skill:criteria-retrieve); missing, unrecognised or self-declared sources cannot establish support", "quality-gate-criteria.md #1.5"
     ev_type = evidence.get("type")
     if klass == "quantified":
         if ev_type not in TRACEABLE_QUANTIFIED_TYPES:

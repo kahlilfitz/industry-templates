@@ -106,7 +106,7 @@
           "type": { "enum": ["analysis_model", "financial_model", "system_export", "signed_client_data", "licensed_content_register", "internal_benchmark", "statement_of_work", "disclaimer_extract", "interview_summary", "workshop_note", "stakeholder_verbal"], "description": "Closed list. Each assertion class accepts only an allowlist of types as support (quality-gate-criteria.md #1.1-#1.4): quantified claims accept analysis_model, financial_model, system_export and signed_client_data; factual claims accept analysis_model, financial_model, system_export, signed_client_data, licensed_content_register, internal_benchmark, statement_of_work and disclaimer_extract; forward-looking claims accept every type except stakeholder_verbal; recommendations accept every type except stakeholder_verbal, disclaimer_extract and licensed_content_register. An absent, blank or unrecognised type never supports any claim." },
           "title": { "type": "string" },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-          "source": { "type": "string" },
+          "source": { "type": "string", "description": "Ingest provenance: connector:<slug> (lower-case letters, digits, -, _ or .) or skill:deliverable-ingest / skill:criteria-retrieve. An item with an absent, blank, unrecognised or self-declared source never supports an assertion, whatever its type or confidence (quality-gate-criteria.md #1.5)." },
           "citation": { "type": "string" }
         }
       }
@@ -133,11 +133,12 @@
     "gate_results": { "type": "array", "items": { "type": "object" } },
     "findings": {
       "type": "array",
+      "description": "Required by severity_rank (gate_check always emits it, empty when nothing was found); absent or non-array is an input error.",
       "items": {
         "type": "object",
         "required": ["finding_id", "gate_id", "severity", "location", "criteria_section", "confidence", "source", "citation"],
         "properties": {
-          "finding_id": { "type": "string", "description": "Prefixes GC- (gate_check) and AM- (assertion_map) are engine-owned. A GC- finding, or an AM- finding that does not exactly match gate-check's recomputation of assertion_map output, is ignored and raises a G8 spoof hold; the source tag is never trusted. A duplicate finding_id never lowers severity." },
+          "finding_id": { "type": "string", "description": "Prefixes GC- (gate_check) and AM- (assertion_map) are engine-owned. A GC- finding, or an AM- finding that does not exactly match gate-check's recomputation of assertion_map output, is ignored and raises a G8 spoof hold; the source tag is never trusted. A duplicate finding_id never lowers severity: severity_rank keeps one finding per ID at the highest severity and escalates the collapse (severity-rules.md #3.4)." },
           "gate_id": { "enum": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"] },
           "severity": { "enum": ["release_blocker", "must_fix", "advisory"] },
           "title": { "type": "string" },
@@ -152,7 +153,7 @@
     },
     "ranked_findings": { "type": "array", "items": { "type": "object" } },
     "release_readiness": { "type": "object" },
-    "escalations": { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "type": "object" }] } },
+    "escalations": { "type": "array", "items": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object" }] }, "description": "Required by severity_rank; absent or non-array is an input error. Every escalation is a hold: escalations without any finding give not_ready_for_release, never partner_review_required_no_engine_findings (severity-rules.md #3.3)." },
     "provenance": { "type": "object" }
   },
   "definitions": {

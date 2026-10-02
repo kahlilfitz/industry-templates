@@ -197,26 +197,23 @@ def iter_strings(value, path):
         yield path, value
 
 def collect_scan_text(payload):
-    """Yield (path, text) for every untrusted string, counting a copied value once at its source.
+    """Yield (path, text, derived) for every untrusted string, primary sections first.
 
-    Primary sections are scanned verbatim, including citation fields. Derived sections are scanned
-    after removing any primary text they copy, so an assertion and its assertion_mappings copy raise
-    one hit (at the assertion's location) while text introduced only downstream is still caught."""
+    Every string is yielded verbatim, including citation fields; nothing is stripped before screening
+    (quality-gate-criteria.md #8.5). A derived string that is exactly equal to a primary string is a copy
+    (for example assertion_mappings[].text) and is not yielded again."""
     primary, derived = [], []
     for key, child in payload.items():
         if key in UNSCANNED_KEYS:
             continue
         target = primary if key in PRIMARY_SECTIONS or not isinstance(child, (dict, list)) else derived
         target.extend(iter_strings(child, f"$.{safe_token(key, '<field>')}"))
-    yield from primary
-    sources = sorted({text for _, text in primary if len(text.strip()) >= 3}, key=len, reverse=True)
+    for path, text in primary:
+        yield path, text, False
+    copies = {text for _, text in primary}
     for path, text in derived:
-        residue = text
-        for source in sources:
-            if source in residue:
-                residue = residue.replace(source, " ")
-        if residue.strip():
-            yield path, residue
+        if text not in copies:
+            yield path, text, True
 
 AGGREGATE_LABEL = "(combined text, citation, evidence titles and location label)"
 
@@ -245,10 +242,16 @@ def instruction_hits(payload):
     def reason(found):
         return OVERSIZE if any(hit.family == OVERSIZE for hit in found) else "instruction"
     hits, tripped = [], set()
-    for path, text in collect_scan_text(payload):
+    for path, text, derived in collect_scan_text(payload):
         found = screen_text(text)
-        if found:
-            hits.append((path, reason(found)))
+        if not found:
+            continue
+        # De-duplication happens only after the whole derived string has tripped: it is the same note when it
+        # embeds a primary field that already raised a G8 hit, so the run is held either way.
+        if derived and any(source in text for source in tripped):
+            continue
+        hits.append((path, reason(found)))
+        if not derived:
             tripped.add(text)
     for path, fields in assertion_fields(payload):
         if tripped.intersection(fields.values()):

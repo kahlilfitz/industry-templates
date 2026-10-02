@@ -62,8 +62,15 @@ def require_contract(payload):
         raise InputError("input must be a JSON object")
     if payload.get("contract_version") != CONTRACT_VERSION:
         raise InputError(f"expected contract {CONTRACT_VERSION}, got {payload.get('contract_version')!r}")
-    if not isinstance(payload.get("findings", []), list):
-        raise InputError("findings must be an array")
+    # gate_check always emits both arrays; an absent one means the gate run is missing, never "nothing found".
+    for key in ("findings", "escalations"):
+        if key not in payload:
+            raise InputError(f"missing required array: {key} (run gate_check first; an empty run still emits [])")
+        if not isinstance(payload[key], list):
+            raise InputError(f"{key} must be an array")
+    for index, item in enumerate(payload["escalations"]):
+        if not (isinstance(item, dict) or (isinstance(item, str) and item.strip())):
+            raise InputError(f"escalations[{index}] must be a non-blank string or an object, got {item!r}")
 
 def is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -97,6 +104,22 @@ def sort_key(item):
     page, paragraph = location.get("page"), location.get("paragraph")
     return (SEVERITY_ORDER[item["severity"]], -float(item.get("confidence", 0.0)), 9999 if page is None else page, 9999 if paragraph is None else paragraph, item.get("finding_id", ""))
 
+def collapse_duplicates(findings):
+    """Keep one finding per finding_id at the highest severity (first occurrence on a tie), so a duplicate is never
+    counted twice and can never lower severity (severity-rules.md #3.1). Returns (kept, {finding_id: copies})."""
+    kept, positions, copies = [], {}, {}
+    for item in findings:
+        finding_id = item["finding_id"]
+        if finding_id not in positions:
+            positions[finding_id] = len(kept)
+            kept.append(item)
+            continue
+        copies[finding_id] = copies.get(finding_id, 1) + 1
+        current = kept[positions[finding_id]]
+        if SEVERITY_ORDER[item["severity"]] < SEVERITY_ORDER[current["severity"]]:
+            kept[positions[finding_id]] = item
+    return kept, copies
+
 def main():
     parser = argparse.ArgumentParser(description="Rank gate findings and compute release-readiness status.")
     parser.add_argument("--gates", required=True)
@@ -107,13 +130,17 @@ def main():
         generated_at = validate_generated_at(args.generated_at)
         payload = load_json(args.gates)
         require_contract(payload)
-        findings = list(payload.get("findings", []))
-        if not isinstance(payload.get("escalations", []), list):
-            raise InputError("escalations must be an array")
-        for index, item in enumerate(findings):
+        for index, item in enumerate(payload["findings"]):
             validate_finding(index, item)
+        findings, duplicates = collapse_duplicates(payload["findings"])
+        payload["findings"] = findings
+        escalations = payload["escalations"]
+        for finding_id, count in duplicates.items():
+            kept = next(item for item in findings if item["finding_id"] == finding_id)
+            escalations.append(f"{finding_id}: {count} findings shared this finding_id; one was kept at the highest severity ({kept['severity']}) - reviewing partner/QRM to confirm (severity-rules.md #3.4)")
+        for item in findings:
             if float(item.get("confidence", 1.0)) < CONFIDENCE_FLOOR:
-                payload.setdefault("escalations", []).append(f"{item['finding_id']}: confidence {item.get('confidence')} below {CONFIDENCE_FLOOR} - human confirmation required (severity-rules.md #2.1)")
+                escalations.append(f"{item['finding_id']}: confidence {item.get('confidence')} below {CONFIDENCE_FLOOR} - human confirmation required (severity-rules.md #2.1)")
         ranked = []
         for index, item in enumerate(sorted(findings, key=sort_key), start=1):
             ranked_item = dict(item)
@@ -132,6 +159,10 @@ def main():
         elif advisories:
             status = STATUS_WITH_ADVISORIES
             summary = "Only advisory items remain; partner/QRM judgement still required."
+        elif escalations:
+            # An escalation is a hold even without a finding: it can never end in the no-findings verdict.
+            status = STATUS_WITH_BLOCKER
+            summary = f"No engine findings, but {len(escalations)} escalation(s) hold release for reviewing-partner/QRM judgement before any client issue."
         else:
             status = STATUS_CLEAN
             summary = "No engine findings; partner/QRM judgement still required."
