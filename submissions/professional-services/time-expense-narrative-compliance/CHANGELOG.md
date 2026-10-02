@@ -88,7 +88,17 @@ Fix release after the v1.0.3 evaluation (`evaluate-time-expense-narrative-compli
 - **Docs:** client-billing-guidelines.md #13.2 (exclusion wording, review reasons, contract walk) and the new #13.3 (engagement identity, other-engagement exclusion) (×6); the contract description and fields (×6); README "Engine-result integrity" and "Input validation".
 - **Known limit:** packets are not signed. A forger who rewrites both the header and `provenance.engagement_identity` consistently is not detected; a header-only relabel is.
 
+### Strict JSON input and atomic output (DRQG finding applied to this plugin; 1.0.4, no version bump)
+- **Non-finite numbers at the loader:** new `contract_check.strict_load` (shared ×5) is the only JSON parser the engines use, via the new `signal_policy.read_json` (shared ×5). It refuses `NaN`, `Infinity` and `-Infinity` (`parse_constant`), numbers that overflow to infinity such as `1e999` (`parse_float`), and integers beyond ±2**53 (`parse_int`), as a clean input error with no output. This covers every engine input packet, `config/signal-sources.json`, `--signal-config` (`load_policy_file`) and the contract itself. Before this, `NaN` was caught only later by the range checks, and a 400-digit integer crashed `math.isfinite` with an `OverflowError` traceback in all four JSON engines. `check_number` and the contract walker's `number` type now call `math.isfinite` only on floats, so a huge integer can never overflow them.
+- **Atomic writes:** every engine now serialises its whole output first (`signal_policy.dump_json`, with `allow_nan=False` and byte-identical to the previous `json.dump` output; the exception report builds its full text). `signal_policy.write_output` encodes to UTF-8, so a lone surrogate fails at that point, writes a temp file in the output folder, and calls `os.replace()`. On any error, including a dump or encode failure or a directory at `--out`, the temp file is removed and the output path is neither created nor truncated. Callers: `activity_pull.main`, `narrative_draft.main`, `code_map.main`, `guideline_check.main` and `exception_report.main`.
+
 ### Tests and goldens
+- Strict JSON and atomic writes: 371 to 382 checks (11 new in `json_io_tests`).
+  - Per engine: the loader refuses each of `NaN`, `Infinity`, `-Infinity`, `1e999` and a 400-digit integer (5 checks).
+  - Per engine: a failed run leaves the output path untouched with no temp file, for a late dump or encode failure over an existing output and over a new path, a directory at `--out`, and a lone surrogate in the input (5 checks).
+  - Unit checks: `check_number` and the contract walker handle a huge integer without overflow, and `write_output` fails on a lone surrogate before touching the file.
+  - One older check now accepts the earlier loader refusal for its `NaN` mutation; this is stricter.
+  - Goldens are byte-identical.
 - QA round 3 of 1e3164c: 300 to 371 checks (67 new in `integrity3_tests` and `inventory_tests`, plus 4 from split or added older checks).
   - Item 1: seven contract violations at all four downstream engines (28 checks), plus an unsupported schema keyword at validation and at load.
   - Item 2: a header relabelled at all four engines, each identity field alone, and an identity not recorded by activity-pull.

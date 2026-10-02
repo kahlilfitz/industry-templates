@@ -255,8 +255,7 @@ def main():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         plugin_config_path = signal_policy.find_plugin_config(script_dir)
         if plugin_config_path:
-            with open(plugin_config_path, encoding="utf-8") as fh:
-                config = json.load(fh)
+            config = signal_policy.read_json(plugin_config_path, InputError, label="config/signal-sources.json")
         else:
             config = {"sources": signal_policy.NARROW_DEFAULT,
                       "note": "plugin config/signal-sources.json not found; documented narrow default applied"}
@@ -504,10 +503,8 @@ def main():
     except signal_policy.SchemaError as exc:
         sys.exit(f"activity_pull: {exc}")
     try:
-        with open(args.out, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(packet, fh, indent=2)
-            fh.write("\n")
-    except OSError as exc:
+        signal_policy.write_output(args.out, signal_policy.dump_json(packet))
+    except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError
         sys.exit(f"activity_pull: cannot write output: {exc}")
     print(f"activity_pull: {len(signals)} signal(s), {len(entries)} time entr(ies), "
           f"{len(packet['provenance']['excluded_signals'])} excluded link(s) -> {os.path.basename(args.out)}")

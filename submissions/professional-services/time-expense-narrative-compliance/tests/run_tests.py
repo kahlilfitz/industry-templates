@@ -22,6 +22,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -1092,7 +1093,9 @@ def validation_tests(tmp):
         write(src, pkt)
         code, msg = run(engine, flag, src, "--out", dst, "--generated-at", FIXED_TS)
         counted += 1
-        if not (code == 1 and not os.path.exists(dst) and ("invalid input" in msg or "missing" in msg)
+        # NaN is now refused by the strict JSON loader, before validation ("cannot read ...: ... refused")
+        if not (code == 1 and not os.path.exists(dst)
+                and ("invalid input" in msg or "missing" in msg or ("cannot read" in msg and "refused" in msg))
                 and POISON not in msg and "Traceback" not in msg):
             failures.append((stage, engine, label, code, msg[:160]))
     check(f"{counted} wrong-type / unknown-enum packet mutations are clean input errors at every engine "
@@ -2250,6 +2253,122 @@ def integrity3_tests(tmp):
         check(f"qa4 {scenario} runs end to end with no refusal and the golden report", ok, msg)
 
 
+NON_FINITE = ("NaN", "Infinity", "-Infinity", "1e999", "1" + "0" * 400)
+JSON_STAGES = (("narrative_draft", "--activity", "activity.json"), ("code_map", "--drafted", "drafted.json"),
+               ("guideline_check", "--coded", "coded.json"), ("exception_report", "--governed", "governed.json"))
+SENTINEL = "SENTINEL - an earlier output that a failed run must not touch\n"
+
+
+def _golden_text(name):
+    rel = name if name == "activity.json" else os.path.join("expected", name)
+    return read_text(os.path.join(ROOT, "demo-data", "scenario-a-happy", rel))
+
+
+def _engine_argv(engine, workdir, out):
+    """argv for one engine on scenario A (raw files for activity_pull, the upstream golden otherwise)."""
+    if engine == "activity_pull":
+        return ["--raw-dir", os.path.join(ROOT, "demo-data", "scenario-a-happy", "raw"), "--out", out,
+                "--period-start", "2026-09-14", "--period-end", "2026-09-18", *SCENARIO_A_ARGS]
+    flag, name = next((f, n) for e, f, n in JSON_STAGES if e == engine)
+    src = os.path.join(workdir, "in.json")
+    with open(src, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(_golden_text(name))
+    return [flag, src, "--out", out]
+
+
+def _leftovers(folder, keep):
+    return sorted(n for n in os.listdir(folder) if n not in keep)
+
+
+def json_io_tests(tmp):
+    """Strict JSON loading (NaN/Infinity/overflow refused) and atomic writes, per engine (hardening checklist)."""
+    for engine in ENGINES:
+        # (1) the loader refuses non-finite and unrepresentable numbers: clean input error, no output
+        bad = []
+        for token in NON_FINITE:
+            work = tempfile.mkdtemp(dir=tmp)
+            out = os.path.join(work, "out")
+            if engine == "activity_pull":
+                cfg = os.path.join(work, "policy.json")
+                with open(cfg, "w", encoding="utf-8", newline="\n") as fh:
+                    fh.write('{"sources": {"calendar": {"enabled": true, "lookback_days_default": %s}}}' % token)
+                argv = _engine_argv(engine, work, out) + ["--signal-config", cfg]
+            else:
+                flag, name = next((f, n) for e, f, n in JSON_STAGES if e == engine)
+                text = _golden_text(name)
+                at = text.index('"duration_hours": ') + len('"duration_hours": ')
+                end = at + len(re.match(r"[0-9.]+", text[at:]).group(0))
+                src = os.path.join(work, "in.json")
+                with open(src, "w", encoding="utf-8", newline="\n") as fh:
+                    fh.write(text[:at] + token + text[end:])
+                argv = [flag, src, "--out", out]
+            code, msg = run(engine, *argv, "--generated-at", FIXED_TS)
+            if not (code == 1 and "cannot read" in msg and "refused" in msg and not os.path.exists(out)):
+                bad.append((token[:12], code, msg[:120], os.path.exists(out)))
+        check(f"jsonio {engine} loader refuses NaN, Infinity, -Infinity, 1e999 and a 400-digit integer "
+              "(clean input error, no output)", not bad, bad)
+
+        # (2) atomic write: on any error the output path is neither created nor truncated, no temp file is left
+        bad = []
+        module = MODULES[engine]
+        saved = module.ENGINE_VERSION
+        late = saved + "\ud800" if engine == "exception_report" else float("nan")  # fails at encode / dump time
+        for case in ("late-existing", "late-new", "out-is-dir", "surrogate-input"):
+            work = tempfile.mkdtemp(dir=tmp)
+            out = os.path.join(work, "out")
+            argv = _engine_argv(engine, work, out)
+            keep = set(os.listdir(work))
+            if case in ("late-existing", "surrogate-input"):
+                with open(out, "w", encoding="utf-8", newline="\n") as fh:
+                    fh.write(SENTINEL)
+            elif case == "out-is-dir":
+                os.mkdir(out)
+            if case == "surrogate-input":
+                if engine == "activity_pull":
+                    argv[argv.index("--requester") + 1] = "Alex \ud800Rivera"
+                else:
+                    src = argv[1]
+                    packet = read(src)
+                    packet["time_entries"][0]["notes"] = "ok \ud800 text"
+                    write(src, packet)
+            if case.startswith("late"):
+                module.ENGINE_VERSION = late
+            try:
+                code, msg = run(engine, *argv, "--generated-at", FIXED_TS)
+            finally:
+                module.ENGINE_VERSION = saved
+            keep_now = keep | ({"out"} if case != "late-new" else set())
+            intact = (read_text(out) == SENTINEL if case in ("late-existing", "surrogate-input")
+                      else os.path.isdir(out) and not os.listdir(out) if case == "out-is-dir"
+                      else not os.path.exists(out))
+            if not (code == 1 and intact and "Traceback" not in msg and _leftovers(work, keep_now) == []):
+                bad.append((case, code, msg[:120], intact, _leftovers(work, keep_now)))
+        check(f"jsonio {engine} failed run leaves the output path untouched and no temp file "
+              "(late dump/encode error, directory at --out, lone surrogate in input)", not bad, bad)
+
+    sp = MODULES["code_map"].signal_policy
+    try:
+        sp.check_number(10 ** 400, "hours", low=0, high=24)
+        overflow_ok = False
+    except sp.SchemaError:
+        overflow_ok = True
+    except OverflowError:
+        overflow_ok = False
+    work = tempfile.mkdtemp(dir=tmp)
+    out = os.path.join(work, "report.md")
+    with open(out, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(SENTINEL)
+    try:
+        sp.write_output(out, "partial \ud800 text")
+        direct_ok = False
+    except UnicodeEncodeError:
+        direct_ok = read_text(out) == SENTINEL and os.listdir(work) == ["report.md"]
+    check("jsonio check_number and the contract walker reject a huge integer without OverflowError; "
+          "write_output fails on a lone surrogate before touching the file",
+          overflow_ok and direct_ok and MODULES["code_map"].signal_policy.contract_check._is(10 ** 400, "number")
+          and not sp.contract_check._is(float("nan"), "number"))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         golden_tests(tmp)
@@ -2262,6 +2381,7 @@ def main():
         integrity2_tests(tmp)
         integrity3_tests(tmp)
         inventory_tests(tmp)
+        json_io_tests(tmp)
     failed = [r for r in RESULTS if not r[1]]
     for label, ok, detail in RESULTS:
         detail = str(detail).encode("ascii", "backslashreplace").decode("ascii") if detail else ""

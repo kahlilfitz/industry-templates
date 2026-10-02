@@ -30,6 +30,11 @@
    header differs from provenance.engagement_identity, which activity_pull records once from the
    engagement letter. filter_packet() drops signals and time entries whose source scope or engagement_id
    names another engagement; they are recorded in provenance and never rendered.
+6. Strict JSON in, atomic output out. read_json() parses every JSON input with contract_check.strict_load
+   (NaN, Infinity, -Infinity, 1e999 and integers beyond +/-2**53 are input errors). Every engine serialises
+   its whole output first (dump_json refuses NaN; text is encoded to UTF-8, so a lone surrogate fails here)
+   and write_output() then writes a temp file in the output folder and os.replace()s it: on any error the
+   output path is neither created nor truncated.
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
@@ -41,6 +46,7 @@ import math
 import os
 import re
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import contract_check  # noqa: E402  (shared contract walker, identical copies next to each engine)
@@ -181,12 +187,45 @@ def find_plugin_config(start_dir):
     return None
 
 
-def load_policy_file(path):
+def read_json(path, error, label=None):
+    """Parse a JSON input strictly (contract_check.strict_load); any failure is raised as error(...)."""
     try:
         with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise PolicyError(f"cannot read signal policy {os.path.basename(path)}: {exc}") from exc
+            return contract_check.strict_load(fh)
+    except (OSError, ValueError) as exc:  # ValueError covers JSONDecodeError, UnicodeDecodeError and strict_load
+        raise error(f"cannot read {label or os.path.basename(path)}: {exc}") from exc
+
+
+def dump_json(packet):
+    """Serialise an output packet completely before anything is written (NaN/Infinity are refused)."""
+    return json.dumps(packet, indent=2, allow_nan=False) + "\n"
+
+
+def write_output(path, text):
+    """Write text atomically: encode first, write a temp file in the same folder, then os.replace().
+
+    On any error (a lone surrogate, a full disk, a directory at the output path) the temp file is removed and
+    the output path is neither created nor truncated."""
+    data = text.encode("utf-8")
+    folder = os.path.dirname(os.path.abspath(path))
+    fd, tmp = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", suffix=".tmp", dir=folder)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        umask = os.umask(0)
+        os.umask(umask)
+        os.chmod(tmp, 0o666 & ~umask)  # mkstemp creates 0600; give the output the usual default mode
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def load_policy_file(path):
+    data = read_json(path, PolicyError, label=f"signal policy {os.path.basename(path)}")
     sources = data.get("sources") if isinstance(data, dict) else None
     if not isinstance(sources, dict):
         raise PolicyError(f"signal policy {os.path.basename(path)} has no 'sources' object")
@@ -658,7 +697,7 @@ def check_bool(value, where):
 
 def check_number(value, where, low=None, high=None, integer=False):
     kinds = (int,) if integer else (int, float)
-    if (type(value) not in kinds or not math.isfinite(value)
+    if (type(value) not in kinds or (type(value) is float and not math.isfinite(value))
             or (low is not None and value < low) or (high is not None and value > high)):
         span = f" in [{low if low is not None else '-inf'}, {high if high is not None else 'inf'}]"
         _bad(where, ("an integer" if integer else "a finite number") + span, value)

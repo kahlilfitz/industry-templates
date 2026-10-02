@@ -9,7 +9,9 @@ propertyNames, items, pattern, minLength, minimum, maximum - and refuses to load
 other validation keyword, so a keyword it cannot enforce is never silently ignored (fail closed).
 
 Rules: "number" is a finite int or float and never a boolean; "integer" is an int and never a boolean;
-"pattern" is a regular-expression search, as in JSON Schema. Error messages name the field path, the rule
+"pattern" is a regular-expression search, as in JSON Schema. strict_load() is the only JSON parser the engines
+use: NaN, Infinity and -Infinity, numbers that overflow to infinity (1e999) and integers beyond +/-2**53 are
+refused while parsing, so a non-finite or unrepresentable number never reaches a range check. Error messages name the field path, the rule
 and the JSON type of the value - never the value itself, which is untrusted text.
 
 This file ships as identical copies next to each engine (skills are self-contained);
@@ -22,6 +24,7 @@ import os
 import re
 
 CONTRACT_FILE = "ps.time-expense-narrative-compliance.v1.json"
+MAX_JSON_INT = 2 ** 53  # largest integer every JSON consumer represents exactly
 ANNOTATIONS = {"$schema", "$id", "title", "description", "definitions"}
 KEYWORDS = {"$ref", "type", "enum", "const", "required", "properties", "additionalProperties", "propertyNames",
             "items", "pattern", "minLength", "minimum", "maximum"}
@@ -57,12 +60,35 @@ def _check_keywords(schema, where):
                 _check_keywords(value, f"{where}/{key}")
 
 
+def _no_constant(token):
+    raise ValueError(f"{token} is not a finite number (NaN, Infinity and -Infinity are refused)")
+
+
+def _finite_float(text):
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("a number overflows to infinity (refused)")
+    return value
+
+
+def _bounded_int(text):
+    value = int(text)
+    if abs(value) > MAX_JSON_INT:
+        raise ValueError("an integer is outside +/-2**53 (refused)")
+    return value
+
+
+def strict_load(fh):
+    """json.load that refuses non-finite and unrepresentable numbers instead of parsing them (ValueError)."""
+    return json.load(fh, parse_constant=_no_constant, parse_float=_finite_float, parse_int=_bounded_int)
+
+
 @functools.lru_cache(maxsize=8)
 def load_contract(path):
     try:
         with open(path, encoding="utf-8") as fh:
-            schema = json.load(fh)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            schema = strict_load(fh)
+    except (OSError, ValueError) as exc:  # ValueError covers JSONDecodeError, UnicodeDecodeError and strict_load
         raise ContractError(f"cannot read contract {os.path.basename(path)}: {exc}") from exc
     if not isinstance(schema, dict):
         raise ContractError(f"contract {os.path.basename(path)} is not a JSON object")
@@ -76,7 +102,7 @@ def json_type(value):
 
 def _is(value, kind):
     if kind == "number":
-        return type(value) in (int, float) and math.isfinite(value)
+        return type(value) is int or (type(value) is float and math.isfinite(value))  # isfinite(huge int) overflows
     if kind == "integer":
         return type(value) is int
     return json_type(value) == kind

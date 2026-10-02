@@ -27,7 +27,6 @@ to another engagement are counted, never named or quoted.
 """
 import argparse
 import datetime
-import json
 import os
 import sys
 from copy import deepcopy
@@ -57,11 +56,7 @@ def generated_at(override):
 
 
 def load_governed(path):
-    try:
-        with open(path, encoding="utf-8") as fh:
-            payload = json.load(fh)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
+    payload = signal_policy.read_json(path, InputError)
     if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT:
         raise InputError(f"expected a {CONTRACT} object")
     signal_policy.validate_packet(payload, "governed")
@@ -252,9 +247,7 @@ def main():
     ]
     text = "\n".join(lines)
     try:
-        text.encode("utf-8")  # fail before the file is opened, so no partial output is left behind
-        with open(args.out, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(text)
+        signal_policy.write_output(args.out, text)  # encodes first, then temp file + os.replace
     except (OSError, UnicodeError) as exc:
         sys.exit(f"exception_report: cannot write output: {exc}")
     print(f"exception_report: DRAFT written (not sent) -> {os.path.basename(args.out)}")

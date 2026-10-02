@@ -26,7 +26,6 @@ v1.0.4 rules:
 """
 import argparse
 import datetime
-import json
 import os
 import sys
 from copy import deepcopy
@@ -65,11 +64,7 @@ def generated_at(override):
 
 
 def load_packet(path):
-    try:
-        with open(path, encoding="utf-8") as fh:
-            payload = json.load(fh)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
+    payload = signal_policy.read_json(path, InputError)
     if not isinstance(payload, dict):
         raise InputError("input is not a JSON object")
     if payload.get("contract_version") != CONTRACT:
@@ -289,10 +284,8 @@ def main():
     out.setdefault("provenance", {}).setdefault("engines", []).append(ENGINE_VERSION)
     out["provenance"]["generated_at"] = stamp
     try:
-        with open(args.out, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(out, fh, indent=2)
-            fh.write("\n")
-    except OSError as exc:
+        signal_policy.write_output(args.out, signal_policy.dump_json(out))
+    except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError
         sys.exit(f"narrative_draft: cannot write output: {exc}")
     print(f"narrative_draft: {len(out['time_entries'])} entries, {drafted_count} drafted, "
           f"{len(out['provenance'].get('excluded_signals', []))} excluded signal(s) -> {os.path.basename(args.out)}")
