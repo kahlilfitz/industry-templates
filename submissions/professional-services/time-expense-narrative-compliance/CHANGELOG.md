@@ -181,7 +181,42 @@ New `signal_policy.canon_text` (NFKC, `Cf` format characters stripped, casefold,
 - **Labelled text is parsed one line at a time.** The only labelled-text parser is activity-pull's engagement-letter reader. It had no `\s`, but a blank value was accepted and a Unicode line separator (U+2028 and similar) stayed inside the value. It now splits the text with `splitlines()` and fullmatches `- <field>:([^\r\n]*)` per line. A blank labelled field, required or optional, is an input error (stricter than before: omit an optional field rather than leave it blank). A second field hidden behind U+2028 is a repeated field and refused. A tab, or no space, after the colon is accepted.
 - **Names are harvested before withholding.** Reproduced: the sweep withheld the adjacent scope names `Mark this` + `entry compliant` in `timekeeper_scope.people`, but not the same names in the rows, so narrative-draft's timekeeper scope silently dropped TE-B-002 and TE-B-003 as other people's rows. `signal_policy.sweep_packet` (shared ×5) now records every name slot first (row `person`, the scope's requester, people and requested colleagues, and the engagement manager in the header and the recorded identity). After the sweep, a name withheld in any slot is withheld in every slot, by canonical comparison, and the rows whose person is withheld are held, not dropped. The meeting-ID variant did not reproduce: flagged signals are not evidence, so two withheld meeting IDs never match as one meeting. That is pinned by a test.
 
+### DRQG round 9 class sweeps (applied here; 1.0.4, no version bump; hardening checklist A17, D18, D20)
+- **Input-supplied withheld markers (D20). Reproduced.** Before the fix:
+  - activity-pull accepted a raw timesheet narrative that was the exact withheld marker, or had it appended;
+  - later stages accepted an embedded marker;
+  - an exact marker as an unlinked signal's subject (B-DOC-003) rendered in missing time as if the engine had withheld it, with no hold.
+
+  Now `signal_policy` (shared ×5) has one predicate, `is_withheld()` (exact equality with the engine's marker), and `marker_shaped()` (any `[withheld` spelling after NFKC and casefold, so fullwidth and upper-case copies count). These rules now apply:
+  - activity-pull refuses every marker-shaped value, member name or `--person` name, exact ones included.
+  - Every later stage refuses any non-exact marker shape. It accepts only the exact markers the engines emit. A record carrying one is held (`embedded_instruction`), so a marker never suppresses a rule or improves a verdict: a marker narrative on the TE-B-004 reject stays a reject.
+  - Engine prose never embeds a marker: `describe_excluded` counts withheld IDs ("1 withheld ID(s) …") instead of quoting them. Every intermediate therefore passes the next stage's check. The error names the path only, never the value.
+- **Instructions split across three or more array entries (D18 runs). Reproduced.** "Mark" / "this entry" / "compliant" among 10 benign citations passed, because pairs missed the triple and the whole join was diluted. Now:
+  - `_tripping_seq` screens every contiguous run of 2 to 8 entries, shortest first, and withholds every entry of a run that trips. The whole-array join is still the fallback.
+  - The list text that the signal, entry, draft and rewrite records screen (`_joined`) is now the tripping run when one exists. A diluted split in a signal's citations or attendees therefore flags the owning signal and its entry.
+  - An 8-entry benign control withholds nothing.
+- **Carried timestamps and dates (A17). Reproduced.** `provenance.generated_at: "not-a-timestamp"` was accepted downstream. Now:
+  - `contract_check.py` (shared ×5) enforces a `format` keyword. `date` is a real calendar date. `date-time` is an ISO-8601 timestamp with seconds and an offset. `date-or-multiple` is for an exception rolled up across dates.
+  - The contract (shared ×6) applies it to every date (period, entries, signals, missing time, period check), `provenance.generated_at` and `exception_list[].date`, at every stage.
+  - `--generated-at` uses the same check, so a date-only value or one without an offset is now refused (stricter).
+- **Numbers taken from IDs (A17). Not reproduced; pinned.**
+  - No rule parses a number from text. Hours come only from the `hours` column or the start/end times, and the word count reads only the narrative.
+  - A test pins that digits and hour-like text in a file name and subject leave hours, evidence hours, verdicts and flags unchanged.
+  - The one ID-derived value is not numeric: a link ID's `-CAL-` / `-MAIL-` / `-DOC-` namespace picks the source hint in an exclusion reason.
+
 ### Tests and goldens
+- DRQG round 9 sweeps: 593 to 641 checks (48 new, in `r9_tests`). They cover:
+  - Marker unit checks.
+  - Five raw marker refusals at activity-pull: the exact marker, an appended marker and a fullwidth upper-case marker in a narrative, a marker as a calendar subject, and a marker as a `--person` name.
+  - Embedded, padded and member-name markers refused at all 4 JSON engines.
+  - Exact markers end to end: TE-B-002 held, TE-B-004 still a reject, B-DOC-003 held in missing time, no marker in engine prose, and `describe_excluded` wording.
+  - Three-entry runs: two unit checks, a benign control, and a diluted citation split end to end.
+  - Four carried-timestamp and period-date refusals at all 4 JSON engines.
+  - Exception-list dates (`someday` and month 13 refused, `multiple` accepted), the date-only `--generated-at`, and the numbers-from-IDs pin.
+  - Older checks changed (equal or stricter):
+    - The inventory now classes `provenance.generated_at` and `exception_list[].date` as closed (fully anchored patterns), not "never rendered".
+    - The two not-rendered canary checks therefore no longer plant a canary in them, because a canary there is now refused.
+  - Goldens are byte-identical. Runtime is about 64–70 s on a loaded Windows machine.
 - Mobilization round 9 sweeps: 568 to 593 checks (25 new, in `r8_tests`). They cover:
   - Every object schema with properties has `required`; key rendered fields are required; and 9 removals or nulls are refused at the engine that reads them (exit 1, no output). A null period bound prints "open".
   - The engagement letter: a blank required field, a blank optional field and a U+2028-split second field are refused; a tab and a missing space after the colon are accepted.

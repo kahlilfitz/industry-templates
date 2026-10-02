@@ -74,6 +74,20 @@ SIGNAL_POLICY_VERSION = "signal_policy/1.0.4"
 TEAM_VIEW_PREFIX = "engagement-manager:"
 TEAM_VIEW_TOKEN_RE = re.compile(r"engagement-manager:[A-Za-z0-9._-]+")
 WITHHELD_TEXT = "[withheld: flagged as embedded_instruction - client-billing-guidelines.md #11.2]"
+# D20: only the engines write markers. Input text shaped like one - exact or embedded, in any spelling that NFKC and
+# case folding bring to "[withheld" - is refused at activity_pull (supplied_marker). A later stage accepts only the
+# exact markers the engines emit, and every record that carries one is held (sweep_packet). is_withheld() is the one
+# predicate for "this text is withheld".
+MARKER_SHAPE_RE = re.compile(r"\[\s*withheld\b")
+
+
+def is_withheld(value):
+    """True only for the exact withheld marker an engine wrote (never a padded or embedded copy)."""
+    return isinstance(value, str) and value == WITHHELD_TEXT
+
+
+def marker_shaped(text):
+    return isinstance(text, str) and bool(MARKER_SHAPE_RE.search(canon_text(text)))
 
 # Connector source prefix -> key in config/signal-sources.json "sources".
 SOURCE_KEYS = (
@@ -144,10 +158,15 @@ def describe_excluded(links, packet):
     """Excluded link IDs for a reason or flag detail: other engagements' IDs are counted, never named (a variant
     spelling of such an ID is the same ID, canon_id)."""
     other = {canon_id(a) for a in other_engagement_ids(packet) if isinstance(a, str)}
-    shown = [a for a in links if canon_id(a) not in other]
-    hidden = len(links) - len(shown)
-    return ", ".join(shown) + (f"{'; ' if shown else ''}{hidden} from another engagement (not shown, "
-                               f"{ENGAGEMENT_CITATION})" if hidden else "")
+    shown = [a for a in links if not is_withheld(a) and canon_id(a) not in other]
+    withheld = sum(1 for a in links if is_withheld(a))
+    hidden = len(links) - len(shown) - withheld
+    # A withheld ID is counted, never quoted: prose never embeds a marker, so a later stage can refuse any embedded
+    # marker as supplied (D20).
+    parts = ([", ".join(shown)] if shown else []) \
+        + ([f"{withheld} withheld ID(s) (flagged as embedded_instruction, {METADATA_CITATION})"] if withheld else []) \
+        + ([f"{hidden} from another engagement (not shown, {ENGAGEMENT_CITATION})"] if hidden else [])
+    return "; ".join(parts)
 
 
 # Exclusion wording (#10.1). activity_pull and filter_packet write exactly these texts, and exception_report
@@ -574,7 +593,11 @@ def _joined(values):
     """List items (attendees, citations) for screening. Joined by newline, not "; ": steering_guard
     reads "; " as a clause boundary, so an instruction split across two items would be missed."""
     items = [v if isinstance(v, str) else json.dumps(v, default=str) for v in values]
-    return "\n".join(i for i in items if i.strip())
+    items = [i for i in items if i.strip()]
+    # D18: a run of up to RUN_WINDOW items that trips is screened on its own, so the rest of a long list cannot
+    # dilute an instruction split across three or more of its entries.
+    run = _tripping_seq(items) if len(items) > 1 else set()
+    return "\n".join(items[i] for i in sorted(run)) if run else "\n".join(items)
 
 
 # Every free-text field of a signal or entry that an engine can copy into a draft, a flag detail or the report.
@@ -692,7 +715,7 @@ def field_withheld(record, key):
     text = fields.get(key)
     if text is None:
         return False
-    if text.strip() == WITHHELD_TEXT or _scan_text(text):
+    if is_withheld(text) or _scan_text(text):
         return True
     rest = {k: t for k, t in fields.items() if k != key and not _scan_text(t)}
     if any(_scan_record({key: text, k: t}) or _scan_record({k: t, key: text}) for k, t in rest.items()):
@@ -712,6 +735,35 @@ METADATA_CITATION = "client-billing-guidelines.md #11.3"
 MEMBER_MARKER = "[withheld member {n}: flagged as embedded_instruction - client-billing-guidelines.md #11.3]"
 MEMBER_MARKER_RE = re.compile(r"\[withheld member \d+: flagged as embedded_instruction - "
                               r"client-billing-guidelines\.md #11\.3\]")
+PLAIN_KEY_RE = re.compile(r"[a-z_]{1,40}")
+
+
+def supplied_marker(packet, exact_ok):
+    """The path (never the text) of the first member name or string shaped like a withheld marker, or None (D20).
+    exact_ok accepts the exact markers the engines emit (WITHHELD_TEXT as a value, MEMBER_MARKER as a member name);
+    activity_pull passes False, since raw input never carries an engine's marker."""
+    stack = [(packet, "packet")]
+    while stack:
+        value, where = stack.pop()
+        if isinstance(value, dict):
+            for n, (key, item) in enumerate(value.items(), start=1):
+                plain = isinstance(key, str) and PLAIN_KEY_RE.fullmatch(key)
+                if marker_shaped(key) and not (exact_ok and MEMBER_MARKER_RE.fullmatch(key)):
+                    return f"{where} member #{n} name"
+                stack.append((item, f"{where}.{key}" if plain else f"{where}.<member #{n}>"))
+        elif isinstance(value, list):
+            stack += [(item, f"{where}[{i}]") for i, item in enumerate(value)]
+        elif marker_shaped(value) and not (exact_ok and is_withheld(value)):
+            return where
+    return None
+
+
+def refuse_supplied_markers(packet, exact_ok):
+    where = supplied_marker(packet, exact_ok)
+    if where:
+        raise SchemaError(f"invalid input: {where} carries text shaped like the engines' withheld marker; only the "
+                          "engines write markers, so input that imitates one is refused (client-billing-guidelines.md "
+                          "#11.2) - no output was written")
 PACKET_HOLD_REASON = ("packet metadata (a member name, or engagement, period, policy, provenance or summary text) "
                       "flagged as embedded_instruction; withheld from every output and never followed")
 COVERED_ALL = "*"
@@ -781,14 +833,21 @@ def _member_texts(key, value):
     return [t for t in out if isinstance(t, str) and t.strip()]
 
 
+RUN_WINDOW = 8  # contiguous runs of up to this many entries are screened on their own (D18)
+
+
 def _tripping_seq(texts):
-    """Indices to withhold in a sequence of strings: each alone, then each adjacent pair (an instruction split
-    across neighbouring array entries), then the whole sequence (every index when only the whole trips)."""
+    """Indices to withhold in a sequence of strings: each alone, then every contiguous run of 2 to RUN_WINDOW
+    entries, shortest first (an instruction split across neighbouring array entries, which the rest of a long array
+    would dilute), then the whole sequence (every index when only the whole trips). Every entry of a run that trips
+    is withheld; a run that holds an entry already withheld is not screened again."""
     live = [i for i, t in enumerate(texts) if isinstance(t, str) and t.strip()]
     bad = {i for i in live if _scan_text(texts[i])}
-    for a, b in zip(live, live[1:]):
-        if a not in bad and b not in bad and _scan_record({"a": texts[a], "b": texts[b]}):
-            bad |= {a, b}
+    for size in range(2, min(RUN_WINDOW, len(live)) + 1):
+        for start in range(len(live) - size + 1):
+            run = live[start:start + size]
+            if not bad.intersection(run) and _scan_record({str(n): texts[i] for n, i in enumerate(run)}):
+                bad.update(run)
     rest = [i for i in live if i not in bad]
     if not bad and len(rest) > 2 and _scan_record({str(i): texts[i] for i in rest}):
         bad = set(rest)
@@ -1020,6 +1079,11 @@ def sweep_packet(packet):
     sweep.walk(packet, sweep.root, ())
     _sweep_excluded_ids(packet, sweep.owners)
     _withhold_names(packet, originals, sweep.owners)
+    # D20: a record that carries an exact marker (written by an earlier stage, or supplied) is always held.
+    for name in ("time_entries", "activity_signals"):
+        for n, record in enumerate(packet.get(name) or []):
+            if isinstance(record, dict) and _holds_marker(record):
+                sweep.owners.add((name, n))
     for owner in sweep.owners - {"packet"}:
         records = packet.get(owner[0])
         if isinstance(records, list) and isinstance(owner[1], int) and owner[1] < len(records) \
@@ -1036,7 +1100,7 @@ def sweep_packet(packet):
 
 def _holds_marker(value):
     if isinstance(value, str):
-        return value == WITHHELD_TEXT
+        return is_withheld(value)
     if isinstance(value, dict):
         return any(MEMBER_MARKER_RE.fullmatch(str(k)) or _holds_marker(v) for k, v in value.items())
     if isinstance(value, list):
@@ -1433,6 +1497,7 @@ def validate_packet(packet, stage):
     except contract_check.ContractError as exc:
         raise SchemaError(str(exc)) from exc
     check_engagement_identity(packet)
+    refuse_supplied_markers(packet, exact_ok=True)
     check_unique_ids(packet)
     if level >= 3:
         for key in ("missing_time_report", "exception_list", "prebill_summary"):

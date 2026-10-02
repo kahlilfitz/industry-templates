@@ -37,10 +37,8 @@ class InputError(ValueError):
 
 def generated_at(override):
     if override:
-        try:
-            datetime.datetime.fromisoformat(override.replace("Z", "+00:00"))
-        except ValueError as exc:
-            raise InputError(f"--generated-at must be an ISO-8601 timestamp, got a string of {len(override)} character(s)") from exc
+        if not signal_policy.contract_check.valid_timestamp(override):
+            raise InputError(f"--generated-at must be an ISO-8601 timestamp with seconds and an offset (for example 2026-09-23T00:00:00Z), got a string of {len(override)} character(s)")
         return override
     return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 

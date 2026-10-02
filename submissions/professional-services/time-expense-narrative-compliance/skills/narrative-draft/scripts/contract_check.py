@@ -5,7 +5,8 @@ Every engine validates every input packet at entry against contracts/ps.time-exp
 (the copy shipped in its own skill folder) before it reads anything (signal_policy.validate_packet). A
 violation is a ContractError: the engine writes no output. The walker supports the schema keywords the
 contract uses - $ref (local #/definitions), type, enum, const, required, properties, additionalProperties,
-propertyNames, items, pattern, minLength, minimum, maximum - and refuses to load a contract that uses any
+propertyNames, items, pattern, minLength, minimum, maximum, format (date, date-time, date-or-multiple:
+real calendar values, not only their shape) - and refuses to load a contract that uses any
 other validation keyword, so a keyword it cannot enforce is never silently ignored (fail closed).
 
 Rules: "number" is a finite int or float and never a boolean; "integer" is an int and never a boolean;
@@ -20,6 +21,7 @@ as its position ("<member #2>").
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
 """
+import datetime
 import functools
 import json
 import math
@@ -30,7 +32,36 @@ CONTRACT_FILE = "ps.time-expense-narrative-compliance.v1.json"
 MAX_JSON_INT = 2 ** 53  # largest integer every JSON consumer represents exactly
 ANNOTATIONS = {"$schema", "$id", "title", "description", "definitions"}
 KEYWORDS = {"$ref", "type", "enum", "const", "required", "properties", "additionalProperties", "propertyNames",
-            "items", "pattern", "minLength", "minimum", "maximum"}
+            "items", "pattern", "minLength", "minimum", "maximum", "format"}
+DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+TIMESTAMP_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|[+-][0-9]{2}:[0-9]{2})")
+
+
+def valid_date(text):
+    """A real calendar date written YYYY-MM-DD (ASCII digits)."""
+    if not (isinstance(text, str) and DATE_RE.fullmatch(text)):
+        return False
+    try:
+        datetime.date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def valid_timestamp(text):
+    """A real ISO-8601 date-time with seconds and an explicit offset (Z or +hh:mm), as the engines write it (A17)."""
+    if not (isinstance(text, str) and TIMESTAMP_RE.fullmatch(text)):
+        return False
+    try:
+        datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+# "format" is enforced, not an annotation: a carried date or timestamp is checked at every stage (A17).
+FORMATS = {"date": valid_date, "date-time": valid_timestamp,
+           "date-or-multiple": lambda t: t == "multiple" or valid_date(t)}
 JSON_TYPES = {bool: "boolean", str: "string", int: "integer", float: "number", dict: "object", list: "array",
               type(None): "null"}
 
@@ -55,6 +86,8 @@ def _check_keywords(schema, where):
         unknown = set(schema) - KEYWORDS - ANNOTATIONS
         if unknown:
             raise ContractError(f"contract uses unsupported keyword(s) {', '.join(sorted(unknown))} at {where}")
+        if "format" in schema and schema["format"] not in FORMATS:
+            raise ContractError(f"contract uses an unsupported format at {where}; the walker cannot enforce it")
         for key, value in schema.items():
             if key in ("properties", "definitions"):
                 for name, sub in value.items():
@@ -184,6 +217,8 @@ def validate(value, schema, root, where="packet"):
             _fail(where, f"a string of at least {schema['minLength']} character(s)", value)
         if "pattern" in schema and not re.search(schema["pattern"], value):
             _fail(where, f"a string matching the contract pattern {schema['pattern']}", value)
+        if "format" in schema and not FORMATS.get(schema["format"], lambda _: False)(value):
+            _fail(where, f"a valid {schema['format']} value", value)
     if _is(value, "number"):
         if "minimum" in schema and value < schema["minimum"]:
             _fail(where, f"a number >= {schema['minimum']}", value)

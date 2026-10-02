@@ -96,7 +96,7 @@ def usable_narratives(entry, linked):
     draft_text = draft.get("narrative").strip() if isinstance(draft.get("narrative"), str) else ""
     own = entry.get("narrative").strip() if isinstance(entry.get("narrative"), str) else ""
     draft_withheld = own_withheld = False
-    if draft_text and (draft_text == signal_policy.WITHHELD_TEXT or draft_hits(draft_text, entry, linked)):
+    if draft_text and (signal_policy.is_withheld(draft_text) or draft_hits(draft_text, entry, linked)):
         draft_text, draft_withheld = "", True
     clean = [a for a in linked if not signal_policy.signal_flagged(a)]
     if own and signal_policy.field_withheld(signal_policy.entry_texts(entry, clean), "narrative"):
@@ -364,7 +364,7 @@ def govern(out):
         linked = [by_id[a] for a in entry.get("activity_ids", []) if a in by_id]
         draft_text = draft.get("narrative").strip() if isinstance(draft.get("narrative"), str) else ""
         draft_found = []
-        if draft_text and draft_text != signal_policy.WITHHELD_TEXT:
+        if draft_text and not signal_policy.is_withheld(draft_text):
             # The main draft alone, and with the entry's notes and linked activity text (split instructions).
             draft_found = draft_hits(draft_text, entry, linked)
         # #11.2: a withheld draft (flagged now, or already the marker) is never checked as text. Every rule runs
@@ -681,7 +681,7 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_
         have = _flag_keys(recorded.get("flags"))
         need = _flag_keys(want["compliance"]["flags"])
         floor = want["compliance"]["verdict"]
-        if (got.get("draft") or {}).get("narrative") == signal_policy.WITHHELD_TEXT:
+        if signal_policy.is_withheld((got.get("draft") or {}).get("narrative")):
             need.add(("embedded_instruction", "hold_for_review"))
             floor = max(floor, "hold_for_review", key=rank.__getitem__)
         absent = sorted({f for f, _ in need - have})

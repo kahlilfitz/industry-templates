@@ -39,14 +39,28 @@
     "date": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-      "description": "YYYY-MM-DD; engines also reject impossible dates."
+      "description": "YYYY-MM-DD; a real calendar date (format is enforced at every stage).",
+      "format": "date"
     },
     "date_or_null": {
       "type": [
         "string",
         "null"
       ],
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "format": "date"
+    },
+    "date_or_multiple": {
+      "type": "string",
+      "pattern": "^(?:[0-9]{4}-[0-9]{2}-[0-9]{2}|multiple)$",
+      "format": "date-or-multiple",
+      "description": "A real YYYY-MM-DD date, or 'multiple' for a rolled-up missing-time exception."
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?(?:Z|[+-][0-9]{2}:[0-9]{2})$",
+      "format": "date-time",
+      "description": "ISO-8601 date-time with seconds and an offset, as the engines write it; a real instant, checked at every stage."
     },
     "hours": {
       "type": "number",
@@ -781,7 +795,7 @@
             "$ref": "#/definitions/text"
           },
           "date": {
-            "$ref": "#/definitions/text"
+            "$ref": "#/definitions/date_or_multiple"
           },
           "duration_hours": {
             "$ref": "#/definitions/hours"
@@ -937,7 +951,7 @@
           "$ref": "#/definitions/strings"
         },
         "generated_at": {
-          "$ref": "#/definitions/text"
+          "$ref": "#/definitions/timestamp"
         },
         "demo_scenario": {
           "$ref": "#/definitions/text"
