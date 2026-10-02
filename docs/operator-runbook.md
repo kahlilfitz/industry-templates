@@ -43,21 +43,8 @@ Typical elapsed time per iteration:
 
 Expect one to three Cowork iterations per plugin. Several plugins can be in Cowork at once.
 
-### Roles and contacts
-
-This repository is public, so it names roles only. The people are recorded by name in a
-**Roles and contacts** section of the industry status README in SharePoint,
-`sharepoint\<Industry>\README.md`:
-
-| Role | Responsibility |
-|---|---|
-| Workstream owner / operator | Runs the loop in this runbook day to day |
-| Accountable publication owner | Makes the publication decision recorded in the tracker; approves pushes to `main` and label changes |
-| Reviewer pool | People who can act as the two independent reviewers |
-| Escalation | Who to go to when the owner is unavailable or a decision is disputed |
-
-If that section is missing or out of date, ask the person who handed the workstream over, or the
-team's channel, and fill it in before you start.
+This repository is public, so it names roles only. Reviewers and the owner decision are recorded by
+name in each plugin's tracker workbook in SharePoint.
 
 ## One-time setup
 
@@ -114,7 +101,7 @@ goes with this table:
 | Headline evaluation figures (scores, pass counts, floors) | Reviewer identities and tracker results |
 | Summaries, in your own words, of findings about the plugin's own synthetic code and behaviour | Owner decision records (who decided, when and why) |
 | Cowork task names (`evaluate-<slug>-v<version>-<date>`) | Filled-in `PLUGIN-DETAILS-AND-DEPLOYMENT.md` documents |
-| The resulting plugin state: promoted, back to a new version, or stopped | Roles and contacts, library URLs |
+| The resulting plugin state: promoted, back to a new version, or stopped | Library URLs |
 
 Never copy report text, scenario evidence or anything from the right-hand column into the
 repository, a commit message, a pull request or a plugin bundle. If you are unsure, keep it in
@@ -518,9 +505,8 @@ not generalisation.
 2. **Create or update the tracker** `sharepoint\<Industry>\<slug>\<slug>-human-test-tracker.xlsx`
    from the [tracker spec](templates/human-test-tracker.md): one workbook per plugin, a new tab per
    version.
-3. **Recruit two independent reviewers** from the reviewer pool (see
-   [Roles and contacts](#roles-and-contacts)). Reviewers work separately, ideally not the person who
-   built the version.
+3. **Recruit two independent reviewers.** They record their own names in the tracker's `T1 name`
+   and `T2 name` columns. Reviewers work separately, ideally not the person who built the version.
 4. **Reviewers run every prompt in the tracker** and record results there. The critical-path
    prompts are the mandatory minimum the tracker must contain, not the scope of the test. Failures
    and disagreements are investigated and the resolution is noted in the tracker.
@@ -736,9 +722,6 @@ Day one:
 
 1. Run `npm install`, `npm run sharepoint:doctor` and `npm run check:submissions`.
 2. Read the [Wave 1 log](professional-services/wave-1.md) and `sharepoint\<Industry>\README.md`.
-   Confirm its **Roles and contacts** section names the workstream owner, the accountable
-   publication owner, the reviewer pool and an escalation contact (see
-   [Roles and contacts](#roles-and-contacts)). If it does not, get it filled before anything else.
 3. List local receipts and their state:
 
    ```powershell
