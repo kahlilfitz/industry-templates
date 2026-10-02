@@ -13,6 +13,9 @@ OTHER_CLIENTS_SCREENED=True  # confidentiality-and-ethical-wall-rules.md #3.3
 def applies(r,e,j):
     # Every populated field must match; blank person = engagement-wide row; a row must name this client or matter.
     # One canonical comparison (canon_person / canon_id): `Taylor  Reed` and `taylor reed` are the same joiner (#1.3).
+    # A withheld value on either side never matches: two different flagged names both read "[withheld ...]" (#4.3).
+    for a,b in (("person","person"),("client_name","client_name"),("matter_id","matter_id")):
+        if (r.get(a) or "").strip() and (is_withheld(r.get(a)) or is_withheld((j if a=="person" else e).get(b))): return False
     p,c,m=canon_person(r.get("person")),canon_person(r.get("client_name")),canon_id(r.get("matter_id"))
     if p and p!=canon_person(j.get("person")): return False
     if c and c!=canon_person(e.get("client_name")): return False
@@ -84,11 +87,11 @@ def govern(p,register,inventory):
             deniedk=[x.get("knowledge_id") for x in p.get("prior_knowledge_candidates",[])]
             for i,r in restricted:
                 for w in (r.get("restricted_workspaces") or "").split(";"):
-                    if w.strip() and not cin(w,deniedw) and w.strip() not in (WITHHELD,OTHER_WITHHELD): deniedw.append(w.strip())  # a withheld ID is held, never published (#3.3); the register's spelling is kept, compared canonically (#1.3)
+                    if w.strip() and not cin(w,deniedw) and not is_withheld(w): deniedw.append(w.strip())  # a withheld ID is held, never published (#3.3); the register's spelling is kept, compared canonically (#1.3)
             briefed=[]; screened=0
             for i,r in restricted:
                 for t in topics(r):
-                    if t==WITHHELD or hits(t): briefed.append(WITHHELD); screened+=1; continue  # tripwire hold already raised by scan_rows (#4.3)
+                    if is_withheld(t) or hits(t): briefed.append(WITHHELD); screened+=1; continue  # tripwire hold already raised by scan_rows (#4.3)
                     if names_other(t,terms,own,own_ids):
                         briefed.append(TOPIC_WITHHELD); screened+=1
                         holds.append({"hold_id":"HOLD-BRIEFING-TOPIC-"+hashlib.sha256(strip_cf(t).encode()).hexdigest()[:12],"path":f"raw/ethical-wall-register.csv row {i}.briefing_topics","reason":"briefing topic names another client, matter or identifying detail; withheld from the pack","source":ENGINE,"confidence":.97,"citation":"confidentiality-and-ethical-wall-rules.md #3.1,#3.2"}); continue
@@ -112,7 +115,7 @@ def govern(p,register,inventory):
         if ih: holds+=ih; esc.append(other_escalation(len(ih)))
         for i,w in enumerate(ws,2):
             nm=w.get("name") or ""; wid=w.get("workspace_id")
-            if (hits(nm) or nm in (WITHHELD,OTHER_WITHHELD)) and wid and wid not in (WITHHELD,OTHER_WITHHELD) and not cin(wid,withheld_names): withheld_names.append(wid)
+            if (hits(nm) or is_withheld(nm)) and wid and not is_withheld(wid) and not cin(wid,withheld_names): withheld_names.append(wid)
     # Upstream holds are supplied content: another client's name or steering text in them never travels (#3.3, #4.3).
     up,uh=screen_holds(up,terms,ENGINE,"matched.holds")
     if any(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh): esc.append(other_escalation(sum(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh)))
@@ -121,7 +124,7 @@ def govern(p,register,inventory):
     odd=[]
     for i,w in enumerate(ws or [],2):
         wid=w.get("workspace_id")
-        if wid in (WITHHELD,OTHER_WITHHELD): continue  # never requested (access_checklist: invalid row) and never published
+        if is_withheld(wid): continue  # never requested (access_checklist: invalid row) and never published
         conf=client_confidential(w.get("data_classification")); dep=depends_on_knowledge(w.get("depends_on_knowledge"))  # blank/unknown fail closed (workspace-inventory-rules.md #2.3)
         if not cin(w.get("data_classification"),KNOWN_CLASSIFICATIONS) or canon_text(w.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES: odd.append(str(i))
         if status=="denied" and cin(wid,deniedw):

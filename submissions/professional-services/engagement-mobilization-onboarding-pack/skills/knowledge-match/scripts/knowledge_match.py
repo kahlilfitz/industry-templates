@@ -49,11 +49,11 @@ def main():
     s=load_json(a.scope); check_scope(s); set_trusted_domains((s.get("engagement") or {}).get("trusted_domains"))
     # Both upstream documents are screened whole (every string, holds included) and redacted before use (#4.1, #4.3).
     s,sh=screen_upstream(s,"scope",ENGINE)
-    c,own_h=screen_upstream(adapt(a.closeout),"upstream/closeout",ENGINE); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES}  # joined by canon_id (#1.3)
+    c,own_h=screen_upstream(adapt(a.closeout),"upstream/closeout",ENGINE); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES and not is_withheld(x.get("asset_id"))}  # joined by canon_id (#1.3); a withheld ID joins nothing (#4.3)
     inc=[]; exc=[]; kr=c["knowledge_record"]
     for asset in kr.get("reusable_assets",[]):
         aid=asset.get("asset_id")
-        if canon_id(aid) not in rels: exc.append({"asset_id":aid,"reason":"not_in_released_assets","citation":"knowledge-reuse-rules.md #2.1"}); continue
+        if is_withheld(aid) or canon_id(aid) not in rels: exc.append({"asset_id":aid,"reason":"not_in_released_assets","citation":"knowledge-reuse-rules.md #2.1"}); continue
         perm=asset.get("confidentiality_permission",rels[canon_id(aid)].get("confidentiality_permission"))
         if perm is not None and perm!=PERM: exc.append({"asset_id":aid,"reason":"confidentiality_permission_not_internal_reuse","citation":"knowledge-reuse-rules.md #2.2"}); continue
         score,over=rel(s,asset)

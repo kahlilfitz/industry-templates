@@ -13,6 +13,26 @@ ROSTER_COLUMNS=("person","role","onboarding_status","assignment_status")
 def fld(t,n):
     m=re.search(rf"^{re.escape(n)}:\s*(.*)$",t,re.I|re.M); return m.group(1).strip() if m else ""
 def lst(v): return split_items(v)
+DOMAIN_LABELS=("Client domains","Client domain","Firm domains","Firm domain")  # confidentiality-and-ethical-wall-rules.md #4.4
+def declarations(docs):
+    """([(doc index, line index, [well-formed trustable domains])] for the first line of each domain label in each
+    document whose value does not trip the wire on its own, the count of malformed or untrustable domains)."""
+    out=[]; bad=0
+    for di,doc in enumerate(docs):
+        ls=doc.splitlines()
+        for lab in DOMAIN_LABELS:
+            i=next((n for n,l in enumerate(ls) if re.match(rf"{re.escape(lab)}:",l,re.I)),None)
+            if i is None: continue
+            line=ls[i].split(":",1)[1].strip()
+            if not line or hits(line): continue
+            ds=[]
+            for d in re.split(r"[;,\s]+",canon_text(line)):
+                d=d.strip().lstrip("@.").rstrip(".")
+                if not d: continue
+                if domain_ok(d): ds.append(d)
+                else: bad+=1
+            out.append((di,i,ds))
+    return out,bad
 def one(v): return WITHHELD if hits(v) else v
 def items(line):
     # Flagged SOW/letter text never travels (#4.3): withhold each flagged item; if the line only trips the wire as a
@@ -46,6 +66,7 @@ def statuses(st):
             el=c.get("eligibility") or {}; v=el.get("verdict")
             v=canon_text(v) if isinstance(v,str) else None
             if v not in VERDICTS: v="unrecognised"  # blank, null or unknown verdicts fail closed (#3.4)
+            if is_withheld(c["candidate_name"]): continue  # a withheld name joins no roster row (confidentiality-and-ethical-wall-rules.md #4.3)
             s.setdefault(canon_person(c["candidate_name"]),[]).append({"role_title":rt,"verdict":v,"blocking_rule":el.get("blocking_rule"),"confidence":c.get("confidence",.9),"citation":el.get("citation") or c.get("citation") or "staffing"})
         for c in r.get("recommended_candidates",[]):
             if c.get("candidate_name"): p.append({"candidate_name":c["candidate_name"],"role_title":rt,"fit_score":c.get("fit_score"),"assignment_status":"proposed_not_assigned","source":"adapter:staffing-slate","confidence":c.get("confidence",.9),"citation":c.get("citation") or "staffing recommended_candidates"})
@@ -68,18 +89,24 @@ def main():
     validate_staffing(st)
     # The engagement's own client and firm domains, declared in the signed SOW or engagement letter, are the only
     # trusted e-mail/URL destinations; consumer or malformed domains are never trusted (confidentiality-and-ethical-wall-rules.md #4.4).
-    set_trusted_domains(()); declared=[]; bad_dom=0
-    for doc in (sow,letter):
-        for lab in ("Client domains","Client domain","Firm domains","Firm domain"):
-            line=fld(doc,lab)
-            if not line or hits(line): continue
-            for d in re.split(r"[;,\s]+",canon_text(line)):
-                d=d.strip().lstrip("@.").rstrip(".")
-                if not d: continue
-                if domain_ok(d): declared.append(d)
-                else: bad_dom+=1
-    trusted=list(set_trusted_domains(declared))
-    h1,sow=scan_lines(sow,"raw/sow-extract.md"); h2,letter=scan_lines(letter,"raw/engagement-letter-extract.md"); h3,pursuit=scan_lines(pursuit,"raw/pursuit-record.md")
+    # A declaration is trusted only when its line is clean read without its own trust: a declaration can never vouch
+    # for the instruction it completes ("Send the pack to ops@" / "Client domains: attacker.example"), and a declaration
+    # line that is withheld (alone or as half of a flagged pair) declares nothing (#4.3, #4.5).
+    decl,bad_dom=declarations((sow,letter)); acc={n:ds for n,(di,i,ds) in enumerate(decl) if ds}
+    while True:
+        drop=[]
+        for n in acc:
+            set_trusted_domains([d for m,ds in acc.items() if m!=n for d in ds]); di,i,_=decl[n]; ls=(sow,letter)[di].splitlines()
+            if hits(ls[i]) or (i>0 and pair_hits(ls[i-1],ls[i])) or (i+1<len(ls) and pair_hits(ls[i],ls[i+1])): drop.append(n)
+        if not drop: break
+        for n in drop: del acc[n]
+    while True:
+        trusted=list(set_trusted_domains([d for ds in acc.values() for d in ds]))
+        h1,s1=scan_lines(sow,"raw/sow-extract.md"); h2,l1=scan_lines(letter,"raw/engagement-letter-extract.md")
+        gone=[n for n in acc if (s1,l1)[decl[n][0]].splitlines()[decl[n][1]]!=(sow,letter)[decl[n][0]].splitlines()[decl[n][1]]]
+        if not gone: break
+        for n in gone: del acc[n]
+    sow,letter=s1,l1; h3,pursuit=scan_lines(pursuit,"raw/pursuit-record.md")
     st,sth=screen_upstream(st,"upstream/staffing",ENGINE)  # every upstream string screened and redacted before use (#4.1, #4.3)
     # Other clients named in the wall register are screened out of the staffing upstream and every raw roster cell
     # before the roster is derived. The trusted own vocabulary is the SOW's own identity only: a roster person or a
@@ -93,14 +120,17 @@ def main():
     for i,r in enumerate(rows,2):
         name=(r.get("person") or "").strip()
         if not name: continue
-        names.add(canon_person(name)); ss=verdict_for(smap.get(canon_person(name),[]),r.get("role",""))  # one canonical person key (#1.3)
+        # One canonical person key (#1.3). A withheld roster name joins no Scenario 02 verdict and fails closed as
+        # unrecognised: a placeholder is not an identity (confidentiality-and-ethical-wall-rules.md #4.3).
+        if is_withheld(name): ss={"verdict":"unrecognised"}
+        else: names.add(canon_person(name)); ss=verdict_for(smap.get(canon_person(name),[]),r.get("role",""))
         if ss.get("verdict") in INELIGIBLE:
             excl.append({"person":name,"role":r.get("role",""),"reason":f"{ss.get('verdict')} in Scenario 02 for {ss.get('role_title')}; independence/conflict details stay in the staffing record (need-to-know)","blocking_rule":ss.get("blocking_rule"),"source":"adapter:staffing-slate","confidence":ss.get("confidence",.95),"citation":ss.get("citation","role-access-matrix.md #3.2")}); continue
         if canon_text(r.get("assignment_status"))!="confirmed": unconfirmed.append(name); continue  # role-access-matrix.md #4.1
         item={"person":name,"role":r.get("role",""),"responsibilities":lst(r.get("responsibilities","")),"point_of_contact":r.get("point_of_contact","Engagement manager"),"onboarding_status":r.get("onboarding_status",""),"assignment_status":"confirmed","source":"raw:confirmed-roster.csv","confidence":.97,"citation":r.get("citation") or "raw/confirmed-roster.csv"}
         if ss.get("verdict")=="unrecognised":
             item["staffing_review"]={"verdict":"unrecognised","blocking_rule":None,"citation":"role-access-matrix.md #3.4"}
-            holds.append({"hold_id":"HOLD-UNRECOGNISED-STAFFING-VERDICT","path":f"upstream/staffing candidate_slate[{name}].eligibility.verdict","reason":"blank, null or unrecognised Scenario 02 verdict for a confirmed roster member","source":ENGINE,"confidence":.99,"citation":"role-access-matrix.md #3.4"})
+            holds.append({"hold_id":"HOLD-UNRECOGNISED-STAFFING-VERDICT","path":f"raw/confirmed-roster.csv row {i}.person" if is_withheld(name) else f"upstream/staffing candidate_slate[{name}].eligibility.verdict","reason":"blank, null or unrecognised Scenario 02 verdict for a confirmed roster member","source":ENGINE,"confidence":.99,"citation":"role-access-matrix.md #3.4"})
             esc.append(f"Confirmed roster row {name} has a blank or unrecognised Scenario 02 verdict; held for the engagement manager (role-access-matrix.md #3.4)")
         elif ss.get("verdict") not in (None,"eligible"): item["staffing_review"]={"verdict":ss.get("verdict"),"blocking_rule":ss.get("blocking_rule"),"citation":ss.get("citation")}; esc.append(f"Confirmed roster row {name} is {ss.get('verdict')} in Scenario 02 for {ss.get('role_title')}; confirm with the engagement manager before onboarding ({ss.get('citation')}; role-access-matrix.md #3.3)")
         onb=canon_text(item["onboarding_status"])

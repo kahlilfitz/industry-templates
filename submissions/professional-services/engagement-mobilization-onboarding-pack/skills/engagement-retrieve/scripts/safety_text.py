@@ -24,11 +24,29 @@ def _unique_keys(pairs):
         if k in out: raise InputError("a JSON object repeats a member name (not repeated here); duplicate keys are ambiguous; fail closed")
         out[k] = v
     return out
+# Nesting is bounded before parsing: a document nested deeper than MAX_JSON_DEPTH arrays/objects is refused, so no
+# parser, copy or recursive walker (screening, other-client screen, contract validation) ever recurses without
+# bound (#1.3). The pipeline documents nest about ten levels deep.
+MAX_JSON_DEPTH = 64
+_JSON_TOKEN = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"?|[\[\]{}]')
+def json_depth_ok(text):
+    """Raise InputError if text nests arrays/objects deeper than MAX_JSON_DEPTH (an iterative count; strings skipped)."""
+    depth = 0
+    for m in _JSON_TOKEN.finditer(text):
+        t = m.group(0)
+        if t in "[{":
+            depth += 1
+            if depth > MAX_JSON_DEPTH: raise InputError(f"JSON nests deeper than {MAX_JSON_DEPTH} levels; refused before parsing; fail closed")
+        elif t in "]}": depth -= 1
 def load_json(p):
-    """NaN, Infinity, -Infinity, overflowing literals (1e999) and duplicate member names are rejected at parse time,
-    never passed on (#1.3). Errors name the position, never the offending input text."""
+    """NaN, Infinity, -Infinity, overflowing literals (1e999), duplicate member names and nesting deeper than
+    MAX_JSON_DEPTH are rejected before anything is derived, never passed on (#1.3). Errors name the position, never
+    the offending input text."""
     try:
-        with open(p, encoding="utf-8-sig") as f: return json.load(f, parse_constant=_no_constant, parse_float=_finite_float, object_pairs_hook=_unique_keys)  # a BOM never hides the first key (#1.3)
+        with open(p, encoding="utf-8-sig") as f: text = f.read()  # a BOM never hides the first key (#1.3)
+        json_depth_ok(text)
+        return json.loads(text, parse_constant=_no_constant, parse_float=_finite_float, object_pairs_hook=_unique_keys)
+    except RecursionError as e: raise InputError(f"JSON in {p} nests too deeply to parse; fail closed") from None
     except InputError as e: raise InputError(f"{e} ({p})") from e
     except FileNotFoundError as e: raise InputError(f"missing required JSON file: {p}") from e
     except json.JSONDecodeError as e: raise InputError(f"malformed JSON in {p} (must be UTF-8 JSON): {e.msg} at line {e.lineno} column {e.colno}") from e
@@ -514,7 +532,8 @@ def client_terms(names, own):
     exact full-name match is always screened (#3.3)."""
     out = []; seen = set()
     for nm in names:
-        if not isinstance(nm, str) or not nm.strip() or nm in (WITHHELD, OTHER_WITHHELD): continue
+        nm = unwithheld(nm)  # a placeholder names no one: its words never become an identity (#4.3)
+        if not isinstance(nm, str) or not nm.strip(): continue
         full = id_spaced(norm(nm))
         if not full.strip() or full in seen: continue
         seen.add(full)
@@ -688,6 +707,19 @@ def check_digest(doc, where, wall_status=None):
 # client_name / matter_id and proper-noun runs in restriction free text (#3.2, #3.3).
 ALLOW_CAPS = {"sharepoint", "teams", "planner", "sow", "gdpr", "pci", "pii", "hipaa", "api", "it", "risk", "conflicts", "knowledge", "repository", "channel", "engagement", "delivery", "client", "q1", "q2", "q3", "q4", "i"}
 TOPIC_WITHHELD = "[briefing topic withheld - it names another client or matter, Risk/Conflicts brief the joiner directly]"  # #3.2
+# Withheld text never decides anything (#4.3): a placeholder is not an identity, an ID, an enum or a keyword. Rules
+# compare and score only screened text with every placeholder removed, and a withheld value never matches another
+# withheld value (two different flagged names both read "[withheld ...]").
+PLACEHOLDERS = (WITHHELD, OTHER_WITHHELD, TOPIC_WITHHELD, WITHHELD_KEY)
+def is_withheld(v):
+    """True when v is or contains a withheld placeholder (in any case, as canon_text folds it)."""
+    return isinstance(v, str) and ("[withheld" in v.casefold() or any(x in v for x in PLACEHOLDERS))
+def unwithheld(v):
+    """v with every placeholder removed (and the ";"-list items it leaves blank): the only text a rule may read."""
+    if not is_withheld(v): return v
+    for x in PLACEHOLDERS: v = v.replace(x, " ")
+    v = re.sub(r"\[withheld[^\]]*\]", " ", v, flags=re.I)
+    return ";".join(x.strip() for x in v.split(";") if x.strip())
 def cap_runs(text):
     for m in re.finditer(r"[A-Z][A-Za-z0-9&'.-]*(?:\s+(?:&\s+)?[A-Z][A-Za-z0-9&'.-]*)*", text or ""):
         start = m.start() == 0 or bool(re.search(r"[.;:!?]\s*$", text[:m.start()])); yield m.group(0).strip(" .'-"), start
@@ -713,6 +745,7 @@ def other_names(rows, e, own):
     restriction free text (confidentiality-and-ethical-wall-rules.md #3.2,#3.3). Withheld cells name nobody."""
     names = []
     for r in rows:
+        r = {k: unwithheld(v) for k, v in r.items()}  # placeholder words never become an identity (#4.3)
         # Overflow cells of a malformed row are harvested conservatively: they are never dropped (#2.1, #3.3).
         for kk, v in r.items():
             if is_extra(kk) and isinstance(v, str) and v.strip() and v not in (WITHHELD, OTHER_WITHHELD): names += overflow_names(v, own)
@@ -732,7 +765,7 @@ def engagement_words(client, engagement_id, matter_id, title):
     """The trusted own vocabulary: words of the engagement's own identity only (client, engagement ID, matter ID and
     engagement title, as the SOW declares them). No screenable field - roster or register cells, staffing affiliates,
     systems, any other CSV or JSON value - ever adds to it, so input data cannot make another client trusted (#3.3)."""
-    return words(client, engagement_id, matter_id, title)
+    return words(*(unwithheld(x) for x in (client, engagement_id, matter_id, title)))  # placeholder words are never trusted (#4.3)
 def own_words(doc):
     e = doc.get("engagement") or {}
     return engagement_words(e.get("client_name"), e.get("engagement_id"), e.get("matter_id"), e.get("title"))
@@ -774,8 +807,9 @@ def dedup_holds(holds):
     return out
 def toks(*parts):
     stop = {"the", "and", "for", "with", "from", "into", "client", "engagement", "team", "work", "draft", "record"}
-    return {x for p in parts for x in re.findall(r"[a-z0-9]+", norm(p or "")) if len(x) > 2 and x not in stop}
+    return {x for p in parts for x in re.findall(r"[a-z0-9]+", norm(unwithheld(p) or "")) if len(x) > 2 and x not in stop}  # withheld text scores nothing (#4.3)
 def guard(fn):
     try: return fn()
     except InputError as e: raise SystemExit(f"InputError: {e}")
     except (KeyError, TypeError, ValueError, AttributeError) as e: raise SystemExit(f"InputError: malformed input ({type(e).__name__}; the input value is not repeated); fail closed")
+    except RecursionError: raise SystemExit("InputError: input nests too deeply to process; nothing written; fail closed")  # defence in depth: load_json bounds nesting (#1.3)

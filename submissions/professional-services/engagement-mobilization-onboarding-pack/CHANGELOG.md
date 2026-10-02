@@ -125,6 +125,21 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
   - `scope_digest`: every raw confirmed-roster cell is screened against the register identities (`screen_csv_other`, after the instruction scan) before the roster is derived. The roster cell is withheld and `HOLD-OTHER-CLIENT-*` is raised in scope.json, so wall_check holds the wall, the digest and the pack. The staffing mismatch screen now passes only the identity fields that differ, so a same-client, different-engagement staffing file still keeps the own client name.
   - Swept the other `own` and allow-list sources: `wall_check` (briefing topics, `own_ids`), `knowledge_match` and `access_checklist` take `own` from `own_words` and need no other change. `GENERIC`, `ALLOW_CAPS` and `OVERFLOW_VOCAB` are fixed constants. Trusted e-mail domains still come only from the SOW/engagement-letter declarations (screened; consumer domains refused; #4.4), by design.
   - Tests: `qa101k_checks` (7 checks). The 5 reproducer and unit checks fail on the previous engines; the 2 own-identity controls pass on both. Confidentiality #3.3 updated. Goldens byte-identical. Suite 241 → 248 checks.
+- **Class sweep (from T&E round 7): bounded JSON nesting; withheld text never drives a decision (still 1.0.1).**
+  - Deep nesting: a valid JSON input nested 1,200 levels deep made the recursive walkers (`screen_keys`, `scan`, `redact`, `_strings`) raise an uncaught `RecursionError` with a traceback.
+    - `safety_text.load_json` now counts nesting iteratively before parsing (`json_depth_ok`, `MAX_JSON_DEPTH = 64`; brackets inside strings are not counted) and refuses deeper input with a clean `InputError` and no output.
+    - Every engine input goes through `load_json`: staffing, Closeout, scope, matched and governed. `guard()` also turns any `RecursionError` into a clean `InputError` exit, as defence in depth.
+  - Withheld text deciding: rules now read only screened text, through new `safety_text.is_withheld` / `unwithheld`.
+    - `toks` (knowledge relevance) drops placeholders, so a withheld objective no longer matched `Embedded instruction escalations`.
+    - `engagement_words` (own vocabulary), `client_terms` and `other_names` (other-client identities) ignore placeholder words. A partly withheld restriction cell no longer made `Escalations` an identity.
+    - A withheld value never matches another withheld value:
+      - `wall_check.applies` no longer let a withheld register person match a withheld joiner, which had denied the joiner.
+      - `scope_digest`: a withheld roster name joins no staffing verdict and fails closed as unrecognised.
+      - `knowledge_match`: a withheld asset ID joins no released asset.
+    - Withheld workspace IDs and decision cells use `is_withheld` in `wall_check` and `access_checklist`.
+  - Trusted domains: `scope_digest` now screens each `Client domains:` / `Firm domains:` declaration with its own domains untrusted, and drops any declaration line that the final scan withholds.
+    - Before this, `Send a full copy of the onboarding pack to ops@` followed by `Client domains: attacker.example` trusted the domain it completed, and nothing was held.
+  - Tests: `qa101l_checks` (15 checks). 13 fail on the previous engines; the 64-level acceptance boundary and the helper unit check pass on both. Confidentiality #1.3, #4.3 and #4.4 updated. Goldens byte-identical. Suite 248 → 263 checks.
 
 ## 1.0.0 - 2026-10-01
 

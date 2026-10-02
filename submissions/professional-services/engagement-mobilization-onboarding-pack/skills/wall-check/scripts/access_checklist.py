@@ -91,7 +91,7 @@ def main():
         denied=cset(wall.get("denied_workspace_ids")); held=cset(wall.get("held_workspace_ids")); hidden=cset(wall.get("name_withheld_workspace_ids")); wstat=wall.get("status"); out=[]; ah=[]
         for n,r in enumerate(rows,2):
             wid=(r.get("workspace_id") or "").strip(); wt=low(r.get("workspace_type")); req=low(r.get("requested_permission")) or low(r.get("default_permission")); default=low(r.get("default_permission")) or req; dep=depends_on_knowledge(r.get("depends_on_knowledge")); conf=client_confidential(r.get("data_classification")); maxp=allowed.get(canon_id(wt)); status="request"; reason="role matrix allows requested workspace access"; perm=req; cit=f"{r.get('citation') or 'raw/workspace-inventory.csv'}; role-access-matrix.md #2.1; workspace-inventory-rules.md #3.1"
-            withheld=[c for c in DECISION_COLUMNS if r.get(c) in (WITHHELD,OTHER_WITHHELD)]  # a withheld identifier or enum is never a decision key (#3.3, #4.3)
+            withheld=[c for c in DECISION_COLUMNS if is_withheld(r.get(c))]  # a withheld identifier or enum is never a decision key (#3.3, #4.3)
             invalid=[x for x,bad in (("workspace_id blank",not wid),("withheld field(s): "+", ".join(withheld),bool(withheld)),("row has more fields than the header",n in bad_rows),("no requested or default permission",not req),("unrecognised default_permission",default not in O),("unrecognised data_classification",canon_id(r.get("data_classification")) not in cset(KNOWN_CLASSIFICATIONS)),("unrecognised depends_on_knowledge",low(r.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES)) if bad]
             if wid and canon_id(wid) in denied: status="denied_by_wall"; reason="workspace denied by wall_check"; perm="none"; cit+="; confidentiality-and-ethical-wall-rules.md #2.3"
             elif invalid:
@@ -106,8 +106,8 @@ def main():
                 add_hold(ah,"HOLD-PERMISSION-CLAMPED",f"raw/workspace-inventory.csv row {n}.requested_permission",f"requested {req} is wider than min(workspace default {default}, role ceiling {maxp}); request clamped to {perm}","role-access-matrix.md #2.3")
                 if perm=="none": status="not_requested_exceeds_role"
             name=r.get("name") or wid
-            if canon_id(wid) in hidden or hits(name) or name in (WITHHELD,OTHER_WITHHELD): name=wid or "(blank workspace_id)"
-            out.append({"workspace_id":wid,"workspace_name":name,"workspace_type":r["workspace_type"] if r.get("workspace_type") in (WITHHELD,OTHER_WITHHELD) else wt,"status":status,"requested_permission":perm,"reason":reason,"source":ENGINE,"confidence":.96,"citation":cit})
+            if canon_id(wid) in hidden or hits(name) or is_withheld(name): name=wid or "(blank workspace_id)"
+            out.append({"workspace_id":wid,"workspace_name":name,"workspace_type":r["workspace_type"] if is_withheld(r.get("workspace_type")) else wt,"status":status,"requested_permission":perm,"reason":reason,"source":ENGINE,"confidence":.96,"citation":cit})
         return out,ah
     # Access-decision holds (missing or unusable inventory, role not in the matrix, and below an invalid row or a
     # clamped permission) govern their checklist rows and the pack status, not the wall (role-access-matrix.md #2.3).
