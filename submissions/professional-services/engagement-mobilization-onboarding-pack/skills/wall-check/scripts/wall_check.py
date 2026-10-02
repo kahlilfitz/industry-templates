@@ -21,7 +21,7 @@ def applies(r,e,j):
     if c and c!=canon_person(e.get("client_name")): return False
     if m and m!=canon_id(e.get("matter_id")): return False
     return bool(c or m)
-def cin(v,xs): return canon_id(v) in {canon_id(x) for x in xs}  # ID membership by canonical form (#1.3)
+def cin(v,xs): return join_key(v) in {join_key(x) for x in xs}-{None}  # ID membership by canonical form; a blank key is a member of nothing (#1.3)
 def row_cite(r): return r.get("citation") or "raw/ethical-wall-register.csv"
 def topics(r): return [x.strip() for x in (r.get("briefing_topics") or "").split(";") if x.strip()]
 def names_other(text,terms,own,own_ids):
@@ -152,5 +152,5 @@ def main():
     p=load_json(a.matched,"matched input"); check_matched(p); reconcile_trusted(p,"matched")  # re-derived from the carried declaration lines, never the carried list (#1.4, #4.4)
     p=govern(p,a.wall_register,a.workspace_inventory)
     p.setdefault("provenance",{}).setdefault("engines",[]).append(f"wall_check/{VERSION}"); p["provenance"]["generated_at"]=ts
-    p=settle_trust(p); check_contract(p,"governed","governed"); dump_json(a.out,p,"governed output")  # the document written is held to the same contract (#1.3)
+    p=bind_withheld(settle_trust(p),"governed",ENGINE); check_contract(p,"governed","governed"); dump_json(a.out,p,"governed output")  # the document written is held to the same contract (#1.3)
 if __name__=="__main__": guard(main)

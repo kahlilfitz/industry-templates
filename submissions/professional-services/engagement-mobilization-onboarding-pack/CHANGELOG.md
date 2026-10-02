@@ -191,6 +191,29 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
   - Tests: `qa101q_checks` (19 checks); 15 fail on the previous engines. The four that pass on both are controls: the unmodified-scope control, forged identity (already fail-closed), the canonical-variant proposal and the hostile-path golden sweep.
     - Four existing fixtures were adjusted. QA-C4 moves its arbitrary nested `run_metadata` string from `demo_scenario`, now a contract slug, to a free-text field. QA-M3, QA-N1 (staffing) and QA-N2 give their injected recommendation the eligible slate record that rule 3.2 now requires.
   - Confidentiality #1.3, #1.4 and #4.4 and role-access-matrix #3.2 updated in all 6 copies. Goldens byte-identical; shared copies 40/40. Suite 311 → 330 checks.
+- **QA round 12: exclusions enforced in every person field, blank keys never match, duplicate staffing keys refused, placeholders bound to their holds (still 1.0.1).**
+  - Excluded person in `proposed_staffing` (class: an excluded subject in any derived section). `safety_text.check_links`, which runs at every stage's entry, refused a `staffing_exclusions` person only in `team_roster`. It now refuses, canonically, an excluded person named as the joiner, a roster member, the joiner's or any roster member's `point_of_contact`, or a `proposed_staffing[].candidate_name`. It also refuses an `excluded_items` asset or lesson that is still a candidate or a digest item. The message names the path, never the value.
+    - At the first stage, `scope_digest` drops a proposed candidate naming an excluded person and replaces a point of contact naming one with `Engagement manager`. Both raise the new `HOLD-EXCLUDED-PERSON-NAMED`, an engine template recognised downstream, with an escalation. Access rows name no person.
+  - A missing `candidate_id` matched another missing one (class: blank keys). New shared `safety_text.join_key` returns no key for a blank, missing, non-string, separators-only or withheld value, and None never equals anything.
+    - Used by `scope_digest.statuses`: both the slate record and the recommendation must state the ID; otherwise the recommendation is held with `HOLD-STAFFING-RECOMMENDATION-NOT-ELIGIBLE` and never proposed.
+    - Also used by `staffing_links`, `slate_verdict`, the `check_links` joiner and digest joins, `access_checklist.cset` and the denied, held and name-withheld lookups, and `wall_check.cin`.
+    - A joiner whose name is withheld has no key, so it must equal exactly one roster record field for field. A blank never joins.
+    - Sweep: the remaining `canon_id`/`canon_person` lookups (Closeout released-asset joins) already required a stated, non-withheld key. Wall applicability treats a blank register cell as "any", which is the conservative direction, so it is unchanged.
+  - Duplicate recommendation IDs were rendered twice (class: keyed staffing collections). `scope_digest.validate_staffing` now runs canonical duplicate-key checks (new `unique_records`) before screening or linking:
+    - bench by `candidate_id` and name;
+    - each scored, ranked or governed slate by `candidate_id` and name;
+    - `role_id` within `governed_roles`, `scored_roles` and `ranked_roles`;
+    - recommendations by `candidate_id` and by name across every governed role.
+    A repeat is a clean `InputError` naming both paths, with no output. The contract adds `x-uniqueKeys: ["candidate_name"]` to `proposed_staffing` (6 copies), so every downstream validator refuses a person proposed twice.
+  - A withheld marker was accepted because of an unrelated hold (class: placeholder binding). New shared `bind_withheld` and `unbound_withheld`: before writing, every engine binds each placeholder in its document to a hold of the same kind at its field.
+    - The kinds are instruction, other-client and briefing-topic. A hold binds the field at `<stage>.<path>`, a run at `[i]+[j]`, or a record at `(fields joined)`. If screening raised only a source hold, the engine adds a field hold; the new reason `WITHHELD_FIELD_REASON` is an engine template.
+    - `check_hold_evidence` refuses a placeholder that no same-kind hold binds, giving the count and kinds only.
+    - Scenario B's only hold writes no placeholder, so the goldens are unchanged.
+  - Tests: `qa101r_checks` (16 checks); 14 fail on the previous engines. The two that pass on both are the `join_key` unit check (shimmed for the old run) and the golden control.
+    - Five existing fixtures were adjusted. The extra-role fixture in `extra_checks` gets its own `role_id`. QA-M3, QA-N1 (staffing) and QA-N2 give the injected recommendation and its slate record a `candidate_id` on both sides.
+    - The briefing-topics check now counts the four raw-path topic holds plus the field hold that binds the governed restriction placeholder.
+    - QA-O1 is unchanged: an unheld placeholder still fails first with "matching hold is missing".
+  - Confidentiality #1.3, #1.4, #1.5 and #4.3 and role-access-matrix #3.2 updated in all 6 copies. Goldens byte-identical; shared copies 40/40. Suite 330 → 346 checks.
 
 ## 1.0.0 - 2026-10-01
 

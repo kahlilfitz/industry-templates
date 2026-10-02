@@ -38,6 +38,15 @@ def items(line):
     if not hits(line): return xs
     out=[WITHHELD if hits(x) else x for x in xs]
     return out if WITHHELD in out else [WITHHELD]
+def unique_records(recs,key,where,f=canon_id):
+    """Records keyed by `key` (canonical, #1.3) appear once: a repeat is refused before any screening or linking, never
+    resolved last-wins or rendered twice. `recs` is [(path, record)]; blank keys are not keys (join_key)."""
+    seen={}
+    for w,c in recs:
+        k=join_key(c.get(key),f) if isinstance(c,dict) else None
+        if k is None: continue
+        if k in seen: raise InputError(f"{w}.{key} repeats {seen[k]}.{key} (value not repeated); each record keyed by {key} appears once (confidentiality-and-ethical-wall-rules.md #1.3); fail closed")
+        seen[k]=w
 def validate_staffing(st):
     need(isinstance(st,dict),f"staffing adapter expected a JSON object, got {type(st).__name__}; fail closed")
     if st.get("contract_version")!=STAFF: raise InputError(f"staffing adapter expected contract {STAFF} at upstream/staffing.contract_version (supplied value not repeated); fail closed")
@@ -49,21 +58,40 @@ def validate_staffing(st):
     for e in field(st,"escalations","list",W,default=[]): esc_text(e,W+".escalations")
     # Every section and nested record any reader uses (statuses, staffing_links) is type-checked before screening or
     # linking: a malformed section is a clean InputError, never silently skipped (#1.3, #1.5).
-    for i,c in enumerate(field(st,"bench_candidates","objlist",W,nullable=True,default=[]) or []):
+    bench=field(st,"bench_candidates","objlist",W,nullable=True,default=[]) or []
+    for i,c in enumerate(bench):
         cw=f"{W}.bench_candidates[{i}]"; field(c,"candidate_id","str",cw,nullable=True); field(c,"name","str",cw,nullable=True)
+    # Every keyed staffing collection is checked for canonical duplicates before linking (#1.3): the bench by
+    # candidate_id and name, each role's slate or scores by candidate_id and name, roles by role_id, and the
+    # recommendations by candidate_id and name across every governed role (one person is proposed once).
+    unique_records([(f"{W}.bench_candidates[{i}]",c) for i,c in enumerate(bench)],"candidate_id",W)
+    unique_records([(f"{W}.bench_candidates[{i}]",c) for i,c in enumerate(bench)],"name",W,canon_person)
     for sec,key,nk in (("scored_roles","candidate_scores","candidate_name"),("ranked_roles","candidate_slate","candidate_name")):
-        for i,r in enumerate(field(st,sec,"objlist",W,nullable=True,default=[]) or []):
-            w=f"{W}.{sec}[{i}]"; field(r,"role_title","str",w,nullable=True)
-            for j,c in enumerate(field(r,key,"objlist",w,nullable=True,default=[]) or []):
+        rs=field(st,sec,"objlist",W,nullable=True,default=[]) or []
+        for i,r in enumerate(rs):
+            w=f"{W}.{sec}[{i}]"; field(r,"role_title","str",w,nullable=True); field(r,"role_id","str",w,nullable=True)
+            cs=field(r,key,"objlist",w,nullable=True,default=[]) or []
+            for j,c in enumerate(cs):
                 cw=f"{w}.{key}[{j}]"; field(c,"candidate_id","str",cw,nullable=True); field(c,nk,"str",cw,nullable=True)
+            unique_records([(f"{w}.{key}[{j}]",c) for j,c in enumerate(cs)],"candidate_id",w)
+            unique_records([(f"{w}.{key}[{j}]",c) for j,c in enumerate(cs)],nk,w,canon_person)
+        unique_records([(f"{W}.{sec}[{i}]",r) for i,r in enumerate(rs)],"role_id",W)
+    recs=[]
     for i,r in enumerate(st["governed_roles"]):
-        w=f"{W}.governed_roles[{i}]"; field(r,"role_title","str",w,nullable=True)
+        w=f"{W}.governed_roles[{i}]"; field(r,"role_title","str",w,nullable=True); field(r,"role_id","str",w,nullable=True)
         for key in ("candidate_slate","recommended_candidates"):
-            for j,c in enumerate(field(r,key,"objlist",w,default=[])):
+            cs=field(r,key,"objlist",w,default=[])
+            if key=="candidate_slate":
+                unique_records([(f"{w}.{key}[{j}]",c) for j,c in enumerate(cs)],"candidate_id",w)
+                unique_records([(f"{w}.{key}[{j}]",c) for j,c in enumerate(cs)],"candidate_name",w,canon_person)
+            else: recs+=[(f"{w}.{key}[{j}]",c) for j,c in enumerate(cs)]
+            for j,c in enumerate(cs):
                 cw=f"{w}.{key}[{j}]"; field(c,"candidate_id","str",cw,nullable=True); field(c,"candidate_name","str",cw,nullable=True); field(c,"confidence","num01",cw); field(c,"fit_score","num",cw,nullable=True); field(c,"citation","str",cw,nullable=True)
                 el=field(c,"eligibility","obj",cw,nullable=True)
                 if el:
                     for k in ("verdict","recommendation_status","blocking_rule","citation"): field(el,k,"str",cw+".eligibility",nullable=True)
+    unique_records([(f"{W}.governed_roles[{i}]",r) for i,r in enumerate(st["governed_roles"])],"role_id",W)
+    unique_records(recs,"candidate_id",W); unique_records(recs,"candidate_name",W,canon_person)
 def staffing_links(st):
     """Staffing records name a candidate by candidate_id in several places (bench, scored, ranked and governed slates,
     recommendations). A candidate_id whose records state different people (canonical names, #1.3) links one person's
@@ -72,7 +100,9 @@ def staffing_links(st):
     seen={}; first={}
     def add(path,c,nk):
         if not isinstance(c,dict) or not stated(c.get("candidate_id")) or not stated(c.get(nk)): return  # withheld text is already held (#4.3)
-        k=canon_id(c["candidate_id"]); seen.setdefault(k,set()).add(canon_person(c[nk])); first.setdefault(k,[]).append(path)
+        k=join_key(c["candidate_id"])
+        if k is None: return  # a blank key links nothing (#1.3)
+        seen.setdefault(k,set()).add(canon_person(c[nk])); first.setdefault(k,[]).append(path)
     W="upstream/staffing"
     for i,c in enumerate(st.get("bench_candidates") or []): add(f"{W}.bench_candidates[{i}].name",c,"name")
     for sec,key in (("scored_roles","candidate_scores"),("ranked_roles","candidate_slate"),("governed_roles","candidate_slate"),("governed_roles","recommended_candidates")):
@@ -85,11 +115,12 @@ def slate_verdict(c,bad):
     el=c.get("eligibility") or {}; v=el.get("verdict")
     v=canon_text(v) if isinstance(v,str) else None
     if v not in VERDICTS: v="unrecognised"  # blank, null or unknown verdicts fail closed (#3.4)
-    if canon_id(c.get("candidate_id")) in bad: v="unrecognised"  # a candidate_id naming two people is not evidence (#1.5)
+    if join_key(c.get("candidate_id")) in bad: v="unrecognised"  # a candidate_id naming two people is not evidence (#1.5)
     return v
 def statuses(st,bad=frozenset()):
     """(verdicts by canonical person, proposed staffing, paths of recommendations not proposed). A recommendation is
-    proposed only when the slate holds a record for the same candidate (canonical candidate_id AND name, #1.3) and the
+    proposed only when the slate holds a record for the same candidate (canonical candidate_id AND name, #1.3; both
+    sides must state the ID - a blank or missing key never matches anything, including another blank key) and the
     most restrictive verdict across those records and any other slate record for the same person is eligible.
     Blocked, conflicted, ineligible, needs-review, unrecognised and unmatched recommendations are never proposed and
     are held (role-access-matrix.md #3.2-#3.4; confidentiality-and-ethical-wall-rules.md #1.5)."""
@@ -100,15 +131,16 @@ def statuses(st,bad=frozenset()):
             if not (c.get("candidate_name") or "").strip(): continue
             v=slate_verdict(c,bad)
             if is_withheld(c["candidate_name"]): continue  # a withheld name joins no roster row (confidentiality-and-ethical-wall-rules.md #4.3)
-            slate.append((canon_id(c.get("candidate_id")),canon_person(c["candidate_name"]),v))
+            slate.append((join_key(c.get("candidate_id")),canon_person(c["candidate_name"]),v))
             s.setdefault(canon_person(c["candidate_name"]),[]).append({"role_title":rt,"verdict":v,"blocking_rule":(c.get("eligibility") or {}).get("blocking_rule"),"confidence":c.get("confidence",.9),"citation":(c.get("eligibility") or {}).get("citation") or c.get("citation") or "staffing"})
     for i,r in enumerate(st["governed_roles"]):
         rt=r.get("role_title") if (r.get("role_title") or "").strip() else "role"
         for j,c in enumerate(r.get("recommended_candidates",[])):
-            if canon_id(c.get("candidate_id")) in bad: continue  # never propose through an ID that names another person; held as a link mismatch (#1.5)
+            if join_key(c.get("candidate_id")) in bad: continue  # never propose through an ID that names another person; held as a link mismatch (#1.5)
             nm=c.get("candidate_name")
             if not (nm or "").strip() or is_withheld(nm) or is_withheld(c.get("candidate_id")): continue  # blank names nobody; withheld text is already held (#4.3)
-            same=[v for k,n,v in slate if k==canon_id(c.get("candidate_id")) and n==canon_person(nm)]
+            rk=join_key(c.get("candidate_id"))  # None never equals a slate key: blank IDs match nothing (#1.3)
+            same=[v for k,n,v in slate if rk is not None and k==rk and n==canon_person(nm)]
             v=max(same+[v for k,n,v in slate if n==canon_person(nm)],key=lambda x:RANK.get(x,2.5)) if same else None
             if v!="eligible": notp.append(f"upstream/staffing.governed_roles[{i}].recommended_candidates[{j}]"); continue
             p.append({"candidate_name":nm,"role_title":rt,"fit_score":c.get("fit_score"),"assignment_status":"proposed_not_assigned","source":"adapter:staffing-slate","confidence":c.get("confidence",.9),"citation":c.get("citation") or "staffing recommended_candidates"})
@@ -198,6 +230,15 @@ def main():
             joiners.append(name)
             if not joiner: joiner=dict(item)
     prop=[p for p in prop if canon_person(p["candidate_name"]) not in names]
+    # An excluded subject is named in no derived section (#1.4, #1.5; role-access-matrix.md #3.2): a proposed candidate
+    # or a point of contact naming an excluded roster member is dropped and held, name not repeated.
+    xs={join_key(x["person"],canon_person) for x in excl}-{None}
+    for p in [p for p in prop if join_key(p["candidate_name"],canon_person) in xs]: prop.remove(p); holds.append(excluded_hold("scope.proposed_staffing",ENGINE))
+    for n,r in enumerate(roster):
+        if join_key(r.get("point_of_contact"),canon_person) in xs:
+            r["point_of_contact"]="Engagement manager"; holds.append(excluded_hold(f"raw/confirmed-roster.csv team_roster[{n}].point_of_contact",ENGINE))
+            if joiner and canon_person(joiner.get("person"))==canon_person(r.get("person")): joiner["point_of_contact"]="Engagement manager"
+    if any(h.get("hold_id")==EXCLUDED_HOLD_ID for h in holds): esc.append("A derived section named a person excluded from this engagement; the name was dropped and held for the engagement manager (role-access-matrix.md #3.2)")
     exclusions=items(fld(sow,"Exclusions")); pt=canon_text(pursuit)
     for e in exclusions:
         if e!=WITHHELD and canon_text(e).split(" - ")[0] in pt and re.search(r"\b(?:include|included|request|requested|add|added|reuse)\b",pt): esc.append(f"SOW exclusion controls over pursuit conflict: '{e}' (confidentiality-and-ethical-wall-rules.md #1.2)"); break
@@ -242,5 +283,6 @@ def main():
         if oh: holds=dedup_holds(holds+oh); body["escalations"].append(other_escalation(len(oh)))
     body=settle_trust(body)  # a declaration line screening withheld backs no trusted domain (#4.4)
     out={"contract_version":CONTRACT_VERSION,"run_metadata":{"generated_at":ts,"demo_scenario":a.scenario},**body,"holds":holds,"provenance":{"engines":[f"scope_digest/{VERSION}"],"generated_at":ts,"sources":["raw/sow-extract.md","raw/engagement-letter-extract.md","raw/pursuit-record.md","raw/confirmed-roster.csv","upstream/staffing"]}}
+    out=bind_withheld(out,"scope",ENGINE)  # every placeholder bound to a hold at its field (#1.4, #4.3)
     check_contract(out,"scope","scope"); dump_json(a.out,out,"scope output")  # the document written is held to the contract (#1.3)
 if __name__=="__main__": guard(main)

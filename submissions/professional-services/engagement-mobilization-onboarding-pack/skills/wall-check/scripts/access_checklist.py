@@ -11,7 +11,7 @@ WALL_STATUSES={"clear","denied","hold"}  # confidentiality-and-ethical-wall-rule
 INVENTORY_COLUMNS=("workspace_id","workspace_type","default_permission","depends_on_knowledge","data_classification")  # workspace-inventory-rules.md #1.3
 KNOWN_CLASSIFICATIONS={"client_confidential","confidential","restricted","internal","public"}  # workspace-inventory-rules.md #2.3
 def low(v): return canon_text(v)  # enums and roles: the one canonical comparison form (confidentiality-and-ethical-wall-rules.md #1.3)
-def cset(xs): return {canon_id(x) for x in xs or []}  # workspace IDs, types and classifications compare canonically (#1.3)
+def cset(xs): return {join_key(x) for x in xs or []}-{None}  # workspace IDs, types and classifications compare canonically; a blank key is in no set (#1.3)
 def safe(x): return WITHHELD if hits(x) else x  # confidentiality-and-ethical-wall-rules.md #4.3
 def strs(xs): return [x for x in (xs or []) if isinstance(x,str)]  # contract-valid arrays render without a TypeError (#1.3)
 DECISION_COLUMNS=("workspace_id","workspace_type","default_permission","requested_permission","depends_on_knowledge","data_classification")  # workspace-inventory-rules.md #1.3
@@ -96,11 +96,11 @@ def main():
             wid=(r.get("workspace_id") or "").strip(); wt=low(r.get("workspace_type")); req=low(r.get("requested_permission")) or low(r.get("default_permission")); default=low(r.get("default_permission")) or req; dep=depends_on_knowledge(r.get("depends_on_knowledge")); conf=client_confidential(r.get("data_classification")); maxp=allowed.get(canon_id(wt)); status="request"; reason="role matrix allows requested workspace access"; perm=req; cit=f"{r.get('citation') or 'raw/workspace-inventory.csv'}; role-access-matrix.md #2.1; workspace-inventory-rules.md #3.1"
             withheld=[c for c in DECISION_COLUMNS if is_withheld(r.get(c))]  # a withheld identifier or enum is never a decision key (#3.3, #4.3)
             invalid=[x for x,bad in (("workspace_id blank",not wid),("withheld field(s): "+", ".join(withheld),bool(withheld)),("row has more fields than the header",n in bad_rows),("no requested or default permission",not req),("unrecognised default_permission",default not in O),("unrecognised data_classification",canon_id(r.get("data_classification")) not in cset(KNOWN_CLASSIFICATIONS)),("unrecognised depends_on_knowledge",low(r.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES)) if bad]
-            if wid and canon_id(wid) in denied: status="denied_by_wall"; reason="workspace denied by wall_check"; perm="none"; cit+="; confidentiality-and-ethical-wall-rules.md #2.3"
+            if join_key(wid) in denied: status="denied_by_wall"; reason="workspace denied by wall_check"; perm="none"; cit+="; confidentiality-and-ethical-wall-rules.md #2.3"
             elif invalid:
                 status="not_requested_invalid_row"; reason="invalid inventory row ("+"; ".join(invalid)+"); nothing requested"; perm="none"; cit+="; workspace-inventory-rules.md #1.3,#2.3"
                 add_hold(ah,"HOLD-INVALID-WORKSPACE-ROW",f"raw/workspace-inventory.csv row {n}","invalid workspace inventory row: "+"; ".join(invalid),"workspace-inventory-rules.md #1.3,#2.3")
-            elif canon_id(wid) in held or (wstat in {"hold","denied"} and (dep or conf)): status="hold_pending_wall_review"; reason="prior-knowledge dependent access held until wall status is clear" if dep else "client-confidential workspace held pending wall review"; perm="none"; cit+="; workspace-inventory-rules.md #2.1"
+            elif join_key(wid) in held or (wstat in {"hold","denied"} and (dep or conf)): status="hold_pending_wall_review"; reason="prior-knowledge dependent access held until wall status is clear" if dep else "client-confidential workspace held pending wall review"; perm="none"; cit+="; workspace-inventory-rules.md #2.1"
             elif not maxp: status="not_requested_role_not_allowed"; reason="role matrix does not allow this workspace type"; perm="none"; cit+="; role-access-matrix.md #1"
             elif req not in O or O[req]>=O["admin"]: status="not_requested_exceeds_role"; reason=f"requested {req} exceeds role ceiling {maxp}; admin rights are never requested" if req in O else f"unrecognised requested permission exceeds role ceiling {maxp}"; perm="none"; cit+="; role-access-matrix.md #2.1,#2.2; workspace-inventory-rules.md #3.2"
             elif O[req]>min(O[default],O[maxp]):
@@ -109,7 +109,7 @@ def main():
                 add_hold(ah,"HOLD-PERMISSION-CLAMPED",f"raw/workspace-inventory.csv row {n}.requested_permission",f"requested {req} is wider than min(workspace default {default}, role ceiling {maxp}); request clamped to {perm}","role-access-matrix.md #2.3")
                 if perm=="none": status="not_requested_exceeds_role"
             name=r.get("name") if (r.get("name") or "").strip() else wid
-            if not (name or "").strip() or canon_id(wid) in hidden or hits(name) or is_withheld(name): name=wid or "(blank workspace_id)"  # never rendered blank (#1.3)
+            if not (name or "").strip() or join_key(wid) in hidden or hits(name) or is_withheld(name): name=wid or "(blank workspace_id)"  # never rendered blank (#1.3)
             out.append({"workspace_id":wid,"workspace_name":name,"workspace_type":r["workspace_type"] if is_withheld(r.get("workspace_type")) else wt,"status":status,"requested_permission":perm,"reason":reason,"source":ENGINE,"confidence":.96,"citation":cit})
         return out,ah
     # Access-decision holds (missing or unusable inventory, role not in the matrix, and below an invalid row or a
@@ -126,5 +126,5 @@ def main():
     reasons=(["open_holds"] if holds else [])+(["wall_status_hold"] if wstat=="hold" else [])+(["workspaces_pending_wall_review"] if pend else [])  # workspace-inventory-rules.md #3.3
     if pend: esc.append(f"{pend} workspace(s) held pending wall review; the pack stays on hold until Risk/Conflicts resolve the wall decision (workspace-inventory-rules.md #3.3)")
     p["access_checklist"]=out; p["holds"]=holds; p["mobilization_pack"]={"status":"on_hold_internal_only" if reasons else "draft_internal_only","hold_reasons":reasons,"label":"DRAFT - for internal review only. Do not send to the client or provision access.","sections":["client_context","scope","prior_knowledge","team_roster","access_checklist","wall_briefing","first_week_plan"],"source":ENGINE,"confidence":.94,"citation":"workspace-inventory-rules.md #3.1,#3.3; confidentiality-and-ethical-wall-rules.md #3.1"}; p.setdefault("provenance",{}).setdefault("engines",[]).append(f"access_checklist/{VERSION}"); p["provenance"]["generated_at"]=ts
-    p=settle_trust(p); check_contract(p,"access","access"); write_atomic([(a.out,json_bytes(a.out,p,"access checklist output"),"access checklist output"),(a.pack_out,text_bytes(a.pack_out,pack(p),"pack output"),"pack output")])  # both serialised first, then written atomically together  # the document written is held to the contract (#1.3)
+    p=bind_withheld(settle_trust(p),"access",ENGINE); check_contract(p,"access","access"); write_atomic([(a.out,json_bytes(a.out,p,"access checklist output"),"access checklist output"),(a.pack_out,text_bytes(a.pack_out,pack(p),"pack output"),"pack output")])  # both serialised first, then written atomically together  # the document written is held to the contract (#1.3)
 if __name__=="__main__": guard(main)

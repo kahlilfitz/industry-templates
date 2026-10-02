@@ -103,5 +103,5 @@ def main():
     status="ready" if inc and not holds else "hold" if holds else "empty"
     if not inc and not holds: s.setdefault("escalations",[]).append("No released, permissioned prior-knowledge records matched the engagement (knowledge-reuse-rules.md #2.1,#2.2,#3.1)")
     s["prior_knowledge_candidates"]=inc; s["knowledge_digest"]={"status":status,"items":inc,"excluded_items":exc,"source":ENGINE,"confidence":.92 if inc else .7,"citation":"knowledge-reuse-rules.md #1.1-#3.2"}; s["holds"]=holds; s.setdefault("provenance",{}).setdefault("engines",[]).append(f"knowledge_match/{VERSION}"); s["provenance"]["generated_at"]=ts
-    s=settle_trust(s); check_contract(s,"matched","matched"); dump_json(a.out,s,"matched output")  # the document written is held to the same contract (#1.3)
+    s=bind_withheld(settle_trust(s),"matched",ENGINE); check_contract(s,"matched","matched"); dump_json(a.out,s,"matched output")  # the document written is held to the same contract (#1.3)
 if __name__=="__main__": guard(main)

@@ -355,6 +355,7 @@ def settle_trust(doc):
     return doc
 OVERSIZE_REASON = "oversize: too long to screen for embedded instructions; not scanned, held for human review"
 WITHHELD = "[withheld - source text held for embedded-instruction review, see Escalations and holds]"  # #4.3
+WITHHELD_FIELD_REASON = "field withheld for embedded-instruction review; the flagged source text is held (not repeated)"  # bind_withheld (#4.3)
 def _families(found):
     out = []
     for h in found:
@@ -706,7 +707,7 @@ def other_hold(path, text, engine):
 # hex digests, counts, family names and permission enums); text that interpolates supplied values (column names,
 # status values, roles) is screened like any other string. Paths are always screened (#3.3, #4.3).
 ENGINE_SOURCES = {"engine:safety_text", "engine:scope_digest", "engine:knowledge_match", "engine:wall_check", "engine:access_checklist"}
-ENGINE_HOLD_ID_RE = re.compile(r"HOLD-(?:(?:OTHER-CLIENT|BRIEFING-TOPIC|SCREENED)-)?[0-9a-f]{12}|HOLD-(?:DOMAIN-NOT-TRUSTED|STAFFING-ENGAGEMENT-MISMATCH|UNKNOWN-ONBOARDING-STATUS|UNRECOGNISED-STAFFING-VERDICT|INVALID-WORKSPACE-ROW|MALFORMED-WORKSPACE-INVENTORY|MISSING-WORKSPACE-INVENTORY|PERMISSION-CLAMPED|ROLE-NOT-IN-MATRIX|UNKNOWN-WALL-DECISION|MALFORMED-WALL-REGISTER|MISSING-WALL-REGISTER|NO-JOINER|UNKNOWN-WALL-STATUS|LINKED-RECORD-MISMATCH|STAFFING-RECOMMENDATION-NOT-ELIGIBLE)")
+ENGINE_HOLD_ID_RE = re.compile(r"HOLD-(?:(?:OTHER-CLIENT|BRIEFING-TOPIC|SCREENED)-)?[0-9a-f]{12}|HOLD-(?:DOMAIN-NOT-TRUSTED|STAFFING-ENGAGEMENT-MISMATCH|UNKNOWN-ONBOARDING-STATUS|UNRECOGNISED-STAFFING-VERDICT|INVALID-WORKSPACE-ROW|MALFORMED-WORKSPACE-INVENTORY|MISSING-WORKSPACE-INVENTORY|PERMISSION-CLAMPED|ROLE-NOT-IN-MATRIX|UNKNOWN-WALL-DECISION|MALFORMED-WALL-REGISTER|MISSING-WALL-REGISTER|NO-JOINER|UNKNOWN-WALL-STATUS|LINKED-RECORD-MISMATCH|STAFFING-RECOMMENDATION-NOT-ELIGIBLE|EXCLUDED-PERSON-NAMED)")
 OTHER_HOLD_REASON = "text names another client or matter (name not repeated); withheld from every output"
 # ---------------------------------------------------------------- linked records belong to the same subject (#1.5)
 # A record reached through another record's ID (a released-asset clearance through a reusable asset's asset_id, a
@@ -723,10 +724,18 @@ REC_REASON = "a staffing recommendation is not backed by an eligible slate verdi
 REC_CITATION = "role-access-matrix.md #3.2"
 def rec_hold(path, engine): return {"hold_id": REC_HOLD_ID, "path": path, "reason": REC_REASON, "source": engine, "confidence": 0.98, "citation": REC_CITATION}
 def rec_escalation(n): return f"{n} staffing recommendation(s) are not backed by an eligible slate verdict for the same candidate; not proposed - confirm with the engagement manager (role-access-matrix.md #3.2)"
+EXCLUDED_HOLD_ID = "HOLD-EXCLUDED-PERSON-NAMED"
+EXCLUDED_REASON = "a derived section names a person Scenario 02 excludes from this engagement (name not repeated); not used"
+def excluded_hold(path, engine): return {"hold_id": EXCLUDED_HOLD_ID, "path": path, "reason": EXCLUDED_REASON, "source": engine, "confidence": 0.98, "citation": "role-access-matrix.md #3.2; confidentiality-and-ethical-wall-rules.md #1.5"}
 def stated(v):
     """A subject value both records must agree on: a non-blank string that is not withheld text (withheld text is
     already held and never decides anything, #4.3)."""
     return isinstance(v, str) and bool(canon_text(v)) and not is_withheld(v)
+def join_key(v, f=canon_id):
+    """The key a record joins on, or None. A blank, missing, non-string or withheld key is not a key: it never matches
+    anything, including another blank key (canon_id(None) == canon_id("") == "" must never join two records) (#1.3, #1.5)."""
+    k = f(v) if stated(v) else ""
+    return k or None
 def subjects_differ(a, b, fields):
     """True when linked records a and b both state a subject field in `fields` ({name: canonical function}) and the
     canonical values differ (#1.5). A field only one record states is not a conflict."""
@@ -743,7 +752,8 @@ ENGINE_REASONS = {OVERSIZE_REASON, OTHER_HOLD_REASON,
     "no wall register row clears this joiner for this client or matter",
     "unknown wall status value (not repeated); treated as hold",
     "ethical-wall register " + DUPLICATE_HEADER_REASON, "workspace inventory " + DUPLICATE_HEADER_REASON + "; no access is requested",
-    "workspace inventory workspace_id " + DUPLICATE_ID_REASON + "; no access is requested", LINK_REASON, REC_REASON}
+    "workspace inventory workspace_id " + DUPLICATE_ID_REASON + "; no access is requested", LINK_REASON, REC_REASON,
+    WITHHELD_FIELD_REASON, EXCLUDED_REASON}
 _PERM = r"(?:none|viewer|member|contributor|admin|owner)"
 ENGINE_REASON_RES = [re.compile(r"embedded_instruction:[a-z_]+(?:,[a-z_]+)*"),
     re.compile(r"\d+ declared client/firm domain\(s\) are malformed or consumer/file-sharing domains and are not trusted \(not repeated\)"),
@@ -870,15 +880,30 @@ def check_links(doc, where):
     roster = [r for r in doc.get("team_roster") or [] if isinstance(r, dict)]
     j = doc.get("joiner") if isinstance(doc.get("joiner"), dict) else {}
     if j:
-        same = [r for r in roster if canon_person(r.get("person")) == canon_person(j.get("person"))]
+        # Joined by the stated canonical person. A joiner whose name is withheld has no key (join_key): it must be,
+        # field for field, exactly one roster record (the engine copies the record whole); a blank never joins.
+        pk = join_key(j.get("person"), canon_person)
+        same = [r for r in roster if join_key(r.get("person"), canon_person) == pk] if pk is not None else [r for r in roster if r == j and is_withheld(j.get("person"))]
         need(len(same) == 1 and not subjects_differ(j, same[0], JOINER_LINK) and all(stated(same[0].get(k)) == stated(j.get(k)) for k in JOINER_LINK), f"{where}.joiner is not the team_roster member it names (person, role, assignment and onboarding status must match one roster record; values not repeated); intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #1.5)")
     kd = doc.get("knowledge_digest") if isinstance(doc.get("knowledge_digest"), dict) else {}
-    cands = {canon_id(c.get("knowledge_id")): c for c in doc.get("prior_knowledge_candidates") or [] if isinstance(c, dict)}
+    cands = {join_key(c.get("knowledge_id")): c for c in doc.get("prior_knowledge_candidates") or [] if isinstance(c, dict) and join_key(c.get("knowledge_id")) is not None}
     for n, it in enumerate(kd.get("items") or []):
-        c = cands.get(canon_id(it.get("knowledge_id"))) if isinstance(it, dict) else None
+        c = cands.get(join_key(it.get("knowledge_id"))) if isinstance(it, dict) and join_key(it.get("knowledge_id")) is not None else None
         if isinstance(it, dict): need(c is not None and not subjects_differ(it, c, ITEM_LINK) and all(stated(c.get(k)) == stated(it.get(k)) for k in ITEM_LINK), f"{where}.knowledge_digest.items[{n}] is not the prior_knowledge_candidates record with its knowledge_id (values not repeated); intermediate state is inconsistent; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #1.5)")
-    ex = {canon_person(x.get("person")) for x in doc.get("staffing_exclusions") or [] if isinstance(x, dict) and stated(x.get("person"))}
-    need(not any(canon_person(r.get("person")) in ex for r in roster if stated(r.get("person"))), f"{where}.team_roster names a person who is also in staffing_exclusions (name not repeated); intermediate state is inconsistent; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #1.5)")
+    # A subject the source excludes is named in no derived section (#1.4, #1.5; role-access-matrix.md #3.2): a person
+    # in staffing_exclusions is not the joiner, a roster member, a point of contact or a proposed candidate, and an
+    # excluded knowledge asset or lesson is neither a candidate nor a digest item. The engines never write such a
+    # document, so one means edited state: refused, names not repeated.
+    ex = {join_key(x.get("person"), canon_person) for x in doc.get("staffing_exclusions") or [] if isinstance(x, dict)} - {None}
+    named = [(f"{where}.joiner.{k}", j.get(k)) for k in ("person", "point_of_contact")]
+    named += [(f"{where}.team_roster[{n}].{k}", r.get(k)) for n, r in enumerate(roster) for k in ("person", "point_of_contact")]
+    named += [(f"{where}.proposed_staffing[{n}].candidate_name", x.get("candidate_name")) for n, x in enumerate(doc.get("proposed_staffing") or []) if isinstance(x, dict)]
+    bad = [w for w, v in named if join_key(v, canon_person) in ex]
+    need(not bad, f"{bad[0] if bad else where} names a person who is also in staffing_exclusions (name not repeated); an excluded subject is named in no derived section; intermediate state is inconsistent; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #1.5; role-access-matrix.md #3.2)")
+    xi = {join_key(x.get(k)) for x in kd.get("excluded_items") or [] if isinstance(x, dict) for k in ("asset_id", "lesson_id")} - {None}
+    used = [(f"{where}.prior_knowledge_candidates[{n}]", c) for n, c in enumerate(doc.get("prior_knowledge_candidates") or [])] + [(f"{where}.knowledge_digest.items[{n}]", c) for n, c in enumerate(kd.get("items") or [])]
+    badk = [w for w, c in used if isinstance(c, dict) and join_key(c.get("knowledge_id")) in xi]
+    need(not badk, f"{badk[0] if badk else where} is a knowledge record the digest excludes (ID not repeated); an excluded subject is named in no derived section; intermediate state is inconsistent; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #1.5)")
 def check_hold_evidence(doc, where):
     check_links(doc, where)
     holds = [h for h in doc.get("holds") or [] if isinstance(h, dict)]
@@ -903,6 +928,9 @@ def check_hold_evidence(doc, where):
     checks += [(any(r.fullmatch(e) for e in esc), hid in ids, hid.lower()) for r, hid in _ESC_ID]
     missing = [what for ev, ok, what in checks if ev and not ok]
     need(not missing, f"{where} carries evidence of an earlier hold ({'; '.join(missing)}) but the matching hold is missing; intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
+    # Each placeholder is bound to a same-kind hold at its own field (bind_withheld), not to any hold of the document.
+    ub = unbound_withheld(doc)
+    need(not ub, f"{where} carries {len(ub)} withheld placeholder(s) ({', '.join(sorted({k for _, k in ub}))}) with no hold of the same kind at that field or its source run (field paths not repeated); an unrelated hold does not account for a placeholder; intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #4.3)")
 def knowledge_ids(items): return [x.get("knowledge_id") if isinstance(x, dict) else None for x in items or []]
 def check_digest(doc, where, wall_status=None):
     """The digest is gating state: re-derive its status from the holds, the items and the wall status and refuse a
@@ -926,6 +954,57 @@ TOPIC_WITHHELD = "[briefing topic withheld - it names another client or matter, 
 # withheld value (two different flagged names both read "[withheld ...]").
 PLACEHOLDERS = _cv.ENGINE_PLACEHOLDERS
 assert PLACEHOLDERS == (WITHHELD, OTHER_WITHHELD, TOPIC_WITHHELD, WITHHELD_KEY)
+# Every withheld placeholder is bound to a hold for THAT field (#1.4, #4.3). An engine binds each placeholder in the
+# document it writes (bind_withheld): one of its holds of the same kind must name the field (`<stage>.<field path>`, a
+# run `<stage>.<list>[i]+[j]`, or a record `<stage>.<record> (fields joined)`); otherwise it adds a field hold. Every
+# later stage refuses a placeholder no same-kind hold binds (check_hold_evidence), so a placeholder can never ride on
+# an unrelated hold. Paths stay valid across stages because each stage binds the paths of the document it writes.
+BIND_STAGES = ("scope", "matched", "governed", "access")
+_PH_KINDS = ((WITHHELD, "instruction"), (OTHER_WITHHELD, "other-client"), (TOPIC_WITHHELD, "briefing-topic"))
+_RUN_RE = re.compile(r"(.*?)((?:\[\d+\])(?:\+\[\d+\])+)")
+def _placeholders(v, path=""):
+    if isinstance(v, dict):
+        for k, x in v.items(): yield from _placeholders(x, f"{path}.{k}" if path else str(k))
+    elif isinstance(v, list):
+        for i, x in enumerate(v): yield from _placeholders(x, f"{path}[{i}]")
+    elif isinstance(v, str):
+        for ph, kind in _PH_KINDS:
+            if ph in v: yield path, kind
+def _hold_kind(h):
+    hid, r = str(h.get("hold_id") or ""), str(h.get("reason") or "")
+    if hid.startswith("HOLD-OTHER-CLIENT-"): return "other-client"
+    if hid.startswith("HOLD-BRIEFING-TOPIC-"): return "briefing-topic"
+    if r == OVERSIZE_REASON or r == WITHHELD_FIELD_REASON or r.startswith("embedded_instruction:"): return "instruction"
+    return None
+def _bound(path):
+    """(exact fields, record prefixes) a hold path binds; only document paths of a pipeline stage bind anything."""
+    if not isinstance(path, str): return set(), set()
+    st = next((x for x in BIND_STAGES if path.startswith(x + ".")), None)
+    if st is None: return set(), set()
+    rest = path[len(st) + 1:]
+    if rest.endswith(" (fields joined)"): return set(), {rest[:-len(" (fields joined)")] + "."}
+    m = _RUN_RE.fullmatch(rest)
+    if m: return {m.group(1) + ix for ix in re.findall(r"\[\d+\]", m.group(2))}, set()
+    return {rest}, set()
+def unbound_withheld(doc):
+    """(field path, kind) for every placeholder in the document body that no hold of the same kind binds."""
+    ex, pre = {}, {}
+    for h in doc.get("holds") or []:
+        k = _hold_kind(h) if isinstance(h, dict) else None
+        if k:
+            e, p = _bound(h.get("path")); ex.setdefault(k, set()).update(e); pre.setdefault(k, set()).update(p)
+    return [(f, k) for f, k in _placeholders({x: v for x, v in doc.items() if x != "holds"})
+            if f not in ex.get(k, ()) and not any(f.startswith(p) for p in pre.get(k, ()))]
+def bind_withheld(doc, stage, engine):
+    """Before an engine writes its document: every placeholder not yet bound gets a hold of its kind at
+    `<stage>.<field path>` (#1.4, #4.3). Returns the document."""
+    for f, k in unbound_withheld(doc):
+        path = f"{stage}.{f}"; d = hashlib.sha256(("bind:" + path).encode()).hexdigest()[:12]
+        if k == "other-client": h = other_hold(path, "bind:" + path, engine)
+        elif k == "briefing-topic": h = {"hold_id": "HOLD-BRIEFING-TOPIC-" + d, "path": path, "reason": "briefing topic names another client, matter or identifying detail; withheld from the pack", "source": engine, "confidence": 0.99, "citation": "confidentiality-and-ethical-wall-rules.md #3.2"}
+        else: h = {"hold_id": "HOLD-" + d, "path": path, "reason": WITHHELD_FIELD_REASON, "source": engine, "confidence": 0.99, "citation": "confidentiality-and-ethical-wall-rules.md #4.3"}
+        doc.setdefault("holds", []).append(h)
+    return doc
 def is_withheld(v):
     """True when v is or contains one of the engine's exact placeholders: the one predicate every rule uses to skip
     withheld text. Marker-shaped text the engine did not write is never withheld text: it is held as a supplied
