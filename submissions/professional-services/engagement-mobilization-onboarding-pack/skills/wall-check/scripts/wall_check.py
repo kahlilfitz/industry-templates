@@ -42,7 +42,7 @@ def check_matched(p):
     # Gating state is reconciled, never trusted: the digest must match its holds and candidates, and every placeholder,
     # escalation or held status from an earlier stage must still have its hold (#1.4).
     check_hold_evidence(p,"matched"); check_digest(p,"matched")
-def govern(p,register,inventory):
+def govern(p,register,inventory,raised=None):
     """Derive the wall decision, the workspace decisions and the digest gating for document p from the raw wall
     register and workspace inventory. access_checklist re-runs this on the governed document to re-derive, never
     trust, the decision state (confidentiality-and-ethical-wall-rules.md #1.4)."""
@@ -92,16 +92,21 @@ def govern(p,register,inventory):
             for i,r in restricted:
                 for w in (r.get("restricted_workspaces") or "").split(";"):
                     if w.strip() and not cin(w,deniedw) and not is_withheld(w): deniedw.append(w.strip())  # a withheld ID is held, never published (#3.3); the register's spelling is kept, compared canonically (#1.3)
-            briefed=[]; screened=0
+            briefed=[]; screened=0; groups={}
+            # Topics are grouped canonically before they are screened: a group is briefed once, in its first spelling,
+            # and is withheld when ANY spelling trips a screen (#1.3, #3.2, #4.3).
             for i,r in restricted:
-                for t in topics(r):
-                    if is_withheld(t) or hits(t): briefed.append(WITHHELD); screened+=1; continue  # tripwire hold already raised by scan_rows (#4.3)
-                    if names_other(t,terms,own,own_ids):
-                        briefed.append(TOPIC_WITHHELD); screened+=1
-                        holds.append({"hold_id":"HOLD-BRIEFING-TOPIC-"+hashlib.sha256(strip_cf(t).encode()).hexdigest()[:12],"path":f"raw/ethical-wall-register.csv row {i}.briefing_topics","reason":"briefing topic names another client, matter or identifying detail; withheld from the pack","source":ENGINE,"confidence":.97,"citation":"confidentiality-and-ethical-wall-rules.md #3.1,#3.2"}); continue
-                    briefed.append(t)
+                for t in topics(r): groups.setdefault(item_key(t,canon_text),[]).append((i,t))
+            for g in groups.values():
+                if any(is_withheld(t) or hits(t) for _,t in g): briefed.append(WITHHELD); screened+=1; continue  # tripwire hold already raised by scan_rows (#4.3)
+                oth=[(i,t) for i,t in g if names_other(t,terms,own,own_ids)]
+                if oth:
+                    briefed.append(TOPIC_WITHHELD); screened+=1
+                    for i,t in oth: holds.append({"hold_id":"HOLD-BRIEFING-TOPIC-"+hashlib.sha256(strip_cf(t).encode()).hexdigest()[:12],"path":f"raw/ethical-wall-register.csv row {i}.briefing_topics","reason":"briefing topic names another client, matter or identifying detail; withheld from the pack","source":ENGINE,"confidence":.97,"citation":"confidentiality-and-ethical-wall-rules.md #3.1,#3.2"})
+                    continue
+                briefed.append(g[0][1])
             if screened: esc.append(f"{screened} wall briefing topic(s) withheld from the pack; Risk/Conflicts brief the joiner directly (confidentiality-and-ethical-wall-rules.md #3.2)")
-            may.append({"item":next((x for x in (e.get("client_name"),e.get("matter_id")) if (x or "").strip()),"this client or matter"),"type":"client_or_matter","restriction":("may not access or discuss: "+"; ".join(dict.fromkeys(briefed))) if briefed else "restricted subject matter - confirm specifics with Risk/Conflicts before starting work","citation":f"{cit}; confidentiality-and-ethical-wall-rules.md #2.3,#3.1,#3.2"})
+            may.append({"item":next((x for x in (e.get("client_name"),e.get("matter_id")) if (x or "").strip()),"this client or matter"),"type":"client_or_matter","restriction":("may not access or discuss: "+"; ".join(canon_union(briefed,f=canon_text))) if briefed else "restricted subject matter - confirm specifics with Risk/Conflicts before starting work","citation":f"{cit}; confidentiality-and-ethical-wall-rules.md #2.3,#3.1,#3.2"})
         elif unknown:
             status,reason,cit=hold_status("HOLD-UNKNOWN-WALL-STATUS","raw/ethical-wall-register.csv.status","unknown wall status value (not repeated); treated as hold","#2.2")
         elif not named_clear:
@@ -126,7 +131,8 @@ def govern(p,register,inventory):
             if (hits(nm) or is_withheld(nm)) and wid and not is_withheld(wid) and not cin(wid,withheld_names): withheld_names.append(wid)
     # Upstream holds are supplied content: another client's name or steering text in them never travels (#3.3, #4.3).
     up,uh=screen_holds(up,terms,ENGINE,"matched.holds")
-    if any(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh): esc.append(other_escalation(sum(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh)))
+    if any(hold_is(h,"HOLD-OTHER-CLIENT-") for h in uh): esc.append(other_escalation(sum(hold_is(h,"HOLD-OTHER-CLIENT-") for h in uh)))
+    if raised is not None: raised.extend(dedup_holds(holds+uh))  # the holds this derivation raised itself, before carried holds are merged (access_checklist reconciles each by content, #1.4)
     holds=dedup_holds(up+holds+uh)
     if holds and status=="clear": status="hold"; reason="source holds require review before knowledge/access release"; cit="confidentiality-and-ethical-wall-rules.md #4.1"
     odd=[]

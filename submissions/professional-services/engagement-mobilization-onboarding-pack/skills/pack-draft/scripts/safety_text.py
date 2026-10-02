@@ -336,12 +336,13 @@ def domain_trust(lines):
     return [lines[n] for n in acc], list(_trust([d for n in acc for d in declared_domains(declaration_value(lines[n]))[0]]))
 def reconcile_trusted(doc, where):
     """Re-derive the trusted domains of an intermediate document from its carried declaration lines and refuse it when
-    the carried trusted_domains list disagrees in any domain, or a carried line is not an accepted declaration
-    (values not repeated). Sets and returns the trusted domains (#1.4, #4.4)."""
+    the carried trusted_domains list disagrees with the re-derivation item by item (a substituted or repeated domain at
+    the same count included), or a carried line is not an accepted declaration (values not repeated). Sets and returns
+    the trusted domains (#1.4, #4.4)."""
     e = doc.get("engagement") if isinstance(doc.get("engagement"), dict) else {}
     carried = e.get("trusted_domains") or []; decls = e.get("domain_declarations") or []
     acc, ds = domain_trust(decls)
-    need(len(acc) == len(decls) and {canon_text(d).lstrip("@.") for d in carried if isinstance(d, str)} == set(ds) and len(carried) == len(ds),
+    need(isinstance(carried, list) and isinstance(decls, list) and acc == list(decls) and all(isinstance(d, str) for d in carried) and [canon_text(d).lstrip("@.") for d in carried] == list(ds),
         f"{where}.engagement.trusted_domains is not backed by the domain declarations it carries (every trusted domain must come from an accepted SOW or engagement-letter declaration line; values not repeated); intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #4.4)")
     return list(set_trusted_domains(ds))
 def settle_trust(doc):
@@ -907,9 +908,9 @@ def check_links(doc, where):
 def check_hold_evidence(doc, where):
     check_links(doc, where)
     holds = [h for h in doc.get("holds") or [] if isinstance(h, dict)]
-    ids = [str(h.get("hold_id") or "") for h in holds]; reasons = [str(h.get("reason") or "") for h in holds]
-    safety = any(r == OVERSIZE_REASON or r.startswith("embedded_instruction:") for r in reasons) or any(i.startswith("HOLD-SCREENED-") for i in ids)
-    other = any(i.startswith("HOLD-OTHER-CLIENT-") for i in ids)
+    ids = [str(h.get("hold_id") or "") for h in holds]; reasons = [str(h.get("reason") or "") for h in holds]; cids = {canon_id(i) for i in ids}  # hold kinds and IDs compared canonically (#1.3)
+    safety = any(r == OVERSIZE_REASON or r.startswith("embedded_instruction:") for r in reasons) or any(hold_is(i, "HOLD-SCREENED-") for i in ids)
+    other = any(hold_is(i, "HOLD-OTHER-CLIENT-") for i in ids)
     body = list(_strings({k: v for k, v in doc.items() if k != "holds"}))
     esc = [e for e in doc.get("escalations") or [] if isinstance(e, str)]
     kd = doc.get("knowledge_digest") if isinstance(doc.get("knowledge_digest"), dict) else {}
@@ -917,15 +918,15 @@ def check_hold_evidence(doc, where):
     people = [doc.get("joiner") or {}] + [r for r in doc.get("team_roster") or [] if isinstance(r, dict)]
     checks = [(any(WITHHELD in x for x in body), safety, "text withheld for embedded-instruction review"),
         (any(OTHER_WITHHELD in x for x in body), other, "text withheld because it names another client or matter"),
-        (any(TOPIC_WITHHELD in x for x in body), any(i.startswith("HOLD-BRIEFING-TOPIC-") for i in ids) or safety, "wall briefing topic withheld"),
+        (any(TOPIC_WITHHELD in x for x in body), any(hold_is(i, "HOLD-BRIEFING-TOPIC-") for i in ids) or safety, "wall briefing topic withheld"),
         (any(_ESC_SAFETY.fullmatch(e) for e in esc), safety or other, "embedded-instruction escalation"),
         (any(_ESC_OTHER.fullmatch(e) for e in esc), other, "other-client escalation"),
-        (any(_ESC_TOPIC.fullmatch(e) for e in esc), any(i.startswith("HOLD-BRIEFING-TOPIC-") for i in ids) or safety, "briefing-topic escalation"),
+        (any(_ESC_TOPIC.fullmatch(e) for e in esc), any(hold_is(i, "HOLD-BRIEFING-TOPIC-") for i in ids) or safety, "briefing-topic escalation"),
         (bool(wd.get("name_withheld_workspace_ids")), safety or other, "workspace name withheld"),
         (kd.get("status") == "hold", bool(holds), "knowledge_digest.status hold"),
         (wd.get("status") == "hold", bool(holds), "wall_decision.status hold"),
-        (any(isinstance(x.get("staffing_review"), dict) and x["staffing_review"].get("verdict") == "unrecognised" for x in people if isinstance(x, dict)), "HOLD-UNRECOGNISED-STAFFING-VERDICT" in ids, "unrecognised staffing verdict")]
-    checks += [(any(r.fullmatch(e) for e in esc), hid in ids, hid.lower()) for r, hid in _ESC_ID]
+        (any(isinstance(x.get("staffing_review"), dict) and x["staffing_review"].get("verdict") == "unrecognised" for x in people if isinstance(x, dict)), canon_id("HOLD-UNRECOGNISED-STAFFING-VERDICT") in cids, "unrecognised staffing verdict")]
+    checks += [(any(r.fullmatch(e) for e in esc), canon_id(hid) in cids, hid.lower()) for r, hid in _ESC_ID]
     missing = [what for ev, ok, what in checks if ev and not ok]
     need(not missing, f"{where} carries evidence of an earlier hold ({'; '.join(missing)}) but the matching hold is missing; intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
     # Each placeholder is bound to a same-kind hold at its own field (bind_withheld), not to any hold of the document.
@@ -933,16 +934,27 @@ def check_hold_evidence(doc, where):
     need(not ub, f"{where} carries {len(ub)} withheld placeholder(s) ({', '.join(sorted({k for _, k in ub}))}) with no hold of the same kind at that field or its source run (field paths not repeated); an unrelated hold does not account for a placeholder; intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #4.3)")
 def knowledge_ids(items): return [x.get("knowledge_id") if isinstance(x, dict) else None for x in items or []]
 def check_digest(doc, where, wall_status=None):
-    """The digest is gating state: re-derive its status from the holds, the items and the wall status and refuse a
-    document whose supplied digest disagrees (knowledge-reuse-rules.md #3.1; confidentiality-and-ethical-wall-rules.md #1.4, #2.3)."""
-    kd = doc["knowledge_digest"]; items = knowledge_ids(kd.get("items")); cands = knowledge_ids(doc.get("prior_knowledge_candidates"))
+    """The digest is gating state: re-derive it from the holds, the candidates and the wall status and refuse a
+    document whose supplied digest disagrees - status, and every item compared in full (IDs and content), never by
+    count; at the wall stages the wall decision's knowledge ID lists and the digest's denied and excluded items too
+    (knowledge-reuse-rules.md #3.1; confidentiality-and-ethical-wall-rules.md #1.4, #2.3)."""
+    kd = doc["knowledge_digest"]; cands = doc.get("prior_knowledge_candidates") or []; cids = knowledge_ids(cands)
     if wall_status is None: exp, exp_items = ("hold" if doc.get("holds") else "ready" if cands else "empty"), cands  # as knowledge_match writes it
     elif wall_status == "denied": exp, exp_items = "denied_by_wall", []
     elif wall_status == "hold": exp, exp_items = "hold", []
     else:
         need(not doc.get("holds"), f"{where}.wall_decision is clear while holds are open; wall_check never clears with open holds; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #4.1)")
         exp, exp_items = ("ready" if cands else "empty"), cands
-    need(kd.get("status") == exp and items == exp_items, f"{where}.knowledge_digest (status and {len(items)} item(s)) does not match the state re-derived from its holds, candidates and wall decision (expected status {exp}, {len(exp_items)} item(s)); fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
+    items = kd.get("items")
+    need(kd.get("status") == exp and items == exp_items, f"{where}.knowledge_digest (status and {len(items) if isinstance(items, list) else 0} item(s)) does not match the state re-derived from its holds, candidates and wall decision (expected status {exp}, {len(exp_items)} item(s), every item identical to its candidate); fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
+    bad = []
+    if "excluded_items" in doc and kd.get("excluded_items") != doc.get("excluded_items"): bad.append("knowledge_digest.excluded_items")
+    if wall_status is not None:
+        wd = doc.get("wall_decision") if isinstance(doc.get("wall_decision"), dict) else {}
+        exp_ids = {"allowed_knowledge_ids": cids if wall_status == "clear" else [], "denied_knowledge_ids": cids if wall_status == "denied" else []}
+        bad += [f"wall_decision.{k}" for k, v in exp_ids.items() if item_keys(wd.get(k)) != item_keys(v)]
+        if wall_status == "denied" and item_keys(kd.get("denied_items")) != item_keys(cids): bad.append("knowledge_digest.denied_items")
+    need(not bad, f"{where}: {', '.join(bad)} do(es) not match the list re-derived from the knowledge candidates and the wall status item by item (values not repeated); intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
 
 # ---------------------------------------------------------------- other-client identities from the wall register
 # Every engine screens upstream text for other clients with the same identities wall_check uses: other register rows'
@@ -972,8 +984,8 @@ def _placeholders(v, path=""):
             if ph in v: yield path, kind
 def _hold_kind(h):
     hid, r = str(h.get("hold_id") or ""), str(h.get("reason") or "")
-    if hid.startswith("HOLD-OTHER-CLIENT-"): return "other-client"
-    if hid.startswith("HOLD-BRIEFING-TOPIC-"): return "briefing-topic"
+    if hold_is(hid, "HOLD-OTHER-CLIENT-"): return "other-client"
+    if hold_is(hid, "HOLD-BRIEFING-TOPIC-"): return "briefing-topic"
     if r == OVERSIZE_REASON or r == WITHHELD_FIELD_REASON or r.startswith("embedded_instruction:"): return "instruction"
     return None
 def _bound(path):
@@ -1066,7 +1078,7 @@ def structured_identity(v):
             ws = words(piece)
             if not ws or ws <= GENERIC | ALLOW_CAPS or ws & NOT_NAME: continue
             names.append(piece)
-    return list(dict.fromkeys([m.group(0) for m in _MATTER_ID_RE.finditer(v)] + names)), bool(names)
+    return canon_union([m.group(0) for m in _MATTER_ID_RE.finditer(v)] + names, f=canon_text), bool(names)  # grouped canonically (#1.3)
 def identity_parts(v, own=frozenset()):
     """The identities a raw structured name or ID value names (structured_identity). Capitalised-run extraction
     (proper_names) is for free prose only, such as register restriction text."""
@@ -1093,7 +1105,7 @@ def overflow_names(v, own):
         if not ws or ws <= own | GENERIC | ALLOW_CAPS or canon_text(run) in OVERFLOW_VOCAB: continue
         if start and len(run.split()) == 1 and canon_text(run) != canon_text(v.strip(" .;")): continue
         out.append(run)
-    return list(dict.fromkeys(out))
+    return canon_union(out, f=canon_text)  # grouped canonically (#1.3)
 def other_names(rows, e, own):
     """Every other client's identity in the register: other rows' client_name/matter_id and proper-noun runs in
     restriction free text (confidentiality-and-ethical-wall-rules.md #3.2,#3.3). Read from the rows AS READ, before
@@ -1165,10 +1177,43 @@ def screen_csv_other(rows, label, terms, engine, only=None, skip=()):
             r[k] = ";".join(OTHER_WITHHELD if n in flagged else x for n, x in enumerate(items)) if flagged and not names_client(keep, terms) else OTHER_WITHHELD
     return out
 
+# Grouping and reconciliation use the one canonical form (#1.3): holds, IDs and names are grouped, de-duplicated
+# and compared canonically, and a carried derived list is reconciled against its re-derivation item by item - keys
+# and IDs included - never by count (#1.4).
+def hold_key(h):
+    """The canonical identity of a hold for grouping: hold_id, path and reason in canonical form."""
+    h = h if isinstance(h, dict) else {}
+    return (canon_id(h.get("hold_id")), canon_text(h.get("path")), canon_text(h.get("reason")))
+def hold_content(h):
+    """Every field of a hold in canonical form: a carried hold reconciles with its re-derivation only when no field differs."""
+    h = h if isinstance(h, dict) else {}
+    c = h.get("confidence")
+    return hold_key(h) + (canon_text(h.get("source")), canon_text(h.get("citation")), c if isinstance(c, (int, float)) and not isinstance(c, bool) else repr(c))
+def hold_is(h, prefix):
+    """True when a hold (or hold ID) is of the kind the ID prefix names (`HOLD-OTHER-CLIENT-`), compared
+    canonically, so `hold-other-client-…` and `HOLD_OTHER_CLIENT_…` are the same kind."""
+    c = canon_id(h.get("hold_id") if isinstance(h, dict) else h); p = canon_id(prefix)
+    return bool(p) and c.startswith(p + " ")
+def item_key(v, f=canon_id):
+    """One carried list item for content reconciliation: a stated value by its canonical form; any other value
+    (blank, withheld, non-string) only by its exact value, so it never matches a stated one."""
+    k = join_key(v, f)
+    return ("stated", k) if k is not None else ("unstated", json.dumps(v, sort_keys=True, ensure_ascii=False, default=str))
+def item_keys(xs, f=canon_id):
+    """The ordered item keys of a list (None when xs is not a list): compared item by item, never by count."""
+    return [item_key(x, f) for x in xs] if isinstance(xs, list) else None
+def canon_union(*lists, f=canon_id):
+    """The lists joined in order with canonical repeats dropped; the first spelling of each value is kept."""
+    seen = set(); out = []
+    for xs in lists:
+        for x in xs or []:
+            k = item_key(x, f)
+            if k not in seen: seen.add(k); out.append(x)
+    return out
 def dedup_holds(holds):
     seen = set(); out = []
     for h in holds:
-        key = (h.get("hold_id"), h.get("path"), h.get("reason"))
+        key = hold_key(h)
         if key not in seen: seen.add(key); out.append(h)
     return out
 def toks(*parts):

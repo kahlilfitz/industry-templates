@@ -214,6 +214,23 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
     - The briefing-topics check now counts the four raw-path topic holds plus the field hold that binds the governed restriction placeholder.
     - QA-O1 is unchanged: an unheld placeholder still fails first with "matching hold is missing".
   - Confidentiality #1.3, #1.4, #1.5 and #4.3 and role-access-matrix #3.2 updated in all 6 copies. Goldens byte-identical; shared copies 40/40. Suite 330 → 346 checks.
+- **T&E round 10 class sweeps: reconcile by content, not count; canonical grouping (checklist A13, A22).**
+  - *Content reconciliation.*
+    - `access_checklist.rederive` now compares every carried wall-decision field with its re-derivation: status, reason, confidence, source and citation exactly; denied workspace and allowed/denied knowledge IDs item by item and in order (canonical `item_keys`); held and name-withheld workspaces as a canonical subset. Previously only five fields were compared.
+    - `may_not_access_discuss`: every re-derived entry must be carried unchanged. A carried extra is kept only when it is a workspace restriction (the inventory read now may differ; most restrictive wins), so a missing inventory no longer drops the carried workspace briefing.
+    - Holds: `wall_check.govern(..., raised=)` reports the holds a derivation raises itself, before carried holds are merged. Each must be carried with every field unchanged (`hold_content`: ID, path, reason, source, citation, confidence). One from another engine with the same canonical key reconciles by key. A carried hold with only its citation or confidence edited was accepted before. The refusal names engine hold IDs only.
+    - The knowledge digest is compared in full, not by status and ID list.
+    - `safety_text.check_digest` now requires every digest item to equal its candidate in every field (previously IDs only). It also requires the digest's `excluded_items` to equal the document's, and, at the wall stages, `allowed_knowledge_ids`, `denied_knowledge_ids` and `knowledge_digest.denied_items` to equal the candidate IDs the wall status implies.
+    - `reconcile_trusted` compares the carried trusted domains with the re-derived list item by item and in order (case variants accepted), not by set and count. A reordered or repeated domain at the same count, or a non-string entry, is refused.
+  - *Canonical grouping.*
+    - New shared helpers: `hold_key`, `hold_content`, `hold_is`, `item_key`/`item_keys` and `canon_union`.
+    - `dedup_holds` groups by canonical hold ID, path and reason.
+    - Hold kinds are recognised canonically in `check_hold_evidence`, `_hold_kind` (placeholder binding) and the `knowledge_match`/`wall_check` escalation counts.
+    - Escalation-to-hold evidence compares canonical IDs, and so does the `scope_digest` excluded-person escalation.
+    - Held/name-withheld workspace unions, identity term lists (`structured_identity`, `overflow_names`) and wall briefing topics drop canonical repeats and keep the first spelling.
+    - Briefing topics are grouped canonically before screening. When any spelling in a group trips a screen, the whole group is withheld.
+  - Tests: `qa101s_checks` (10 checks), all 10 failing on the round 12 code. QA-C4's access fixture now makes its nested edit to the candidate and its digest copy alike, as `wall_check` writes them.
+  - Confidentiality #1.3, #1.4 and #3.2 updated in all 6 copies. Goldens byte-identical; shared copies 40/40. Suite 346 → 356 checks.
 
 ## 1.0.0 - 2026-10-01
 

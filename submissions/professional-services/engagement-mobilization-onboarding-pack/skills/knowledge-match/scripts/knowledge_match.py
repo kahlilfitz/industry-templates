@@ -96,7 +96,7 @@ def main():
     up,uh=screen_holds(s.get("holds",[]),terms,ENGINE,"scope.holds"); holds=dedup_holds(up+sh+own_h+uh+ih+lh)
     if lh: s.setdefault("escalations",[]).append(link_escalation(len(lh)))
     if sh or own_h: s.setdefault("escalations",[]).append(upstream_escalation(len(sh)+len(own_h)))
-    if any(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh): s.setdefault("escalations",[]).append(other_escalation(sum(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh)))
+    if any(hold_is(h,"HOLD-OTHER-CLIENT-") for h in uh): s.setdefault("escalations",[]).append(other_escalation(sum(hold_is(h,"HOLD-OTHER-CLIENT-") for h in uh)))
     if terms:
         s["prior_knowledge_candidates"]=inc; s["excluded_items"]=exc; s,oh=screen_other(s,terms,ENGINE,"matched."); inc=s.pop("prior_knowledge_candidates"); exc=s.pop("excluded_items")
         if oh: holds=dedup_holds(holds+oh); s.setdefault("escalations",[]).append(other_escalation(len(oh)))

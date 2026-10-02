@@ -238,7 +238,7 @@ def main():
         if join_key(r.get("point_of_contact"),canon_person) in xs:
             r["point_of_contact"]="Engagement manager"; holds.append(excluded_hold(f"raw/confirmed-roster.csv team_roster[{n}].point_of_contact",ENGINE))
             if joiner and canon_person(joiner.get("person"))==canon_person(r.get("person")): joiner["point_of_contact"]="Engagement manager"
-    if any(h.get("hold_id")==EXCLUDED_HOLD_ID for h in holds): esc.append("A derived section named a person excluded from this engagement; the name was dropped and held for the engagement manager (role-access-matrix.md #3.2)")
+    if any(canon_id(h.get("hold_id"))==canon_id(EXCLUDED_HOLD_ID) for h in holds): esc.append("A derived section named a person excluded from this engagement; the name was dropped and held for the engagement manager (role-access-matrix.md #3.2)")
     exclusions=items(fld(sow,"Exclusions")); pt=canon_text(pursuit)
     for e in exclusions:
         if e!=WITHHELD and canon_text(e).split(" - ")[0] in pt and re.search(r"\b(?:include|included|request|requested|add|added|reuse)\b",pt): esc.append(f"SOW exclusion controls over pursuit conflict: '{e}' (confidentiality-and-ethical-wall-rules.md #1.2)"); break
