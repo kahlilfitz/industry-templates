@@ -172,7 +172,9 @@ How to read a report:
   every engine-owned field and section, provenance included. Fields that are not engine-owned sit
   on an explicit, justified allow-list, and a test fails if the contract gains a field that is
   neither compared nor allow-listed. Per-field reconciliation kept leaving the next field open.
-  [Wave 1 pre-freeze QA: Mobilization round 14, T&E round 11]
+  This includes the final rendering step: a pack or report filled in by the model from a template
+  first runs a deterministic check that re-derives the final document, and stops on refusal.
+  [Wave 1 pre-freeze QA: Mobilization round 14, T&E round 11, DRQG round 12]
   Test: change any single engine-owned field, including a copied record, a proposal or a
   provenance ledger entry; the next stage must refuse.
 
