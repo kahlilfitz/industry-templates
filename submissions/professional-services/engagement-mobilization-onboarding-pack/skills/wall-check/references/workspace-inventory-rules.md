@@ -5,7 +5,7 @@ Only listed systems/workspaces can appear in the checklist.
 ### 1.2 Missing is not empty
 A missing inventory is a hold and the checklist is empty; an explicitly empty inventory means no requests.
 ### 1.3 Malformed inventory holds
-An inventory without `workspace_id`, `workspace_type`, `default_permission`, `depends_on_knowledge` and `data_classification` columns holds and requests nothing. A row with a blank `workspace_id`, no requested or default permission, an unrecognised default permission, or more fields than the header is `not_requested_invalid_row` with a hold; permissions never fall back to a default.
+An inventory without `workspace_id`, `workspace_type`, `default_permission`, `depends_on_knowledge` and `data_classification` columns holds and requests nothing, and so does an inventory that repeats a `workspace_id` on more than one row (compared after NFKC, case folding and whitespace collapsing), because a repeated key would let one row hide another's classification. Required columns are checked from the header, whether or not any rows follow. A row with a blank `workspace_id`, no requested or default permission, an unrecognised default permission, or more fields than the header is `not_requested_invalid_row` with a hold; permissions never fall back to a default.
 ## 2. Dependency on knowledge clearance
 ### 2.1 Prior-knowledge dependency
 Workspaces marked dependent on prior knowledge inherit knowledge holds or denials.

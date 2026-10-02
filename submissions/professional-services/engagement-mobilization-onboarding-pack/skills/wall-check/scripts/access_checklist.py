@@ -78,6 +78,8 @@ def main():
         add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv header","workspace inventory "+DUPLICATE_HEADER_REASON+"; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
     elif missing_columns(rows,INVENTORY_COLUMNS):
         add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv header",f"workspace inventory is missing required column(s): {', '.join(missing_columns(rows,INVENTORY_COLUMNS))}; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
+    elif duplicate_rows(rows,"workspace_id"):  # keyed by workspace_id: a repeat holds, never last-wins (#1.3)
+        add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv rows "+", ".join(map(str,duplicate_rows(rows,"workspace_id")))+" workspace_id","workspace inventory workspace_id "+DUPLICATE_ID_REASON+"; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
     else:
         screened=scan_rows(rows,"raw/workspace-inventory.csv")+screen_csv_other(rows,"raw/workspace-inventory.csv",terms,ENGINE)
     bad_rows=set(getattr(rows,"malformed",()))

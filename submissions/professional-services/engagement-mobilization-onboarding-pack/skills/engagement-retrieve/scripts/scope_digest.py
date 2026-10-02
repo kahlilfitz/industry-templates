@@ -63,6 +63,8 @@ def main():
     if miss: raise InputError(f"confirmed roster is missing required column(s): {', '.join(miss)}; fail closed")
     if rows.duplicate_columns: raise InputError("confirmed roster "+DUPLICATE_HEADER_REASON+"; fail closed")
     if rows.malformed: raise InputError(f"confirmed roster row(s) {', '.join(map(str,rows.malformed))} have more fields than the header; fail closed")
+    dup=duplicate_rows(rows,"person")  # the roster is keyed by person: a repeat is refused, never resolved last-wins (#1.3)
+    if dup: raise InputError(f"confirmed roster row(s) {', '.join(map(str,dup))} name the same person (name not repeated); each person appears once; fail closed")
     validate_staffing(st)
     # The engagement's own client and firm domains, declared in the signed SOW or engagement letter, are the only
     # trusted e-mail/URL destinations; consumer or malformed domains are never trusted (confidentiality-and-ethical-wall-rules.md #4.4).

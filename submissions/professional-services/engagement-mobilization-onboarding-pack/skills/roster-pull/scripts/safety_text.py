@@ -137,6 +137,35 @@ def header_unusable(rows, cols):
     """A header that misses a required column or repeats any column name is malformed (#1.3, #2.1)."""
     return bool(missing_columns(rows, cols)) or rows.duplicate_columns > 0
 DUPLICATE_HEADER_REASON = "header repeats a column name (not repeated); the file is ambiguous and is not used"
+DUPLICATE_ID_REASON = "repeats an identifier on more than one record (value not repeated); the file is ambiguous and is not used"
+def id_key(v):
+    """Identity of an ID value for duplicate detection: NFKC, case-folded, whitespace collapsed. Blank values and
+    withheld placeholders are not identifiers (None)."""
+    if not isinstance(v, str): return None
+    t = " ".join(unicodedata.normalize("NFKC", v).casefold().split())
+    return None if not t or t.startswith("[withheld") else t
+def duplicate_rows(rows, col):
+    """1-based file row numbers of every CSV row whose `col` repeats another row's (id_key). Records keyed by an ID
+    are never indexed last-wins: a repeat is refused or held, never resolved by picking one (#1.3)."""
+    first, dup = {}, set()
+    for n, r in enumerate(rows or [], 2):
+        t = id_key(r.get(col))
+        if t is None: continue
+        if t in first: dup.update((first[t], n))
+        else: first[t] = n
+    return sorted(dup)
+def duplicate_ids(groups, where):
+    """For [(list of records, key, path)] that share one ID space, the paths of every record whose key repeats an
+    earlier one's, as "<later> repeats <earlier>". Values are never echoed (#1.3)."""
+    seen, out = {}, []
+    for items, key, path in groups:
+        for i, x in enumerate(items or []):
+            t = id_key(x.get(key)) if isinstance(x, dict) else None
+            if t is None: continue
+            here = f"{where}.{path}[{i}].{key}"
+            if t in seen: out.append(f"{here} repeats {seen[t]}")
+            else: seen[t] = here
+    return out
 
 # ---------------------------------------------------------------- type / enum validation (fail closed)
 def need(ok, msg):
@@ -516,7 +545,8 @@ ENGINE_REASONS = {OVERSIZE_REASON, OTHER_HOLD_REASON,
     "ethical-wall register row(s) carry more fields than the header",
     "no wall register row clears this joiner for this client or matter",
     "unknown wall status value (not repeated); treated as hold",
-    "ethical-wall register " + DUPLICATE_HEADER_REASON, "workspace inventory " + DUPLICATE_HEADER_REASON + "; no access is requested"}
+    "ethical-wall register " + DUPLICATE_HEADER_REASON, "workspace inventory " + DUPLICATE_HEADER_REASON + "; no access is requested",
+    "workspace inventory workspace_id " + DUPLICATE_ID_REASON + "; no access is requested"}
 _PERM = r"(?:none|viewer|member|contributor|admin|owner)"
 ENGINE_REASON_RES = [re.compile(r"embedded_instruction:[a-z_]+(?:,[a-z_]+)*"),
     re.compile(r"\d+ declared client/firm domain\(s\) are malformed or consumer/file-sharing domains and are not trusted \(not repeated\)"),

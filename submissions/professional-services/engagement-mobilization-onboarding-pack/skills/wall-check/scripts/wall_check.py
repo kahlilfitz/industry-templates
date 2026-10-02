@@ -101,6 +101,8 @@ def govern(p,register,inventory):
         else: cit="; ".join(row_cite(r) for r in named_clear)
     if ws is not None and ws.duplicate_columns:
         holds.append({"hold_id":"HOLD-MALFORMED-WORKSPACE-INVENTORY","path":"raw/workspace-inventory.csv header","reason":"workspace inventory "+DUPLICATE_HEADER_REASON+"; no access is requested","source":ENGINE,"confidence":.99,"citation":"workspace-inventory-rules.md #1.3"}); ws=Rows()
+    if ws is not None and duplicate_rows(ws,"workspace_id"):  # keyed by workspace_id: a repeat holds, never last-wins (#1.3)
+        holds.append({"hold_id":"HOLD-MALFORMED-WORKSPACE-INVENTORY","path":"raw/workspace-inventory.csv rows "+", ".join(map(str,duplicate_rows(ws,"workspace_id")))+" workspace_id","reason":"workspace inventory workspace_id "+DUPLICATE_ID_REASON+"; no access is requested","source":ENGINE,"confidence":.99,"citation":"workspace-inventory-rules.md #1.3"}); ws=Rows()
     if ws is not None:
         holds+=scan_rows(ws,"raw/workspace-inventory.csv")
         # Every inventory cell is screened for other clients before any decision uses it: IDs, types, permissions,

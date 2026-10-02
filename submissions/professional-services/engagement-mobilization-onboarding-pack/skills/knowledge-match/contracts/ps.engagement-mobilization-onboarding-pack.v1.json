@@ -204,6 +204,7 @@
     },
     "team_roster": {
       "type": "array",
+      "x-uniqueKeys": ["person"],
       "items": {
         "$ref": "#/$defs/roster_member"
       }
@@ -245,6 +246,7 @@
     },
     "staffing_exclusions": {
       "type": "array",
+      "x-uniqueKeys": ["person"],
       "description": "Confirmed roster rows ineligible in Scenario 02; reasons stay in the staffing record.",
       "items": {
         "type": "object",
@@ -283,6 +285,7 @@
     },
     "prior_knowledge_candidates": {
       "type": "array",
+      "x-uniqueKeys": ["knowledge_id"],
       "items": {
         "$ref": "#/$defs/knowledge_item"
       }
@@ -300,12 +303,14 @@
         },
         "items": {
           "type": "array",
+          "x-uniqueKeys": ["knowledge_id"],
           "items": {
             "$ref": "#/$defs/knowledge_item"
           }
         },
         "excluded_items": {
           "type": "array",
+          "x-uniqueKeys": ["asset_id", "lesson_id"],
           "items": {
             "type": "object",
             "properties": {
@@ -455,6 +460,7 @@
     },
     "access_checklist": {
       "type": "array",
+      "x-uniqueKeys": ["workspace_id"],
       "items": {
         "type": "object",
         "required": [

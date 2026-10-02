@@ -28,6 +28,10 @@ def adapt(p):
     for i,r in enumerate(ra): check_asset(r,f"{W}.released_assets[{i}]",True)
     for i,r in enumerate(kr.get("reusable_assets",[])): check_asset(r,f"{W}.knowledge_record.reusable_assets[{i}]")
     for i,r in enumerate(kr.get("lessons",[])): check_lesson(r,f"{W}.knowledge_record.lessons[{i}]")
+    # Records keyed by ID are never indexed last-wins: released assets by asset_id; reusable assets and lessons share
+    # the knowledge_id space they are published under (confidentiality-and-ethical-wall-rules.md #1.3).
+    dup=duplicate_ids([(ra,"asset_id","released_assets")],W)+duplicate_ids([(kr.get("reusable_assets",[]),"asset_id","knowledge_record.reusable_assets"),(kr.get("lessons",[]),"cluster_id","knowledge_record.lessons")],W)
+    if dup: raise InputError("closeout records keyed by ID must be unique (values not repeated): "+"; ".join(dup)+"; fail closed")
     ce=field(x,"engagement","obj",W,nullable=True,default={})
     for k in ("engagement_id","client_name","title"): field(ce,k,"str",W+".engagement",nullable=True)
     return {"knowledge_record":kr,"released_assets":ra,"engagement":ce,"provenance":x.get("provenance",x.get("run_metadata",{}))}
