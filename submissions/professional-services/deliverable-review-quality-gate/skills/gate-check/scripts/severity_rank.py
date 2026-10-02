@@ -79,8 +79,9 @@ def validate_finding(index, item):
         raise InputError(f"{label}: location must be an object")
     for key in ("page", "paragraph"):
         value = location.get(key)
-        if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
-            raise InputError(f"{label}: location.{key} must be an integer or null, got {rules.describe(value)}; record the physical "
+        if value is not None and not rules.is_position(value):
+            raise InputError(f"{label}: location.{key} must be an integer of {rules.MIN_POSITION} or more, or null, got "
+                             f"{rules.describe(value) if not rules.is_integer(value) else 'an integer below ' + str(rules.MIN_POSITION)}; record the physical "
                              f"page number and keep printed labels such as roman numerals in location.label")
 
 def sort_key(item):

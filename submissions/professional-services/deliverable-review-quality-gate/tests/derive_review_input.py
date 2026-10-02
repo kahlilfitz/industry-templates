@@ -24,8 +24,14 @@ judgement_problems (a confidence is a finite number in 0..1, a class is one of t
 classes, a location has a text section and label and positive integer page and paragraph, flags
 are true/false), so "high", {} or "certain" never pass. Any other field is reported, so a new
 fixture value cannot be added without a raw source or a documented rule. The review input is
-loaded with the engines' strict JSON loader, and IDs and names are compared in the engines'
-canonical form (assertion_rules.canonical_id / canonical_name, quality-gate-criteria.md #8.11).
+loaded with the engines' strict JSON loader (integers within +/-(2^53 - 1), finite numbers,
+quality-gate-criteria.md #8.12), and IDs are indexed and compared in the engines' canonical form
+(assertion_rules.canonical_id, #8.11): evidence, prior-finding, brand-check and licensed-content
+IDs, every other *_id field and each assertion's evidence_ids, so `ev_b1` matches `EV-B1` exactly as
+the engines match it. Sample and population sizes are compared as exact Decimals, never floats.
+Reports never quote a raw-pack or review-input value, ID or member name: they give the path or line,
+the expected form and at most a content-free description (assertion_rules.describe, #8.9), and an
+unexpected error is reported by its type only, never as a traceback.
 
 Paragraph rule (deliverable-ingest step 3): a paragraph is a block of body text separated by a
 blank line; headings, [Page N] markers and blank lines are not paragraphs. Paragraphs are counted
@@ -38,19 +44,21 @@ import os
 import re
 import sys
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skills", "assertion-map", "scripts"))
 import assertion_rules as rules  # noqa: E402  (the engines' strict loader and canonical comparison forms)
 
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 CRITERIA_FLOOR = ["quality-gate-criteria.md #1-#8", "severity-rules.md #1-#4"]
-PAGE_MARKER = re.compile(r"^\[Page (\d+)\]$")
+PAGE_MARKER = re.compile(r"^\[Page (\d{1,9})\]$")
 SECTION_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?\s+")
-LOCATION = re.compile(r"^(?P<section>.+?), page (?P<page>\d+), paragraph (?P<paragraph>\d+), (?P<label>.+)$")
-EVIDENCE = re.compile(r"^- (?P<id>EV-[\w-]+): (?P<title>.+?)\. (?P<desc>.*?) ?Type: (?P<type>\w+)\. Source: (?P<source>[\w ]+)\. Confidence: (?P<conf>[\d.]+)\.$")
-PRIOR = re.compile(r"^- (?P<id>PR-[\w-]+): (?P<request>.+?) Tracker status: (?P<status>closed|open)[^.]*\. Document check: fix (?P<fix>present|absent)[^.]*\. Location: (?P<loc>.+?)\. Confidence: (?P<conf>[\d.]+)\.$")
-BRAND = re.compile(r"^- (?P<id>[\w-]+): (?P<status>\w+)\. (?P<title>.+?)\. (?P<detail>.+?) Legal or release control: (?P<legal>yes|no)\. Location: (?P<loc>.+?)\. Confidence: (?P<conf>[\d.]+)\. Criteria: (?P<crit>.+?)\.$")
-LICENSED = re.compile(r"^- (?P<id>[\w-]+): (?P<detail>.+?) Attribution present: (?P<attr>yes|no)\. License status: (?P<status>[\w ]+)\. Location: (?P<loc>.+?)\. Confidence: (?P<conf>[\d.]+)\. Register: (?P<register>.+?)\. Criteria: (?P<crit>.+?)\.$")
+LOCATION = re.compile(r"^(?P<section>.+?), page (?P<page>\d{1,9}), paragraph (?P<paragraph>\d{1,9}), (?P<label>.+)$")
+CONF = r"\d{1,3}(?:\.\d{1,9})?"
+EVIDENCE = re.compile(r"^- (?P<id>EV-[\w-]+): (?P<title>.+?)\. (?P<desc>.*?) ?Type: (?P<type>\w+)\. Source: (?P<source>[\w ]+)\. Confidence: (?P<conf>" + CONF + r")\.$")
+PRIOR = re.compile(r"^- (?P<id>PR-[\w-]+): (?P<request>.+?) Tracker status: (?P<status>closed|open)[^.]*\. Document check: fix (?P<fix>present|absent)[^.]*\. Location: (?P<loc>.+?)\. Confidence: (?P<conf>" + CONF + r")\.$")
+BRAND = re.compile(r"^- (?P<id>[\w-]+): (?P<status>\w+)\. (?P<title>.+?)\. (?P<detail>.+?) Legal or release control: (?P<legal>yes|no)\. Location: (?P<loc>.+?)\. Confidence: (?P<conf>" + CONF + r")\. Criteria: (?P<crit>.+?)\.$")
+LICENSED = re.compile(r"^- (?P<id>[\w-]+): (?P<detail>.+?) Attribution present: (?P<attr>yes|no)\. License status: (?P<status>[\w ]+)\. Location: (?P<loc>.+?)\. Confidence: (?P<conf>" + CONF + r")\. Register: (?P<register>.+?)\. Criteria: (?P<crit>.+?)\.$")
 NO_ASSURANCE = re.compile(r"\bnot (?:provide |be treated as |an? )?assurance\b", re.IGNORECASE)
 RELIANCE = re.compile(r"\bmay not be relied (?:up)?on\b|\breliance\b", re.IGNORECASE)
 NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
@@ -66,6 +74,36 @@ ASSERTION_CLASSES = tuple(sorted(rules.SUPPORT_TYPES_BY_CLASS))
 ASSERTION_FLAGS = ("hedging_present", "limitation_present", "stated_basis", "scope_aligned")
 ORDER_FREE = {"present_disclaimer_types", "required_language", "present_language"}
 REGISTER_IDS = {"brand_checks": "check_id", "licensed_content": "content_id"}
+
+
+class PackError(ValueError):
+    """A raw pack that cannot be parsed. Messages name a line or position, never the pack's text."""
+
+
+def show(value):
+    """Content-free description of a raw-pack or review-input value (rules.describe: JSON type and size, never its
+    text), so a mismatch report can never echo embedded instructions (quality-gate-criteria.md #8.9)."""
+    return rules.describe(value)
+
+
+def is_id_key(key):
+    return isinstance(key, str) and rules.is_id_field((key,))
+
+
+def same_value(key, expected, actual):
+    """Equality as the engines see it: IDs (any *_id member) in canonical form (rules.canonical_id), everything else
+    exactly (quality-gate-criteria.md #8.11)."""
+    if is_id_key(key) and isinstance(expected, str) and isinstance(actual, str):
+        return rules.canonical_id(expected) == rules.canonical_id(actual)
+    return expected == actual
+
+
+def position(text, where):
+    """A page or paragraph number from the raw pack: 1 to 9 digits and at least 1 (quality-gate-criteria.md #8.12)."""
+    value = int(text)
+    if value < rules.MIN_POSITION:
+        raise PackError(f"{where} gives a page or paragraph number below {rules.MIN_POSITION}")
+    return value
 
 
 def read_text(path):
@@ -89,19 +127,19 @@ def parse_draft(text):
         if current:
             paragraph += 1
             if (page, paragraph) in blocks:
-                raise ValueError(f"draft has two blocks at page {page} paragraph {paragraph}; a later one would overwrite the earlier")
+                raise PackError(f"draft has two blocks at page {page} paragraph {paragraph}; a later one would overwrite the earlier")
             blocks[(page, paragraph)] = {"section": section, "text": " ".join(current), "lines": list(current)}
             current.clear()
 
-    for raw in lines:
+    for number, raw in enumerate(lines, 1):
         line = raw.strip()
         marker = PAGE_MARKER.match(line)
         if marker:
             flush()
-            page, paragraph = int(marker.group(1)), 0
+            page, paragraph = position(marker.group(1), f"draft line {number}"), 0
             # A repeated page marker would restart paragraph numbering and overwrite that page's blocks.
             if page in pages:
-                raise ValueError(f"draft repeats the page {page} marker; page markers must be unique")
+                raise PackError(f"draft repeats the page {page} marker (line {number}); page markers must be unique")
             pages.add(page)
         elif line.startswith("# "):
             flush()
@@ -118,7 +156,7 @@ def parse_draft(text):
             current.append(line)
     flush()
     if not paginated and any(key[0] != 1 for key in blocks):
-        raise ValueError("unpaginated draft produced a page other than 1")
+        raise PackError("unpaginated draft produced a page other than 1")
     cover = {}
     first = next((block for key, block in sorted(blocks.items()) if block["section"] == "Cover"), None)
     for line in first["lines"] if first else []:
@@ -126,25 +164,25 @@ def parse_draft(text):
             key, sep, value = part.partition(": ")
             if sep:
                 if key.strip() in cover:
-                    raise ValueError(f"draft cover repeats the {key.strip()!r} field; a later value would overwrite the earlier")
+                    raise PackError(f"draft cover repeats a field name ({show(key.strip())}); a later value would overwrite the earlier")
                 cover[key.strip()] = value.strip()
     return title, cover, blocks, disclaimers
 
 
-def parse_location(text):
+def parse_location(text, where):
     match = LOCATION.match(text.strip())
     if not match:
-        raise ValueError(f"unparseable location: {text!r}")
-    return {"section": match["section"], "page": int(match["page"]), "paragraph": int(match["paragraph"]), "label": match["label"]}
+        raise PackError(f"{where}: Location ({show(text)}) does not follow '<section>, page N, paragraph N, <label>'")
+    return {"section": match["section"], "page": position(match["page"], where), "paragraph": position(match["paragraph"], where), "label": match["label"]}
 
 
 def register_sections(text):
     sections, name = {}, None
-    for line in text.splitlines():
+    for number, line in enumerate(text.splitlines(), 1):
         if line.startswith("## "):
             name = line[3:].strip()
             if name in sections:
-                raise ValueError(f"release registers repeat the {name!r} section; a later one would replace the earlier")
+                raise PackError(f"release registers repeat a section heading (line {number}); a later one would replace the earlier")
             sections[name] = []
         elif name and line.strip():
             sections[name].append(line.strip())
@@ -162,41 +200,42 @@ def parse_registers(path):
     brand = None
     if "Brand and formatting checks" in sections:
         brand = []
-        for line in sections["Brand and formatting checks"]:
+        for number, line in enumerate(sections["Brand and formatting checks"], 1):
             match = BRAND.match(line)
             if match:
                 brand.append({"check_id": match["id"], "status": match["status"], "legal_or_release_control": match["legal"] == "yes",
-                              "title": match["title"], "detail": match["detail"], "location": parse_location(match["loc"]),
+                              "title": match["title"], "detail": match["detail"], "location": parse_location(match["loc"], f"brand check entry {number}"),
                               "confidence": float(match["conf"]), "citation": match["crit"]})
     licensed = None
     if "Licensed and third-party content register" in sections:
         licensed = []
-        for line in sections["Licensed and third-party content register"]:
+        for number, line in enumerate(sections["Licensed and third-party content register"], 1):
             match = LICENSED.match(line)
             if match:
                 licensed.append({"content_id": match["id"], "attribution_present": match["attr"] == "yes", "license_status": match["status"],
-                                 "detail": match["detail"], "location": parse_location(match["loc"]), "confidence": float(match["conf"]),
+                                 "detail": match["detail"], "location": parse_location(match["loc"], f"licensed-content entry {number}"), "confidence": float(match["conf"]),
                                  "citation": f"{match['register']}; {match['crit']}"})
     return handling, brand, licensed
 
 
 def parse_evidence(text):
+    """Return (items, {canonical evidence ID: index line}); IDs are compared in canonical form (rules.canonical_id)."""
     items, lines = [], {}
-    for line in text.splitlines():
+    for number, line in enumerate(text.splitlines(), 1):
         match = EVIDENCE.match(line.strip())
         if match:
             items.append({"evidence_id": match["id"], "type": match["type"], "title": match["title"], "confidence": float(match["conf"]),
                           "source": "connector:" + match["source"].strip().lower().replace(" ", "-"),
                           "citation": f"supporting-evidence-index.md {match['id']}"})
-            if match["id"] in lines:
-                raise ValueError(f"supporting evidence index repeats evidence ID {match['id']}; evidence IDs must be unique")
-            lines[match["id"]] = line
+            if rules.canonical_id(match["id"]) in lines:
+                raise PackError(f"supporting evidence index repeats an evidence ID (line {number}, equal exactly or after folding); evidence IDs must be unique")
+            lines[rules.canonical_id(match["id"])] = line
     return items, lines
 
 
 def parse_prior(text):
     items = []
-    for line in text.splitlines():
+    for number, line in enumerate(text.splitlines(), 1):
         match = PRIOR.match(line.strip())
         if match:
             closed, fixed = match["status"] == "closed", match["fix"] == "present"
@@ -204,7 +243,7 @@ def parse_prior(text):
             if closed and not fixed:
                 citation += "; quality-gate-criteria.md #7.1-#7.2"
             items.append({"finding_id": match["id"], "claimed_closed": closed, "document_fix_present": fixed,
-                          "location": parse_location(match["loc"]), "confidence": float(match["conf"]),
+                          "location": parse_location(match["loc"], f"prior-review-findings.md line {number}"), "confidence": float(match["conf"]),
                           "source": "skill:criteria-retrieve", "citation": citation})
     return items
 
@@ -259,43 +298,66 @@ def derive(scenario_dir):
 
 
 def numbers_in(text):
-    return {float(token.replace(",", "")) for token in NUMBER.findall(text)}
+    """Every number written in text, as exact Decimals: no float conversion, so no size can overflow or round."""
+    found = set()
+    for token in NUMBER.findall(text):
+        try:
+            found.add(Decimal(token.replace(",", "")))
+        except InvalidOperation:
+            continue
+    return found
+
+
+def block_at(location, blocks):
+    """The draft block a location points at; None unless page and paragraph are both positions (rules.is_position)."""
+    if not isinstance(location, dict) or not all(rules.is_position(location.get(key)) for key in ("page", "paragraph")):
+        return None
+    return blocks.get((location["page"], location["paragraph"]))
 
 
 def location_problems(label, location, blocks):
-    block = blocks.get((location.get("page"), location.get("paragraph")))
+    if not isinstance(location, dict):
+        return [f"{label}.location: must be an object, got {show(location)}"]
+    page, paragraph = location.get("page"), location.get("paragraph")
+    if not (rules.is_position(page) and rules.is_position(paragraph)):
+        # judgement_problems reports the type or range; nothing can be looked up.
+        return [f"{label}: location page {show(page)} / paragraph {show(paragraph)} cannot be looked up in the draft"]
+    block = blocks.get((page, paragraph))
     if block is None:
-        return [f"{label}: draft has no paragraph {location.get('paragraph')} on page {location.get('page')}"]
-    if not (block["section"] or "").startswith(location.get("section") or "\0"):
-        return [f"{label}: page {location['page']} paragraph {location['paragraph']} is under {block['section']!r}, not {location.get('section')!r}"]
+        return [f"{label}: draft has no paragraph {paragraph} on page {page}"]
+    section = location.get("section")
+    if not isinstance(section, str) or not section or not (block["section"] or "").startswith(section):
+        return [f"{label}: page {page} paragraph {paragraph} is under a different section from location.section ({show(section)})"]
     return []
 
 
 def compare_value(path, expected, actual, problems):
+    key = path.rsplit(".", 1)[-1]
     if expected is MISSING:
-        problems.append(f"{path}: value {actual!r} has no raw source")
-    elif path.rsplit(".", 1)[-1] in ORDER_FREE and isinstance(expected, list) and isinstance(actual, list):
-        if sorted(expected) != sorted(actual):
-            problems.append(f"{path}: raw pack gives {sorted(expected)!r}, review input has {sorted(actual)!r}")
-    elif expected != actual:
-        problems.append(f"{path}: raw pack gives {expected!r}, review input has {actual!r}")
+        problems.append(f"{path}: the review input has {show(actual)} with no raw source")
+    elif key in ORDER_FREE and isinstance(expected, list) and isinstance(actual, list):
+        if sorted(map(json.dumps, expected)) != sorted(map(json.dumps, actual)):
+            problems.append(f"{path}: the review input ({show(actual)}) does not hold the same entries as the raw pack ({show(expected)})")
+    elif not same_value(key, expected, actual):
+        problems.append(f"{path}: the review input ({show(actual)}) does not match the raw pack ({show(expected)})")
 
 
 def compare_object(path, expected, actual, judgement, problems):
     if not isinstance(actual, dict):
-        problems.append(f"{path}: expected an object")
+        problems.append(f"{path}: expected an object, got {show(actual)}")
         return
     for key in sorted(set(expected) | set(actual)):
         if key in judgement:
             continue
+        shown = f"{path}.{rules.path_key(key)}"
         if key not in actual:
-            problems.append(f"{path}.{key}: raw pack gives {expected[key]!r} but the review input omits it")
+            problems.append(f"{shown}: the raw pack gives {show(expected[key])} but the review input omits it")
         elif key not in expected:
-            problems.append(f"{path}.{key}: value {actual[key]!r} is neither derived from the raw pack nor a declared ingest judgement")
+            problems.append(f"{shown}: {show(actual[key])} is neither derived from the raw pack nor a declared ingest judgement")
         elif key in REGISTER_IDS and isinstance(expected[key], list) and isinstance(actual[key], list):
-            compare_list(f"{path}.{key}", expected[key], actual[key], REGISTER_IDS[key], set(), problems)
+            compare_list(shown, expected[key], actual[key], REGISTER_IDS[key], set(), problems)
         else:
-            compare_value(f"{path}.{key}", expected[key], actual[key], problems)
+            compare_value(shown, expected[key], actual[key], problems)
 
 
 def id_key(value):
@@ -303,45 +365,81 @@ def id_key(value):
     return rules.canonical_id(value) if isinstance(value, str) else json.dumps(value, sort_keys=True)
 
 
+def repeated_positions(ids):
+    """Positions of the first ID that repeats (exactly or after canonical folding), or None."""
+    seen = {}
+    for index, item in enumerate(ids):
+        fold = id_key(item)
+        if fold in seen:
+            return seen[fold], index
+        seen[fold] = index
+    return None
+
+
 def compare_list(path, expected, actual, key, judgement, problems):
+    """Match register entries by ID in canonical form (rules.canonical_id), in order, then compare each entry."""
     if not isinstance(actual, list):
-        problems.append(f"{path}: raw pack gives a list of {len(expected)}, review input has {actual!r}")
+        problems.append(f"{path}: the raw pack gives a list of {len(expected)}, the review input has {show(actual)}")
         return
-    want, have = [item[key] for item in expected], [item.get(key) for item in actual if isinstance(item, dict)]
+    if not all(isinstance(item, dict) for item in actual):
+        problems.append(f"{path}: every entry must be an object")
+        return
+    want, have = [item[key] for item in expected], [item.get(key) for item in actual]
     for side, ids in (("raw pack", want), ("review input", have)):
-        folded = [id_key(item) for item in ids]
-        repeated = sorted({str(item) for item, fold in zip(ids, folded) if folded.count(fold) > 1})
-        if repeated:
-            problems.append(f"{path}: {side} repeats {key} {', '.join(repeated)}; IDs must be unique")
+        repeat = repeated_positions(ids)
+        if repeat:
+            problems.append(f"{path}: the {side} repeats {key} at positions {repeat[0]} and {repeat[1]} (equal exactly or after folding); IDs must be unique")
             return
-    if want != have:
-        problems.append(f"{path}: raw pack gives {want!r}, review input has {have!r}")
+    if len(want) != len(have):
+        problems.append(f"{path}: the raw pack gives {len(want)} entries, the review input has {len(have)}")
+        return
+    differing = [index for index, (exp, act) in enumerate(zip(want, have)) if id_key(exp) != id_key(act)]
+    if differing:
+        problems.append(f"{path}[{differing[0]}].{key}: the review input ({show(have[differing[0]])}) is not the raw pack's ID at that position ({show(want[differing[0]])})"
+                        + (f"; {len(differing) - 1} more position(s) differ" if len(differing) > 1 else ""))
         return
     for index, (exp, act) in enumerate(zip(expected, actual)):
         compare_object(f"{path}[{index}]", exp, act, judgement, problems)
 
 
 def assertion_problems(index, assertion, blocks, evidence_lines):
-    label = f"assertions[{index}] {assertion.get('assertion_id')}"
-    location = assertion.get("location") or {}
+    label = f"assertions[{index}]"
+    if not isinstance(assertion, dict):
+        return [f"{label}: must be an object, got {show(assertion)}"]
+    location = assertion.get("location")
     problems = location_problems(label, location, blocks)
-    block = blocks.get((location.get("page"), location.get("paragraph")))
+    block = block_at(location, blocks)
     allowed = JUDGEMENT_KEYS["assertion"] | {"text", "evidence_ids", "sample_size", "population_size", "source", "citation"}
-    problems += [f"{label}.{key}: value is neither derived from the raw pack nor a declared ingest judgement" for key in sorted(set(assertion) - allowed)]
-    if block and assertion.get("text", "").rstrip(".") not in block["text"]:
+    problems += [f"{label}.{rules.path_key(key)}: value is neither derived from the raw pack nor a declared ingest judgement" for key in sorted(set(assertion) - allowed)]
+    text = assertion.get("text")
+    if not isinstance(text, str):
+        problems.append(f"{label}.text: must be a string, got {show(text)}")
+    elif block and text.rstrip(".") not in block["text"]:
         problems.append(f"{label}: text is not quoted from page {location['page']} paragraph {location['paragraph']}")
-    if assertion.get("citation") != f"draft-deliverable.md p{location.get('page')} para{location.get('paragraph')}":
-        problems.append(f"{label}: citation {assertion.get('citation')!r} does not match its location")
+    if block and assertion.get("citation") != f"draft-deliverable.md p{location['page']} para{location['paragraph']}":
+        problems.append(f"{label}.citation: {show(assertion.get('citation'))} does not match its location")
     if assertion.get("source") != "skill:deliverable-ingest":
-        problems.append(f"{label}: source must be skill:deliverable-ingest")
-    unknown = [eid for eid in assertion.get("evidence_ids") or [] if eid not in evidence_lines]
-    if unknown:
-        problems.append(f"{label}: evidence IDs {unknown} are not in the evidence index")
-    context = (block["text"] if block else "") + " " + " ".join(evidence_lines.get(eid, "") for eid in assertion.get("evidence_ids") or [])
+        problems.append(f"{label}.source: must be skill:deliverable-ingest, got {show(assertion.get('source'))}")
+    evidence_ids = assertion.get("evidence_ids")
+    linked = []
+    if evidence_ids is not None and not isinstance(evidence_ids, list):
+        problems.append(f"{label}.evidence_ids: must be an array, got {show(evidence_ids)}")
+    else:
+        for position_index, evidence_id in enumerate(evidence_ids or []):
+            line = evidence_lines.get(rules.canonical_id(evidence_id)) if isinstance(evidence_id, str) else None
+            if line is None:
+                problems.append(f"{label}.evidence_ids[{position_index}]: {show(evidence_id)} is not in the evidence index")
+            else:
+                linked.append(line)
+    context = (block["text"] if block else "") + " " + " ".join(linked)
     for key in ("sample_size", "population_size"):
         value = assertion.get(key)
-        if value is not None and float(value) not in numbers_in(context):
-            problems.append(f"{label}.{key}: {value} appears in neither the located paragraph nor a linked evidence entry")
+        if value is None:
+            continue
+        if not rules.is_integer(value) or value < 0:
+            problems.append(f"{label}.{key}: must be a non-negative integer or null, got {show(value) if not rules.is_integer(value) else 'a negative integer'}")
+        elif Decimal(value) not in numbers_in(context):
+            problems.append(f"{label}.{key}: the value appears in neither the located paragraph nor a linked evidence entry")
     return problems + judgement_problems(label, "assertion", assertion)
 
 
@@ -416,14 +514,34 @@ def compare(scenario_dir, payload):
             problems += location_problems(f"deliverable.{name}[{index}]", item["location"], blocks)
     for index, item in enumerate(derived["prior_findings"]):
         problems += location_problems(f"prior_findings[{index}]", item["location"], blocks)
-    assertion_ids = [item.get("assertion_id") for item in payload.get("assertions") or [] if isinstance(item, dict)]
-    folded = [id_key(item) for item in assertion_ids]
-    repeated = sorted({str(item) for item, fold in zip(assertion_ids, folded) if folded.count(fold) > 1})
-    if repeated:
-        problems.append(f"assertions: review input repeats assertion_id {', '.join(repeated)}; IDs must be unique")
-    for index, assertion in enumerate(payload.get("assertions") or []):
+    assertions = payload.get("assertions")
+    if not isinstance(assertions, list):
+        problems.append(f"assertions: must be an array, got {show(assertions)}")
+        return problems
+    repeat = repeated_positions([item.get("assertion_id") for item in assertions if isinstance(item, dict)])
+    if repeat:
+        problems.append(f"assertions: the review input repeats assertion_id at positions {repeat[0]} and {repeat[1]} (equal exactly or after folding); IDs must be unique")
+    for index, assertion in enumerate(assertions):
         problems += assertion_problems(index, assertion, blocks, evidence_lines)
     return problems
+
+
+def check_scenario(scenario_dir):
+    """The difference list for one scenario. Never raises: a malformed review input or raw pack, or any unexpected
+    error, is reported as one content-free problem (its type, never its message), so no traceback or untrusted text
+    reaches the output (quality-gate-criteria.md #8.9)."""
+    try:
+        payload = rules.load_json_file(os.path.join(scenario_dir, "review-input.json"))
+    except rules.InputError as exc:
+        return [f"review input is malformed: {exc}"]
+    if not isinstance(payload, dict):
+        return [f"review input must be a JSON object, got {show(payload)}"]
+    try:
+        return compare(scenario_dir, payload)
+    except PackError as exc:
+        return [f"raw pack is malformed: {exc}"]
+    except Exception as exc:  # noqa: BLE001 - reported by type only; details may quote untrusted text
+        return [f"could not compare the scenario ({type(exc).__name__}; details withheld because they may quote untrusted text)"]
 
 
 def main(argv):
@@ -431,15 +549,7 @@ def main(argv):
     scenarios = argv or [os.path.join(root, "demo-data", name) for name in sorted(os.listdir(os.path.join(root, "demo-data")))]
     failed = False
     for scenario_dir in scenarios:
-        try:
-            payload = rules.load_json_file(os.path.join(scenario_dir, "review-input.json"))
-        except rules.InputError as exc:
-            problems = [f"review input is malformed: {exc}"]
-        else:
-            try:
-                problems = compare(scenario_dir, payload)
-            except ValueError as exc:
-                problems = [f"raw pack is malformed: {exc}"]
+        problems = check_scenario(scenario_dir)
         print(f"{os.path.basename(os.path.normpath(scenario_dir))}: {'derives from its raw pack' if not problems else f'{len(problems)} difference(s)'}")
         for problem in problems:
             print("  - " + problem)

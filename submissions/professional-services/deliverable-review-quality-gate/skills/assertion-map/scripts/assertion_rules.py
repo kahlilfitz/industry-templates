@@ -67,6 +67,13 @@ CONNECTOR_SLUG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_.")
 ASSERTION_BOOLEANS = ("hedging_present", "limitation_present", "stated_basis", "scope_aligned")
 ASSERTION_COUNTS = ("sample_size", "population_size")
 PAGE_LABEL_HINT = "record the physical page number and keep printed labels such as roman numerals in location.label"
+# Positions (location.page, location.paragraph) count from 1; counts (sample_size, population_size, finding_count)
+# from 0 (quality-gate-criteria.md #8.12).
+MIN_POSITION = 1
+# The largest integer every JSON reader holds exactly (an IEEE double's 2^53 - 1). A larger integer is refused at
+# load, so no engine or tool ever converts one to float (OverflowError) or prints one (Python's digit limit).
+MAX_JSON_INTEGER = 2 ** 53 - 1
+_MAX_JSON_INTEGER_DIGITS = len(str(MAX_JSON_INTEGER))
 
 
 class InputError(ValueError):
@@ -95,6 +102,29 @@ def is_number(value):
 
 def _reject_constant(name):
     raise InputError(f"input JSON contains {name}, which is not a valid JSON number")
+
+
+def _parse_int(text):
+    """JSON integers are bounded to +/-MAX_JSON_INTEGER (quality-gate-criteria.md #8.12). The digit count is checked
+    before conversion, so an integer of thousands of digits never reaches int() and the value is never echoed."""
+    if len(text.lstrip("-")) > _MAX_JSON_INTEGER_DIGITS or abs(int(text)) > MAX_JSON_INTEGER:
+        raise InputError(f"input JSON contains an integer of {len(text.lstrip('-'))} digits outside +/-{MAX_JSON_INTEGER}; "
+                         "no contract number needs one, so the input is malformed")
+    return int(text)
+
+
+def _parse_float(text):
+    """A JSON number written with a fraction or exponent must be finite: 1e400 overflows to infinity, which is not a
+    JSON number (quality-gate-criteria.md #8.12)."""
+    value = float(text)
+    if not math.isfinite(value):
+        raise InputError("input JSON contains a number too large to represent (it overflows to infinity), which is not a valid JSON number")
+    return value
+
+
+def is_position(value):
+    """A location page or paragraph: an integer of 1 or more (quality-gate-criteria.md #8.12)."""
+    return is_integer(value) and value >= MIN_POSITION
 
 
 def describe(value):
@@ -316,11 +346,13 @@ def record_engine(payload, tag):
 
 
 def load_json_file(path):
-    """Load engine input. Strict JSON only: NaN/Infinity constants, lone surrogates, duplicate member names and
-    over-deep nesting are input errors, so no engine ever processes or writes a value that is not valid JSON."""
+    """Load engine input. Strict JSON only: NaN/Infinity constants, numbers that overflow to infinity, integers outside
+    +/-MAX_JSON_INTEGER, lone surrogates, duplicate member names and over-deep nesting are input errors, so no engine
+    ever processes or writes a value that is not valid JSON."""
     try:
         with open(path, encoding="utf-8") as handle:
-            payload = json.load(handle, parse_constant=_reject_constant, object_pairs_hook=_object_pairs)
+            payload = json.load(handle, parse_constant=_reject_constant, parse_int=_parse_int, parse_float=_parse_float,
+                                object_pairs_hook=_object_pairs)
     except OSError as exc:
         raise InputError(f"could not read input JSON: {exc}") from exc
     except UnicodeDecodeError as exc:
@@ -413,8 +445,9 @@ def validate_location(location, label, required=True):
             raise InputError(f"{label}.location.{key} must be a string, got {describe(location[key])}")
     for key in ("page", "paragraph"):
         value = location.get(key)
-        if value is not None and not is_integer(value):
-            raise InputError(f"{label}: location.{key} must be an integer or null, got {describe(value)}; {PAGE_LABEL_HINT}")
+        if value is not None and not is_position(value):
+            raise InputError(f"{label}: location.{key} must be an integer of {MIN_POSITION} or more, or null, got "
+                             f"{describe(value) if not is_integer(value) else 'an integer below ' + str(MIN_POSITION)}; {PAGE_LABEL_HINT}")
     return location
 
 
@@ -507,7 +540,7 @@ def _contract_errors(value, node, path, root):
     if "$ref" in node:
         node = root["definitions"][node["$ref"].rsplit("/", 1)[-1]]
     if "const" in node and value != node["const"]:
-        yield f"{path} must be {node['const']!r}, got {describe(value)}"
+        yield f"{path} must be the constant {node['const']}, got {describe(value)}"
         return
     if "oneOf" in node:
         if sum(1 for option in node["oneOf"] if next(_contract_errors(value, option, path, root), None) is None) != 1:
@@ -538,7 +571,10 @@ def _contract_errors(value, node, path, root):
                 yield f"{path} ({describe(value)}) does not match the contract format {node['pattern']}"
     elif is_number(value):
         if value < node.get("minimum", value) or value > node.get("maximum", value):
-            yield f"{path} must be between {node.get('minimum')} and {node.get('maximum')}, got a number outside that range"
+            if "maximum" not in node:
+                yield f"{path} must be {node['minimum']} or more, got a number below that"
+            else:
+                yield f"{path} must be between {node.get('minimum')} and {node.get('maximum')}, got a number outside that range"
     elif isinstance(value, dict):
         for key in node.get("required", ()):
             if key not in value:
@@ -792,7 +828,8 @@ WITHHELD_WORDING = {
     OVERSIZE: "too long to screen for embedded instructions",
     SPLIT: "flagged with neighbouring fields by the embedded-instruction screen",
 }
-WITHHELD_PATTERN = re.compile(r"\[withheld ([1-9][0-9]*)(?: \((oversize|split)\))?: [a-z -]+; see the G8 finding\]")
+# Marker numbers are 1 to 9 digits, so reading one back (int) is always bounded; a longer number is not a marker.
+WITHHELD_PATTERN = re.compile(r"\[withheld ([1-9][0-9]{0,8})(?: \((oversize|split)\))?: [a-z -]+; see the G8 finding\]")
 
 
 def withheld_marker(number, kind=INSTRUCTION):

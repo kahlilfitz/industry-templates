@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "ps.deliverable-review-quality-gate.v1",
   "title": "Deliverable Review & Quality Gate contract v1",
-  "description": "Chains deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-check -> review-packet. Carries data plus confidence, provenance and citations on every hop so review-status escalation is mechanical. Engines treat deliverable and evidence text as untrusted data. JSON nested deeper than 64 levels anywhere in an engine input is an input error. Every engine validates its whole input against this contract at entry (required fields, JSON types, closed enums, ranges and provenance prefixes) and fails with a clean input error, writing no output, on any violation. Beyond the required list below, assertion_map also requires criteria and evidence_set, gate_check requires assertion_mappings, and severity_rank requires assertion_mappings, gate_results, findings and escalations. x-unrecognised: hold marks an enum the gates judge themselves (any string or null is accepted here and an unrecognised value holds); x-normalise: provenance means the value is compared after trimming, lower-casing and turning internal whitespace runs into -. Every member name must be spelled exactly as below: a name that differs only in case, Unicode form or -/_/. separators is a variant spelling and an input error. Any *_id value (or *_ids entry) longer than 512 characters is an input error. IDs and names are compared in one canonical form (NFKC, format characters removed, look-alike letters folded, case-folded, whitespace collapsed, and for IDs separators folded), while outputs keep the original values (quality-gate-criteria.md #8.11).",
+  "description": "Chains deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-check -> review-packet. Carries data plus confidence, provenance and citations on every hop so review-status escalation is mechanical. Engines treat deliverable and evidence text as untrusted data. JSON nested deeper than 64 levels anywhere in an engine input is an input error. Every engine validates its whole input against this contract at entry (required fields, JSON types, closed enums, ranges and provenance prefixes) and fails with a clean input error, writing no output, on any violation. Beyond the required list below, assertion_map also requires criteria and evidence_set, gate_check requires assertion_mappings, and severity_rank requires assertion_mappings, gate_results, findings and escalations. x-unrecognised: hold marks an enum the gates judge themselves (any string or null is accepted here and an unrecognised value holds); x-normalise: provenance means the value is compared after trimming, lower-casing and turning internal whitespace runs into -. Every member name must be spelled exactly as below: a name that differs only in case, Unicode form or -/_/. separators is a variant spelling and an input error. Any *_id value (or *_ids entry) longer than 512 characters is an input error. Every JSON integer must lie within +/-(2^53 - 1) and every number must be finite (1e400 and NaN are input errors); locations count from 1 and counts from 0 (quality-gate-criteria.md #8.12). IDs and names are compared in one canonical form (NFKC, format characters removed, look-alike letters folded, case-folded, whitespace collapsed, and for IDs separators folded), while outputs keep the original values (quality-gate-criteria.md #8.11).",
   "type": "object",
   "required": ["contract_version", "engagement_id", "deliverable", "assertions"],
   "properties": {
@@ -86,8 +86,8 @@
           "hedging_present": { "type": "boolean" },
           "limitation_present": { "type": "boolean" },
           "stated_basis": { "type": "boolean" },
-          "sample_size": { "type": ["integer", "null"] },
-          "population_size": { "type": ["integer", "null"] },
+          "sample_size": { "type": ["integer", "null"], "minimum": 0 },
+          "population_size": { "type": ["integer", "null"], "minimum": 0 },
           "scope_aligned": { "type": "boolean" },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
           "source": { "type": "string", "pattern": "^(engine|skill|connector):[a-z0-9][a-z0-9._-]*$", "x-normalise": "provenance", "description": "Required provenance prefix engine:, skill: or connector: plus a slug (normally skill:deliverable-ingest). Absent, blank, free-text or self-declared sources are input errors." },
@@ -179,8 +179,8 @@
       "required": ["section", "page", "paragraph"],
       "properties": {
         "section": { "type": "string" },
-        "page": { "type": ["integer", "null"], "description": "Physical page number. Null only for register-level findings with no page (for example a register that was not supplied). Printed labels such as roman numerals go in label; any other type is an input error." },
-        "paragraph": { "type": ["integer", "null"], "description": "Paragraph number on the page; null only for register-level findings." },
+        "page": { "type": ["integer", "null"], "minimum": 1, "description": "Physical page number, counted from 1; 0 and negative numbers are input errors. Null only for register-level findings with no page (for example a register that was not supplied). Printed labels such as roman numerals go in label; any other type is an input error." },
+        "paragraph": { "type": ["integer", "null"], "minimum": 1, "description": "Paragraph number on the page, counted from 1; 0 and negative numbers are input errors. Null only for register-level findings." },
         "label": { "type": "string" }
       }
     }
