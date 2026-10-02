@@ -77,7 +77,8 @@ def main():
                 else: bad_dom+=1
     trusted=list(set_trusted_domains(declared))
     h1,sow=scan_lines(sow,"raw/sow-extract.md"); h2,letter=scan_lines(letter,"raw/engagement-letter-extract.md"); h3,pursuit=scan_lines(pursuit,"raw/pursuit-record.md")
-    holds=h1+h2+h3+scan_rows(rows,"raw/confirmed-roster.csv")+scan(st,"upstream/staffing")
+    st,sth=screen_upstream(st,"upstream/staffing",ENGINE)  # every upstream string screened and redacted before use (#4.1, #4.3)
+    holds=h1+h2+h3+scan_rows(rows,"raw/confirmed-roster.csv")+sth
     smap,prop=statuses(st); roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]
     for i,r in enumerate(rows,2):
         name=(r.get("person") or "").strip()

@@ -56,7 +56,9 @@ def check_matched(p):
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--matched",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
     p=load_json(a.matched); check_matched(p); set_trusted_domains((p.get("engagement") or {}).get("trusted_domains"))
-    rows=read_csv(a.wall_register,False); ws=read_csv(a.workspace_inventory,False); up=list(p.get("holds",[])); holds=[]; deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
+    p,mh=screen_upstream(p,"matched",ENGINE)  # every upstream string screened and redacted before use; any hit holds the wall (#4.1, #4.3)
+    if mh: p.setdefault("escalations",[]).append(upstream_escalation(len(mh)))
+    rows=read_csv(a.wall_register,False); ws=read_csv(a.workspace_inventory,False); up=list(p.get("holds",[])); holds=list(mh); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
     status="clear"; reason="wall register marks joiner clear for this client/matter"; cit="confidentiality-and-ethical-wall-rules.md #2.2"
     own=words(e.get("client_name"),e.get("matter_id"),e.get("engagement_id"),e.get("title"),*(e.get("affiliates") or []),j.get("person"),*[r.get("person") for r in p.get("team_roster",[])],*(p.get("scope_summary") or {}).get("systems",[])); own_ids={k(e.get("matter_id")),k(e.get("engagement_id"))}-{""}
     def hold_status(hid,path,why,rule):

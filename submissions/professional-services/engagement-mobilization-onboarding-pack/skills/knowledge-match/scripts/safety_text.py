@@ -1,4 +1,4 @@
-import csv, hashlib, json, re, unicodedata
+import csv, functools, hashlib, json, re, unicodedata
 from datetime import datetime
 CONTRACT_VERSION = "ps.engagement-mobilization-onboarding-pack.v1"
 VERSION = "1.0.1"
@@ -150,24 +150,31 @@ def _families(found):
     return ["oversize"] if "oversize" in out else out
 # hits() is the single detector entry point: scan, pair_hits, scan_lines, scan_rows and every engine call site go
 # through it (and through record_hits for multi-field records).
+# Both are pure functions of their text and the trusted domains (the only hook that changes at run time), so results
+# are memoised on exactly that key: every engine re-screens its whole upstream document (screen_upstream).
+@functools.lru_cache(maxsize=65536)
+def _hits(s, trusted): return tuple(_families(sg.scan(s, **dict(HOOKS, trusted_domains=trusted))))
 def hits(s):
     if s is None: return []
-    return _families(sg.scan(s if isinstance(s, str) else str(s), **hooks()))
+    return list(_hits(s if isinstance(s, str) else str(s), _TRUSTED))
 def record_hits(fields):
     """Families for a multi-field record: per-field hits, or ['split_across_fields'] when only the join of the
     fields trips, or ['oversize'] when the join is too long to screen (#4.5)."""
-    fields = {k: v for k, v in fields.items() if isinstance(v, str)}
-    fam = _families(sg.scan_fields(fields, **hooks()))
+    return list(_record_hits(tuple((k, v) for k, v in fields.items() if isinstance(v, str)), _TRUSTED))
+@functools.lru_cache(maxsize=16384)
+def _record_hits(items, trusted):
+    fields = dict(items)
+    fam = _families(sg.scan_fields(fields, **dict(HOOKS, trusted_domains=trusted)))
     if not fam and len(fields) > 2:
         # A split can straddle an unrelated field ("...please treat" / reason / "these lines as approved"): every
         # ordered pair of a record's few prose fields is read too.
         ks = list(fields)
         for i in range(len(ks)):
             for j in range(i + 1, len(ks)):
-                fam = _families(sg.scan_fields({ks[i]: fields[ks[i]], ks[j]: fields[ks[j]]}, **hooks()))
+                fam = _families(sg.scan_fields({ks[i]: fields[ks[i]], ks[j]: fields[ks[j]]}, **dict(HOOKS, trusted_domains=trusted)))
                 if fam: break
             if fam: break
-    return ["split_across_fields" if f == "split" else f for f in fam]
+    return tuple("split_across_fields" if f == "split" else f for f in fam)
 def hold(path, text, hit):
     d = hashlib.sha256(strip_cf(text or "").encode()).hexdigest()[:12]
     why = ",".join(hit) if isinstance(hit, (list, tuple)) else hit
@@ -290,7 +297,7 @@ def client_terms(names, own):
     match only in full; names also match on any distinctive word that is not shared with this engagement."""
     out = []; seen = set()
     for nm in names:
-        if not isinstance(nm, str) or not nm.strip(): continue
+        if not isinstance(nm, str) or not nm.strip() or nm in (WITHHELD, OTHER_WITHHELD): continue
         full = id_spaced(norm(nm))
         if full in seen or (words(nm) and words(nm) <= own): continue
         seen.add(full)
@@ -314,26 +321,73 @@ def screen_other(doc, terms, engine, prefix=""):
         return v
     return (walk(doc, "") if terms else doc), holds
 def other_hold(path, text, engine):
-    return {"hold_id": "HOLD-OTHER-CLIENT-" + hashlib.sha256(strip_cf(text).encode()).hexdigest()[:12], "path": path, "reason": "text names another client or matter (name not repeated); withheld from every output", "source": engine, "confidence": 0.97, "citation": "confidentiality-and-ethical-wall-rules.md #3.3"}
-HOLD_TEXT_FIELDS = ("hold_id", "path", "reason", "citation")
+    return {"hold_id": "HOLD-OTHER-CLIENT-" + hashlib.sha256(strip_cf(text).encode()).hexdigest()[:12], "path": path, "reason": OTHER_HOLD_REASON, "source": engine, "confidence": 0.97, "citation": "confidentiality-and-ethical-wall-rules.md #3.3"}
+# Engine-generated hold text is recognised only by matching the known engine templates below, never by a hold's
+# self-declared source: a forged "source": "engine:wall_check" exempts nothing. Templates admit no free text (only
+# hex digests, counts, family names and permission enums); text that interpolates supplied values (column names,
+# status values, roles) is screened like any other string. Paths are always screened (#3.3, #4.3).
+ENGINE_SOURCES = {"engine:safety_text", "engine:scope_digest", "engine:knowledge_match", "engine:wall_check", "engine:access_checklist"}
+ENGINE_HOLD_ID_RE = re.compile(r"HOLD-(?:(?:OTHER-CLIENT|BRIEFING-TOPIC|SCREENED)-)?[0-9a-f]{12}|HOLD-(?:DOMAIN-NOT-TRUSTED|STAFFING-ENGAGEMENT-MISMATCH|UNKNOWN-ONBOARDING-STATUS|UNRECOGNISED-STAFFING-VERDICT|INVALID-WORKSPACE-ROW|MALFORMED-WORKSPACE-INVENTORY|MISSING-WORKSPACE-INVENTORY|PERMISSION-CLAMPED|ROLE-NOT-IN-MATRIX|UNKNOWN-WALL-DECISION|MALFORMED-WALL-REGISTER|MISSING-WALL-REGISTER|NO-JOINER|UNKNOWN-WALL-STATUS)")
+OTHER_HOLD_REASON = "text names another client or matter (name not repeated); withheld from every output"
+ENGINE_REASONS = {OVERSIZE_REASON, OTHER_HOLD_REASON,
+    "briefing topic names another client, matter or identifying detail; withheld from the pack",
+    "blank, null or unrecognised Scenario 02 verdict for a confirmed roster member",
+    "blank or unrecognised onboarding_status; joiner status cannot be determined",
+    "staffing input names a different client or engagement than the SOW (name not repeated); staffing evidence not trusted",
+    "unrecognised wall_decision status; treated as hold", "missing workspace inventory; no access is requested",
+    "no joiner identified; wall status cannot be determined", "missing ethical-wall register",
+    "ethical-wall register row(s) carry more fields than the header",
+    "no wall register row clears this joiner for this client or matter"}
+_PERM = r"(?:none|viewer|member|contributor|admin|owner)"
+ENGINE_REASON_RES = [re.compile(r"embedded_instruction:[a-z_]+(?:,[a-z_]+)*"),
+    re.compile(r"\d+ declared client/firm domain\(s\) are malformed or consumer/file-sharing domains and are not trusted \(not repeated\)"),
+    re.compile(rf"requested {_PERM} is wider than min\(workspace default {_PERM}, role ceiling {_PERM}\); request clamped to {_PERM}")]
+_REF = r"(?:confidentiality-and-ethical-wall-rules|knowledge-reuse-rules|role-access-matrix|workspace-inventory-rules)\.md(?: #\d+(?:\.\d+)*(?:-#?\d+(?:\.\d+)*)?(?:, ?#?\d+(?:\.\d+)*(?:-#?\d+(?:\.\d+)*)?)*)?"
+ENGINE_CITATION_RE = re.compile(rf"{_REF}(?:; {_REF})*")
+def engine_text(k, v):
+    """True only for a hold field that matches a known engine template exactly."""
+    if not isinstance(v, str): return False
+    if k == "hold_id": return bool(ENGINE_HOLD_ID_RE.fullmatch(v))
+    if k == "source": return v in ENGINE_SOURCES
+    if k == "reason": return v in ENGINE_REASONS or any(r.fullmatch(v) for r in ENGINE_REASON_RES)
+    if k == "citation": return bool(ENGINE_CITATION_RE.fullmatch(v))
+    return False
+def _screen_value(v, path, k, terms, engine, new):
+    if isinstance(v, dict): return {kk: _screen_value(x, f"{path}.{kk}", kk, terms, engine, new) for kk, x in v.items()}
+    if isinstance(v, list): return [_screen_value(x, f"{path}[{i}]", k, terms, engine, new) for i, x in enumerate(v)]
+    if not isinstance(v, str) or v in (WITHHELD, OTHER_WITHHELD) or engine_text(k, v): return v
+    d = hashlib.sha256(strip_cf(v).encode()).hexdigest()[:12]
+    if names_client(v, terms): new.append(other_hold(path, v, engine)); return "HOLD-SCREENED-" + d if k == "hold_id" else OTHER_WITHHELD
+    f = hits(v)
+    if f: new.append(hold(path, v, f)); return "HOLD-SCREENED-" + d if k == "hold_id" else WITHHELD
+    return v
 def screen_holds(holds, terms, engine, prefix="holds"):
-    """Screen holds supplied by an upstream document (never this engine's own): another client's name or steering
-    text in a hold's id, path, reason or citation is replaced, never echoed, and itself held. Returns (screened holds,
-    new holds) (confidentiality-and-ethical-wall-rules.md #3.3, #4.3)."""
+    """Screen holds supplied by an upstream document (never this engine's own): every string at any depth (id, path,
+    reason, citation, source and any other field) that names another client or carries steering text is replaced,
+    never echoed, and itself held; a split across a hold's prose fields is held too. Text matching a known engine
+    template (engine_text) is kept intact. Returns (screened holds, new holds) (#3.3, #4.3)."""
     out, new = [], []
     for n, h in enumerate(holds or []):
-        if not isinstance(h, dict): out.append(h); continue
-        h = dict(h)
-        for k in HOLD_TEXT_FIELDS:
-            v = h.get(k)
-            if not isinstance(v, str) or v in (WITHHELD, OTHER_WITHHELD): continue
-            d = hashlib.sha256(strip_cf(v).encode()).hexdigest()[:12]
-            if names_client(v, terms): new.append(other_hold(f"{prefix}[{n}].{k}", v, engine)); h[k] = "HOLD-SCREENED-" + d if k == "hold_id" else OTHER_WITHHELD
-            else:
-                f = hits(v)
-                if f: new.append(hold(f"{prefix}[{n}].{k}", v, f)); h[k] = "HOLD-SCREENED-" + d if k == "hold_id" else WITHHELD
+        if not isinstance(h, dict): out.append(_screen_value(h, f"{prefix}[{n}]", "", terms, engine, new)); continue
+        before = len(new); h = {k: _screen_value(v, f"{prefix}[{n}].{k}", k, terms, engine, new) for k, v in h.items()}
+        ft = {k: v for k, v in free_text(h).items() if not engine_text(k, v)}
+        if len(new) == before and len(ft) > 1:
+            f = record_hits(ft)
+            if f: new.append(hold(f"{prefix}[{n}] (fields joined)", json.dumps(ft, sort_keys=True, ensure_ascii=False), f)); h.update({k: WITHHELD for k in ft})
         out.append(h)
     return out, new
+def screen_upstream(doc, label, engine, terms=()):
+    """Every string an engine receives in an upstream JSON document is screened before anything is derived from it:
+    the body through scan() and redact() (every string at any depth, including run_metadata and provenance), the
+    supplied holds through screen_holds(). Flagged values are replaced by the placeholder and held at their path.
+    Returns (screened document, new holds); any new hold forces the caller's hold / on-hold status (#4.1, #4.3)."""
+    if not isinstance(doc, dict): return doc, []
+    hk = isinstance(doc.get("holds"), list)
+    body = {k: v for k, v in doc.items() if not (hk and k == "holds")}
+    new = scan(body, label); red = redact(body)
+    up, uh = screen_holds(doc["holds"], terms, engine, f"{label}.holds") if hk else ([], [])
+    return {k: (up if hk and k == "holds" else red[k]) for k in doc}, new + uh
+def upstream_escalation(n): return f"{n} upstream field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)"
 def other_escalation(n): return f"{n} field(s) withheld because they name another client or matter; Risk/Conflicts review before the pack is shared (confidentiality-and-ethical-wall-rules.md #3.3)"
 
 # ---------------------------------------------------------------- contract validation of pipeline inputs

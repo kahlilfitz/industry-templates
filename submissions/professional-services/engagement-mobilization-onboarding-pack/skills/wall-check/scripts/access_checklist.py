@@ -9,7 +9,6 @@ ADMIN_EXCLUDED=True  # workspace-inventory-rules.md #3.2
 WALL_STATUSES={"clear","denied","hold"}  # confidentiality-and-ethical-wall-rules.md #2.2
 INVENTORY_COLUMNS=("workspace_id","workspace_type","default_permission","depends_on_knowledge","data_classification")  # workspace-inventory-rules.md #1.3
 KNOWN_CLASSIFICATIONS={"client_confidential","confidential","restricted","internal","public"}  # workspace-inventory-rules.md #2.3
-GOVERNED_META=("contract_version","run_metadata","provenance","holds")
 def low(v): return (v or "").strip().lower()
 def safe(x): return WITHHELD if hits(x) else x  # confidentiality-and-ethical-wall-rules.md #4.3
 def pack(p):
@@ -36,9 +35,9 @@ def main():
     p=load_json(a.governed); check_governed(p); set_trusted_domains((p.get("engagement") or {}).get("trusted_domains"))
     # The governed document is untrusted input: its upstream holds and every content field are screened and flagged text
     # withheld before anything is derived from it (confidentiality-and-ethical-wall-rules.md #4.1, #4.3).
-    up,uh=screen_holds(p.get("holds",[]),[],ENGINE,"governed.holds"); body={k_:v for k_,v in p.items() if k_ not in GOVERNED_META}; gh=scan(body,"governed"); p.update(redact(body))
-    holds=dedup_holds(up+uh+gh); esc=p.setdefault("escalations",[])
-    if uh or gh: esc.append(f"{len(uh)+len(gh)} governed field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
+    p,gh=screen_upstream(p,"governed",ENGINE)
+    holds=dedup_holds(list(p.get("holds",[]))+gh); esc=p.setdefault("escalations",[])
+    if gh: esc.append(f"{len(gh)} governed field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
     role=low((p.get("joiner") or {}).get("role")); allowed=M.get(role,{}); wall=p["wall_decision"]; denied=set(wall.get("denied_workspace_ids",[])); held=set(wall.get("held_workspace_ids",[])); hidden=set(wall.get("name_withheld_workspace_ids",[])); out=[]
     def add_hold(hid,path,why,cit): holds.append({"hold_id":hid,"path":path,"reason":why,"source":ENGINE,"confidence":.99,"citation":cit})
     wstat=wall.get("status")

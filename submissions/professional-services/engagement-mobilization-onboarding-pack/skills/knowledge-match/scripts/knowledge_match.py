@@ -45,7 +45,9 @@ def rel(scope,item):
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--scope",required=True); ap.add_argument("--closeout",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
     s=load_json(a.scope); check_scope(s); set_trusted_domains((s.get("engagement") or {}).get("trusted_domains"))
-    c=adapt(a.closeout); own_h=scan(c["engagement"],"upstream/closeout.engagement")+scan(c["knowledge_record"],"upstream/closeout.knowledge_record")+scan(c["released_assets"],"upstream/closeout.released_assets"); rels={x.get("asset_id"):x for x in c["released_assets"] if x.get("clearance_state") in STATES}
+    # Both upstream documents are screened whole (every string, holds included) and redacted before use (#4.1, #4.3).
+    s,sh=screen_upstream(s,"scope",ENGINE)
+    c,own_h=screen_upstream(adapt(a.closeout),"upstream/closeout",ENGINE); rels={x.get("asset_id"):x for x in c["released_assets"] if x.get("clearance_state") in STATES}
     inc=[]; exc=[]; kr=c["knowledge_record"]
     for asset in kr.get("reusable_assets",[]):
         aid=asset.get("asset_id")
@@ -66,7 +68,8 @@ def main():
     ce=c["engagement"]; mine=s.get("engagement") or {}
     terms=client_terms([v for k_,v in (("client_name",ce.get("client_name")),("engagement_id",ce.get("engagement_id"))) if v and norm(v)!=norm(mine.get(k_) or "")],own_words(s))
     # Upstream scope holds are supplied content: screened for other-client names and steering text (#3.3, #4.3).
-    up,uh=screen_holds(s.get("holds",[]),terms,ENGINE,"scope.holds"); holds=dedup_holds(up+own_h+uh)
+    up,uh=screen_holds(s.get("holds",[]),terms,ENGINE,"scope.holds"); holds=dedup_holds(up+sh+own_h+uh)
+    if sh or own_h: s.setdefault("escalations",[]).append(upstream_escalation(len(sh)+len(own_h)))
     if any(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh): s.setdefault("escalations",[]).append(other_escalation(sum(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh)))
     if terms:
         s["prior_knowledge_candidates"]=inc; s,oh=screen_other(s,terms,ENGINE,"matched."); inc=s.pop("prior_knowledge_candidates")
