@@ -173,7 +173,7 @@
     },
     "gate_results": {
       "type": "array",
-      "description": "Required by severity_rank: exactly one entry per gate G1-G8. severity_rank reconciles every entry against findings[] (status, highest_severity and finding_count) and refuses the input on any mismatch, so a gate reported blocked can never reach a lower verdict (severity-rules.md #3.5).",
+      "description": "Required by severity_rank: exactly one entry per gate G1-G8, in gate order, each with exactly the members gate_check emits. severity_rank reconciles every entry against findings[] (status, highest_severity and finding_count) and against gate_check re-derivation (order, members, name, confidence, source and citation) and refuses the input on any mismatch, so a gate reported blocked can never reach a lower verdict (severity-rules.md #3.5, #3.7).",
       "items": {
         "type": "object",
         "required": ["gate_id", "name", "status", "highest_severity", "finding_count", "confidence", "source", "citation"],

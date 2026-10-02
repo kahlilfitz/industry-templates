@@ -1091,7 +1091,7 @@ def map_assertion(assertion, evidence_by_id, subject=None):
     evidence = best_evidence(assertion, linked_evidence(assertion, evidence_by_id, subject))
     withheld_ids = withheld_references(assertion, evidence_by_id)
     foreign_ids = foreign_references(assertion, evidence_by_id, subject)
-    missing_ids = [eid for eid in assertion.get("evidence_ids") or [] if evidence_for(evidence_by_id, eid) is None and eid not in withheld_ids]
+    missing_ids = [eid for eid in assertion.get("evidence_ids") or [] if evidence_for(evidence_by_id, eid) is None and not is_withheld_reference(evidence_by_id, eid)]
     status, support_score, rationale, criteria_section = classify(assertion, evidence, missing_ids, withheld_ids, foreign_ids)
     mapping = {
         "assertion_id": assertion["assertion_id"], "class": assertion["class"], "text": assertion["text"],

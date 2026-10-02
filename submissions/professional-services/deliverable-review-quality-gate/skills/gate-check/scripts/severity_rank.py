@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """severity_rank - deterministic finding ranking and review-status verdict."""
+import collections
 import copy
+import json
 import re
 import sys
 
@@ -119,6 +121,9 @@ def reconcile_gate_results(findings, gate_results):
         repeated = [gate for gate in GATE_IDS if seen.count(gate) > 1]
         raise InputError(f"gate_results must contain exactly one entry per gate {', '.join(GATE_IDS)}; got {len(seen)} entries"
                          + (f", missing {', '.join(missing)}" if missing else "") + (f", repeated {', '.join(repeated)}" if repeated else ""))
+    if seen != list(GATE_IDS):
+        moved = [position for position, named in enumerate(seen) if named != GATE_IDS[position]]
+        raise InputError(f"gate_results must list the gates in gate_check's order {', '.join(GATE_IDS)}; {len(moved)} position(s) differ; re-run gate_check (severity-rules.md #3.5)")
     by_gate = {item["gate_id"]: item for item in gate_results}
     mismatched = [gate for gate in GATE_IDS
                   if (by_gate[gate]["status"], by_gate[gate]["highest_severity"], by_gate[gate]["finding_count"]) != gate_summary(findings, gate)]
@@ -142,11 +147,14 @@ def rederive_gate_findings(payload):
     mapped = {key: copy.deepcopy(value) for key, value in payload.items() if key not in derived_sections}
     mapped["findings"] = am_findings_for_rederivation(mapped, [copy.deepcopy(item) for item in payload["findings"] if item["finding_id"].startswith("AM-")])
     mapped["escalations"] = []
+    hit_paths = []
     try:
-        evaluated = gc.evaluate(mapped)
+        evaluated = gc.evaluate(mapped, hit_sink=hit_paths)
     except InputError as exc:
         raise InputError(f"gate_check re-derivation failed on the carried mapped input ({exc}); re-run gate_check") from exc
     derived = evaluated["findings"]
+    # Presence is keyed by the exact engine ID: a variant spelling, or any one-field edit to an ID, counts as missing
+    # and is refused, never matched (quality-gate-criteria.md #8.19).
     supplied = {}
     for item in payload["findings"]:
         key = (item["finding_id"], item.get("gate_id"))
@@ -165,7 +173,8 @@ def rederive_gate_findings(payload):
         raise InputError(f"findings[] do not contain every finding gate_check derives from the carried mapped input: {shown}. Re-run gate_check; engine findings cannot be removed or downgraded after the gate run (severity-rules.md #3.7)")
     reconcile_derived_escalations(payload["escalations"], evaluated["escalations"])
     reconcile_gate_fields(payload["gate_results"], evaluated["gate_results"])
-    return evaluated
+    # Internal only, never written: every path gate_check's own G8 screen holds, listed or in its overflow note.
+    return dict(evaluated, g8_hit_paths=frozenset(hit_paths))
 
 
 def escalation_gate(entry):
@@ -174,11 +183,25 @@ def escalation_gate(entry):
     return next((known for known in GATE_IDS if known == gate), None)
 
 
+def escalation_key(entry):
+    """Exact comparison form of one escalation (string or object): every key and value, not a count."""
+    return json.dumps(entry, sort_keys=True, ensure_ascii=False)
+
+
 def reconcile_derived_escalations(supplied, derived):
     """Every escalation gate_check derives from the carried mapped input must still be in escalations[] (#3.7). An
     escalation is a hold that needs partner/QRM confirmation, so deleting one would relax the review; extra escalations
-    may only add. Counted by gate (engine constants), never quoted (quality-gate-criteria.md #8.9)."""
-    missing = [entry for entry in derived if entry not in supplied]
+    may only add. Compared item by item as a multiset of exact entries, never by count or bare membership, so two
+    identical derived escalations need two carried copies and a one-field edit counts as missing (quality-gate-criteria.md
+    #8.19). Counted by gate (engine constants), never quoted (quality-gate-criteria.md #8.9)."""
+    remaining = collections.Counter(escalation_key(entry) for entry in supplied)
+    missing = []
+    for entry in derived:
+        key = escalation_key(entry)
+        if remaining[key]:
+            remaining[key] -= 1
+        else:
+            missing.append(entry)
     if not missing:
         return
     gates = [escalation_gate(entry) or "other" for entry in missing]
@@ -191,11 +214,12 @@ GATE_ENGINE_FIELDS = ("name", "confidence", "source", "citation")
 
 def reconcile_gate_fields(supplied, derived):
     """gate_results' name, confidence, source and citation are gate_check constants; they must equal what
-    re-derivation gives, so an edited gate entry can never relabel or re-source a gate (#3.5, #3.7)."""
+    re-derivation gives, and each entry must carry exactly gate_check's keys (no extra or missing member), so an
+    edited gate entry can never relabel, re-source or annotate a gate (#3.5, #3.7; quality-gate-criteria.md #8.19)."""
     expected = {item["gate_id"]: item for item in derived}
-    differing = [gate for gate in GATE_IDS if any(entry["gate_id"] == gate and any(entry.get(field) != expected[gate][field] for field in GATE_ENGINE_FIELDS) for entry in supplied)]
+    differing = [gate for gate in GATE_IDS if any(entry["gate_id"] == gate and (set(entry) != set(expected[gate]) or any(entry.get(field) != expected[gate][field] for field in GATE_ENGINE_FIELDS)) for entry in supplied)]
     if differing:
-        raise InputError(f"gate_results for {', '.join(differing)} do not carry gate_check's own {'/'.join(GATE_ENGINE_FIELDS)}; re-run gate_check, gate entries cannot be edited after the gate run (severity-rules.md #3.7 and #3.5)")
+        raise InputError(f"gate_results for {', '.join(differing)} do not carry gate_check's own {'/'.join(GATE_ENGINE_FIELDS)}, or carry members gate_check does not emit; re-run gate_check, gate entries cannot be edited after the gate run (severity-rules.md #3.7 and #3.5)")
 
 
 def am_findings_for_rederivation(mapped, am_findings):
@@ -240,11 +264,11 @@ def remove_forged_engine_findings(payload, derived, raw_owners=()):
     and when its ID is one re-derivation produces and no exact copy remains, the derived finding is restored in its
     place. `raw_owners[i]` is the owner of findings[i] read before screening withheld any text, so a flagged engine ID
     is still treated as engine-owned. Returns the labels of the forged findings (never their text)."""
-    derived_by_id = {item["finding_id"]: item for item in derived}
+    derived_by_id = {rules.canonical_id(item["finding_id"]): item for item in derived}
     kept, forged = [], []
     for index, item in enumerate(payload["findings"]):
         owner = (raw_owners[index] if index < len(raw_owners) else None) or engine_owner(item)
-        if owner is None or derived_by_id.get(item["finding_id"]) == item:
+        if owner is None or derived_by_id.get(rules.canonical_id(item["finding_id"])) == item:
             kept.append(item)
             continue
         if is_history_hold(item):
@@ -254,7 +278,7 @@ def remove_forged_engine_findings(payload, derived, raw_owners=()):
     labels = []
     for index, item in forged:
         labels.append(gc.safe_token(item["finding_id"], f"findings[{index}]"))
-        restored = derived_by_id.get(item["finding_id"])
+        restored = derived_by_id.get(rules.canonical_id(item["finding_id"]))
         if restored is not None and restored not in kept:
             kept.append(copy.deepcopy(restored))
     payload["findings"] = kept
@@ -277,15 +301,12 @@ def refresh_gate_results(payload):
         item["status"], item["highest_severity"], item["finding_count"] = gate_summary(payload["findings"], item["gate_id"])
 
 
-def covered_by_gate_check(findings, escalations, path):
-    """True when gate_check already holds this primary-field hit under its own G8 finding. `findings` and
-    `escalations` are what gate_check re-derives from the carried mapped input (#3.7), never the carried copies: a pasted
-    G8 history hold or overflow note must not stop severity_rank reporting a field (quality-gate-criteria.md #8.16)."""
-    if any(item["finding_id"].startswith("GC-G8-embedded-instruction-") and f"Untrusted field {path} " in item.get("detail", "") for item in findings):
-        return True
-    listed = sum(1 for item in findings if item["finding_id"].startswith("GC-G8-embedded-instruction-"))
-    overflow = any(isinstance(entry, str) and entry.startswith("G8: ") and "further embedded-instruction hit(s) not listed individually" in entry for entry in escalations)
-    return listed >= MAX_G8_HITS and overflow
+def covered_by_gate_check(rederived, path):
+    """True when gate_check's own G8 screen, re-run on the carried mapped input (#3.7), holds this exact path, whether
+    it is listed as a GC-G8 finding or counted in gate_check's overflow note. Matched by path, item by item, never by
+    how many holds were listed, and never from carried copies: a pasted G8 history hold or overflow note must not stop
+    severity_rank reporting a field (quality-gate-criteria.md #8.16, #8.19)."""
+    return path in rederived["g8_hit_paths"]
 
 # Escalations severity_rank itself writes about an engine finding (severity-rules.md #2.1, #3.4); the finding ID may
 # carry a withheld assertion ID, which the engine finding binds.
@@ -330,8 +351,7 @@ def screen_embedded_instructions(payload, rederived, raw_owners=()):
     derived sections (findings, escalations, gate_results, provenance, assertion_mappings and any other notes) that
     trips the detector, and is not a copy of primary text already held, is a new hit. Text already replaced by a
     withheld marker upstream stays withheld. Returns (path, reason) for each new hit; the payload is updated in place."""
-    findings, escalations = rederived["findings"], rederived["escalations"]
-    hits = [(path, reason) for path, reason, derived in rules.withhold_untrusted(payload) if derived or not covered_by_gate_check(findings, escalations, path)]
+    hits = [(path, reason) for path, reason, derived in rules.withhold_untrusted(payload) if derived or not covered_by_gate_check(rederived, path)]
     hits += placeholder_hits(payload, rederived, raw_owners, hits)
     for index, item in enumerate(payload["findings"]):
         if rules.is_withheld(item["finding_id"]):

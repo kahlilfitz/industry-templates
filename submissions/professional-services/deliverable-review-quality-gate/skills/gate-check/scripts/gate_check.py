@@ -190,7 +190,7 @@ def screen_upstream_findings(upstream, expected, raw_upstream=None):
         if owner == rules.AM_ENGINE:
             if not genuine_am_finding(item, expected_am):
                 spoofed.append(label)
-            elif not any(kept_item["finding_id"] == item["finding_id"] for kept_item in kept):
+            elif not any(rules.canonical_id(kept_item["finding_id"]) == rules.canonical_id(item["finding_id"]) for kept_item in kept):
                 kept.append(item)
             continue
         if rules.is_engine_tag(raw.get("source")):
@@ -206,8 +206,8 @@ def screen_upstream_findings(upstream, expected, raw_upstream=None):
 def check_claimed_findings(claimed, findings):
     """Labels of upstream GC- findings that this run's computation does not reproduce exactly (same ID and every field
     equal). A reproduced claim is already present as the engine's own finding; any other is spoofed (#8.4)."""
-    computed = {item["finding_id"]: item for item in findings}
-    return [label for label, item in claimed if computed.get(item["finding_id"]) != item]
+    computed = {rules.canonical_id(item["finding_id"]): item for item in findings}
+    return [label for label, item in claimed if computed.get(rules.canonical_id(item["finding_id"])) != item]
 
 def claim_finding_id(findings, owners, base, owner):
     """A finding ID unique to one register entry, required-language item or assertion (quality-gate-criteria.md #8.4).
@@ -230,17 +230,26 @@ def language_excerpt(text, limit=120):
     return text if len(text) <= limit or rules.is_withheld(text) else text[:limit].rstrip() + "..."
 
 def reconcile_assertion_outputs(payload, expected, kept, escalations):
-    """Restore assertion_map output that was removed or altered upstream. Returns the assertion IDs that differed."""
+    """Restore assertion_map output that was removed or altered upstream. Returns the assertion IDs that differed.
+
+    The carried mappings are compared with the recomputed ones item by item, every key and ID included, never by
+    count: each recomputed mapping must be carried exactly, and the carried list must equal the recomputed list, so
+    an extra, repeated or reordered entry, or a one-field edit to an ID, is restored and held (quality-gate-criteria.md
+    #8.19). Mappings are matched by canonical assertion ID (rules.key_of), so a variant spelling is a difference."""
     if expected is None:
         return []
-    provided = {item.get("assertion_id"): item for item in payload["assertion_mappings"] if isinstance(item, dict)}
-    altered = [m["assertion_id"] for m in expected["mappings"] if provided.get(m["assertion_id"]) != m]
-    if len(payload["assertion_mappings"]) != len(expected["mappings"]) and not altered:
+    provided = {}
+    for item in payload["assertion_mappings"]:
+        key = rules.key_of(item.get("assertion_id")) if isinstance(item, dict) else None
+        if key is not None:
+            provided.setdefault(key, item)
+    altered = [m["assertion_id"] for m in expected["mappings"] if provided.get(rules.key_of(m["assertion_id"])) != m]
+    if payload["assertion_mappings"] != expected["mappings"] and not altered:
         altered.append("assertion_mappings")
     payload["assertion_mappings"] = expected["mappings"]
-    present = {item["finding_id"] for item in kept}
+    present = {rules.canonical_id(item["finding_id"]) for item in kept}
     for finding_id, finding in expected["findings"].items():
-        if finding_id not in present:
+        if rules.canonical_id(finding_id) not in present:
             kept.append(finding)
             altered.append(finding["finding_id"][len("AM-"):])
     for escalation in expected["escalations"]:
@@ -553,7 +562,7 @@ def add_spoof_hold(findings, escalations, spoofed, altered):
     if altered:
         escalations.append(f"G8: assertion_map output for {', '.join(altered)} was missing or altered upstream and was restored from recomputation - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
 
-def evaluate(payload):
+def evaluate(payload, hit_sink=None):
     """Apply every gate to a mapped payload (assertion_map output) and return it with findings, escalations and
     gate_results set. No file I/O and no provenance stamp; severity_rank calls it to re-derive the engine findings
     from the mapped input that gate-checked.json carries (severity-rules.md #3.7)."""
@@ -698,6 +707,9 @@ def evaluate(payload):
         hits = instruction_hits(payload)
         hits += [hit for hit in screened_hits if hit not in hits]
         hits += placeholder_hits(payload, raw, expected, escalations[carried_escalations:], hits)
+        if hit_sink is not None:
+            # Every hit path, listed or beyond MAX_G8_HITS, so severity_rank reconciles by path, never by count (#8.19).
+            hit_sink.extend(path for path, _ in hits)
         for hit_index, (path, hit_reason) in enumerate(hits[:MAX_G8_HITS], start=1):
             if hit_reason == OVERSIZE:
                 add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Field too long to screen for embedded instructions", f"Untrusted field {path} is too long to screen for embedded instructions (over {sg.MAX_TOTAL_CHARS:,} characters, raw or after Unicode normalisation), so it was not screened; it must be held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.6", 0.99, "quality-gate-criteria.md #8.1, #8.6; severity-rules.md #1.1")

@@ -425,6 +425,33 @@ The structural patterns described at the top of this entry are replaced, not sup
 
   Goldens are byte-identical, and no old tests changed.
 
+### Class sweeps from T&E round 10 (reconcile by content, not count; canonical grouping)
+
+- Reconcile by content, not count (#8.19). Every carried derived list is now re-derived and compared item by item, keys and IDs included. Four places relied on a length or count, or matched too loosely:
+  - **gate_check, carried `assertion_mappings`:** flagged only a length mismatch when no individual mapping differed, so a reorder with equal items was silently restored. The carried list must now equal the recomputed one entry by entry, matched by canonical assertion ID. A reorder, repeat, extra entry or one-field ID edit is restored with the G8 spoof hold.
+  - **severity_rank, derived escalations:** checked by bare membership. They are now compared as a multiset of exact entries.
+  - **severity_rank, `gate_results`:** must now list the gates in gate_check's order with exactly its members. An extra member is refused, so a flagged member name there is now refused rather than screened and held.
+  - **severity_rank, G8 coverage:** treated a primary-field hit as covered whenever gate_check had listed five holds and written an overflow note. gate_check re-derivation now reports every hit path, and a hit is covered only when its own path is among them.
+  - Engine findings stay present by exact ID, so a respelled or one-character-edited ID is refused (documented in severity-rules.md #3.7).
+- Canonical grouping (A13; #8.19). These now compare in canonical form:
+  - gate_check's de-duplication of verified AM findings, claimed GC findings and restored AM findings;
+  - severity_rank's lookup of derived findings when removing or restoring forged ones;
+  - assertion_map's missing-reference test, which now uses the same withheld-reference predicate as the rest of the rules.
+
+  A sweep of every set, group-by and equality on names and IDs found no other raw-string comparison. Recipients and client names already use `canonical_name`. Closed enums (gate IDs, severities) stay exact, because the contract refuses variants.
+- Docs: quality-gate-criteria.md #8.19 is new, and severity-rules.md #3.6 and #3.7 are updated, in all six copies. The contract's `gate_results` description (all six copies) now states the order and member rule.
+- Tests: 1078 checks (were 1051), with 26 new in `tne_round10_sweep_tests`. They cover:
+  - mappings reordered, ID-edited, respelled, repeated or extended;
+  - gate_results reordered or given an extra or variant-named member;
+  - a one-character edit to an escalation ID, and multiset unit checks;
+  - engine finding IDs edited or respelled;
+  - path-based G8 coverage, with an eight-hit overflow run end to end, its re-run, and a deleted overflow note;
+  - variant spellings of language, disclaimer, evidence-reference and subject keys;
+  - variant-spelled forged GC and AM findings, and canonical duplicate collapse;
+  - both demos end to end.
+
+  Goldens are byte-identical. Old test changed: QR5-1's severity_rank member-name placement moved from a `gate_results` entry to `provenance`, plus a new QR5-1 check that the `gate_results` placement is refused without echo.
+
 ## 1.0.3 - 2026-10-01
 
 Fixes every FAIL, WEAK and should-fix item in the Cowork 1.0.2 evaluation (42/50, Blocked).
