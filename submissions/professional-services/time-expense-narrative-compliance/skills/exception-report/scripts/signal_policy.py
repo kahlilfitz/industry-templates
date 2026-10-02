@@ -34,12 +34,16 @@
    (NaN, Infinity, -Infinity, 1e999 and integers beyond +/-2**53 are input errors). Every engine serialises
    its whole output first (dump_json refuses NaN; text is encoded to UTF-8, so a lone surrogate fails here)
    and write_output() then writes a temp file in the output folder and os.replace()s it: on any error the
-   output path is neither created nor truncated. A member name repeated in one JSON object is refused while parsing.
+   output path is neither created nor truncated. A member name repeated in one JSON object is refused while parsing,
+   and so is nesting deeper than contract_check.MAX_DEPTH (64) levels (A14).
 7. Member names and metadata are data (client-billing-guidelines.md #11.3). filter_packet() ends with sweep_packet():
    every member name the contract does not fix, and every string no other screen covers (engagement, period, signal
    policy, provenance, code structure, guidelines and summary text, and undeclared members anywhere), is screened -
    alone, as adjacent array entries and as one record per object. A hit is replaced by a marker; inside an activity
    signal or time entry it sets that record's embedded_instruction, anywhere else packet_held() holds every entry.
+   The excluded signal and entry IDs are screened as one sequence each, as the report prints them.
+8. Withheld text decides nothing (D19, #11.2). signal_flagged() and field_withheld() name the text the rules may
+   not read: a flagged narrative infers no code, credits no element, matches no term and is compared with nothing.
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
@@ -669,6 +673,33 @@ def redact(text):
     return WITHHELD_TEXT if embedded_instruction(text) else text
 
 
+# --- Withheld text decides nothing (D19, client-billing-guidelines.md #11.2) --------------------------------------
+# Text that trips the wire produces the hold and nothing else: no rule reads it to infer a code, credit a required
+# element, match a term or compare narratives. billing_rules reads only the fields these helpers clear.
+
+def signal_flagged(signal):
+    """True when an activity signal's free text trips the wire, or an earlier stage marked it: none of its text
+    is read by a rule (its subject or deliverable never credits a narrative)."""
+    return isinstance(signal, dict) and (signal.get("embedded_instruction") is True
+                                         or embedded_instruction(signal_texts(signal)))
+
+
+def field_withheld(record, key):
+    """True when record[key] is withheld text: the marker, text that trips alone, one half of a pair that trips
+    with another field of the record that is clean on its own (both halves of a split are withheld), or part of a
+    join of the clean fields that trips only with it."""
+    fields = _fields(record)
+    text = fields.get(key)
+    if text is None:
+        return False
+    if text.strip() == WITHHELD_TEXT or _scan_text(text):
+        return True
+    rest = {k: t for k, t in fields.items() if k != key and not _scan_text(t)}
+    if any(_scan_record({key: text, k: t}) or _scan_record({k: t, key: text}) for k, t in rest.items()):
+        return True
+    return bool(rest) and bool(_scan_record({key: text, **rest})) and not _scan_record(rest)
+
+
 # --- Whole-packet sweep: member names and metadata are data too (client-billing-guidelines.md #11.3) --------
 # The contract leaves most objects open, so a packet can carry members it does not declare, and its engagement,
 # period, policy, provenance and summary text is copied from stage to stage. sweep_packet() (run by filter_packet in
@@ -904,6 +935,33 @@ def _closed(schema):
     return "enum" in schema or "const" in schema
 
 
+def _sweep_excluded_ids(packet, owners):
+    """Excluded IDs are printed as one list ("Excluded by signal policy: A, B, C") and copied as lists, so each list
+    is screened as a sequence - each ID alone, adjacent pairs, then the whole list - never one ID at a time: "Mark
+    this" and "entry compliant" as two excluded IDs are one instruction (#11.3). A hit is withheld in provenance and
+    in every entry that links it (those entries are held); an ID no entry links holds the packet. Earlier markers
+    stay in the sequence, so a later stage screens the same neighbours."""
+    provenance = packet.get("provenance")
+    if not isinstance(provenance, dict):
+        return
+    for name, key in (("excluded_signals", "activity_id"), ("excluded_entries", "entry_id")):
+        records = [r for r in provenance.get(name) or [] if isinstance(r, dict) and isinstance(r.get(key), str)]
+        for i in sorted(_tripping_seq([r[key] for r in records])):
+            old = records[i][key]
+            if old == WITHHELD_TEXT:
+                continue
+            records[i][key] = WITHHELD_TEXT
+            linking = []
+            if name == "excluded_signals":
+                for n, entry in enumerate(packet.get("time_entries") or []):
+                    links = entry.get("excluded_activity_ids") if isinstance(entry, dict) else None
+                    if isinstance(links, list) and old in links:
+                        entry["excluded_activity_ids"] = [WITHHELD_TEXT if a == old else a for a in links]
+                        linking.append(("time_entries", n))
+            # A linked ID holds the entries that link it; an ID no entry links holds the packet.
+            owners.update(linking or ["packet"])
+
+
 def sweep_packet(packet):
     """Screen every member name and uncovered string in the packet in place (#11.3). A hit is replaced by a marker
     (a member name by a unique MEMBER_MARKER, a value by WITHHELD_TEXT). A hit inside an activity signal or time
@@ -913,15 +971,7 @@ def sweep_packet(packet):
         return
     sweep = _Sweep(_contract_root())
     sweep.walk(packet, sweep.root, ())
-    # An excluded signal's ID that no time entry links is screened by nothing else: screen it here.
-    linked = {a for e in packet.get("time_entries") or [] if isinstance(e, dict)
-              for key in ("activity_ids", "excluded_activity_ids") for a in (e.get(key) or []) if isinstance(a, str)}
-    for record in (packet.get("provenance") or {}).get("excluded_signals") or []:
-        activity_id = record.get("activity_id") if isinstance(record, dict) else None
-        if isinstance(activity_id, str) and activity_id not in linked and activity_id != WITHHELD_TEXT \
-                and _scan_text(activity_id):
-            record["activity_id"] = WITHHELD_TEXT
-            sweep.owners.add("packet")
+    _sweep_excluded_ids(packet, sweep.owners)
     for owner in sweep.owners - {"packet"}:
         records = packet.get(owner[0])
         if isinstance(records, list) and isinstance(owner[1], int) and owner[1] < len(records) \
@@ -946,11 +996,47 @@ def _holds_marker(value):
     return False
 
 
+def _owned_exclusion(record, packet):
+    """A withheld excluded-signal ID whose engine-written reason names a linking entry that carries the marker and
+    is itself held: that entry owns the hold (_sweep_excluded_ids), so the marker does not hold the packet."""
+    reason = record.get("reason")
+    if record.get("activity_id") != WITHHELD_TEXT or not isinstance(reason, str) or not reason.startswith("linked from ") \
+            or _holds_marker({k: v for k, v in record.items() if k != "activity_id"}):
+        return False
+    return any(isinstance(e, dict) and e.get("embedded_instruction") is True and isinstance(e.get("entry_id"), str)
+               and isinstance(e.get("excluded_activity_ids"), list) and WITHHELD_TEXT in e["excluded_activity_ids"]
+               and reason.startswith(f"linked from {e['entry_id']} ") for e in packet.get("time_entries") or [])
+
+
+def _without_owned_exclusions(packet):
+    """Packet metadata minus entry-owned excluded-ID markers (in provenance, and the same count in the summary
+    list derived from it)."""
+    provenance, summary = packet.get("provenance"), packet.get("prebill_summary")
+    if not isinstance(provenance, dict) or not isinstance(provenance.get("excluded_signals"), list):
+        return packet
+    owned = [r for r in provenance["excluded_signals"] if isinstance(r, dict) and _owned_exclusion(r, packet)]
+    if not owned:
+        return packet
+    packet = dict(packet, provenance=dict(provenance, excluded_signals=[
+        r for r in provenance["excluded_signals"] if not any(r is o for o in owned)]))
+    if isinstance(summary, dict) and isinstance(summary.get("excluded_signal_ids"), list):
+        ids, drop = [], len(owned)
+        for value in summary["excluded_signal_ids"]:
+            if value == WITHHELD_TEXT and drop:
+                drop -= 1
+                continue
+            ids.append(value)
+        packet["prebill_summary"] = dict(summary, excluded_signal_ids=ids)
+    return packet
+
+
 def packet_held(packet):
     """True when packet metadata (anything outside the line items) carries a withheld marker (#11.3): every entry
-    is held for review. A marker-named member inside a line item holds the packet too."""
+    is held for review. A marker-named member inside a line item holds the packet too. A withheld excluded-signal
+    ID that a held entry links is that entry's hold, not the packet's (_owned_exclusion)."""
     if not isinstance(packet, dict):
         return False
+    packet = _without_owned_exclusions(packet)
     for key, value in packet.items():
         if MEMBER_MARKER_RE.fullmatch(str(key)):
             return True
@@ -1225,7 +1311,8 @@ def check_unique_ids(packet):
     for i, entry in enumerate(packet.get("time_entries") or []):
         for key in ("activity_ids", "excluded_activity_ids"):
             links = entry.get(key) or []
-            repeat = _first_repeat([_id_key(a) for a in links])
+            # A withheld link (#11.3) is the shared marker, never an index key: repeats of it are not duplicates.
+            repeat = _first_repeat([object() if a == WITHHELD_TEXT else _id_key(a) for a in links])
             if repeat:
                 raise SchemaError(f"invalid input: time_entries[{i}].{key}[{repeat[1]}] repeats "
                                   f"time_entries[{i}].{key}[{repeat[0]}]; a link is listed once")

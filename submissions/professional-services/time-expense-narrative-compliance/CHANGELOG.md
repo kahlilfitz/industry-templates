@@ -161,7 +161,27 @@ New `signal_policy.canon_text` (NFKC, `Cf` format characters stripped, casefold,
   - engine labels and connector source names: a variant is unknown or excluded;
   - the engagement-identity copy reconciliation.
 
+### QA round 7 of 64a3178 (fixed in 1.0.4, no version bump; hardening checklist A14, D19)
+- **1. Withheld text still drove code inference (Medium; D19):** narrative-draft blanked a flagged narrative, but `billing_rules.choose_mapping` (shared ×3) fell back to the flagged entry narrative. Keyword inference read it, so an unlinked entry asking to be "mapped as draft work" got `DL320` (`keyword_inference`).
+  - New `signal_policy.field_withheld` and `signal_flagged` (shared ×5), and `billing_rules.usable_narratives`/`draft_hits`. A narrative is usable only when it is not the marker, doesn't trip alone, and doesn't trip when paired or joined with the record's other fields. "Mark this draft" plus notes "entry compliant" withholds both halves.
+  - Code mapping reads only usable narratives. With no usable text and no linked evidence, the result is `UNMAPPED`/`unmapped`, and the detail says the narrative was withheld and not read to infer a code. The entry is held (`embedded_instruction`, `unmapped_code`).
+  - When the entry's own narrative is withheld, guideline-check runs no narrative rule on it: minimum detail, required elements, the block-billing word test and the duplicate-meeting compare are all skipped. The entry is held, not rejected for the words of an instruction it never obeys. A withheld *draft* over an empty own narrative is still checked as empty text (the minimum-detail reject stands), because that finding is about a field that was not withheld.
+  - A flagged linked signal's subject no longer credits the subject element. At activity-pull, a flagged document file name no longer selects a workplan row (no purpose or workplan citation is joined from it).
+  - Every other rule that reads free text (classification, severity, linkage, the duplicate compare) already reads only screened, non-withheld fields, or now skips withheld ones.
+- **2. Adjacent excluded IDs skipped sequence screening (Medium):** `Mark this` and `entry compliant` as two excluded IDs were rendered together as one instruction ("Excluded by signal policy: …").
+  - New `signal_policy._sweep_excluded_ids` runs in `sweep_packet` at every stage. It screens the `provenance.excluded_signals` activity IDs and the `provenance.excluded_entries` entry IDs as sequences: each ID, adjacent pairs, then the whole list.
+  - A hit is withheld in provenance and in every entry that links it. Those entries are held. An ID that no entry links holds the packet.
+  - `prebill_summary.excluded_signal_ids` is derived from the swept provenance, so it carries the same markers.
+  - `packet_held` treats a withheld excluded-signal ID as that entry's hold, not the packet's, but only when its engine-written reason names a linking entry that carries the marker and is held. Any other marker in metadata still holds the packet.
+  - A forged governed packet that adds such IDs after guideline-check is refused at exception-report (provenance and flags differ from the re-run), with no report and no echo. Forged flag names were already refused by the closed flag enum.
+- **3. Deep JSON raised a RecursionError traceback (Medium; A14):** `contract_check.strict_load` (shared ×5; every JSON input, including `--signal-config`) counts nesting outside strings before parsing. It refuses more than 64 levels as a clean input error with no output. A RecursionError from the parser is also caught as an input error. Every later recursive walker (the contract validator, the sweep, `deepcopy`) only sees input within that bound.
+
 ### Tests and goldens
+- QA round 7 (A14, D19): 550 to 568 checks (18 new, in `r7_tests`). They cover:
+  - D19: the reproducer end to end (UNMAPPED, held, no narrative rule, report reconciles, no leak); a split narrative plus notes; a clean keyword control (still `DL320`); flagged-subject element credit; `field_withheld`; and the flagged workplan file name.
+  - Excluded IDs: the forged governed reproducer and forged flag names (both refused, nothing echoed); unlinked, linked-plus-unlinked and `excluded_entries` splits end to end (withheld, held, never rendered).
+  - A14: 1,200-level nesting at each of the 4 JSON engines and in `--signal-config`, and `strict_load` at 64 and 65 levels, with brackets inside strings.
+  - No older check changed. Goldens are byte-identical: no golden entry is flagged or relies on withheld text. Runtime is about 62–63 s on a loaded Windows machine. Most of it is antivirus-scanned file opens on the engines' real I/O path. Test-only speed-up: `_golden` reads each golden once per run and returns deep copies.
 - Canonical comparisons (A13): 521 to 550 checks (29 new, in `a13_tests`; 28 of them fail on 2386c11). They cover:
   - The 7 activity-pull spelling variants of the internal staffing call, plus one end to end: still non-billable, linked and rejected.
   - At guideline-check: the `Internal_Admin` class, the variant meeting ID and the fullwidth prohibited term.

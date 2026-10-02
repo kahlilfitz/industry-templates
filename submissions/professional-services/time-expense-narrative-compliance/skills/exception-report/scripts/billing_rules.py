@@ -76,11 +76,44 @@ def signal_mapping(signal):
     return mapping
 
 
+def draft_hits(draft_text, entry, linked):
+    """Hits for a main draft narrative: alone, and with the entry's notes and linked activity text (#11.1)."""
+    return signal_policy.screen(draft_text, signal_policy.entry_texts(
+        {"narrative": draft_text, "notes": entry.get("notes")}, linked))
+
+
+def usable_narratives(entry, linked):
+    """(draft narrative, entry narrative, draft withheld, own withheld) the rules may read (D19, #11.2).
+
+    The draft narrative is unusable when it is the withheld marker or trips with the entry's notes or linked text
+    (guideline_check withholds it); the entry's own narrative when signal_policy.field_withheld() finds it is
+    withheld text in its record (linked signals that are flagged themselves are left out, since their text is
+    withheld on its own). An unusable narrative is "" and infers no code, credits no element, matches no term and
+    is compared with no other narrative. A withheld draft over an empty timesheet narrative leaves the entry with
+    no narrative of its own, which the rules still report (minimum detail); a withheld own narrative is not text
+    the rules can judge, so with no usable draft the entry is held instead."""
+    draft = entry.get("draft") if isinstance(entry.get("draft"), dict) else {}
+    draft_text = draft.get("narrative").strip() if isinstance(draft.get("narrative"), str) else ""
+    own = entry.get("narrative").strip() if isinstance(entry.get("narrative"), str) else ""
+    draft_withheld = own_withheld = False
+    if draft_text and (draft_text == signal_policy.WITHHELD_TEXT or draft_hits(draft_text, entry, linked)):
+        draft_text, draft_withheld = "", True
+    clean = [a for a in linked if not signal_policy.signal_flagged(a)]
+    if own and signal_policy.field_withheld(signal_policy.entry_texts(entry, clean), "narrative"):
+        own, own_withheld = "", True
+    return draft_text, own, draft_withheld, own_withheld
+
+
+WITHHELD_MAPPING_NOTE = ("the narrative is withheld as embedded_instruction and is not read to infer a code "
+                         "(client-billing-guidelines.md #11.2)")
+
+
 def choose_mapping(entry, linked):
     """Return (mapping tuple, confidence, basis).
 
     Every linked signal is mapped first; more than one target code (non-billable codes included)
     is a conflict and returns UNMAPPED at 0.40 (#5.3). There is no non-billable short-circuit.
+    Keyword inference reads only usable (screened, non-withheld) narratives (D19).
     """
     if linked:
         mappings = [signal_mapping(a) for a in linked]
@@ -91,8 +124,8 @@ def choose_mapping(entry, linked):
         if len(known) == len(mappings) and len(codes) == 1:
             return known[0], DIRECT_MATCH_CONFIDENCE, "direct_activity_class"
         return UNMAPPED, UNKNOWN_CONFIDENCE, "unknown_activity_class"
-    text = signal_policy.canon_text(" ".join([entry.get("draft", {}).get("narrative", "") or "",
-                                              entry.get("narrative", "") or ""]))
+    draft_text, own, _, _ = usable_narratives(entry, linked)
+    text = signal_policy.canon_text(" ".join([draft_text, own]))
     for token, mapping in KEYWORDS:
         if token in text:
             return mapping, KEYWORD_MATCH_CONFIDENCE, "keyword_inference"
@@ -110,6 +143,8 @@ def code_mapping(entry, linked):
             f"{signal_policy.redact(a.get('activity_class'))}->{(signal_mapping(a) or ('?', '?'))[1]}" for a in linked}))
             + "); no code is recommended"
                   if basis == "conflicting_activity_classes" else "no activity class or keyword maps to a code")
+        if basis == "unmapped" and any(usable_narratives(entry, linked)[2:]):
+            detail = f"{WITHHELD_MAPPING_NOTE}; no activity class maps to a code"
         if submitted_task:
             detail += f"; submitted {submitted_task} cannot be confirmed"
         flags.append({
@@ -184,6 +219,8 @@ PURPOSE_RE = re.compile(r"\b(?:to|so that we can|in order to)\s+(?:" + "|".join(
 EMBEDDED_DEFAULT = ("narrative or linked activity text addresses the reviewer/engine, steers the verdict, "
                     "suppresses or overrides the review, claims an approval or waiver, asks for forwarding, mixes "
                     "scripts in one word, or carries an e-mail address or URL")
+TEXT_WITHHELD_REASON = ("the narrative is withheld, so no narrative rule (detail, required elements, terms, phrases, "
+                        "duplicates) or code inference was run on it (client-billing-guidelines.md #11.2)")
 
 
 def normalize(text):
@@ -234,7 +271,8 @@ def required_elements(entry, narrative, linked):
     """#1.2 checks on the narrative text itself. Returns {element: bool}.
 
     The subject is credited only against the entry's own linked signals; with nothing linked the
-    subject cannot be evidenced (no fall-back to every signal in the packet).
+    subject cannot be evidenced (no fall-back to every signal in the packet). A flagged signal's
+    subject and deliverable are withheld text and credit nothing (D19).
     """
     toks = tokens(narrative)
     narrative_tokens = set(toks)
@@ -242,6 +280,8 @@ def required_elements(entry, narrative, linked):
     actor = bool(entry.get("person")) and first in ACTION_VERBS
     subject = False
     for signal in linked:
+        if signal_policy.signal_flagged(signal):
+            continue
         for text in (signal.get("subject"), signal.get("deliverable")):
             wanted = content_tokens(text)
             if wanted and len(wanted & narrative_tokens) / len(wanted) >= SUBJECT_COVERAGE:
@@ -323,15 +363,18 @@ def govern(out):
         draft = entry.get("draft") or {}
         linked = [by_id[a] for a in entry.get("activity_ids", []) if a in by_id]
         draft_text = draft.get("narrative").strip() if isinstance(draft.get("narrative"), str) else ""
-        draft_hits = []
+        draft_found = []
         if draft_text and draft_text != signal_policy.WITHHELD_TEXT:
             # The main draft alone, and with the entry's notes and linked activity text (split instructions).
-            draft_hits = signal_policy.screen(draft_text, signal_policy.entry_texts(
-                {"narrative": draft_text, "notes": entry.get("notes")}, linked))
+            draft_found = draft_hits(draft_text, entry, linked)
         # #11.2: a withheld draft (flagged now, or already the marker) is never checked as text. Every rule runs
         # on the entry's own narrative instead, so exception_report's re-run reproduces every flag (#13.2).
-        draft_withheld = draft_text == signal_policy.WITHHELD_TEXT or bool(draft_hits)
-        narrative = ((None if draft_withheld else draft.get("narrative")) or entry.get("narrative") or "").strip()
+        # D19: a narrative that is itself withheld text is read by no rule; with no usable narrative the text rules
+        # (detail, elements, terms, phrases, duplicates) are not run and the entry is held instead.
+        usable_draft, usable_own, draft_withheld, own_withheld = usable_narratives(entry, linked)
+        narrative = usable_draft or usable_own
+        any_withheld = draft_withheld or own_withheld
+        text_withheld = own_withheld and not narrative
         narrative_norm = normalize(narrative)
         used_activity_ids.update(a["activity_id"] for a in linked)
         # Distinct classes in canonical form (a variant spelling of one class is one class); first spelling shown.
@@ -345,9 +388,9 @@ def govern(out):
         off_date = [a for a in linked if a.get("date") != entry.get("date")]
         evidence_hours = round(sum(a.get("duration_hours", 0) for a in same_day), 2)
         all_date_hours = round(sum(a.get("duration_hours", 0) for a in linked), 2)
-        # #13.1: the code mapping is recomputed from the rules (before any draft text is withheld, as
-        # code_map.py saw it); a supplied mapping that disagrees is discarded and the entry is held.
-        mapping = code_mapping(dict(entry, draft=dict(draft, narrative="")) if draft_withheld else entry, linked)
+        # #13.1: the code mapping is recomputed from the rules (on the usable narratives only, as code_map.py
+        # read them, D19); a supplied mapping that disagrees is discarded and the entry is held.
+        mapping = code_mapping(entry, linked)
         mapping_rejected = entry.get("code_mapping") != mapping
         flags = []
 
@@ -358,13 +401,15 @@ def govern(out):
                      f"{signal_policy.describe_excluded(excluded_links, out)}", [signal_policy.POLICY_CITATION], 0.99)
 
         wc = word_count(narrative)
-        if wc < MIN_NARRATIVE_WORDS:
+        if wc < MIN_NARRATIVE_WORDS and not text_withheld:
             add_flag(flags, "minimum_detail", "reject", f"{wc} words < {MIN_NARRATIVE_WORDS} required words",
                      ["client-billing-guidelines.md #1.1"], 0.9)
 
         elements = required_elements(entry, narrative, linked)
         missing = [k for k in ("actor", "subject", "purpose") if not elements[k]]
-        if len(missing) >= 2:
+        if text_withheld:
+            pass  # D19: a withheld narrative is not checked for elements; the entry is held below
+        elif len(missing) >= 2:
             add_flag(flags, "required_elements_missing", "reject", f"missing required elements: {', '.join(missing)}",
                      ["client-billing-guidelines.md #1.2"], 0.88)
         elif missing:
@@ -379,7 +424,7 @@ def govern(out):
             add_flag(flags, "block_billing", "reject",
                      f"{duration} hours combines {len(classes)} activity classes (at most {RELATED_CLASS_LIMIT} at <= "
                      f"{BLOCK_BILLING_HOURS} hours): {', '.join(classes)}", ["client-billing-guidelines.md #2.2"], 0.95)
-        elif (duration <= BLOCK_BILLING_HOURS and len(classes) == RELATED_CLASS_LIMIT
+        elif (duration <= BLOCK_BILLING_HOURS and len(classes) == RELATED_CLASS_LIMIT and not text_withheld
               and not (elements["subject"] and elements["purpose"])):
             add_flag(flags, "block_billing", "needs_review",
                      f"{duration} hours combines {', '.join(classes)} without an explicit subject and purpose",
@@ -407,15 +452,16 @@ def govern(out):
         record_hits = [signal_policy.screen(r) for r in records]
         # Any upstream marker or any field (or field aggregate) that trips holds the entry; never compliant.
         hits = signal_policy.screen(narrative, signal_policy.entry_texts(entry, linked),
-                                    *[signal_policy.signal_texts(a) for a in linked]) + draft_hits
+                                    *[signal_policy.signal_texts(a) for a in linked]) + draft_found
         hits += [h for found in record_hits for h in found]
         reasons = list(draft.get("review_reasons") or []) + [x for r in rewrites for x in r.get("review_reasons") or []]
-        marked = (draft_withheld or entry.get("embedded_instruction") is True
+        marked = (any_withheld or entry.get("embedded_instruction") is True
                   or any(a.get("embedded_instruction") is True for a in linked)
                   or any(r.get("status") == "withheld_embedded_instruction" for r in rewrites)
                   or signal_policy.WITHHELD_TEXT in reasons)
         if marked or hits or packet_hold:
             causes = ([signal_policy.hold_reason(hits, EMBEDDED_DEFAULT)] if marked or hits else []) \
+                + ([TEXT_WITHHELD_REASON] if text_withheld else []) \
                 + ([signal_policy.PACKET_HOLD_REASON] if packet_hold else [])
             add_flag(flags, "embedded_instruction", "hold_for_review",
                      "; ".join(causes) + "; treated as data and not followed",
@@ -423,8 +469,8 @@ def govern(out):
                      0.95)
         if record_hits and record_hits[0]:
             withhold_texts(draft)
-        if draft_hits:
-            withhold_draft(draft, draft_hits)
+        if draft_found:
+            withhold_draft(draft, draft_found)
         for rewrite, found in zip(rewrites, record_hits[1:]):
             if found:
                 rewrite["narrative"] = signal_policy.WITHHELD_TEXT
@@ -473,6 +519,8 @@ def govern(out):
             if a.get("meeting_id"):
                 meeting_ids.setdefault(signal_policy.canon_id(a["meeting_id"]), a["meeting_id"])
         for meeting_key, meeting_id in sorted(meeting_ids.items()):
+            if text_withheld:
+                break  # D19: a withheld narrative is compared with no other narrative, and none with it
             prior = meeting_seen.setdefault(meeting_key, [])
             best = None
             for prior_id, prior_text in prior:

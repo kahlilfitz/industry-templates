@@ -12,7 +12,8 @@ Rules: "number" is a finite int or float and never a boolean; "integer" is an in
 "pattern" is a regular-expression search, as in JSON Schema. strict_load() is the only JSON parser the engines
 use: NaN, Infinity and -Infinity, numbers that overflow to infinity (1e999) and integers beyond +/-2**53 are
 refused while parsing, so a non-finite or unrepresentable number never reaches a range check. A member name repeated
-in one object is refused too (json.load would silently keep the last one). Error messages name the field path, the rule
+in one object is refused too (json.load would silently keep the last one), and so is nesting deeper than MAX_DEPTH (64)
+levels, checked iteratively before parsing, so no recursive walker or deepcopy can raise RecursionError (A14). Error messages name the field path, the rule
 and the JSON type of the value - never the value itself, which is untrusted text; a map key in a path is written
 as its position ("<member #2>").
 
@@ -90,10 +91,34 @@ def _unique_members(pairs):
     return out
 
 
+MAX_DEPTH = 64  # deepest JSON nesting accepted (A14); the demo packets nest 7 levels
+_JSON_STRING_RE = re.compile(r'"(?:[^"\\]|\\.)*"', re.S)
+_JSON_BRACKET_RE = re.compile(r"[\[\]{}]")
+
+
+def _check_depth(text):
+    """Refuse JSON nested deeper than MAX_DEPTH before it is parsed. Counted iteratively over the brackets outside
+    strings, so neither the parser nor any recursive walker, validator or deepcopy can raise RecursionError."""
+    depth = 0
+    for match in _JSON_BRACKET_RE.finditer(_JSON_STRING_RE.sub('""', text)):
+        if match.group() in "[{":
+            depth += 1
+            if depth > MAX_DEPTH:
+                raise ValueError(f"JSON nesting is deeper than {MAX_DEPTH} levels (refused)")
+        else:
+            depth -= 1
+
+
 def strict_load(fh):
-    """json.load that refuses non-finite and unrepresentable numbers and duplicate member names (ValueError)."""
-    return json.load(fh, parse_constant=_no_constant, parse_float=_finite_float, parse_int=_bounded_int,
-                     object_pairs_hook=_unique_members)
+    """json.load that refuses non-finite and unrepresentable numbers, duplicate member names and nesting deeper
+    than MAX_DEPTH (ValueError)."""
+    text = fh.read()
+    _check_depth(text)
+    try:
+        return json.loads(text, parse_constant=_no_constant, parse_float=_finite_float, parse_int=_bounded_int,
+                          object_pairs_hook=_unique_members)
+    except RecursionError as exc:  # unreachable after _check_depth; never a traceback
+        raise ValueError(f"JSON nesting is deeper than {MAX_DEPTH} levels (refused)") from exc
 
 
 @functools.lru_cache(maxsize=8)

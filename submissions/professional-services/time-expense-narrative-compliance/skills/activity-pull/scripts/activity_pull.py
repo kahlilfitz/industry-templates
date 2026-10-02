@@ -390,7 +390,10 @@ def main():
                 extra = {"organizer": row["organizer"].strip() or None,
                          "attendees": [a.strip() for a in row["attendees"].split(";") if a.strip()]}
             else:
-                match = workplan.get((signal_policy.canon_id("document"), signal_policy.canon_id(row["file_name"])))
+                # D19: a file name that trips the wire is withheld text and selects no workplan row (no purpose,
+                # deliverable or confidence is joined on it); the signal itself is held below.
+                match = (None if signal_policy.embedded_instruction(row["file_name"]) else
+                         workplan.get((signal_policy.canon_id("document"), signal_policy.canon_id(row["file_name"]))))
                 activity_class = DOCUMENT_CLASS.get(signal_policy.canon_id(row["activity_type"]), "unclassified_document_activity")
                 subject = subject_from_file(row["file_name"])
                 try:
