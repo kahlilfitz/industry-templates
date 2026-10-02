@@ -44,12 +44,20 @@
    The excluded signal and entry IDs are screened as one sequence each, as the report prints them.
 8. Withheld text decides nothing (D19, #11.2). signal_flagged() and field_withheld() name the text the rules may
    not read: a flagged narrative infers no code, credits no element, matches no term and is compared with nothing.
+9. Every placeholder has its own hold (D21, client-billing-guidelines.md #11.4). sweep_packet() records the path of
+   every marker it places or keeps in a withheld_fields ledger: on the activity signal or time entry that carries it
+   (relative path), else in provenance.withheld_fields. validate_packet() refuses a marker that is not listed at its
+   exact path, a listed path that holds no marker, and a record with markers that is not held. Re-derived sections
+   (drafts, code mappings, compliance, missing time, exception list, summary IDs) are compared with their
+   re-derivation instead.
+10. Exclusions hold in every section and blank keys never match (A20, A21, client-billing-guidelines.md #13.6).
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
 """
 import datetime
 import functools
+import hashlib
 import json
 import math
 import os
@@ -793,14 +801,16 @@ PACKET_HOLD_REASON = ("packet metadata (a member name, or engagement, period, po
 COVERED_ALL = "*"
 # Strings at these positions are screened elsewhere (or re-derived and compared); the sweep skips them.
 COVERED_KEYS = {
-    "signal": set(SIGNAL_TEXT_KEYS),
-    "entry": set(ENTRY_TEXT_KEYS),
+    "signal": set(SIGNAL_TEXT_KEYS) | {"withheld_fields"},
+    "entry": set(ENTRY_TEXT_KEYS) | {"withheld_fields"},
     "draft": set(DRAFT_TEXT_KEYS) | {"narrative"},
     "rewrite": set(REWRITE_TEXT_KEYS),
     "item": COVERED_ALL,
     "exclusion": {"activity_id", "reason", "citations"},
     "excluded_entry": {"reason", "citations"},
     "summary": {"excluded_signal_ids"},
+    # The placeholder ledgers (D21) are engine-written paths, reconciled exactly against the markers they bind.
+    "provenance": {"withheld_fields"},
 }
 LINE_ITEMS = ("activity_signals", "time_entries", "missing_time_report", "exception_list")
 # The only exemptions: the engines' own origin labels. "engine:code_map" reads to the detector like a vocative
@@ -840,6 +850,8 @@ def _role(path):
     # reconciled against it exactly by exception_report.
     if path == ("prebill_summary",):
         return "summary"
+    if path == ("provenance",):
+        return "provenance"
     return None
 
 
@@ -1120,6 +1132,109 @@ def sweep_packet(packet):
         for key in IDENTITY_KEYS:
             if WITHHELD_TEXT in (header.get(key), identity.get(key)):
                 header[key] = identity[key] = WITHHELD_TEXT
+    write_ledgers(packet)
+
+
+# --- Placeholder ledger (D21, client-billing-guidelines.md #11.4) ----------------------------------------------
+LEDGER_KEY = "withheld_fields"
+LEDGER_CITATION = "client-billing-guidelines.md #11.4"
+LEDGER_RECORDS = ("activity_signals", "time_entries")
+RECORD_DERIVED = ("draft", "code_mapping", "compliance")  # re-derived and compared whole (#13.2, #13.5)
+# Packet-level sections that are re-derived and compared exactly at the report (#13.2), or ledgered per record.
+PACKET_DERIVED = (("activity_signals",), ("time_entries",), ("missing_time_report",), ("exception_list",),
+                  ("prebill_summary", "excluded_signal_ids"), ("provenance", LEDGER_KEY))
+LEDGER_PATH_RE = re.compile(r"(?:/(?:[a-z_]{1,40}|[0-9]+|@member[0-9]+|@key[0-9a-f]{16}))+")
+
+
+def _ledger_segment(key):
+    """One path segment: an index, a plain member name, @member<n> for a member marker, else @key<hash> - a ledger
+    path never carries supplied text or a marker-shaped string."""
+    if isinstance(key, int):
+        return str(key)
+    if MEMBER_MARKER_RE.fullmatch(key):
+        return "@member" + re.search(r"[0-9]+", key).group()
+    if PLAIN_KEY_RE.fullmatch(key):
+        return key
+    return "@key" + hashlib.sha256(key.encode("utf-8", "surrogatepass")).hexdigest()[:16]
+
+
+def _marker_paths(value, skip):
+    """Ledger paths of every exact marker (a WITHHELD_TEXT value or a MEMBER_MARKER member name) under value; paths
+    in `skip` (tuples) are not entered. Iterative: nesting is bounded at load (A14)."""
+    found, stack = set(), [(value, ())]
+    while stack:
+        item, path = stack.pop()
+        if isinstance(item, dict):
+            for key, child in item.items():
+                sub = path + (key,)
+                if sub in skip:
+                    continue
+                if isinstance(key, str) and MEMBER_MARKER_RE.fullmatch(key):
+                    found.add(sub)
+                stack.append((child, sub))
+        elif isinstance(item, list):
+            stack += [(child, path + (i,)) for i, child in enumerate(item)]
+        elif is_withheld(item) and path:
+            found.add(path)
+    return {"/" + "/".join(_ledger_segment(s) for s in p) for p in found}
+
+
+def record_marker_paths(record):
+    return _marker_paths(record, {(k,) for k in RECORD_DERIVED + (LEDGER_KEY,)})
+
+
+def packet_marker_paths(packet):
+    return _marker_paths(packet, set(PACKET_DERIVED))
+
+
+def write_ledgers(packet):
+    """Record every marker the sweep placed or kept (D21). Run at the end of sweep_packet, after validate_packet has
+    bound every input marker to its listed path, so only bound markers and this stage's own are recorded. An empty
+    ledger is left out."""
+    for name in LEDGER_RECORDS:
+        for record in packet.get(name) or []:
+            if isinstance(record, dict):
+                paths = sorted(record_marker_paths(record))
+                if paths:
+                    record[LEDGER_KEY] = paths
+                else:
+                    record.pop(LEDGER_KEY, None)
+    provenance = packet.get("provenance")
+    if isinstance(provenance, dict):
+        paths = sorted(packet_marker_paths(packet))
+        if paths:
+            provenance[LEDGER_KEY] = paths
+        else:
+            provenance.pop(LEDGER_KEY, None)
+
+
+def _check_ledger(where, listed, have):
+    if listed is None:
+        listed = []
+    if not all(isinstance(p, str) and LEDGER_PATH_RE.fullmatch(p) for p in listed):
+        raise SchemaError(f"invalid input: {where}.{LEDGER_KEY} must list ledger paths ({LEDGER_CITATION})")
+    if len(set(listed)) != len(listed):
+        raise SchemaError(f"invalid input: {where}.{LEDGER_KEY} lists a path twice ({LEDGER_CITATION})")
+    unbound, empty = len(have - set(listed)), len(set(listed) - have)
+    if unbound or empty:
+        raise SchemaError(f"invalid input: {where}: {unbound} withheld placeholder(s) not listed in {LEDGER_KEY} and "
+                          f"{empty} listed path(s) holding no placeholder; every placeholder is bound to its own "
+                          f"hold at its exact path, and an engine writes both ({LEDGER_CITATION}) - no output was "
+                          "written")
+
+
+def check_withheld_bindings(packet):
+    """D21: every exact marker outside the re-derived sections is listed at its exact path in its record's ledger
+    (or the packet's), every listed path holds a marker, and a signal or entry that carries one is held
+    (embedded_instruction). A hold elsewhere never makes a newly placed marker valid."""
+    for name in LEDGER_RECORDS:
+        for i, record in enumerate(packet.get(name) or []):
+            have = record_marker_paths(record)
+            _check_ledger(f"{name}[{i}]", record.get(LEDGER_KEY), have)
+            if have and record.get("embedded_instruction") is not True:
+                raise SchemaError(f"invalid input: {name}[{i}] carries a withheld placeholder but is not held "
+                                  f"(embedded_instruction) ({LEDGER_CITATION})")
+    _check_ledger("provenance", (packet.get("provenance") or {}).get(LEDGER_KEY), packet_marker_paths(packet))
 
 
 def _holds_marker(value):
@@ -1248,8 +1363,9 @@ def check_text(value, where, null=True):
 
 
 def check_id(value, where):
-    if not isinstance(value, str) or not value.strip():
-        _bad(where, "a non-empty string", value)
+    # A21: an ID that folds to nothing ("-", "_", a format character) is blank and could equal another blank key.
+    if not isinstance(value, str) or not canon_id(value):
+        _bad(where, "a non-empty string that names something (not only separators or format characters)", value)
 
 
 def check_bool(value, where):
@@ -1343,6 +1459,11 @@ def check_list(value, where, spec):
 def check_sources(sources, where):
     check_object(sources, where)
     known = {key for _, key in SOURCE_KEYS}
+    # A11: source keys are unique in canonical form - "Calendar" next to "calendar" is one source named twice.
+    repeat = _first_repeat([_id_key(key) for key in sources])
+    if repeat:
+        raise SchemaError(f"invalid input: {where} names one source twice in canonical form (member #{repeat[0] + 1} "
+                          f"and member #{repeat[1] + 1}); duplicate keys are malformed")
     for n, (key, value) in enumerate(sources.items(), start=1):
         # Only the documented source names are echoed; any other key is input text and named by position.
         check_fields(value, f"{where}.{key}" if key in known else f"{where}.<member #{n}>", (("enabled", "bool", True),))
@@ -1410,7 +1531,10 @@ def _first_repeat(values):
 
 
 def _id_key(value):
-    return canon_id(value) if isinstance(value, str) else value
+    """The canonical join key of an ID. A21: a missing, null or blank ID gets a fresh key that equals nothing, so two
+    blank keys never match in a join, link, ownership check or reconciliation."""
+    key = canon_id(value)
+    return key if key else object()
 
 
 def check_unique_ids(packet):
@@ -1456,6 +1580,9 @@ def check_unique_ids(packet):
                 raise SchemaError(f"invalid input: time_entries[{i}].{key}[{repeat[1]}] repeats "
                                   f"time_entries[{i}].{key}[{repeat[0]}]; a link is listed once")
             for j, link in enumerate(links):
+                if not isinstance(link, str) or (link != WITHHELD_TEXT and not canon_id(link)):
+                    raise SchemaError(f"invalid input: time_entries[{i}].{key}[{j}] is blank; a link names an activity "
+                                      "ID (a blank key never matches another, client-billing-guidelines.md #13.6)")
                 if isinstance(link, str) and link != WITHHELD_TEXT and known.get(canon_id(link), link) != link:
                     raise SchemaError(f"invalid input: time_entries[{i}].{key}[{j}] names a known activity ID "
                                       "in a variant spelling; links must use the activity's exact ID")
@@ -1480,6 +1607,127 @@ def check_unique_ids(packet):
                 raise SchemaError(f"invalid input: time_entries[{i}].activity_ids[{j}] links an activity recorded for "
                                   "another timekeeper; a linked activity is evidence only for its own timekeeper "
                                   f"({CROSS_PERSON_CITATION})")
+
+
+# --- Exclusions hold in every section; blank keys never match (client-billing-guidelines.md #13.6) -----------
+# Whatever activity_pull or the signal policy marks excluded - an excluded or out-of-scope activity, a skipped source,
+# an excluded entry, a withheld colleague - is refused, in canonical form, in every other section that names it, at
+# every stage (A20). Every keyed collection is checked for canonical duplicates before anything is joined on it, and
+# a blank key is never a key (A11, A21). Messages name sections and positions only.
+EXCLUSION_CITATION = "client-billing-guidelines.md #13.6"
+
+
+def _keys(values):
+    return [_id_key(v) for v in values if v != WITHHELD_TEXT]
+
+
+def _refuse_repeat(where, values, key=_id_key):
+    repeat = _first_repeat([object() if v == WITHHELD_TEXT else key(v) for v in values])
+    if repeat:
+        raise SchemaError(f"invalid input: {where}[{repeat[1]}] repeats {where}[{repeat[0]}] in canonical form; "
+                          f"duplicate keys are malformed ({EXCLUSION_CITATION})")
+
+
+def _person_key(name):
+    key = person_key(name)
+    return key if key else object()
+
+
+def check_scope_state(packet):
+    """provenance.timekeeper_scope agrees with itself (#12.1, A20): a self-scope lists only the requester and no team
+    view; a team scope lists the requester among its people and withholds no one; a withheld colleague is never the
+    requester or a listed person; names are unique in canonical form. A withheld name is not compared."""
+    scope = (packet.get("provenance") or {}).get("timekeeper_scope")
+    if not isinstance(scope, dict):
+        return
+    where = "provenance.timekeeper_scope"
+    requester, people, withheld = scope.get("requester"), scope.get("people"), scope.get("withheld")
+    if isinstance(people, list):
+        _refuse_repeat(f"{where}.people", people, key=_person_key)
+    named = lambda v: isinstance(v, str) and not is_withheld(v)  # noqa: E731
+    if scope.get("mode") == "self":
+        if scope.get("team_view") is not None:
+            raise SchemaError(f"invalid input: {where}.team_view is set on a self scope ({SCOPE_CITATION})")
+        if not isinstance(people, list) or len(people) != 1 or (
+                named(people[0]) and named(requester) and not same_person(people[0], requester)):
+            raise SchemaError(f"invalid input: {where}.people must list exactly the requester on a self scope "
+                              f"({SCOPE_CITATION}, {EXCLUSION_CITATION})")
+    elif scope.get("mode") == "team":
+        if withheld is not None:
+            raise SchemaError(f"invalid input: {where}.withheld is set on a team scope ({SCOPE_CITATION}, "
+                              f"{EXCLUSION_CITATION})")
+        if isinstance(people, list) and named(requester) and not any(
+                is_withheld(p) or same_person(p, requester) for p in people):
+            raise SchemaError(f"invalid input: {where}.people does not list the requester ({SCOPE_CITATION}, "
+                              f"{EXCLUSION_CITATION})")
+    if isinstance(withheld, dict) and isinstance(withheld.get("requested"), list):
+        requested = withheld["requested"]
+        _refuse_repeat(f"{where}.withheld.requested", requested, key=_person_key)
+        listed = [p for p in (people if isinstance(people, list) else []) + [requester] if named(p)]
+        for n, name in enumerate(requested):
+            if named(name) and any(same_person(name, p) for p in listed):
+                raise SchemaError(f"invalid input: {where}.withheld.requested[{n}] names a person the scope allows; a "
+                                  f"withheld colleague is never in scope ({SCOPE_CITATION}, {EXCLUSION_CITATION})")
+
+
+def check_exclusions(packet, level):
+    """A20/A21 across sections. Excluded activity IDs (provenance.excluded_signals) and out-of-scope rows are never an
+    active signal or an evidence link; an out-of-scope row is never a cross-person link either; a source activity_pull
+    skipped is never read and no signal claims it; secondary keyed collections are unique; on governed data a
+    missing-time item names a present, unlinked signal and an exception item a present entry (never an excluded one)."""
+    provenance = packet.get("provenance") or {}
+    signals = packet.get("activity_signals") or []
+    entries = packet.get("time_entries") or []
+    excluded = set(_keys(r.get("activity_id") for r in provenance.get("excluded_signals") or []))
+    rows = provenance.get("out_of_scope_rows") or []
+    _refuse_repeat("provenance.out_of_scope_rows", [r.get("activity_id") for r in rows])
+    out_of_scope = set(_keys(r.get("activity_id") for r in rows))
+    for i, signal in enumerate(signals):
+        if _id_key(signal.get("activity_id")) in out_of_scope:
+            raise SchemaError(f"invalid input: activity_signals[{i}] is listed in provenance.out_of_scope_rows; an "
+                              f"out-of-scope row is never a signal ({EXCLUSION_CITATION})")
+    for i, entry in enumerate(entries):
+        for key, barred in (("activity_ids", excluded | out_of_scope), ("cross_person_activity_ids", out_of_scope)):
+            for j, link in enumerate(entry.get(key) or []):
+                if link != WITHHELD_TEXT and _id_key(link) in barred:
+                    raise SchemaError(f"invalid input: time_entries[{i}].{key}[{j}] names an excluded or out-of-scope "
+                                      f"activity; an excluded activity is never evidence ({EXCLUSION_CITATION})")
+    read = provenance.get("sources_read") or []
+    skipped = [s.get("policy_key") for s in provenance.get("skipped_sources") or [] if s.get("policy_key")]
+    _refuse_repeat("provenance.sources_read", read)
+    _refuse_repeat("provenance.skipped_sources (policy_key)", skipped)
+    if set(_keys(read)) & set(_keys(skipped)):
+        raise SchemaError(f"invalid input: provenance.skipped_sources names a source in provenance.sources_read; a "
+                          f"source is read or skipped, never both ({EXCLUSION_CITATION})")
+    skipped_keys = set(_keys(skipped))
+    for i, signal in enumerate(signals):
+        if _id_key(source_key(signal.get("source")) or "") in skipped_keys:
+            raise SchemaError(f"invalid input: activity_signals[{i}] comes from a source activity_pull skipped (not "
+                              f"read); a skipped source supplies no signal ({EXCLUSION_CITATION})")
+    if level < 3:
+        return
+    present = {_id_key(s.get("activity_id")) for s in signals}
+    linked = {_id_key(a) for e in entries for a in e.get("activity_ids") or [] if a != WITHHELD_TEXT}
+    missing = packet.get("missing_time_report") or []
+    _refuse_repeat("missing_time_report (activity_id)", [m.get("activity_id") for m in missing])
+    for n, item in enumerate(missing):
+        key = _id_key(item.get("activity_id"))
+        if item.get("activity_id") != WITHHELD_TEXT and (key not in present or key in linked or key in excluded):
+            raise SchemaError(f"invalid input: missing_time_report[{n}] does not name a present, unlinked activity "
+                              f"signal ({EXCLUSION_CITATION})")
+    active = {_id_key(e.get("entry_id")) for e in entries}
+    dropped = set(_keys(r.get("entry_id") for r in provenance.get("excluded_entries") or []))
+    items = packet.get("exception_list") or []
+    ids = [x.get("entry_id") for x in items if x.get("entry_id") is not None]
+    _refuse_repeat("exception_list (entry_id)", ids)
+    if sum(1 for x in items if x.get("entry_id") is None) > 1:
+        raise SchemaError(f"invalid input: exception_list has more than one missing-time item ({EXCLUSION_CITATION})")
+    for n, item in enumerate(items):
+        entry_id = item.get("entry_id")
+        if entry_id is not None and entry_id != WITHHELD_TEXT and (
+                _id_key(entry_id) not in active or _id_key(entry_id) in dropped):
+            raise SchemaError(f"invalid input: exception_list[{n}] does not name a present time entry; an excluded "
+                              f"entry is never listed ({EXCLUSION_CITATION})")
 
 
 # Link state (#13.4). activity_pull resolves each entry's links once into three disjoint, required lists
@@ -2038,12 +2286,15 @@ def validate_packet(packet, stage):
     check_engagement_identity(packet)
     refuse_supplied_markers(packet, exact_ok=True)
     check_unique_ids(packet)
+    check_scope_state(packet)
+    check_withheld_bindings(packet)
     if level >= 3:
         for key in ("missing_time_report", "exception_list", "prebill_summary"):
             if key not in packet:
                 raise SchemaError(f"invalid input: '{key}' missing; {STAGE_HINT['compliance']}")
         check_list(packet["missing_time_report"], "missing_time_report", MISSING_SPEC)
         check_list(packet["exception_list"], "exception_list", EXCEPTION_SPEC)
+    check_exclusions(packet, level)
     check_link_state(packet, level)
     check_signal_annotations(packet)
     if level in (1, 2):

@@ -209,6 +209,9 @@ def fixture_tests(tmp):
         "deliverable": None, "meeting_id": None, "billable_signal": True, "source": "connector:mailbox-metadata", "confidence": 0.76,
         "citations": ["raw/mailbox-summary.txt line 3"]})
     pkt["signal_config"]["sources"]["mailbox_metadata"]["enabled"] = True  # tampered packet policy
+    # #13.6: the tamper must also claim the source was read (a signal from a skipped source is refused outright).
+    pkt["provenance"]["skipped_sources"] = [s for s in pkt["provenance"]["skipped_sources"]
+                                            if s["policy_key"] != "mailbox_metadata"]
     drafted, coded, governed = through_governed(tmp, "mailbox", pkt)
     for label, doc in (("narrative_draft", drafted), ("code_map", coded), ("guideline_check", governed)):
         check(f"{label} drops disabled-source signal even when the packet claims it is enabled",
@@ -371,6 +374,8 @@ def fixture_tests(tmp):
         "deliverable": None, "meeting_id": None, "billable_signal": True, "source": "connector:mailbox-content", "confidence": 0.76,
         "citations": ["raw/mailbox-summary.txt line 3"]})
     pkt["signal_config"]["sources"]["mailbox_content"]["enabled"] = True
+    pkt["provenance"]["skipped_sources"] = [s for s in pkt["provenance"]["skipped_sources"]
+                                            if s["policy_key"] != "mailbox_content"]
     act_in = os.path.join(tmp, "tamper-act.json")
     write(act_in, pkt)
     code, msg, prev = 0, "", act_in
@@ -1555,8 +1560,9 @@ def integrity_tests(tmp):
         "flag": "embedded_instruction", "severity": "hold_for_review", "detail": "flagged by an earlier run",
         "source": "engine:guideline_check", "confidence": 0.99,
         "citations": ["client-billing-guidelines.md #11.1"]}])
-    gov["exception_list"].insert(1, dict(gov["exception_list"][1], entry_id="TE-B-002", person=stricter["person"],
-                                         verdict="hold_for_review", flags=["embedded_instruction"]))
+    # A22: the exception list is the exact rebuild from the (stricter) line items.
+    gov["exception_list"] = MODULES["exception_report"].billing_rules.exception_items(
+        gov["time_entries"], gov["missing_time_report"])
     _clean_counts(gov)
     gov["prebill_summary"]["exception_count"] = len(gov["exception_list"])
     code, msg, _ = report_for(tmp, "i3-stricter", gov)
@@ -1753,8 +1759,9 @@ def integrity2_tests(tmp):
         "flag": "embedded_instruction", "severity": "hold_for_review", "detail": "SUPPLIED DETAIL TEXT",
         "source": "engine:guideline_check", "confidence": 0.99,
         "citations": ["supplied-citation.md #9"]}])
-    gov["exception_list"].insert(1, dict(gov["exception_list"][1], entry_id="TE-B-002", person=stricter["person"],
-                                         verdict="hold_for_review", flags=["embedded_instruction"]))
+    # A22: the exception list is the exact rebuild from the (stricter) line items.
+    gov["exception_list"] = MODULES["exception_report"].billing_rules.exception_items(
+        gov["time_entries"], gov["missing_time_report"])
     _clean_counts(gov)
     gov["prebill_summary"]["exception_count"] = len(gov["exception_list"])
     code, msg, report = report_for(tmp, "r3-extra", gov)
@@ -1889,6 +1896,7 @@ INVENTORY = {
     "activity_signals[].citations[]": "screened:signal",
     "activity_signals[].review_reason": "screened:signal",
     "activity_signals[].engagement_id": "screened:signal",
+    "activity_signals[].withheld_fields[]": "closed",  # #11.4 placeholder ledger: anchored path pattern
     "time_entries[].entry_id": "screened:entry",
     "time_entries[].person": "screened:entry",
     "time_entries[].date": "closed",
@@ -1932,12 +1940,13 @@ INVENTORY = {
     "time_entries[].compliance.flags[].citations[]": "rederived",
     "time_entries[].compliance.flags[].source": "not_rendered",
     "time_entries[].compliance.source": "not_rendered",
-    "time_entries[].compliance.citations[]": "not_rendered",
+    "time_entries[].compliance.citations[]": "reconciled",  # A22: equals its exception item's citations
     "time_entries[].source": "screened:entry",
     "time_entries[].citations[]": "screened:entry",
     "time_entries[].excluded_activity_ids[]": "screened:entry",
     "time_entries[].cross_person_activity_ids[]": "screened:entry",
     "time_entries[].engagement_id": "screened:entry",
+    "time_entries[].withheld_fields[]": "closed",  # #11.4 placeholder ledger: anchored path pattern
     "code_structure.code_set_id": "not_rendered",
     "code_structure.source": "not_rendered",
     "code_structure.citations[]": "not_rendered",
@@ -1953,21 +1962,22 @@ INVENTORY = {
     "missing_time_report[].finding": "rederived",
     "missing_time_report[].source": "rederived",
     "missing_time_report[].citations[]": "rederived",
-    "exception_list[].entry_id": "not_rendered",
-    "exception_list[].person": "not_rendered",
+    "exception_list[].entry_id": "reconciled",  # A22: rebuilt and compared item by item
+    "exception_list[].person": "reconciled",
     "exception_list[].date": "closed",
     "exception_list[].verdict": "closed",
     "exception_list[].flags[]": "closed",
     "exception_list[].recommended_action": "closed",
     "exception_list[].excluded_activity_ids[]": "reconciled",
-    "exception_list[].source": "not_rendered",
-    "exception_list[].citations[]": "not_rendered",
+    "exception_list[].source": "reconciled",
+    "exception_list[].citations[]": "reconciled",
     "prebill_summary.period.start": "closed",
     "prebill_summary.period.end": "closed",
     "prebill_summary.excluded_signal_ids[]": "reconciled",
     "prebill_summary.source": "not_rendered",
     "prebill_summary.citations[]": "not_rendered",
     "provenance.engines[]": "not_rendered",
+    "provenance.withheld_fields[]": "closed",  # #11.4 placeholder ledger: anchored path pattern
     "provenance.generated_at": "closed",
     "provenance.demo_scenario": "not_rendered",
     "provenance.sources_read[]": "not_rendered",
@@ -3676,11 +3686,13 @@ def r9_tests(tmp):
                   code == 1 and not exists and "invalid input" in msg and marker not in msg, (code, msg[:200]))
 
     # D20 exact markers downstream: accepted only as engine-withheld text, and the record carrying one is held - a
-    # marker never suppresses a rule or improves a verdict.
+    # marker never suppresses a rule or improves a verdict. D21: each is placed as an engine places it, with its
+    # own ledger path and its record's hold (a bare marker is refused; see r12).
     pkt = _golden("scenario-b-drama", "activity.json")
-    entry(pkt, "TE-B-002")["narrative"] = marker
-    entry(pkt, "TE-B-004")["narrative"] = marker
-    next(s for s in pkt["activity_signals"] if s["activity_id"] == "B-DOC-003")["subject"] = marker
+    entry(pkt, "TE-B-002").update(narrative=marker, embedded_instruction=True, withheld_fields=["/narrative"])
+    entry(pkt, "TE-B-004").update(narrative=marker, embedded_instruction=True, withheld_fields=["/narrative"])
+    next(s for s in pkt["activity_signals"] if s["activity_id"] == "B-DOC-003").update(
+        subject=marker, embedded_instruction=True, withheld_fields=["/subject"])
     r = _qa5_run(tmp, "r9-exact", pkt)
     ok = isinstance(r, dict) and r["code"] == 0
     gov = r["governed"] if ok else {}
@@ -4391,6 +4403,251 @@ def r11_tests(tmp):
           tried > 2000 and not crashes and not missed, (crashes[:5], missed[:5]))
 
 
+def r12_tests(tmp):
+    """Mobilization round 12 class sweeps: (A20) exclusions are refused in every section, (A21) blank keys never
+    match, (D21) every placeholder is bound to its own hold, (A11) canonical duplicate keys; plus (A22, T&E QA
+    round 10) the exception list is reconciled by content, not count."""
+    sp = MODULES["code_map"].signal_policy
+    br = MODULES["exception_report"].billing_rules
+    serial = itertools.count()
+    B, A = "scenario-b-drama", "scenario-a-happy"
+    marker = sp.WITHHELD_TEXT
+
+    def write_text(path, text):
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+
+    def _raises(fn, exc):
+        try:
+            fn()
+        except exc:
+            return True
+        return False
+
+    def at_stage(engine, flag, packet):
+        name = f"r12-{len(RESULTS)}-{next(serial)}"
+        if engine == "exception_report":
+            code, msg, report = report_for(tmp, name, packet)
+            return code, msg, report != ""
+        code, msg, wrote, _ = _engine_on(tmp, name, engine, flag, packet)
+        return code, msg, wrote
+
+    def refused(result, *marks):
+        code, msg, wrote = result
+        return code == 1 and not wrote and "Traceback" not in msg and all(m in msg for m in marks)
+
+    def signal_of(pkt, aid):
+        return next(x for x in pkt["activity_signals"] if x["activity_id"] == aid)
+
+    # --- A21: a blank key never matches another blank key -------------------------------------------------------
+    check("r12 A21 unit: blank or missing keys never compare equal; stated keys still match canonically",
+          sp._id_key(None) != sp._id_key(None) and sp._id_key("-") != sp._id_key("_")
+          and sp._id_key("\u200b") != sp._id_key("") and sp._id_key("B-CAL-001") == sp._id_key("b_cal_001"))
+    raw = raw_copy(tmp, "r12-wp")
+    edit_csv(raw, "engagement-workplan.csv", 1, "match_key", "-")
+    edit_csv(raw, "calendar-export.csv", 1, "event_id", "_")
+    code, msg, pkt, _ = pull(tmp, "r12-wp", raw, *TEAM_VIEW)
+    check("r12 A21 activity_pull: a workplan match_key '-' never joins a calendar event_id '_' (no purpose borrowed)",
+          code == 0 and not signal_of(pkt, "B-CAL-001").get("purpose")
+          and signal_of(_golden(B, "activity.json"), "B-CAL-001").get("purpose"), msg)
+    raw = raw_copy(tmp, "r12-aid")
+    edit_csv(raw, "calendar-export.csv", 1, "activity_id", "-")
+    code, msg, pkt, out = pull(tmp, "r12-aid", raw, *TEAM_VIEW)
+    check("r12 A21 activity_pull: an activity_id that folds to blank ('-') -> refused, no output",
+          code == 1 and not os.path.exists(out) and "Traceback" not in msg, msg)
+    raw = raw_copy(tmp, "r12-link")
+    edit_csv(raw, "timesheet.csv", 1, "activity_ids", "B-CAL-001;_")
+    code, msg, pkt, out = pull(tmp, "r12-link", raw, *TEAM_VIEW)
+    check("r12 A21 activity_pull: a timesheet link that folds to blank ('_') -> refused, no output",
+          code == 1 and not os.path.exists(out) and "blank link" in msg, msg)
+    raw = raw_copy(tmp, "r12-eng")
+    letter = os.path.join(raw, "engagement-letter-extract.md")
+    write_text(letter, read_text(letter).replace("- engagement_id: ENG-SYN-042", "- engagement_id: -"))
+    code, msg, pkt, out = pull(tmp, "r12-eng", raw, "--requester", "Morgan Lee")
+    check("r12 A21 activity_pull: an engagement_id that folds to blank ('-') -> refused, no output",
+          code == 1 and not os.path.exists(out) and "blank" in msg, msg)
+
+    def meeting_flags(ids):
+        pkt = _golden(B, "coded.json")
+        for aid, mid in zip(("B-CAL-001", "B-CAL-002", "B-CAL-003"), ids):
+            signal_of(pkt, aid)["meeting_id"] = mid
+        br.govern(pkt)
+        return {e["entry_id"]: sorted(f["flag"] for f in e["compliance"]["flags"]) for e in pkt["time_entries"]}
+    check("r12 A21 guideline rules: meeting IDs '-', '_' and '.' are no meeting (same flags as three distinct "
+          "meetings; never a duplicate_meeting)",
+          meeting_flags(("-", "_", ".")) == meeting_flags(("MTG-X1", "MTG-X2", "MTG-X3"))
+          and "duplicate_meeting" in meeting_flags(("MTG-ORION-201",) * 3)["TE-B-003"])
+
+    # --- A22: the exception list is reconciled by content ---------------------------------------------------------
+    for label, mutate in (
+            ("an item's entry_id changed to an absent entry", lambda x: x.update(entry_id="TE-B-999")),
+            ("an item's entry_id changed to another flagged entry",
+             lambda x: x.update(entry_id="TE-B-002")),
+            ("an item's person changed", lambda x: x.update(person="Somebody Else")),
+            ("an item's person respelled", lambda x: x.update(person="  morgan   lee  ")),
+            ("an item's flags reordered", lambda x: x["flags"].reverse()),
+            ("an item's recommended_action changed",
+             lambda x: x.update(recommended_action="billing_coordinator_review"))):
+        gov = _golden(B, "governed.json")
+        mutate(gov["exception_list"][0])
+        check(f"r12 A22 exception_report: {label} (count unchanged) -> refused, no report",
+              refused(at_stage("exception_report", "--governed", gov)))
+    mt = _golden(B, "governed.json")["missing_time_report"]
+    mt[1]["person"] = "  morgan   lee  "
+    item = br.exception_items([], mt)[0]
+    check("r12 A22 roll-up: 'Morgan Lee' and '  morgan   lee  ' are one person on the missing-time exception",
+          item["person"] == "Morgan Lee", item["person"])
+    mt[1]["person"] = "Priya Shah"
+    check("r12 A22 roll-up control: two different people roll up as 'multiple'",
+          br.exception_items([], mt)[0]["person"] == "multiple")
+    gov = _golden(B, "governed.json")
+    check("r12 A22 control: the golden exception list equals its rebuild from the line items",
+          gov["exception_list"] == br.exception_items(gov["time_entries"], gov["missing_time_report"]))
+
+    # --- A20: an exclusion is refused in every section ------------------------------------------------------------
+    pkt = _golden(A, "drafted.json")
+    pkt["provenance"]["timekeeper_scope"]["people"].append("Priya Shah")
+    check("r12 A20 code_map: a self scope whose people list is widened to a colleague -> refused, no output",
+          refused(at_stage("code_map", "--drafted", pkt), "#13.6"))
+    pkt = _golden(A, "drafted.json")
+    requester = pkt["provenance"]["timekeeper_scope"]["requester"]
+    pkt["provenance"]["timekeeper_scope"]["withheld"] = {
+        "requested": [requester.upper()], "reason": "colleagues' rows withheld", "citations": [sp.SCOPE_CITATION]}
+    check("r12 A20 code_map: the requester (respelled) listed as a withheld colleague -> refused, no output",
+          refused(at_stage("code_map", "--drafted", pkt), "#13.6"))
+    pkt = _golden(B, "drafted.json")
+    pkt["provenance"]["timekeeper_scope"]["withheld"] = {
+        "requested": ["Priya Shah"], "reason": "colleagues' rows withheld", "citations": [sp.SCOPE_CITATION]}
+    check("r12 A20 code_map: a team scope that also lists a withheld colleague -> refused, no output",
+          refused(at_stage("code_map", "--drafted", pkt), "#13.6"))
+    for stage, (golden, engine, flag) in enumerate((("activity.json", "narrative_draft", "--activity"),
+                                                    ("drafted.json", "code_map", "--drafted"),
+                                                    ("coded.json", "guideline_check", "--coded"),
+                                                    ("governed.json", "exception_report", "--governed"))):
+        pkt = _golden(B, golden)
+        pkt["provenance"]["out_of_scope_rows"].append({"activity_id": "b_cal_002", "reason": "outside engagement scope",
+                                                       "citations": ["raw/calendar-export.csv row 3"]})
+        check(f"r12 A20 {engine}: an out-of-scope row naming an active signal (canonical respelling) -> refused, "
+              "no output", refused(at_stage(engine, flag, pkt), "#13.6"))
+    pkt = _golden(B, "drafted.json")
+    pkt["provenance"]["out_of_scope_rows"].append({"activity_id": "B-CAL-099", "reason": "outside engagement scope",
+                                                   "citations": ["raw/calendar-export.csv row 9"]})
+    entry(pkt, "TE-B-002")["cross_person_activity_ids"].append("B-CAL-099")
+    check("r12 A20 code_map: an out-of-scope row ID carried as an entry link -> refused, no output",
+          refused(at_stage("code_map", "--drafted", pkt)))
+    pkt = _golden(B, "drafted.json")
+    entry(pkt, "TE-B-002")["activity_ids"].append("b-mail-001")
+    check("r12 A20 code_map: an excluded signal ID (respelled) added to another entry's evidence links -> refused, "
+          "no output", refused(at_stage("code_map", "--drafted", pkt)))
+    pkt = _golden(B, "drafted.json")
+    pkt["activity_signals"].append(dict(copy.deepcopy(signal_of(pkt, "B-DOC-004")), activity_id="B-MAIL-002",
+                                        source="connector:mailbox-metadata"))
+    check("r12 A20 code_map: a signal from a source activity_pull skipped (not read) -> refused, no output",
+          refused(at_stage("code_map", "--drafted", pkt), "#13.6"))
+    pkt = _golden(B, "drafted.json")
+    pkt["provenance"]["sources_read"].append("mailbox_metadata")
+    check("r12 A20 code_map: a source recorded as both read and skipped -> refused, no output",
+          refused(at_stage("code_map", "--drafted", pkt), "#13.6"))
+    for label, aid in (("an excluded signal", "B-MAIL-001"), ("a linked signal", "B-CAL-001"),
+                       ("an absent signal", "B-DOC-999")):
+        gov = _golden(B, "governed.json")
+        gov["missing_time_report"][0]["activity_id"] = aid
+        check(f"r12 A20 exception_report: a missing-time item naming {label} -> refused, no report",
+              refused(at_stage("exception_report", "--governed", gov)))
+
+    # --- A11: canonical duplicate keys ----------------------------------------------------------------------------
+    gov = _golden(B, "governed.json")
+    gov["missing_time_report"][1]["activity_id"] = "b_doc_003"
+    check("r12 A11 exception_report: missing-time IDs repeated in canonical form -> refused, no report",
+          refused(at_stage("exception_report", "--governed", gov), "#13.6"))
+    gov = _golden(B, "governed.json")
+    gov["exception_list"][1]["entry_id"] = "te_b_001"
+    check("r12 A11 exception_report: exception-list entry IDs repeated in canonical form -> refused, no report",
+          refused(at_stage("exception_report", "--governed", gov), "#13.6"))
+    gov = _golden(B, "governed.json")
+    gov["exception_list"].append(copy.deepcopy(gov["exception_list"][-1]))
+    check("r12 A11 exception_report: a second missing-time exception item -> refused, no report",
+          refused(at_stage("exception_report", "--governed", gov)))
+    pkt = _golden(B, "drafted.json")
+    pkt["provenance"]["timekeeper_scope"]["people"] = ["Dana Whitfield", "Morgan Lee", "morgan  LEE"]
+    check("r12 A11 code_map: scope people repeated in canonical form -> refused, no output",
+          refused(at_stage("code_map", "--drafted", pkt), "#13.6"))
+    text = json.dumps(_golden(A, "activity.json")).replace('"provenance": {', '"provenance": {"Demo-Scenario": "x", ', 1)
+    src, dst = os.path.join(tmp, "r12-dupmember.json"), os.path.join(tmp, "r12-dupmember-out.json")
+    write_text(src, text)
+    code, msg = run("narrative_draft", "--activity", src, "--out", dst, "--generated-at", FIXED_TS)
+    check("r12 A11 narrative_draft: member names 'Demo-Scenario' and 'demo_scenario' (canonical duplicates) -> "
+          "refused, no output", code == 1 and not os.path.exists(dst) and "member name" in msg, msg)
+    check("r12 A11 unit: check_sources refuses source keys 'calendar' and 'Calendar'",
+          _raises(lambda: sp.check_sources({"calendar": {"enabled": True}, "Calendar": {"enabled": False}},
+                                           "signal_config.sources"), sp.SchemaError))
+    raw = raw_copy(tmp, "r12-label")
+    letter = os.path.join(raw, "engagement-letter-extract.md")
+    write_text(letter, read_text(letter).replace("- engagement_id: ENG-SYN-042",
+                                                 "- engagement_id: ENG-SYN-042\n- Engagement ID: ENG-OTHER-9"))
+    code, msg, pkt, out = pull(tmp, "r12-label", raw, "--requester", "Morgan Lee")
+    check("r12 A11 activity_pull: an engagement-letter label repeated in another spelling ('Engagement ID') -> "
+          "refused, no output", code == 1 and not os.path.exists(out) and "ENG-OTHER" not in msg, msg)
+    raw = raw_copy(tmp, "r12-label-ok")
+    letter = os.path.join(raw, "engagement-letter-extract.md")
+    write_text(letter, read_text(letter).replace("- engagement_id: ENG-SYN-042", "- Engagement-ID: ENG-SYN-042"))
+    code, msg, pkt, out = pull(tmp, "r12-label-ok", raw, "--requester", "Morgan Lee")
+    check("r12 A11 control: a label spelled 'Engagement-ID' is read as engagement_id",
+          code == 0 and pkt["engagement"]["engagement_id"] == "ENG-SYN-042", msg)
+
+    # --- D21: every placeholder is bound to its own hold at its exact path ---------------------------------------
+    def d21(label, mutate, *marks, golden="activity.json", engine="narrative_draft", flag="--activity"):
+        pkt = _golden(B, golden)
+        mutate(pkt)
+        res = at_stage(engine, flag, pkt)
+        check(f"r12 D21 {engine}: {label} -> refused, no output, no echo",
+              refused(res, *marks) and marker not in res[1], res[1][:240])
+
+    d21("a marker in an entry narrative, held, but with no ledger path",
+        lambda p: entry(p, "TE-B-001").update(narrative=marker, embedded_instruction=True), "#11.4")
+    d21("a ledgered marker in a signal subject on an unheld signal",
+        lambda p: signal_of(p, "B-CAL-001").update(subject=marker, withheld_fields=["/subject"]), "#11.4")
+    d21("a second, unlisted marker in a record whose first marker is ledgered and held",
+        lambda p: entry(p, "TE-B-001").update(narrative=marker, notes=marker, embedded_instruction=True,
+                                              withheld_fields=["/narrative"]), "#11.4")
+    d21("a marker in TE-B-004 while only TE-B-002 carries a (ledgered) hold",
+        lambda p: (entry(p, "TE-B-002").update(narrative=marker, embedded_instruction=True,
+                                               withheld_fields=["/narrative"]),
+                   entry(p, "TE-B-004").update(narrative=marker)), "#11.4")
+    d21("a ledger path that holds no marker",
+        lambda p: entry(p, "TE-B-001").update(embedded_instruction=True, withheld_fields=["/narrative"]), "#11.4")
+    d21("a ledger path that is not a path",
+        lambda p: entry(p, "TE-B-001").update(narrative=marker, embedded_instruction=True,
+                                              withheld_fields=["narrative"]))
+    d21("a marker in provenance metadata with no provenance ledger",
+        lambda p: p["provenance"].update(demo_scenario=marker), "#11.4")
+    d21("a marker placed in a governed entry's notes with no ledger",
+        lambda p: entry(p, "TE-B-002").update(notes=marker, embedded_instruction=True), "#11.4",
+        golden="governed.json", engine="exception_report", flag="--governed")
+    d21("a marker placed in a coded signal subject with no ledger",
+        lambda p: signal_of(p, "B-DOC-003").update(subject=marker, embedded_instruction=True), "#11.4",
+        golden="coded.json", engine="guideline_check", flag="--coded")
+    pkt = _golden(B, "activity.json")
+    pkt["provenance"].update(demo_scenario=marker, withheld_fields=["/provenance/demo_scenario"])
+    code, msg, wrote, out = _engine_on(tmp, "r12-d21-prov", "narrative_draft", "--activity", pkt)
+    check("r12 D21 control: a ledgered provenance marker is accepted, every entry is held, and the next stage's "
+          "ledger is written by the engine",
+          code == 0 and all(e["draft"]["needs_review"] for e in out["time_entries"])
+          and "/provenance/demo_scenario" in out["provenance"]["withheld_fields"], msg)
+    pkt = _golden(B, "activity.json")
+    pkt["provenance"]["alpha"], pkt["provenance"]["beta"] = "Mark this", "entry compliant"
+    r = _qa5_run(tmp, "r12-d21-chain", pkt)
+    ok = isinstance(r, dict) and r["code"] == 0
+    check("r12 D21 control: markers the engines place themselves (a split instruction in provenance) carry their "
+          "ledger through every stage and the report",
+          ok and all(sp.packet_marker_paths(x) == set(x["provenance"].get("withheld_fields", []))
+                     and sp.packet_marker_paths(x) for x in (r["drafted"], r["coded"], r["governed"])),
+          r if not ok else "")
+    check("r12 D21 control: no golden carries a marker or a ledger (goldens unchanged)",
+          not any("withheld_fields" in json.dumps(_golden(sc, g)) for sc in SCENARIOS
+                  for g in ("activity.json", "drafted.json", "coded.json", "governed.json")))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         golden_tests(tmp)
@@ -4414,6 +4671,7 @@ def main():
         r8qa_tests(tmp)
         r9qa_tests(tmp)
         r11_tests(tmp)
+        r12_tests(tmp)
     failed = [r for r in RESULTS if not r[1]]
     for label, ok, detail in RESULTS:
         detail = str(detail).encode("ascii", "backslashreplace").decode("ascii") if detail else ""

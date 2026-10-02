@@ -13,7 +13,8 @@ Rules: "number" is a finite int or float and never a boolean; "integer" is an in
 "pattern" is a regular-expression search, as in JSON Schema. strict_load() is the only JSON parser the engines
 use: NaN, Infinity and -Infinity, numbers that overflow to infinity (1e999) and integers beyond +/-2**53 are
 refused while parsing, so a non-finite or unrepresentable number never reaches a range check. A member name repeated
-in one object is refused too (json.load would silently keep the last one), and so is nesting deeper than MAX_DEPTH (64)
+in one object - exactly or in canonical form (NFKC, case, format characters and - _ . folded, A11) - is refused too
+(json.load would silently keep the last one), and so is nesting deeper than MAX_DEPTH (64)
 levels, checked iteratively before parsing, so no recursive walker or deepcopy can raise RecursionError (A14). Error messages name the field path, the rule
 and the JSON type of the value - never the value itself, which is untrusted text; a map key in a path is written
 as its position ("<member #2>").
@@ -27,6 +28,7 @@ import json
 import math
 import os
 import re
+import unicodedata
 
 CONTRACT_FILE = "ps.time-expense-narrative-compliance.v1.json"
 MAX_JSON_INT = 2 ** 53  # largest integer every JSON consumer represents exactly
@@ -114,13 +116,27 @@ def _bounded_int(text):
     return value
 
 
+def _canon_member(key):
+    """A member name in canonical form - NFKC, format characters stripped, casefold, whitespace collapsed and - _ .
+    folded - the same form as signal_policy.canon_id, so "Demo-Scenario" and "demo_scenario" are one name (A11)."""
+    if not isinstance(key, str):
+        return key
+    strip = lambda t: "".join(ch for ch in t if unicodedata.category(ch) != "Cf")  # noqa: E731
+    text = unicodedata.normalize("NFKC", strip(unicodedata.normalize("NFKC", strip(key))).casefold())
+    return " ".join(re.sub(r"[\s\-_.]+", " ", " ".join(text.split())).split())
+
+
 def _unique_members(pairs):
-    """object_pairs_hook: a member name given twice in one object is malformed (json.load would keep the last)."""
-    out = {}
+    """object_pairs_hook: a member name given twice in one object - exactly or in canonical form - is malformed
+    (json.load would keep the last; a variant spelling would shadow the declared member)."""
+    out, seen = {}, set()
     for key, value in pairs:
-        if key in out:
-            raise ValueError("a JSON object repeats a member name (duplicate keys are refused, never overwritten)")
+        canon = _canon_member(key)
+        if key in out or canon in seen:
+            raise ValueError("a JSON object repeats a member name, exactly or in canonical form (duplicate keys are "
+                             "refused, never overwritten)")
         out[key] = value
+        seen.add(canon)
     return out
 
 

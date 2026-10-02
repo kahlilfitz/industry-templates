@@ -356,7 +356,6 @@ def govern(out):
     packet_hold = signal_policy.packet_held(out)
     used_activity_ids = set()
     meeting_seen = {}
-    exception_list = []
     rejected_mappings = 0
 
     for entry in out["time_entries"]:
@@ -524,7 +523,8 @@ def govern(out):
         # and cannot escape the duplicate rule; the detail names the entry's own spelling.
         meeting_ids = {}
         for a in linked:
-            if a.get("meeting_id"):
+            # A21: a meeting ID that folds to nothing is no meeting: two blank IDs are never "the same meeting".
+            if signal_policy.canon_id(a.get("meeting_id")):
                 meeting_ids.setdefault(signal_policy.canon_id(a["meeting_id"]), a["meeting_id"])
         for meeting_key, meeting_id in sorted(meeting_ids.items()):
             if text_withheld:
@@ -563,41 +563,11 @@ def govern(out):
             "citations": sorted({c for f in flags for c in f.get("citations", [])})
             or ["client-billing-guidelines.md #1.1", "client-billing-guidelines.md #1.2"],
         }
-        if flags:
-            item = {
-                "entry_id": entry["entry_id"],
-                "person": entry.get("person"),
-                "date": entry.get("date"),
-                "duration_hours": duration,
-                "verdict": entry["compliance"]["verdict"],
-                "flags": [f["flag"] for f in flags],
-                "recommended_action": ("rewrite_or_remove_before_prebill" if verdict == "reject"
-                                       else "billing_coordinator_review"),
-                "source": GUIDELINE_ENGINE,
-                "confidence": entry["compliance"]["confidence"],
-                "citations": entry["compliance"]["citations"],
-            }
-            if excluded_links:
-                item["excluded_activity_ids"] = list(excluded_links)
-            exception_list.append(item)
 
     missing_time = [missing_time_item(a) for a in signals
                     if a["activity_id"] not in used_activity_ids
                     and a.get("billable_signal") and a.get("duration_hours", 0) >= MISSING_TIME_MIN_HOURS]
-    if missing_time:
-        exception_list.append({
-            "entry_id": None,
-            "person": "multiple" if len({m["person"] for m in missing_time}) > 1 else missing_time[0]["person"],
-            "date": "multiple" if len({m["date"] for m in missing_time}) > 1 else missing_time[0]["date"],
-            "duration_hours": round(sum(m["duration_hours"] for m in missing_time), 2),
-            "verdict": "missing_time",
-            "flags": ["missing_time"] + (["embedded_instruction"] if any(m.get("embedded_instruction")
-                                                                         for m in missing_time) else []),
-            "recommended_action": "review_activity_and_create_draft_entries_if_billable",
-            "source": GUIDELINE_ENGINE,
-            "confidence": min(m["confidence"] for m in missing_time),
-            "citations": sorted({c for m in missing_time for c in m["citations"]}),
-        })
+    exception_list = exception_items(out["time_entries"], missing_time)
 
     out["missing_time_report"] = missing_time
     out["exception_list"] = exception_list
@@ -614,6 +584,55 @@ def govern(out):
                       "client-billing-guidelines.md #10.1"],
     }
     return rejected_mappings
+
+
+def _rolled_up(values, key):
+    """One value, or "multiple" when the values differ in canonical form (A22: "Morgan Lee" and "  morgan   lee  "
+    are one person); the first spelling is shown."""
+    return "multiple" if len({key(v) for v in values}) > 1 else values[0]
+
+
+def exception_items(entries, missing_time):
+    """The exception_list, built from the entries' compliance and the missing-time items (#13.2). guideline_check
+    writes it and exception_report rebuilds it and compares it item by item (A22), so a changed ID, person, verdict
+    or flag in one item is refused, never only counted."""
+    items = []
+    for entry in entries:
+        compliance = entry.get("compliance") or {}
+        flags = compliance.get("flags") or []
+        if not flags:
+            continue
+        item = {
+            "entry_id": entry.get("entry_id"),
+            "person": entry.get("person"),
+            "date": entry.get("date"),
+            "duration_hours": entry.get("duration_hours"),
+            "verdict": compliance.get("verdict"),
+            "flags": [f.get("flag") for f in flags],
+            "recommended_action": ("rewrite_or_remove_before_prebill" if compliance.get("verdict") == "reject"
+                                   else "billing_coordinator_review"),
+            "source": GUIDELINE_ENGINE,
+            "confidence": compliance.get("confidence"),
+            "citations": compliance.get("citations"),
+        }
+        if entry.get("excluded_activity_ids"):
+            item["excluded_activity_ids"] = list(entry["excluded_activity_ids"])
+        items.append(item)
+    if missing_time:
+        items.append({
+            "entry_id": None,
+            "person": _rolled_up([m.get("person") for m in missing_time], signal_policy.person_key),
+            "date": _rolled_up([m.get("date") for m in missing_time], str),
+            "duration_hours": round(sum(m["duration_hours"] for m in missing_time), 2),
+            "verdict": "missing_time",
+            "flags": ["missing_time"] + (["embedded_instruction"] if any(m.get("embedded_instruction")
+                                                                         for m in missing_time) else []),
+            "recommended_action": "review_activity_and_create_draft_entries_if_billable",
+            "source": GUIDELINE_ENGINE,
+            "confidence": min(m["confidence"] for m in missing_time),
+            "citations": sorted({c for m in missing_time for c in m["citations"]}),
+        })
+    return items
 
 
 def summary_figures(entries, missing_time):
@@ -719,6 +738,14 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_
         problems.append("prebill_summary.exception_count does not match the line items")
     if len(packet["exception_list"]) != derived_exceptions:
         problems.append("exception_list does not match the line items")
+    else:
+        # A22: compared item by item, IDs and persons included; a matching count is not enough.
+        rebuilt = exception_items(supplied, packet["missing_time_report"])
+        for n, (got, want) in enumerate(zip(packet["exception_list"], rebuilt)):
+            if got != want:
+                problems.append(f"exception_list[{n}] does not match its rebuild from the line items (compared item "
+                                f"by item, {RECONCILE_CITATION})")
+                break
     if "period" in summary and summary["period"] != packet.get("period"):
         problems.append("prebill_summary.period does not match the packet period")
     ids = excluded_ids(packet)
@@ -727,14 +754,18 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_
     if excluded_ids(rerun) != ids:
         problems.append("activity_signals hold signal(s) the signal policy excludes, or provenance.excluded_signals "
                         "is incomplete")
-    present = {a.get("activity_id") for a in packet["activity_signals"]}
-    if present & set(ids):
+    key = signal_policy._id_key
+    present = {key(a.get("activity_id")) for a in packet["activity_signals"]}
+    if present & {key(x) for x in ids if x != signal_policy.WITHHELD_TEXT}:
         problems.append("provenance.excluded_signals lists signal(s) still present in activity_signals")
-    dropped = {e.get("entry_id") for e in (packet.get("provenance") or {}).get("excluded_entries", [])}
-    if (dropped - {signal_policy.WITHHELD_TEXT}) & {e.get("entry_id") for e in supplied}:
+    dropped = {key(e.get("entry_id")) for e in (packet.get("provenance") or {}).get("excluded_entries", [])
+               if e.get("entry_id") != signal_policy.WITHHELD_TEXT}
+    if dropped & {key(e.get("entry_id")) for e in supplied}:
         problems.append("provenance.excluded_entries lists time entr(ies) still present in time_entries")
+    recorded = {signal_policy.WITHHELD_TEXT if x == signal_policy.WITHHELD_TEXT else key(x) for x in ids}
     for i, entry in enumerate(supplied):
-        if set(entry.get("excluded_activity_ids") or []) - set(ids):
+        if any((signal_policy.WITHHELD_TEXT if a == signal_policy.WITHHELD_TEXT else key(a)) not in recorded
+               for a in entry.get("excluded_activity_ids") or []):
             problems.append(f"time_entries[{i}].excluded_activity_ids are not recorded in provenance.excluded_signals")
     # Exclusion reasons and citations are printed only when they are the engines' own wording (#13.2).
     provenance = packet.get("provenance") or {}

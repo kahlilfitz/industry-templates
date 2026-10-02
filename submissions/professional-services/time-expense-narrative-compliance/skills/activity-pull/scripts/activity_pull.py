@@ -140,8 +140,9 @@ def cell_hours(row, key, cite):
 
 def cell_id(row, key, cite):
     value = row[key].strip()
-    if not value:
-        raise InputError(f"{cite} {key} must not be empty")
+    # A21: a value that folds to nothing ("-", "_", a format character) is blank and never a key.
+    if not signal_policy.canon_id(value):
+        raise InputError(f"{cite} {key} must not be empty (or only separators or format characters)")
     return value
 
 
@@ -158,7 +159,10 @@ def unique(index, key, cite, what, value=None):
 ENGAGEMENT_FIELDS = ("engagement_id", "client_name", "matter_name", "billing_guidelines_id", "engagement_manager")
 # One labelled field per line. The text is split with str.splitlines() (every line boundary, including U+2028, \x85
 # and \x0b-\x0c), and the value can never cross a line, so a blank field can't take the next line as its value.
-ENGAGEMENT_LABEL_RE = re.compile(r"- (" + "|".join(ENGAGEMENT_FIELDS) + r"):([^\r\n]*)")
+# Labels compare in canonical form (A11, A13): "- Engagement-ID:" is engagement_id, so a variant spelling can neither
+# be ignored next to the declared label nor shadow it - it is the same field given twice.
+ENGAGEMENT_LABEL_RE = re.compile(r"- ([^:\r\n]{1,60}):([^\r\n]*)")
+ENGAGEMENT_LABELS = {signal_policy.canon_id(f): f for f in ENGAGEMENT_FIELDS}
 
 
 def read_engagement(path):
@@ -167,7 +171,9 @@ def read_engagement(path):
             text = fh.read()
     except (OSError, UnicodeError) as exc:
         raise InputError(f"cannot read engagement-letter-extract.md: {signal_policy.error_text(exc)}") from exc
-    found = [(m.group(1), m.group(2).strip()) for m in map(ENGAGEMENT_LABEL_RE.fullmatch, text.splitlines()) if m]
+    found = [(ENGAGEMENT_LABELS[signal_policy.canon_id(m.group(1))], m.group(2).strip())
+             for m in map(ENGAGEMENT_LABEL_RE.fullmatch, text.splitlines())
+             if m and signal_policy.canon_id(m.group(1)) in ENGAGEMENT_LABELS]
     repeated = sorted({k for k, _ in found if [n for n, _ in found].count(k) > 1})
     if repeated:
         raise InputError(f"engagement-letter-extract.md gives {', '.join(repeated)} more than once (a repeated field "
@@ -180,6 +186,10 @@ def read_engagement(path):
     missing = [k for k in ("engagement_id", "client_name", "matter_name") if k not in fields]
     if missing:
         raise InputError(f"engagement-letter-extract.md is missing: {', '.join(missing)}")
+    # A21: the engagement ID is the key every row is scoped by; one that folds to nothing would match blank rows.
+    if not signal_policy.canon_id(fields["engagement_id"]):
+        raise InputError("engagement-letter-extract.md gives a blank engagement_id (only separators or format "
+                         "characters); a blank key never matches")
     return fields
 
 
@@ -209,7 +219,7 @@ def resolve_scope(args, engagement):
     if not signal_policy.person_key(requester):
         raise InputError("--requester must name the requesting timekeeper")
     eng_id = engagement["engagement_id"]
-    requested = [" ".join(p.split()) for p in (args.person or []) if p and p.strip()]
+    requested = [" ".join(p.split()) for p in (args.person or []) if signal_policy.person_key(p)]
     # Names compare in canonical form (person_key): one colleague named twice in variant spellings is one person.
     distinct = {}
     for p in requested:
@@ -331,17 +341,20 @@ def main():
     dates_available, dates_in_period = set(), set()
 
     def allowed(person):
+        # people never holds a blank key (A21), so a blank person is never in scope; with everyone in scope cell_id
+        # refuses it.
         return people is None or signal_policy.person_key(person) in people
     workplan, workplan_ids = {}, {}
     for idx, row in enumerate(workplan_rows, start=2):
         cite = f"raw/engagement-workplan.csv row {idx}"
         try:
-            unique(workplan_ids, signal_policy.canon_id(row["workplan_id"]), cite, "workplan_id")
+            unique(workplan_ids, signal_policy.canon_id(cell_id(row, "workplan_id", cite)), cite, "workplan_id")
             # Engagement IDs, item types and match keys compare in canonical form (A13): a variant spelling of a
-            # workplan key is the same key, never a missed match that drops the row's activity class.
-            if signal_policy.canon_id(row["engagement_id"]) == eng_key:
-                unique(workplan, (signal_policy.canon_id(row["item_type"]), signal_policy.canon_id(row["match_key"])),
-                       cite, "item_type and match_key", value=(idx, row))
+            # workplan key is the same key, never a missed match that drops the row's activity class. A21: a row
+            # with a blank item type or match key is never indexed, so it can never join a blank event ID or file.
+            key = (signal_policy.canon_id(row["item_type"]), signal_policy.canon_id(row["match_key"]))
+            if signal_policy.canon_id(row["engagement_id"]) == eng_key and all(key):
+                unique(workplan, key, cite, "item_type and match_key", value=(idx, row))
         except InputError as exc:
             sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
 
@@ -471,6 +484,9 @@ def main():
             links = [a.strip() for a in (row["activity_ids"] or "").split(";") if a.strip()]
             linked = {}
             for link in links:
+                if not signal_policy.canon_id(link):
+                    raise InputError(f"{cite} activity_ids has a blank link (only separators or format characters); "
+                                     "a blank key never matches an activity")
                 unique(linked, signal_policy.canon_id(link), cite, "activity_ids link")
         except InputError as exc:
             sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")

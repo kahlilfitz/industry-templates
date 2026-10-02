@@ -91,6 +91,8 @@ def main():
     excluded = out.get("provenance", {}).get("excluded_signals", [])
     out.setdefault("provenance", {}).setdefault("engines", []).append(ENGINE_VERSION)
     out["provenance"]["generated_at"] = stamp
+    # #11.4: the ledgers describe the packet as written (the stamp replaces a withheld generated_at).
+    signal_policy.write_ledgers(out)
     try:
         signal_policy.write_output(args.out, signal_policy.dump_json(out))
     except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError

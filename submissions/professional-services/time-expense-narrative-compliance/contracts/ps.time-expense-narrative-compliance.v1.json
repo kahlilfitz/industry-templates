@@ -36,6 +36,14 @@
         "type": "string"
       }
     },
+    "withheld_fields": {
+      "type": "array",
+      "description": "Placeholder ledger (client-billing-guidelines.md #11.4): the exact relative path of every withheld marker in this record, written by the engine that placed it. A marker without its own ledger path, or a path without its marker, is refused.",
+      "items": {
+        "type": "string",
+        "pattern": "^(?:/(?:[a-z_]{1,40}|[0-9]+|@member[0-9]+|@key[0-9a-f]{16}))+$"
+      }
+    },
     "date": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
@@ -372,6 +380,9 @@
           "engagement_id": {
             "$ref": "#/definitions/text",
             "description": "Optional engagement scope. A signal naming another engagement is excluded and never rendered (client-billing-guidelines.md #13.3)."
+          },
+          "withheld_fields": {
+            "$ref": "#/definitions/withheld_fields"
           }
         }
       }
@@ -670,6 +681,9 @@
           "engagement_id": {
             "$ref": "#/definitions/text",
             "description": "Optional engagement scope. An entry naming another engagement is excluded and recorded in provenance.excluded_entries (client-billing-guidelines.md #13.3)."
+          },
+          "withheld_fields": {
+            "$ref": "#/definitions/withheld_fields"
           }
         }
       }
@@ -958,6 +972,9 @@
         "engines": {
           "$ref": "#/definitions/strings"
         },
+        "withheld_fields": {
+          "$ref": "#/definitions/withheld_fields"
+        },
         "generated_at": {
           "$ref": "#/definitions/timestamp"
         },
@@ -1138,7 +1155,7 @@
             "type": "object",
             "properties": {
               "activity_id": {
-                "$ref": "#/definitions/text"
+                "$ref": "#/definitions/id"
               },
               "reason": {
                 "$ref": "#/definitions/text"

@@ -267,7 +267,79 @@ New `signal_policy.canon_text` (NFKC, `Cf` format characters stripped, casefold,
   - narrative-draft's SKILL.md: polished prose is shown beside the engine's draft and never written into `drafted.json`, which is passed to code-map unchanged.
   - guideline-check's and exception-report's SKILL.md, and the README, describe #13.5.
 
+### Mobilization round 12 class sweeps, plus T&E QA round 10 (applied here; 1.0.4, no version bump; hardening checklist A11, A20, A21, A22, D21)
+All five classes reproduced before the fix. New guidelines are client-billing-guidelines.md #11.4 and #13.6 (shared ×6), and the contract (×6) gains `withheld_fields`.
+- **A20. An exclusion holds in every section.** Reproduced: code-map accepted a self scope whose `people` list was widened to a colleague, and a scope that listed the requester as a withheld colleague.
+  - Fix: a new shared `check_scope_state` refuses, at every stage:
+    - a self scope that lists anyone but the requester or carries a team view;
+    - a team scope that withholds anyone or omits the requester;
+    - a withheld name that is the requester or a listed person.
+  - A new `check_exclusions` refuses, at every stage and by canonical comparison:
+    - an out-of-scope row that is also an active signal or an entry link;
+    - an excluded signal used as an evidence link;
+    - a source that is both read and skipped, and a signal from a skipped source.
+  - On governed data, it also refuses a missing-time item that names an absent, linked or excluded signal, and an exception item that names an absent or excluded entry.
+- **A21. Blank keys never match.** Reproduced at activity-pull:
+  - a workplan `match_key` of `-` joined a calendar `event_id` of `_` and lent it a purpose;
+  - a timesheet link `_` resolved to an activity `-`;
+  - an engagement ID `-` was accepted and matched rows scoped `_`.
+  - Fix: an ID that folds to nothing (only separators or format characters) is refused at activity-pull, whether it is an activity, entry, workplan or engagement ID or a timesheet link. The workplan joins only when both keys are stated.
+  - At every stage, the shared `_id_key` gives a blank or missing key a fresh identity, so it never equals another; carried links must be canonically non-empty.
+  - In the guideline rules, a blank meeting ID is no meeting, so it never raises `duplicate_meeting`.
+- **D21. Each placeholder has its own hold.** Reproduced:
+  - a withheld marker placed in TE-B-001's narrative, with only an `embedded_instruction` hold, ran through the whole chain;
+  - a marker in a signal subject with no hold at all was accepted.
+  - Fix: a placeholder ledger (#11.4). The engine that places or keeps a marker records its exact path in that record's `withheld_fields`, or in `provenance.withheld_fields` for packet metadata. Paths are member names, positions and hashed names, never supplied text.
+  - At every stage, `check_withheld_bindings` refuses, with no output:
+    - a marker without its own path;
+    - a path without its marker;
+    - a malformed path;
+    - a marker on a signal or entry that is not held.
+  - So an unrelated hold never validates a newly placed marker. Markers in re-derived sections (drafts, mappings, compliance, missing time, exception list) are checked by re-derivation, as before.
+  - narrative-draft, code-map and guideline-check rewrite the ledgers after their final provenance stamp, so a withheld `generated_at` that the engine re-stamps leaves no stale path.
+- **A11. Canonical duplicate keys.** Reproduced: member names `Demo-Scenario` and `demo_scenario` were accepted side by side, and so were source keys `Calendar` and `calendar`.
+  - Fix: the contract walker refuses member names that repeat exactly or in canonical form. Each of these is also checked for canonical duplicates:
+    - source keys;
+    - engagement-letter labels (a variant spelling such as `Engagement-ID` is read as the same field, and a repeat is refused);
+    - scope people and withheld names;
+    - out-of-scope, missing-time and exception-list IDs;
+    - read and skipped sources.
+- **A22 (T&E QA round 10). Reconcile by content, not count.** Reproduced: the report accepted an exception item whose `entry_id` was changed to TE-B-999, or whose person was changed, because only the item count was compared.
+  - Fix: guideline-check and the report share one `exception_items` builder. The report rebuilds the exception list from the line items and refuses any item that differs: ID, person, verdict, flags, action or citations.
+  - The missing-time exception rolls people up by canonical name, so "Morgan Lee" and "  morgan   lee  " are one person, not "multiple".
+  - The report's excluded-signal and excluded-entry cross-checks compare canonical IDs.
+
 ### Tests and goldens
+- Mobilization round 12 and T&E QA round 10: 794 to 843 checks. 49 are new in `r12_tests`, one or more per reproducer, with controls:
+  - A21:
+    - a blank workplan key that never joins;
+    - blank activity IDs, links and engagement IDs refused at activity-pull;
+    - blank meeting IDs that are never a duplicate meeting;
+    - a unit check of `_id_key`.
+  - A22: an exception item's entry ID (absent, or another entry), person (changed or respelled), flag order and action, each changed alone and refused; the canonical person roll-up; a control that the golden list equals its rebuild.
+  - A20:
+    - self scope widened; requester listed as withheld; team scope withholding a colleague;
+    - an out-of-scope row naming an active signal, at all four later stages;
+    - an out-of-scope ID as an entry link; a respelled excluded ID as evidence;
+    - a skipped-source signal; a source both read and skipped;
+    - missing-time items naming an excluded, linked or absent signal.
+  - A11: canonical duplicate missing-time and exception IDs, a second missing-time exception, scope people, JSON member names, source keys, and engagement-letter labels (plus a variant-label control).
+  - D21:
+    - a held marker with no ledger path;
+    - a ledgered marker on an unheld record;
+    - a second unlisted marker in a held record;
+    - a marker beside another record's hold;
+    - a path with no marker, and a malformed path;
+    - an unledgered provenance marker;
+    - unledgered markers at the coded and governed stages.
+    - Controls: an engine-carried provenance ledger, the split-instruction chain carrying its ledger to the report, and no golden carrying a ledger.
+- Older checks retargeted to the new rules:
+  - The two hand-built mailbox tamper fixtures also remove the mailbox key from `skipped_sources`, since a signal from a skipped source is now refused outright, so they still test the filter's drop.
+  - The r9 exact-marker fixture places each marker as an engine does (its ledger path and its record's hold).
+  - The QA round 2 and 3 stricter-verdict controls rebuild the exception list exactly.
+  - The inventory reclassifies `exception_list[].entry_id`, `person`, `source` and `citations[]`, and `time_entries[].compliance.citations[]`, from never rendered to reconciled. It adds the three `withheld_fields` ledgers as closed (an anchored path pattern).
+- Goldens: all 10 are byte-identical, since no golden carries a marker, so none carries a ledger. Both scenarios run end to end with no refusal.
+- Runtime: the r12 group takes about 16 s. On this (currently loaded) machine, the scenario B chain timed the same at HEAD and with this change (about 25 s each), so the change adds no engine overhead.
 - Mobilization round 11: 758 to 794 checks. 29 are new in `r11_tests`:
   - `billable_signal` flipped both ways at every stage.
   - A forged draft narrative at drafted, coded and governed.
