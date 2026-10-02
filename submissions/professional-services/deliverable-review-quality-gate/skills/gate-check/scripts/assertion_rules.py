@@ -651,8 +651,30 @@ def validate_unique_ids(payload):
             require_unique_ids(items, ".".join(path), id_key, allow_identical=path == ("findings",), prefix="contract violation: ")
 
 
+def contains_withheld(value):
+    """True when value is a string carrying a withheld marker. Withheld text decides nothing
+    (quality-gate-criteria.md #8.13): no rule reads it to match evidence, satisfy a requirement, identify the client,
+    place a finding or set a severity. It produces the G8 hold and nothing else."""
+    return isinstance(value, str) and WITHHELD_PATTERN.search(value) is not None
+
+
+def is_withheld_reference(evidence_by_id, evidence_id):
+    """True when an evidence_ids entry, or the evidence_id it resolves to, was withheld (#8.13). Every copy of one
+    flagged text carries the same marker, so without this a withheld reference would still link to withheld evidence."""
+    if contains_withheld(evidence_id):
+        return True
+    item = evidence_for(evidence_by_id, evidence_id)
+    return item is not None and contains_withheld(item.get("evidence_id"))
+
+
+def withheld_references(assertion, evidence_by_id):
+    return [eid for eid in assertion.get("evidence_ids") or [] if is_withheld_reference(evidence_by_id, eid)]
+
+
 def linked_evidence(assertion, evidence_by_id):
-    found = (evidence_for(evidence_by_id, eid) for eid in assertion.get("evidence_ids") or [])
+    """The evidence items an assertion's references resolve to; a withheld reference never links (#8.13) and makes
+    the declared support unverifiable (classify)."""
+    found = (evidence_for(evidence_by_id, eid) for eid in assertion.get("evidence_ids") or [] if not is_withheld_reference(evidence_by_id, eid))
     return [item for item in found if item is not None]
 
 
@@ -701,6 +723,9 @@ def best_evidence(assertion, linked_items):
 def linked_evidence_citation(assertion, evidence_by_id):
     citations = []
     for evidence_id in assertion.get("evidence_ids") or []:
+        if is_withheld_reference(evidence_by_id, evidence_id):
+            citations.append("withheld linked evidence reference (not used)")
+            continue
         evidence = evidence_for(evidence_by_id, evidence_id)
         citations.append(evidence.get("citation", f"evidence {evidence_id}") if evidence else f"missing linked evidence {evidence_id}")
     return "; ".join(citations) if citations else "no linked evidence found"
@@ -713,7 +738,9 @@ def location_label(location):
 def is_definitive_conclusion(assertion):
     if assertion.get("limitation_present") is True:
         return False
-    text = assertion.get("text", "").lower()
+    text = assertion.get("text", "")
+    # Withheld text is never read for keywords (#8.13); only the structured flags decide.
+    text = "" if contains_withheld(text) or not isinstance(text, str) else text.lower()
     definitive_terms = (" should ", "we conclude", "will ", "all ", "full ", "estate-wide", "applies across", "national ")
     return (
         assertion.get("hedging_present") is not True
@@ -723,16 +750,22 @@ def is_definitive_conclusion(assertion):
     )
 
 
-def classify(assertion, evidence, missing_ids=()):
+def classify(assertion, evidence, missing_ids=(), withheld_ids=()):
     klass = assertion.get("class")
     if evidence is None:
         if not assertion.get("evidence_ids"):
             return "unsupported", 0.0, "No evidence IDs were linked to the assertion", "quality-gate-criteria.md #1.1"
+        if withheld_ids:
+            # A withheld reference is never matched (quality-gate-criteria.md #8.13), so the declared support cannot be verified.
+            return "unsupported", 0.0, f"{len(withheld_ids)} linked evidence ID(s) were withheld by the embedded-instruction screen and no other linked evidence was found, so the declared support cannot be verified", "quality-gate-criteria.md #1.1; quality-gate-criteria.md #8.13"
         return "unsupported", 0.0, "No linked evidence item was found in the evidence index", "quality-gate-criteria.md #1.1"
     confidence = min(float(assertion.get("confidence", 0.0)), float(evidence.get("confidence", 0.0)))
     if missing_ids:
         # Declared support must exist: a dangling evidence reference is never ignored (quality-gate-criteria.md #1.1).
         return "unsupported", confidence, f"{len(missing_ids)} linked evidence ID(s) are not in the evidence index, so the declared support cannot be verified", "quality-gate-criteria.md #1.1"
+    if withheld_ids:
+        # Like a dangling reference, a withheld one is never ignored and never matched (#1.1, #8.13).
+        return "unsupported", confidence, f"{len(withheld_ids)} linked evidence ID(s) were withheld by the embedded-instruction screen, so the declared support cannot be verified", "quality-gate-criteria.md #1.1; quality-gate-criteria.md #8.13"
     if not recognised_provenance(evidence):
         # A type or confidence the evidence item declares about itself proves nothing without ingest provenance.
         return "unsupported", confidence, "No linked evidence item has recognised provenance (connector:<slug>, skill:deliverable-ingest or skill:criteria-retrieve); missing, unrecognised or self-declared sources cannot establish support", "quality-gate-criteria.md #1.5"
@@ -777,8 +810,9 @@ def classify(assertion, evidence, missing_ids=()):
 def map_assertion(assertion, evidence_by_id):
     """Return (mapping, AM finding or None, escalation or None) exactly as assertion_map emits them."""
     evidence = best_evidence(assertion, linked_evidence(assertion, evidence_by_id))
-    missing_ids = [eid for eid in assertion.get("evidence_ids") or [] if evidence_for(evidence_by_id, eid) is None]
-    status, support_score, rationale, criteria_section = classify(assertion, evidence, missing_ids)
+    withheld_ids = withheld_references(assertion, evidence_by_id)
+    missing_ids = [eid for eid in assertion.get("evidence_ids") or [] if evidence_for(evidence_by_id, eid) is None and eid not in withheld_ids]
+    status, support_score, rationale, criteria_section = classify(assertion, evidence, missing_ids, withheld_ids)
     mapping = {
         "assertion_id": assertion["assertion_id"], "class": assertion["class"], "text": assertion["text"],
         "location": assertion["location"], "evidence_ids": assertion.get("evidence_ids") or [],

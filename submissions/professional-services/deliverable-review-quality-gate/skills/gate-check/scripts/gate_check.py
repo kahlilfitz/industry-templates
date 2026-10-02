@@ -284,13 +284,14 @@ def has_external_vocabulary(text):
     return EXTERNAL_RECIPIENT_PATTERN.search(strip_role_phrases(text)) is not None
 
 def client_identity_entries(deliverable):
-    """Yield (label, raw value, normalised phrase) for client_name and every client_aliases entry."""
+    """Yield (label, raw value, normalised phrase) for client_name and every client_aliases entry. A withheld name or
+    alias never identifies the client (quality-gate-criteria.md #8.13)."""
     entries = []
     if isinstance(deliverable.get("client_name"), str):
         entries.append(("client_name", deliverable["client_name"], recipient_words(deliverable["client_name"])))
     for index, alias in enumerate(string_list(deliverable, "client_aliases", "deliverable.client_aliases")):
         entries.append((f"client_aliases[{index}]", alias, recipient_words(alias)))
-    return [entry for entry in entries if len(entry[2]) >= 3]
+    return [entry for entry in entries if len(entry[2]) >= 3 and not rules.contains_withheld(entry[1])]
 
 def client_identities(deliverable):
     """Client names usable for positive matching. A name or alias containing external-party vocabulary is never
@@ -345,7 +346,7 @@ def recipient_list_problem(deliverable):
         return "recipient list is empty"
     if any(not item.strip() for item in recipients):
         return "recipient list contains a blank entry"
-    joined = " | ".join(rules.canonical_name(item) for item in recipients)
+    joined = " | ".join(rules.canonical_name(item) for item in recipients if not rules.contains_withheld(item))
     if any(rules.canonical_name(term) in joined for term in AMBIGUOUS_RECIPIENT_TERMS):
         return "recipient list is ambiguous"
     return None
@@ -421,13 +422,15 @@ def register(container, key, label):
     return container[key]
 
 def find_prior_location(payload, *terms):
+    """The location of the first prior finding whose readable text names every term; withheld text is not read (#8.13)."""
     priors = payload.get("prior_findings")
     folded_terms = tuple(rules.canonical_name(term) for term in terms)
     for prior in priors if isinstance(priors, list) else []:
         if not isinstance(prior, dict) or not isinstance(prior.get("location"), dict):
             continue
         location = prior["location"]
-        haystack = rules.canonical_name(" ".join(str(value) for value in (prior.get("finding_id", ""), prior.get("detail", ""), prior.get("citation", ""), location.get("section", ""), location.get("label", ""))))
+        values = (prior.get("finding_id", ""), prior.get("detail", ""), prior.get("citation", ""), location.get("section", ""), location.get("label", ""))
+        haystack = rules.canonical_name(" ".join(str(value) for value in values if not rules.contains_withheld(value)))
         if all(term in haystack for term in folded_terms):
             return location
     return None
@@ -578,8 +581,10 @@ def evaluate(payload):
         reason = "no trusted deliverable.client_name or client_aliases entry is supplied, so no recipient can be positively matched to the client" if not client_identities(deliverable) else "they do not positively match the client named in deliverable.client_name/client_aliases or a defined internal role"
         add_finding(findings, "GC-G2-recipient-unconfirmed", "G2", MUST_FIX, "Recipients not confirmed as client-only", f"Recipient(s) {names} are unclassified: {reason}. An unmatched recipient is never assumed to be client-only.", disclaimer_location(payload), "quality-gate-criteria.md #2.5", 0.9, "quality-gate-criteria.md #2.5; severity-rules.md #1.2")
         escalations.append(f"G2: confirm recipients {names} - not positively matched to the client; must-fix until the reviewing partner/QRM confirms they are client-only (quality-gate-criteria.md #2.5)")
-    # Names and labels are compared in canonical form (quality-gate-criteria.md #8.11); closed enums stay exact.
-    present_disclaimers = {rules.canonical_id(item) for item in string_list(deliverable, "present_disclaimer_types", "deliverable.present_disclaimer_types")}
+    # Names and labels are compared in canonical form (quality-gate-criteria.md #8.11); closed enums stay exact. A
+    # withheld entry never satisfies a requirement, and a withheld requirement is always unmet (#8.13): every copy of
+    # one flagged text carries the same marker, so markers must never be matched against each other.
+    present_disclaimers = {rules.canonical_id(item) for item in string_list(deliverable, "present_disclaimer_types", "deliverable.present_disclaimer_types") if not rules.contains_withheld(item)}
     disclaimer_type = deliverable.get("required_disclaimer_type")
     third_party = is_third_party_context(deliverable)
     if disclaimer_type not in DISCLAIMER_TYPES:
@@ -597,9 +602,9 @@ def evaluate(payload):
     if disclaimer_type == "general_advice" and "general advice" not in present_disclaimers:
         add_finding(findings, "GC-G2-general-advice-absent", "G2", MUST_FIX, "Required general-advice disclaimer is absent", "required_disclaimer_type is general_advice but general-advice language is not in present_disclaimer_types; a declared disclaimer requirement is only met when the disclaimer is present.", disclaimer_location(payload), "quality-gate-criteria.md #2.1; quality-gate-criteria.md #2.4", 0.95, "quality-gate-criteria.md #2.1, #2.4; severity-rules.md #1.2")
         escalations.append("G2: required general-advice disclaimer absent from the deliverable - must-fix; reviewing partner/QRM must confirm the disclaimer before release (quality-gate-criteria.md #2.4)")
-    present_language = {rules.canonical_id(item) for item in string_list(deliverable, "present_language", "deliverable.present_language")}
+    present_language = {rules.canonical_id(item) for item in string_list(deliverable, "present_language", "deliverable.present_language") if not rules.contains_withheld(item)}
     for index, required in enumerate(required_language):
-        if rules.canonical_id(required) not in present_language:
+        if rules.contains_withheld(required) or rules.canonical_id(required) not in present_language:
             severity = RELEASE_BLOCKER if rules.canonical_id(required) == "reliance restriction" else MUST_FIX
             token = safe_token(required, "")
             finding_id = claim_finding_id(findings, owners, f"GC-G2-missing-{token or f'language-{index + 1}'}", ("required_language", required))
