@@ -896,15 +896,16 @@ def check_hold_evidence(doc, where):
 # downstream stage re-runs every upstream engine's derivation on the raw inputs (scope_digest on the SOW, engagement
 # letter, pursuit record, wall register, staffing input and confirmed roster; knowledge_match on that scope, the
 # Closeout record and the wall register; wall_check on that matched document, the wall register and the workspace
-# inventory) and requires the carried document to equal the re-derivation in every field and section, provenance
-# included (same_document). A missing, extra or changed field anywhere is an InputError and nothing is written.
+# inventory; before the model renders from a supplied file, verify_render.py re-runs access_checklist too) and
+# requires the carried document to equal the re-derivation in every field and section, provenance included
+# (same_document). A missing, extra or changed field anywhere is an InputError and nothing is written.
 # The only carried values the derivation cannot produce from the raw inputs are command-line run parameters. The
 # re-derivation runs WITH the carried value, so each is validated and screened instead; nothing else is exempt.
 # Path -> (stages whose carried document takes it as a parameter, justification).
 CARRIED_PARAMETERS = {
-    "run_metadata.generated_at": (("scope", "matched", "governed"), "scope_digest's --generated-at run timestamp, a command-line parameter no raw input determines; contract date-time, ISO-8601 UTC (run_parameters) and screened"),
-    "run_metadata.demo_scenario": (("scope", "matched", "governed"), "scope_digest's --scenario demo label, a command-line parameter; contract slug pattern, and the re-derivation re-applies scope_digest's slug, instruction and other-client checks to it"),
-    "provenance.generated_at": (("matched", "governed"), "the writing stage's own --generated-at run timestamp, a command-line parameter; contract date-time, ISO-8601 UTC (stage_timestamp) and screened (in scope.json it equals run_metadata.generated_at and is compared)"),
+    "run_metadata.generated_at": (("scope", "matched", "governed", "access"), "scope_digest's --generated-at run timestamp, a command-line parameter no raw input determines; contract date-time, ISO-8601 UTC (run_parameters) and screened"),
+    "run_metadata.demo_scenario": (("scope", "matched", "governed", "access"), "scope_digest's --scenario demo label, a command-line parameter; contract slug pattern, and the re-derivation re-applies scope_digest's slug, instruction and other-client checks to it"),
+    "provenance.generated_at": (("matched", "governed", "access"), "the writing stage's own --generated-at run timestamp, a command-line parameter; contract date-time, ISO-8601 UTC (stage_timestamp) and screened (in scope.json it equals run_metadata.generated_at and is compared)"),
 }
 def _iso_z(v): return isinstance(v, str) and _ISO_Z.fullmatch(v) is not None and timestamp_ok(v)
 def run_parameters(doc, where):

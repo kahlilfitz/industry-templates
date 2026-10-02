@@ -56,11 +56,16 @@ def main():
     p=load_json(a.governed,"governed input"); check_governed(p)
     g=wall_check.rederive(p,a.raw_dir,a.staffing,a.confirmed_roster,a.closeout,a.wall_register,a.workspace_inventory,stage_timestamp(p,"governed input"),"governed input")
     same_document(p,g,"governed input")  # every field equals the scope_digest + knowledge_match + wall_check re-derivation from the raw inputs (#1.4)
+    d,txt=derive(p,a.wall_register,a.workspace_inventory,ts)
+    write_atomic([(a.out,json_bytes(a.out,d,"access checklist output"),"access checklist output"),(a.pack_out,text_bytes(a.pack_out,txt,"pack output"),"pack output")])  # both serialised first, then written atomically together
+def derive(p,register,inventory,ts):
+    """(access checklist document, mobilization pack text) for a governed document already proved equal to its
+    re-derivation from the raw inputs (#1.4). pack-draft's pre-render check (verify_render.py) re-runs this too."""
     adopt_trust(p)  # from the declaration lines scope_digest accepted, never a carried list (#1.4, #4.4)
     # The governed document is untrusted input: its upstream holds and every content field are screened for embedded
     # instructions and for other clients named in the wall register, and flagged text withheld, before anything is
     # derived from it (confidentiality-and-ethical-wall-rules.md #3.3, #4.1, #4.3).
-    terms=register_terms(a.wall_register,p.get("engagement") or {},own_words(p))
+    terms=register_terms(register,p.get("engagement") or {},own_words(p))
     p,gh=screen_upstream(p,"governed",ENGINE,terms); p,oh=screen_other(p,terms,ENGINE,"governed.")
     esc=p.setdefault("escalations",[])
     if gh: esc.append(f"{len(gh)} governed field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
@@ -72,7 +77,7 @@ def main():
     # hold the wall, the digest and knowledge-dependent or client-confidential access (#1.4, #2.1, #3.3; checklist B6).
     # Cells are screened from the rows AS READ, before an unusable header or a repeated ID empties the collection the
     # decisions use: an inventory that is not used is still screened and its flagged cells held (#1.3, #3.3, #4.3).
-    rows=read_csv(a.workspace_inventory,False,"workspace inventory")
+    rows=read_csv(inventory,False,"workspace inventory")
     if rows is None:
         add_hold(fixed,"HOLD-MISSING-WORKSPACE-INVENTORY","raw/workspace-inventory.csv","missing workspace inventory; no access is requested","workspace-inventory-rules.md #1.2"); rows=[]
     else:
@@ -112,7 +117,7 @@ def main():
         return out,ah
     # Access-decision holds (missing or unusable inventory, role not in the matrix, and below an invalid row or a
     # clamped permission) govern their checklist rows and the pack status, not the wall (role-access-matrix.md #2.3).
-    wall=effective_wall(p,a.wall_register,a.workspace_inventory,gh+oh+screened); out,ah=build(wall)
+    wall=effective_wall(p,register,inventory,gh+oh+screened); out,ah=build(wall)
     p["wall_decision"]=wall; wstat=wall.get("status"); need(wstat in WALL_STATUSES,"re-derived wall status is not recognised; fail closed")
     if wstat in {"hold","denied"}:
         # No knowledge is released while the effective wall status is hold or denied, whatever the digest says (#2.2, #2.3).
@@ -124,5 +129,6 @@ def main():
     reasons=(["open_holds"] if holds else [])+(["wall_status_hold"] if wstat=="hold" else [])+(["workspaces_pending_wall_review"] if pend else [])  # workspace-inventory-rules.md #3.3
     if pend: esc.append(f"{pend} workspace(s) held pending wall review; the pack stays on hold until Risk/Conflicts resolve the wall decision (workspace-inventory-rules.md #3.3)")
     p["access_checklist"]=out; p["holds"]=holds; p["mobilization_pack"]={"status":"on_hold_internal_only" if reasons else "draft_internal_only","hold_reasons":reasons,"label":"DRAFT - for internal review only. Do not send to the client or provision access.","sections":["client_context","scope","prior_knowledge","team_roster","access_checklist","wall_briefing","first_week_plan"],"source":ENGINE,"confidence":.94,"citation":"workspace-inventory-rules.md #3.1,#3.3; confidentiality-and-ethical-wall-rules.md #3.1"}; p.setdefault("provenance",{}).setdefault("engines",[]).append(f"access_checklist/{VERSION}"); p["provenance"]["generated_at"]=ts
-    p=bind_withheld(settle_trust(p),"access",ENGINE); check_contract(p,"access","access"); write_atomic([(a.out,json_bytes(a.out,p,"access checklist output"),"access checklist output"),(a.pack_out,text_bytes(a.pack_out,pack(p),"pack output"),"pack output")])  # both serialised first, then written atomically together  # the document written is held to the contract (#1.3)
+    p=bind_withheld(settle_trust(p),"access",ENGINE); check_contract(p,"access","access")  # the document written is held to the contract (#1.3)
+    return p,pack(p)
 if __name__=="__main__": guard(main)

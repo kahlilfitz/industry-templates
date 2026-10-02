@@ -283,6 +283,24 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
   - Existing tests that edited intermediates now expect the whole-document refusal.
   - Goldens byte-identical; shared copies 43/43. Suite 362 → 379 checks.
 
+- **A23: the final rendering step re-derives before it renders (checklist A23, #1.4).** Fixed after the DRQG QA round 12 finding, applied here in the same A23 scope.
+  - *Engine-rendered already.* `access_checklist.py` writes `mobilization-pack.md` from the governed document it has just re-derived and compared (above). Its body moved into `access_checklist.derive(...)` so the check below can call it; its behaviour is unchanged.
+  - *Model-rendered steps.* Two skills render from a supplied file through SKILL.md instructions, so both now run a deterministic pre-render check, new `scripts/verify_render.py` (a byte-identical copy in each skill):
+    - `pack-draft` drafts from `access-checklist.json` and `mobilization-pack.md`. Step 1 runs `verify_render.py --access ... --pack ...` with the raw inputs. It re-runs every engine under the access document's run parameters and refuses an access checklist that differs in any field, or a pack that differs from the engine's rendering by any byte.
+    - `roster-pull` presents from `scope.json`. Step 1 runs `verify_render.py --scope ...`, which re-runs `scope_digest` and refuses any difference.
+    - On a non-zero exit the skill stops, quotes the error and drafts or presents nothing. Failure handling says so too. The check writes nothing, and its messages give counts only (no value or path).
+  - `knowledge-match` and `wall-check` are unchanged: they report only the output their own engine step has just written.
+  - *Allow-list.* `CARRIED_PARAMETERS` now also names the access stage, with the same three run parameters. The contract walk covers the access document (`stage_access`).
+  - Byte-identical copies are bundled where they are needed: `scope_digest`, `knowledge_match`, `wall_check` and `access_checklist` in `pack-draft`, and `scope_digest` in `roster-pull`. The shared-copy check covers all of them (49/49).
+  - *Behaviour change.* `pack-draft` and `roster-pull` now need the raw inputs at render time, and they refuse an edited, stale or other-run intermediate or pack.
+  - Tests: new `qa101v_checks` cover:
+    - the CLI accepting the goldens and writing nothing;
+    - one-field access edits and pack byte edits refused;
+    - missing, stale and invalid inputs refused;
+    - a chain with a different timestamp at each stage accepted;
+    - `scope.json` edits refused;
+    - SKILL.md step 1 naming the exact command and the stop-on-refusal rule, with every named script bundled.
+
 ## 1.0.0 - 2026-10-01
 
 - Initial Wave 1 Scenario 03 plugin with `scope_digest`, `knowledge_match`, `wall_check` and `access_checklist`.
