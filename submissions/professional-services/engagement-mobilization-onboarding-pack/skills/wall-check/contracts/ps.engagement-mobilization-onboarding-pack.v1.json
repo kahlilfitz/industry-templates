@@ -777,11 +777,9 @@
         },
         "citations": {
           "type": "array",
+          "description": "Source citations; every element is a string (a null citation is not a citation).",
           "items": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           }
         }
       }

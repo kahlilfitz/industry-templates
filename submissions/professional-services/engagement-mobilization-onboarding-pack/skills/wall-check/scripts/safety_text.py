@@ -97,19 +97,33 @@ def write_text(p, t): write_atomic([(p, text_bytes(p, t))])
 class Rows(list):
     """CSV rows with lower-cased, stripped header keys. `columns` lists the header; `malformed` lists data rows
     (1-based file row numbers) that carry more fields than the header; `duplicate_columns` counts header names that
-    repeat after normalisation (csv.DictReader would silently keep only the last: `restricted,clear` -> clear)."""
+    repeat after normalisation. A repeated column is never collapsed (csv.DictReader keeps only the last copy:
+    `restricted,clear` -> clear): its first copy keeps the name and later copies are kept as `<name> (copy N)`, so a
+    malformed register still yields every value it holds for identity harvesting (#2.1, #3.3)."""
     columns = ()
     malformed = ()
     duplicate_columns = 0
+_COPY_RE = re.compile(r"(.*) \(copy \d+\)")
+def base_col(k):
+    """The header name a (possibly repeated) column was read under: `client_name (copy 2)` -> `client_name`."""
+    m = _COPY_RE.fullmatch(str(k)); return m.group(1) if m else str(k)
 def read_csv(p, required=True):
     try:
         with open(p, encoding="utf-8-sig", newline="") as f:
-            rd = csv.DictReader(f); out = Rows(); bad = []
-            cols = tuple((c or "").strip().lower() for c in (rd.fieldnames or ()))
-            out.columns = cols; out.duplicate_columns = len(cols) - len(set(cols))
-            for i, r in enumerate(rd, 2):
-                if None in r: bad.append(i)
-                out.append({(k or "").strip().lower(): ("" if v is None else v) for k, v in r.items() if k is not None})
+            rd = csv.reader(f); out = Rows(); bad = []
+            raw = [(c or "").strip().lower() for c in (next(rd, None) or ())]
+            cols = []
+            for c in raw:
+                n, m = c, 1
+                while n in cols: m += 1; n = f"{c} (copy {m})"
+                cols.append(n)
+            out.columns = tuple(cols); out.duplicate_columns = len(raw) - len(set(raw))
+            i = 1
+            for row in rd:
+                if not row: continue  # blank lines are skipped, as csv.DictReader does
+                i += 1
+                if len(row) > len(cols): bad.append(i)
+                out.append({k: (row[n] if n < len(row) else "") for n, k in enumerate(cols)})
             out.malformed = tuple(bad)
             return out
     except FileNotFoundError as e:
@@ -292,7 +306,7 @@ STRUCTURED_KEYS = {"citation", "citations", "system", "platform", "depends_on_kn
 def prose_key(k):
     """Identifiers, enums, permissions, classifications, sources and citations are scanned cell by cell but are not
     prose: joining them ("clear" + "row 5") manufactures sentences no one wrote, so they never join a record or pair."""
-    k = str(k)
+    k = base_col(k)
     return k not in NON_PROSE_KEYS and k not in STRUCTURED_KEYS and not k.endswith(("_id", "_ids", "_status", "_permission", "_classification", "_type"))
 def free_text(d):
     """The free-text string fields of a record (see prose_key)."""
@@ -627,31 +641,57 @@ def cap_runs(text):
     for m in re.finditer(r"[A-Z][A-Za-z0-9&'.-]*(?:\s+(?:&\s+)?[A-Z][A-Za-z0-9&'.-]*)*", text or ""):
         start = m.start() == 0 or bool(re.search(r"[.;:!?]\s*$", text[:m.start()])); yield m.group(0).strip(" .'-"), start
 def key_low(v): return (v or "").strip().lower()
+IDENTITY_COLUMNS = ("client_name", "matter_id", "restriction")
 def other_names(rows, e, own):
     """Every other client's identity in the register: other rows' client_name/matter_id and proper-noun runs in
     restriction free text (confidentiality-and-ethical-wall-rules.md #3.2,#3.3). Withheld cells name nobody."""
     names = []
     for r in rows:
-        if r.get("client_name") and key_low(r.get("client_name")) != key_low(e.get("client_name")): names.append(r["client_name"].strip())
-        if r.get("matter_id") and key_low(r.get("matter_id")) != key_low(e.get("matter_id")): names.append(r["matter_id"].strip())
-        rest = r.get("restriction") or ""
-        if rest in (WITHHELD, OTHER_WITHHELD): continue
-        for run, start in cap_runs(rest):
-            ws = words(run)
-            if not ws or ws <= own | GENERIC | ALLOW_CAPS or (start and len(run.split()) == 1): continue
-            names.append(run)
+        # Every copy of a repeated identity column counts: a malformed register never yields fewer identities (#2.1).
+        for col in IDENTITY_COLUMNS:
+            for kk, v in r.items():
+                if base_col(kk) != col or not isinstance(v, str) or not v.strip() or v in (WITHHELD, OTHER_WITHHELD): continue
+                if col != "restriction":
+                    if key_low(v) != key_low(e.get(col)): names.append(v.strip())
+                    continue
+                for run, start in cap_runs(v):
+                    ws = words(run)
+                    if not ws or ws <= own | GENERIC | ALLOW_CAPS or (start and len(run.split()) == 1): continue
+                    names.append(run)
     return names
 def own_words(doc):
     e = doc.get("engagement") or {}; j = doc.get("joiner") or {}
     return words(e.get("client_name"), e.get("matter_id"), e.get("engagement_id"), e.get("title"), *(e.get("affiliates") or []), j.get("person"), *[r.get("person") for r in doc.get("team_roster", []) if isinstance(r, dict)], *(doc.get("scope_summary") or {}).get("systems", []))
 REGISTER_COLUMNS = ("person", "client_name", "matter_id", "status")  # confidentiality-and-ethical-wall-rules.md #2.1
+REGISTER_LABEL = "raw/ethical-wall-register.csv"
 def register_terms(path, e, own):
-    """Other-client terms from the wall register at path, read and screened exactly as wall_check reads it; an absent
-    or malformed register yields none (wall_check then holds the pack)."""
+    """Other-client terms from the wall register at path, read and screened exactly as wall_check reads it. Term
+    harvesting is independent of decision validity: a register with a missing or repeated column still names the other
+    clients it lists, and wall_check holds the decision while every engine still withholds those names (#2.1, #3.3).
+    Only an absent register yields none."""
     rows = read_csv(path, False)
-    if rows is None or header_unusable(rows, REGISTER_COLUMNS): return []
-    scan_rows(rows, "raw/ethical-wall-register.csv")
+    if rows is None: return []
+    scan_rows(rows, REGISTER_LABEL)
     return client_terms(other_names(rows, e, own), own)
+def screen_csv_other(rows, label, terms, engine, only=None, skip=()):
+    """Withhold every raw CSV cell that names another client or matter before anything is derived from it, holding it
+    at its row and column (the column by position when the header is not a plain name). In a ";"-separated list cell
+    only the naming items are withheld when the rest names nobody. `only` limits the screen to the given 1-based file
+    rows (the register rows that apply to this engagement; the other rows are the identities themselves) and `skip`
+    exempts columns with their own screen. Returns holds (#3.3)."""
+    out = []
+    if not terms or not rows: return out
+    cols = list(getattr(rows, "columns", ()) or rows[0].keys())
+    lab = {k: col_label(k, n) for n, k in enumerate(cols, 1)}
+    for i, r in enumerate(rows, 2):
+        if only is not None and i not in only: continue
+        for k, v in list(r.items()):
+            if base_col(k) in skip or not isinstance(v, str) or v in (WITHHELD, OTHER_WITHHELD) or not names_client(v, terms): continue
+            out.append(other_hold(f"{label} row {i}.{lab.get(k, 'column')}", v, engine))
+            items = v.split(";"); flagged = [n for n, x in enumerate(items) if names_client(x, terms)] if len(items) > 1 else []
+            keep = ";".join(x for n, x in enumerate(items) if n not in flagged)
+            r[k] = ";".join(OTHER_WITHHELD if n in flagged else x for n, x in enumerate(items)) if flagged and not names_client(keep, terms) else OTHER_WITHHELD
+    return out
 
 def dedup_holds(holds):
     seen = set(); out = []
