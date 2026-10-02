@@ -406,6 +406,25 @@ The structural patterns described at the top of this entry are replaced, not sup
 
   Goldens are byte-identical. Old tests changed only to the contract wording now reported first: A4, S4, T2, T3, A15, QR3 and IDS expectations, 12 QR7-4 and 4 QR8-3 verifier expectations. S3's null-evidence case now expects recomputed unsupported AM findings instead of none. The QR3-5 gate_results-name placement moved to the refused list.
 
+### Class sweeps from Mobilization round 12 (exclusions hold everywhere; blank keys never match; each placeholder has its own hold)
+
+- Exclusion holds across every section (#8.17). A record whose ID the screen withheld, that belongs to another engagement or deliverable, or whose provenance is ineligible is refused in every section that refers to it, at every stage. Before this sweep, a brand check, licensed-content entry or prior finding with a withheld ID was still judged on its status, so a `pass` counted, and a withheld prior finding could still close or locate a finding. It now holds its gate (G5, G6 or G7) as a release blocker titled "... identifier was withheld", with an escalation. It never counts as a pass, attribution or closure, and is never a location source. A carried mapping that claims support from excluded evidence is replaced by the recomputed one, with a G8 spoof hold at gate_check, and refused at severity_rank. The contract description of `best_evidence_id` now says it never names an excluded item.
+- Blank keys never match (#8.17). New `key_of` and `keys_match` helpers give no key for a missing or null value, or for one that is blank after Unicode, case and separator folding (`-`, `_`, zero-width characters). Two blank sides therefore never match. All of these now use the helpers: evidence lookup, subject ownership (a blank subject is foreign), required-language and disclaimer matching (a blank requirement is never met), AM verification, prior-location joins, and the verifier's record matching. A string at an ID path that folds to blank is a clean contract error at every stage, and so is a raw-pack record line whose ID folds to blank in the verifier. `evidence_ids` items and `best_evidence_id` now have `minLength: 1` in all six contract copies.
+- Canonical duplicate keys (A11; #8.17). Every keyed list now refuses canonical duplicates at every stage, not just ID-keyed records: each assertion's and mapping's `evidence_ids`, and `required_language`, `present_language`, `present_disclaimer_types` and `client_aliases`.
+- Each placeholder needs its own hold (#8.18; severity-rules.md #3.6). A withheld marker outside the sections a stage recomputes (an upstream finding, a carried escalation, provenance), whether whole or embedded, must be backed by a G8 hold naming that exact path. gate_check raises a `GC-G8-embedded-instruction-N` hold for each unbound path. severity_rank accepts only a re-derived gate_check G8 finding or a carried history hold whose detail names the same path; otherwise it raises its own `SR-G8` hold. A hold elsewhere never binds a newly placed copy, and binding only ever adds holds.
+- Docs: quality-gate-criteria.md #8.17 and #8.18 are new, and severity-rules.md #3.6 is updated, in all six copies.
+- Tests: 1051 checks (were 972), with 79 new in `mobilization_round12_sweep_tests`. They cover:
+  - blank-after-fold IDs in eight ID fields, plus `best_evidence_id`, at every stage;
+  - `key_of` and `keys_match`, blank subjects, blank language and disclaimer entries;
+  - verifier refusals of a blank raw-pack ID and a blank review-input reference;
+  - canonical duplicates in six keyed lists at each applicable stage;
+  - forged mappings citing foreign, ineligible or withheld-ID evidence, at gate_check and severity_rank;
+  - withheld brand, licensed and prior IDs;
+  - placeholders pasted into findings (whole and embedded), escalations and provenance, at gate_check and severity_rank, including re-runs and a hold naming another path;
+  - both demos end to end.
+
+  Goldens are byte-identical, and no old tests changed.
+
 ## 1.0.3 - 2026-10-01
 
 Fixes every FAIL, WEAK and should-fix item in the Cowork 1.0.2 evaluation (42/50, Blocked).

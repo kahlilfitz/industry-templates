@@ -103,6 +103,9 @@ def record_match(pattern, line, kind, where):
     match = pattern.match(line)
     if match is None and (RECORD_ITEM.match(line) or any(label in line for label in RECORD_LABELS[kind])):
         raise PackError(f"{where} is a record line of the {kind} that does not follow the documented line format; fix or remove it")
+    if match is not None and "id" in pattern.groupindex and rules.key_of(match["id"]) is None:
+        # An ID blank after the fold (for example "-" or "_") names nothing and must never match another (#8.17).
+        raise PackError(f"{where} is a record line of the {kind} whose ID is blank after Unicode, case and separator folding; IDs must state a value")
     return match
 
 
@@ -117,10 +120,10 @@ def is_id_key(key):
 
 
 def same_value(key, expected, actual):
-    """Equality as the engines see it: IDs (any *_id member) in canonical form (rules.canonical_id), everything else
-    exactly (quality-gate-criteria.md #8.11)."""
+    """Equality as the engines see it: IDs (any *_id member) by rules.keys_match, so two blank IDs never match
+    (quality-gate-criteria.md #8.11, #8.17), everything else exactly."""
     if is_id_key(key) and isinstance(expected, str) and isinstance(actual, str):
-        return rules.canonical_id(expected) == rules.canonical_id(actual)
+        return rules.keys_match(expected, actual)
     return expected == actual
 
 
@@ -260,9 +263,9 @@ def parse_evidence(text):
             items.append({"evidence_id": match["id"], "type": match["type"], "title": match["title"], "confidence": float(match["conf"]),
                           "source": "connector:" + match["source"].strip().lower().replace(" ", "-"),
                           "citation": f"supporting-evidence-index.md {match['id']}"})
-            if rules.canonical_id(match["id"]) in lines:
+            if rules.key_of(match["id"]) in lines:
                 raise PackError(f"supporting evidence index repeats an evidence ID (line {number}, equal exactly or after folding); evidence IDs must be unique")
-            lines[rules.canonical_id(match["id"])] = f"{match['title']}. {match['desc']}"
+            lines[rules.key_of(match["id"])] = f"{match['title']}. {match['desc']}"
     return items, lines
 
 
@@ -394,8 +397,12 @@ def compare_object(path, expected, actual, judgement, problems):
 
 
 def id_key(value):
-    """Comparison form of an ID (canonical_id); a non-string is compared by its JSON form."""
-    return rules.canonical_id(value) if isinstance(value, str) else json.dumps(value, sort_keys=True)
+    """Comparison form of an ID (rules.key_of); a non-string is compared by its JSON form. An ID blank after the fold
+    gets a fresh object, so it never equals another blank ID (quality-gate-criteria.md #8.17)."""
+    if not isinstance(value, str):
+        return json.dumps(value, sort_keys=True)
+    key = rules.key_of(value)
+    return key if key is not None else object()
 
 
 def repeated_positions(ids):
@@ -459,7 +466,7 @@ def assertion_problems(index, assertion, blocks, evidence_lines):
         problems.append(f"{label}.evidence_ids: must be an array, got {show(evidence_ids)}")
     else:
         for position_index, evidence_id in enumerate(evidence_ids or []):
-            line = evidence_lines.get(rules.canonical_id(evidence_id)) if isinstance(evidence_id, str) else None
+            line = evidence_lines.get(rules.key_of(evidence_id)) if rules.key_of(evidence_id) is not None else None
             if line is None:
                 problems.append(f"{label}.evidence_ids[{position_index}]: {show(evidence_id)} is not in the evidence index")
             else:

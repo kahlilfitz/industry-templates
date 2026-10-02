@@ -414,12 +414,13 @@ def find_prior_location(payload, *terms):
     folded_terms = tuple(rules.canonical_name(term) for term in terms)
     subject = rules.review_subject(payload)
     for prior in priors if isinstance(priors, list) else []:
-        # A prior finding of another engagement or deliverable is never a basis, not even for a location (#8.15).
-        if not isinstance(prior, dict) or not isinstance(prior.get("location"), dict) or rules.foreign_subject(prior, subject):
+        # An excluded prior finding (withheld ID, or another engagement or deliverable) is never a basis, not even for a
+        # location (#8.13, #8.15, #8.17).
+        if not isinstance(prior, dict) or not isinstance(prior.get("location"), dict) or excluded_entry(prior, subject, "finding_id"):
             continue
         location = prior["location"]
         values = (prior.get("finding_id", ""), prior.get("detail", ""), prior.get("citation", ""), location.get("section", ""), location.get("label", ""))
-        haystack = rules.canonical_name(" ".join(str(value) for value in values if not rules.contains_withheld(value)))
+        haystack = rules.canonical_name(" ".join(value for value in values if isinstance(value, str) and not rules.contains_withheld(value)))
         if all(term in haystack for term in folded_terms):
             return location
     return None
@@ -499,9 +500,20 @@ def check_client_data_value(deliverable, findings, escalations):
     shown = value if value in {"attention", "breach", "unknown"} else "blank/unrecognised"
     escalations.append(f"G4: client_data_handling is {shown}, not ok - {severity}; hold for reviewing partner/QRM (quality-gate-criteria.md #4.2-#4.3)")
 
-def foreign_entry_hold(findings, escalations, item, subject, finding_id, gate_id, kind, entry_id, location, section):
-    """Hold a register entry that names another engagement or deliverable instead of judging it (#8.15): it is never a
-    basis for its gate, so a pass, an attribution or a closure it records counts for nothing. Returns True when held."""
+def excluded_entry(item, subject, id_key):
+    """True when a register entry is excluded from every decision: its ID was withheld by the embedded-instruction
+    screen (#8.13), or it names another engagement or deliverable (#8.15). Every section that reads the entry uses this
+    one predicate (#8.17)."""
+    return rules.contains_withheld(item.get(id_key)) or bool(rules.foreign_subject(item, subject))
+
+def foreign_entry_hold(findings, escalations, item, subject, finding_id, gate_id, kind, entry_id, location, section, id_key):
+    """Hold an excluded register entry instead of judging it: one whose ID the embedded-instruction screen withheld
+    (#8.13) or that names another engagement or deliverable (#8.15). It is never a basis for its gate, so a pass, an
+    attribution or a closure it records counts for nothing. Returns True when held."""
+    if rules.contains_withheld(item.get(id_key)):
+        add_finding(findings, finding_id, gate_id, RELEASE_BLOCKER, f"{kind} identifier was withheld", f"{kind} {entry_id} has an identifier the embedded-instruction screen withheld, so the entry cannot be verified and is not used as a basis for this gate; the reviewing partner/QRM must confirm or remove it before release.", location, f"{section}; quality-gate-criteria.md #8.13", 0.97, f"{section}; quality-gate-criteria.md #8.13, #8.17; severity-rules.md #1.1")
+        escalations.append(f"{gate_id}: {kind.lower()} {entry_id} has a withheld identifier and is not used - release blocker; hold for reviewing partner/QRM (quality-gate-criteria.md #8.13)")
+        return True
     fields = rules.foreign_subject(item, subject)
     if not fields:
         return False
@@ -509,6 +521,22 @@ def foreign_entry_hold(findings, escalations, item, subject, finding_id, gate_id
     add_finding(findings, finding_id, gate_id, RELEASE_BLOCKER, f"{kind} belongs to another engagement or deliverable", f"{kind} {entry_id} gives a {named} that differs from this review's (or cannot be verified), so it is not used as a basis for this gate; the reviewing partner/QRM must confirm or remove it before release.", location, f"{section}; quality-gate-criteria.md #8.15", 0.97, f"{section}; quality-gate-criteria.md #8.15; severity-rules.md #1.1")
     escalations.append(f"{gate_id}: {kind.lower()} {entry_id} names another engagement or deliverable ({named}) - release blocker; hold for reviewing partner/QRM (quality-gate-criteria.md #8.15)")
     return True
+
+def placeholder_hits(payload, raw, expected, own_escalations, hits):
+    """A G8 hit for each withheld placeholder in a position gate_check does not recompute (a reviewer finding, a carried
+    escalation no engine derived, provenance or another note) unless this run already holds that exact path
+    (quality-gate-criteria.md #8.18). Engine findings are recomputed or removed as spoofs, and engine escalations are
+    re-derived, so their placeholders are bound by recomputation. A hold on another path never binds one."""
+    raw_findings = raw.get("findings") if isinstance(raw.get("findings"), list) else []
+
+    def engine_finding(index, item):
+        source = raw_findings[index] if index < len(raw_findings) and isinstance(raw_findings[index], dict) else item
+        return rules.engine_id_owner(source.get("finding_id")) is not None or rules.is_engine_tag(source.get("source"))
+
+    derived = list(expected["escalations"]) + list(own_escalations)
+    held = {path for path, _ in hits}
+    paths = rules.placeholder_paths(payload, engine_finding, lambda entry: entry in derived)
+    return rules.unbound_placeholder_hits(paths, lambda path: path in held)
 
 def add_spoof_hold(findings, escalations, spoofed, altered):
     """One G8 release blocker and escalations for spoofed engine findings and restored assertion_map output (#8.4)."""
@@ -544,6 +572,7 @@ def evaluate(payload):
     validate_deliverable(deliverable)
     expected = expected_assertion_outputs(payload, payload.get("evidence_set"))
     escalations = list(payload.get("escalations", []))
+    carried_escalations = len(escalations)
     findings, spoofed, claimed = screen_upstream_findings(payload.get("findings", []), expected, raw.get("findings", []))
     altered = reconcile_assertion_outputs(payload, expected, findings, escalations)
     owners = {}
@@ -584,7 +613,8 @@ def evaluate(payload):
     # Names and labels are compared in canonical form (quality-gate-criteria.md #8.11); closed enums stay exact. A
     # withheld entry never satisfies a requirement, and a withheld requirement is always unmet (#8.13): every copy of
     # one flagged text carries the same marker, so markers must never be matched against each other.
-    present_disclaimers = {rules.canonical_id(item) for item in string_list(deliverable, "present_disclaimer_types", "deliverable.present_disclaimer_types") if not rules.contains_withheld(item)}
+    # A blank entry (blank after the fold) states nothing, so it never satisfies a requirement (#8.17).
+    present_disclaimers = {rules.key_of(item) for item in string_list(deliverable, "present_disclaimer_types", "deliverable.present_disclaimer_types") if not rules.contains_withheld(item)} - {None}
     disclaimer_type = deliverable.get("required_disclaimer_type")
     third_party = is_third_party_context(deliverable)
     if disclaimer_type not in DISCLAIMER_TYPES:
@@ -602,9 +632,10 @@ def evaluate(payload):
     if disclaimer_type == "general_advice" and "general advice" not in present_disclaimers:
         add_finding(findings, "GC-G2-general-advice-absent", "G2", MUST_FIX, "Required general-advice disclaimer is absent", "required_disclaimer_type is general_advice but general-advice language is not in present_disclaimer_types; a declared disclaimer requirement is only met when the disclaimer is present.", disclaimer_location(payload), "quality-gate-criteria.md #2.1; quality-gate-criteria.md #2.4", 0.95, "quality-gate-criteria.md #2.1, #2.4; severity-rules.md #1.2")
         escalations.append("G2: required general-advice disclaimer absent from the deliverable - must-fix; reviewing partner/QRM must confirm the disclaimer before release (quality-gate-criteria.md #2.4)")
-    present_language = {rules.canonical_id(item) for item in string_list(deliverable, "present_language", "deliverable.present_language") if not rules.contains_withheld(item)}
+    present_language = {rules.key_of(item) for item in string_list(deliverable, "present_language", "deliverable.present_language") if not rules.contains_withheld(item)} - {None}
     for index, required in enumerate(required_language):
-        if rules.contains_withheld(required) or rules.canonical_id(required) not in present_language:
+        # A requirement blank after the fold names nothing a present entry could match, so it is never satisfied (#8.17).
+        if rules.contains_withheld(required) or rules.key_of(required) not in present_language:
             severity = RELEASE_BLOCKER if rules.canonical_id(required) == "reliance restriction" else MUST_FIX
             token = safe_token(required, "")
             finding_id = claim_finding_id(findings, owners, f"GC-G2-missing-{token or f'language-{index + 1}'}", ("required_language", required))
@@ -623,7 +654,7 @@ def evaluate(payload):
         check_id = safe_token(check["check_id"], f"brand-check-{index + 1}")
         finding_id = claim_finding_id(findings, owners, f"GC-G5-{check_id}", ("brand_checks", index))
         location = entry_location(check, "Brand-check register", f"Brand check {check_id}")
-        if foreign_entry_hold(findings, escalations, check, subject, finding_id, "G5", "Brand check", check_id, location, "quality-gate-criteria.md #5.1-#5.3"):
+        if foreign_entry_hold(findings, escalations, check, subject, finding_id, "G5", "Brand check", check_id, location, "quality-gate-criteria.md #5.1-#5.3", "check_id"):
             continue
         legal = check["legal_or_release_control"] and LEGAL_MARK_DEFECT_BLOCKS
         status_value = check.get("status")
@@ -636,8 +667,8 @@ def evaluate(payload):
     for index, item in enumerate(licensed_content):
         content_id = safe_token(item["content_id"], f"licensed-content-{index + 1}")
         license_known = item.get("license_status") == LICENSE_STATUS_KNOWN
-        if rules.foreign_subject(item, subject):
-            foreign_entry_hold(findings, escalations, item, subject, claim_finding_id(findings, owners, f"GC-G6-{content_id}", ("licensed_content", index)), "G6", "Licensed-content entry", content_id, entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.3")
+        if excluded_entry(item, subject, "content_id"):
+            foreign_entry_hold(findings, escalations, item, subject, claim_finding_id(findings, owners, f"GC-G6-{content_id}", ("licensed_content", index)), "G6", "Licensed-content entry", content_id, entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.3", "content_id")
             continue
         if LICENSED_ATTRIBUTION_REQUIRED and item["attribution_present"] is not True:
             severity = MUST_FIX if license_known else RELEASE_BLOCKER
@@ -645,9 +676,9 @@ def evaluate(payload):
             if not license_known:
                 escalations.append(f"G6: unattributed licensed content {content_id} with license_status not known (unknown, blank or unrecognised) - release blocker; hold for reviewing partner/QRM (quality-gate-criteria.md #6.2-#6.3)")
     for index, prior in enumerate(prior_findings):
-        if rules.foreign_subject(prior, subject):
+        if excluded_entry(prior, subject, "finding_id"):
             prior_id = safe_token(prior["finding_id"], f"prior-finding-{index + 1}")
-            foreign_entry_hold(findings, escalations, prior, subject, claim_finding_id(findings, owners, f"GC-G7-{prior_id}", ("prior_findings", index)), "G7", "Prior finding", prior_id, entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2")
+            foreign_entry_hold(findings, escalations, prior, subject, claim_finding_id(findings, owners, f"GC-G7-{prior_id}", ("prior_findings", index)), "G7", "Prior finding", prior_id, entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2", "finding_id")
             continue
         if prior["claimed_closed"] is True and prior["document_fix_present"] is not True and PRIOR_FIX_MUST_LAND:
             prior_id = safe_token(prior["finding_id"], f"prior-finding-{index + 1}")
@@ -656,16 +687,17 @@ def evaluate(payload):
         if assertion["scope_aligned"] is not True:
             assertion_id = safe_token(assertion["assertion_id"], f"assertion-{index + 1}")
             add_finding(findings, claim_finding_id(findings, owners, f"GC-G3-scope-{assertion_id}", ("scope", index)), "G3", RELEASE_BLOCKER, "Claim or recommendation falls outside signed scope", "Assertion is marked scope_aligned=false; claims and recommendations must stay inside the signed statement of work and documented evidence set.", assertion["location"], "quality-gate-criteria.md #3.1", assertion.get("confidence", 0.9), f"{assertion['citation']}; quality-gate-criteria.md #3.1; severity-rules.md #1.1")
-    verified_am = {rules.canonical_id(item["finding_id"]) for item in findings if rules.engine_id_owner(item["finding_id"]) == rules.AM_ENGINE}
+    verified_am = {rules.key_of(item["finding_id"]) for item in findings if rules.engine_id_owner(item["finding_id"]) == rules.AM_ENGINE} - {None}
     for index, mapping in enumerate(payload["assertion_mappings"]):
         if mapping["support_status"] in {"unsupported", "limited"} and "#3.2" in mapping["criteria_section"]:
             # Only an AM finding that matched engine recomputation may stand in for the G3 limitation finding.
-            if rules.canonical_id(f"AM-{mapping['assertion_id']}") in verified_am:
+            if rules.key_of(mapping["assertion_id"]) is not None and rules.key_of(f"AM-{mapping['assertion_id']}") in verified_am:
                 continue
             add_finding(findings, claim_finding_id(findings, owners, f"GC-G3-{safe_token(mapping['assertion_id'], f'assertion-{index + 1}')}", ("limitation", index)), "G3", MUST_FIX, "Scope or sample limitation missing at point of recommendation", mapping.get("rationale", "Recommendation requires limitation."), mapping["location"], "quality-gate-criteria.md #3.2", mapping.get("confidence", 0.8), mapping.get("citation", "quality-gate-criteria.md #3.2"))
     if EMBEDDED_INSTRUCTION_HOLD:
         hits = instruction_hits(payload)
         hits += [hit for hit in screened_hits if hit not in hits]
+        hits += placeholder_hits(payload, raw, expected, escalations[carried_escalations:], hits)
         for hit_index, (path, hit_reason) in enumerate(hits[:MAX_G8_HITS], start=1):
             if hit_reason == OVERSIZE:
                 add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Field too long to screen for embedded instructions", f"Untrusted field {path} is too long to screen for embedded instructions (over {sg.MAX_TOTAL_CHARS:,} characters, raw or after Unicode normalisation), so it was not screened; it must be held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.6", 0.99, "quality-gate-criteria.md #8.1, #8.6; severity-rules.md #1.1")

@@ -225,6 +225,12 @@ def engine_owner(item):
     return owner or (rules.canonical_tag(item.get("source")) if rules.is_engine_tag(item.get("source")) else None)
 
 
+def is_history_hold(item):
+    """A G8 history hold (HISTORY_HOLD_ID) carried as a release blocker under its own engine's source tag."""
+    return bool(HISTORY_HOLD_ID.match(item["finding_id"])) and item["gate_id"] == "G8" and item["severity"] == "release_blocker" \
+        and item.get("source") == (ENGINE if item["finding_id"].startswith("SR-") else gc.ENGINE)
+
+
 def remove_forged_engine_findings(payload, derived, raw_owners=()):
     """Hold every engine-owned finding to re-derivation (severity-rules.md #3.8, quality-gate-criteria.md #8.4).
 
@@ -241,8 +247,7 @@ def remove_forged_engine_findings(payload, derived, raw_owners=()):
         if owner is None or derived_by_id.get(item["finding_id"]) == item:
             kept.append(item)
             continue
-        if HISTORY_HOLD_ID.match(item["finding_id"]) and item["gate_id"] == "G8" and item["severity"] == "release_blocker" \
-                and item.get("source") == (ENGINE if item["finding_id"].startswith("SR-") else gc.ENGINE):
+        if is_history_hold(item):
             kept.append(item)
             continue
         forged.append((index, item))
@@ -282,7 +287,42 @@ def covered_by_gate_check(findings, escalations, path):
     overflow = any(isinstance(entry, str) and entry.startswith("G8: ") and "further embedded-instruction hit(s) not listed individually" in entry for entry in escalations)
     return listed >= MAX_G8_HITS and overflow
 
-def screen_embedded_instructions(payload, rederived):
+# Escalations severity_rank itself writes about an engine finding (severity-rules.md #2.1, #3.4); the finding ID may
+# carry a withheld assertion ID, which the engine finding binds.
+OWN_ESCALATIONS = (
+    re.compile(r": confidence [^\r\n]* below " + re.escape(str(CONFIDENCE_FLOOR)) + r" - human confirmation required \(severity-rules\.md #2\.1\)"),
+    re.compile(r": [0-9]+ findings shared this finding_id; one was kept at the highest severity \((?:release_blocker|must_fix|advisory)\) - reviewing partner/QRM to confirm \(severity-rules\.md #3\.4\)"),
+)
+
+
+def own_escalation(entry, engine_ids):
+    """True when entry is one of severity_rank's own escalations about an engine finding in `engine_ids`."""
+    if not isinstance(entry, str):
+        return False
+    return any(entry.startswith(finding_id + ": ") and pattern.fullmatch(entry[len(finding_id):]) for finding_id in engine_ids for pattern in OWN_ESCALATIONS)
+
+
+def placeholder_hits(payload, rederived, raw_owners, hits):
+    """A G8 hit for each withheld placeholder in a position no stage recomputes (a reviewer finding, an escalation no
+    engine derived, provenance or another note) that no standing G8 hold names exactly (quality-gate-criteria.md
+    #8.18). A hold binds a placeholder only when it names that path: gate_check's `Untrusted field <path> ` or
+    severity_rank's `Field <path> reached`, from a re-derived finding or a G8 history hold. A hold elsewhere never
+    binds a newly placed placeholder."""
+    findings = payload["findings"]
+    engine_ids = [item["finding_id"] for index, item in enumerate(findings) if index < len(raw_owners) and raw_owners[index] is not None]
+    derived_escalations = rederived["escalations"]
+    holds = [item.get("detail", "") for item in list(rederived["findings"]) + [item for item in findings if is_history_hold(item)] if item["gate_id"] == "G8"]
+    held = {path for path, _ in hits}
+
+    def bound(path):
+        return path in held or any(f"Untrusted field {path} " in detail or f"Field {path} reached" in detail for detail in holds)
+
+    paths = rules.placeholder_paths(payload, lambda index, item: index < len(raw_owners) and raw_owners[index] is not None,
+                                    lambda entry: entry in derived_escalations or own_escalation(entry, engine_ids))
+    return rules.unbound_placeholder_hits(paths, bound)
+
+
+def screen_embedded_instructions(payload, rederived, raw_owners=()):
     """Screen every incoming string through steering_guard exactly as gate_check does (severity-rules.md #3.6) and
     withhold every string that trips, everywhere it appears (quality-gate-criteria.md #8.7).
 
@@ -292,6 +332,7 @@ def screen_embedded_instructions(payload, rederived):
     withheld marker upstream stays withheld. Returns (path, reason) for each new hit; the payload is updated in place."""
     findings, escalations = rederived["findings"], rederived["escalations"]
     hits = [(path, reason) for path, reason, derived in rules.withhold_untrusted(payload) if derived or not covered_by_gate_check(findings, escalations, path)]
+    hits += placeholder_hits(payload, rederived, raw_owners, hits)
     for index, item in enumerate(payload["findings"]):
         if rules.is_withheld(item["finding_id"]):
             item["finding_id"] = f"withheld-finding-{index + 1}"
@@ -332,7 +373,7 @@ def main():
         # Ownership is read before screening can withhold an ID (quality-gate-criteria.md #8.4, #8.11).
         raw_owners = [engine_owner(item) for item in payload["findings"]]
         # Screen first, so instruction text planted in a forged finding still raises its own G8 hold before removal.
-        g8_hits = screen_embedded_instructions(payload, rederived)
+        g8_hits = screen_embedded_instructions(payload, rederived, raw_owners)
         if g8_hits:
             add_g8_findings(payload, g8_hits)
         forged = remove_forged_engine_findings(payload, derived, raw_owners)

@@ -241,6 +241,22 @@ def canonical_id(value):
     return _ID_SEPARATOR_RUN.sub(" ", canonical_name(value)).strip()
 
 
+def key_of(value):
+    """The join key of a stated ID or key: canonical_id, or None when the value is not a string or is blank after the
+    fold (for example "", "-", "_" or a zero-width character). None never equals anything: a missing, null or blank key
+    names nothing, so it cannot match another missing key in a join, ownership check or reconciliation
+    (quality-gate-criteria.md #8.17)."""
+    if not isinstance(value, str):
+        return None
+    return canonical_id(value) or None
+
+
+def keys_match(left, right):
+    """True only when both sides state a key and the keys are equal after the canonical fold (#8.11, #8.17)."""
+    key = key_of(left)
+    return key is not None and key == key_of(right)
+
+
 def field_name_key(name):
     """Comparison form of a member name (canonical_id). Names longer than MAX_FIELD_NAME_CHARS are refused at load."""
     return canonical_id(name)
@@ -620,7 +636,8 @@ def evidence_index(evidence_set):
 
 def evidence_for(evidence_by_id, evidence_id):
     """The evidence item an assertion's evidence_ids entry names, compared in canonical form; None when absent."""
-    return evidence_by_id.get(canonical_id(evidence_id)) if isinstance(evidence_id, str) else None
+    key = key_of(evidence_id)
+    return evidence_by_id.get(key) if key is not None else None
 
 
 SUBJECT_FIELDS = ("engagement_id", "deliverable_id")
@@ -637,7 +654,8 @@ def review_subject(payload):
 def foreign_subject(record, subject):
     """The subject fields (engagement_id, deliverable_id) on which a linked record names another engagement or
     deliverable than the review (#8.15); [] when it shares the subject. An absent or null field names no subject, so the
-    record is the review's own. Values are compared by canonical_id (#8.11). A value that is withheld on either side
+    record is the review's own. Values are compared by keys_match (#8.11): a value blank after the fold on either side
+    states no subject to compare, so it never matches and counts as foreign (#8.17). A value that is withheld on either side
     cannot be verified, and every copy of one flagged text carries the same marker, so a withheld value never matches:
     it counts as foreign and holds (#8.13)."""
     if not isinstance(record, dict) or not isinstance(subject, dict):
@@ -648,7 +666,7 @@ def foreign_subject(record, subject):
         if value is None:
             continue
         if (not isinstance(value, str) or not isinstance(own, str) or contains_withheld(value) or contains_withheld(own)
-                or canonical_id(value) != canonical_id(own)):
+                or not keys_match(value, own)):
             fields.append(key)
     return fields
 
@@ -683,6 +701,9 @@ def _type_phrase(types, node):
         return phrases[0]
     joiner = ", or " if any(" or " in phrase for phrase in phrases) else " or "
     return joiner.join(phrases)
+
+
+_ID_PATH = re.compile(r"_id$|_ids\[[0-9]+\]$")
 
 
 def _is_position_path(path):
@@ -727,6 +748,9 @@ def _contract_errors(value, node, path, root):
             return
         if len(value.strip()) < node.get("minLength", 0):
             yield f"{path} must be a non-blank string"
+        elif node.get("minLength") and _ID_PATH.search(path) and key_of(value) is None:
+            # A blank key names nothing and must never equal another blank key in a join (#8.17).
+            yield f"{path} is blank after Unicode, case and separator folding; IDs must state a value"
         elif "pattern" in node:
             candidate = normalise_provenance(value) if node.get("x-normalise") == "provenance" else value
             if not re.search(node["pattern"], candidate):
@@ -804,7 +828,42 @@ def require_unique_ids(items, label, id_key, allow_identical=False, prefix="", s
         positions[key] = index
 
 
+# Lists of keys an engine matches entries against (quality-gate-criteria.md #8.11, #8.17). A repeat is refused like a
+# repeated ID, so one key can never count twice or stand in for another: evidence_ids within each assertion and
+# mapping, and these deliverable lists.
+EVIDENCE_REFERENCE_SECTIONS = ("assertions", "assertion_mappings")
+DELIVERABLE_KEY_LISTS = ("required_language", "present_language", "present_disclaimer_types", "client_aliases")
+
+
+def require_unique_keys(values, label):
+    """Refuse two entries of a key list that are equal exactly or after the canonical fold. Withheld markers are
+    skipped: every copy of one flagged text carries the same marker, and the screen already holds it (#8.13)."""
+    positions = {}
+    for index, value in enumerate(values):
+        if contains_withheld(value):
+            continue
+        key = key_of(value)
+        if key is None:
+            continue
+        if key in positions:
+            raise InputError(f"contract violation: {label}[{index}] duplicates {label}[{positions[key]}] (equal exactly or after Unicode, case and separator folding); each entry must be unique so none can count twice or mask another")
+        positions[key] = index
+
+
+def validate_unique_keys(payload):
+    for field in EVIDENCE_REFERENCE_SECTIONS:
+        items = payload.get(field)
+        for index, item in enumerate(items if isinstance(items, list) else []):
+            if isinstance(item, dict) and isinstance(item.get("evidence_ids"), list):
+                require_unique_keys(item["evidence_ids"], f"{field}[{index}].evidence_ids")
+    deliverable = payload.get("deliverable")
+    for field in DELIVERABLE_KEY_LISTS:
+        if isinstance(deliverable, dict) and isinstance(deliverable.get(field), list):
+            require_unique_keys(deliverable[field], f"deliverable.{field}")
+
+
 def validate_unique_ids(payload):
+    validate_unique_keys(payload)
     for path, id_key in ID_KEYED_ARRAYS:
         items = payload
         for part in path:
@@ -1270,7 +1329,7 @@ def assertion_records(payload):
     """Yield (path, fields, refs) per assertion: fields maps text, citation, linked evidence titles and the location
     label (in reading order, non-blank strings only) to their values, and refs maps the same names to the
     (container, key) holding each value. Only assertions with more than one such field are yielded."""
-    evidence = {canonical_id(item["evidence_id"]): item for item in payload.get("evidence_set") or [] if isinstance(item, dict) and isinstance(item.get("evidence_id"), str)}
+    evidence = {key_of(item["evidence_id"]): item for item in payload.get("evidence_set") or [] if isinstance(item, dict) and key_of(item.get("evidence_id")) is not None}
     for index, assertion in enumerate(payload.get("assertions") or []):
         if not isinstance(assertion, dict):
             continue
@@ -1350,6 +1409,43 @@ def instruction_hits(payload):
             hits.append((path, hit_reason(found)))
     hits.extend(_array_hits(payload, tripped, covered))
     hits.extend((path, INSTRUCTION) for path, text in pending_split if text not in covered)
+    return hits
+
+
+# Top-level sections every stage rebuilds from recomputation (assertion_mappings, gate_results) or regenerates
+# (ranked_findings, release_readiness); a placeholder there is bound by that recomputation, not by a hold.
+ENGINE_REBUILT_SECTIONS = ("assertion_mappings", "gate_results", "ranked_findings", "release_readiness")
+
+
+def placeholder_paths(payload, engine_finding, engine_escalation):
+    """Paths of every string (member names included) carrying a withheld marker in a position no stage recomputes:
+    findings that are not engine findings (`engine_finding(index, item)` false), escalations no engine derived
+    (`engine_escalation(entry)` false), provenance and any other top-level note. Primary sections and top-level scalars
+    are screened as primary text, and engine positions are bound by recomputation (quality-gate-criteria.md #8.18)."""
+    paths = []
+
+    def collect(value, path):
+        paths.extend(found for found, text in iter_strings(value, path) if contains_withheld(text))
+
+    for index, item in enumerate(payload.get("findings") or []):
+        if not engine_finding(index, item):
+            collect(item, f"$.findings[{index}]")
+    for index, entry in enumerate(payload.get("escalations") or []):
+        if not engine_escalation(entry):
+            collect(entry, f"$.escalations[{index}]")
+    for key, path, child, is_derived in top_level_sections(payload):
+        if is_derived and key not in ("findings", "escalations") and key not in ENGINE_REBUILT_SECTIONS:
+            collect(child, path)
+    return paths
+
+
+def unbound_placeholder_hits(paths, holds):
+    """(path, INSTRUCTION) for each placeholder path no hold names exactly (`holds(path)` false), in order and once.
+    A hold elsewhere in the document never binds a newly placed placeholder: each needs its own (#8.18)."""
+    hits = []
+    for path in paths:
+        if not holds(path) and (path, INSTRUCTION) not in hits:
+            hits.append((path, INSTRUCTION))
     return hits
 
 
