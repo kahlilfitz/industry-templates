@@ -19,10 +19,10 @@ After `knowledge-match`, before anything is drafted for the joiner, and whenever
 - Actually provisioning access - out of scope; this plugin drafts requests only.
 - Starting a run from raw sources - use `engagement-retrieve` first; this skill needs `matched.json`.
 ## Inputs
-`matched.json`, `raw/ethical-wall-register.csv`, `raw/workspace-inventory.csv`.
+`matched.json`, `raw/ethical-wall-register.csv`, `raw/workspace-inventory.csv`, and the raw directory, staffing input, confirmed roster and Closeout `governed.json` the earlier stages read. Each engine re-runs every upstream engine on the raw inputs and refuses a `matched.json` or `governed.json` that differs from the re-derivation in any field, provenance included (`confidentiality-and-ethical-wall-rules.md #1.4`); pass the same register and inventory to both steps.
 ## Steps
-1. Run `python3 scripts/wall_check.py --matched matched.json --wall-register <raw>/ethical-wall-register.csv --workspace-inventory <raw>/workspace-inventory.csv --out governed.json --generated-at <ISO>`.
-2. Run `python3 scripts/access_checklist.py --governed governed.json --wall-register <raw>/ethical-wall-register.csv --workspace-inventory <raw>/workspace-inventory.csv --out access-checklist.json --pack-out mobilization-pack.md --generated-at <ISO>`.
+1. Run `python3 scripts/wall_check.py --matched matched.json --raw-dir <raw> --staffing <staffing.json> --confirmed-roster <raw>/confirmed-roster.csv --closeout <closeout governed.json> --wall-register <raw>/ethical-wall-register.csv --workspace-inventory <raw>/workspace-inventory.csv --out governed.json --generated-at <ISO>`.
+2. Run `python3 scripts/access_checklist.py --governed governed.json --raw-dir <raw> --staffing <staffing.json> --confirmed-roster <raw>/confirmed-roster.csv --closeout <closeout governed.json> --wall-register <raw>/ethical-wall-register.csv --workspace-inventory <raw>/workspace-inventory.csv --out access-checklist.json --pack-out mobilization-pack.md --generated-at <ISO>`.
 3. Report `wall_decision.status` verbatim. Missing or malformed register, no joiner, unknown status or no named clear row all hold (`confidentiality-and-ethical-wall-rules.md #2.1,#2.2`); any restricted row denies (`#2.3`).
 4. Report every access row with its status and permission; admin/owner is never requested (`role-access-matrix.md #2.2`). `not_requested_invalid_row` and `hold_pending_wall_review` rows keep the pack on hold; report `mobilization_pack.hold_reasons` (`workspace-inventory-rules.md #1.3,#3.3`).
 5. Use only the engine's `may_not_access_discuss` wording in any briefing (`#3.1`). Briefing topics or workspace names that named another client or matter are already replaced or shown by ID (`#3.2`); never restore them.

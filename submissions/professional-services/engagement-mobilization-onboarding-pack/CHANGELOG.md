@@ -250,6 +250,38 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
     - QA-B7 and QA-C3's forged holds now claim `engine:knowledge_match`; QA-C3 also checks that a forged hold claiming `wall_check` is refused.
     - QA-Q3 derives its governed document with the same missing inventory it gives `access_checklist`.
   - Confidentiality #1.4 updated in all 6 copies. Goldens byte-identical; shared copies 40/40. Suite 356 → 362 checks.
+- **QA round 14: whole-document re-derivation at every stage (checklist A19-A22, #1.4).** Per-field reconciliation is replaced by one structural check, because each earlier round had found another field it did not compare.
+  - Defects reproduced on 6b33a13. In each, a one-field edit to an intermediate reached the output:
+    - A roster record's `responsibilities` differed from the joiner's. `check_links` compared only person, role, assignment and onboarding status.
+    - Jules Park's `proposed_staffing` `role_title` was changed to "Engagement lead". It was checked only for excluded names.
+    - `EXTRA-404` was appended to `knowledge_digest.excluded_items`. It was reconciled only when a top-level `excluded_items` existed.
+  - *Structural fix.* Each downstream stage re-runs every upstream engine on the raw inputs:
+    - `knowledge_match` re-runs `scope_digest`;
+    - `wall_check` re-runs `scope_digest` and `knowledge_match`;
+    - `access_checklist` re-runs all three.
+    - New `safety_text.same_document` then requires the carried document to equal the re-derivation in every field and section, provenance included.
+    - Values are compared exactly, types included. The exceptions are where the engines already compared canonically (`canonical_document`): trusted domains, the wall decision and digest ID lists, and hold ID, path, reason, source and citation.
+    - A missing, extra or changed field is a clean `InputError` with counts only (no value, member name or path), and nothing is written.
+    - The engines now expose `derive`/`rederive` (`scope_digest.derive`, `knowledge_match.derive`/`rederive_scope`/`rederive`, `wall_check.derive`/`rederive`). Byte-identical copies of `scope_digest.py` and `knowledge_match.py` are bundled where a later skill re-runs them; the shared-copy check covers them.
+  - *Allow-list* (`safety_text.CARRIED_PARAMETERS`): only the command-line run parameters, which no raw input determines.
+    - `run_metadata.generated_at` and `run_metadata.demo_scenario` (`scope_digest`'s `--generated-at` and `--scenario`).
+    - `provenance.generated_at` after the scope stage (the writing stage's own `--generated-at`).
+    - Each is validated (`run_parameters`, `stage_timestamp`: ISO-8601 UTC timestamp, scenario label checks) and screened, and the re-derivation runs with it, so it is compared, not skipped.
+  - *New CLI arguments.* `knowledge_match`, `wall_check` and `access_checklist` now require `--raw-dir`, `--staffing`, `--confirmed-roster` and `--closeout`. SKILL.md, README and confidentiality #1.4/#1.5 (all 6 copies) are updated.
+  - *Removed as redundant:*
+    - `check_links`, `check_digest`, `reconcile_trusted` (replaced by `adopt_trust` on the accepted document) and `document_screen_hold`;
+    - `access_checklist.rederive`, `claims_derivation` and the per-list reconciliation. `access_checklist.effective_wall` keeps the merge of its own screening holds before gating.
+    - Kept unchanged: the stage-schema check, `check_hold_evidence` with placeholder binding, the ordered A13 canonicalisation, harvest-before-redact, holds merged before gating, and the accepted designs (single-label SharePoint and onmicrosoft tenants, any `connector:<slug>`).
+  - *Behaviour change.* An edited or stale intermediate is now refused whole, where earlier rounds held or screened some edits. This includes a marker-shaped string, a forged identity, an extra hold and an intermediate written with a different register or inventory than the later stage is given. Legitimate runs are unchanged.
+  - Tests: new `qa101u_checks` (17 checks):
+    - the three reproducers at every stage that carries the edited section;
+    - the unedited goldens accepted;
+    - a contract walk of `stage_scope`, `stage_matched` and `stage_governed`. It resolves `$ref`, `allOf`/`anyOf`, `properties`, `items` and `prefixItems`, and changes, deletes or adds every non-allow-listed path in both scenarios: 197 paths and about 2,400 edits, all refused;
+    - checks that every document path is a contract path;
+    - checks that the allow-list matches the contract, with justifications;
+    - allow-list controls showing invalid parameters are refused.
+  - Existing tests that edited intermediates now expect the whole-document refusal.
+  - Goldens byte-identical; shared copies 43/43. Suite 362 → 379 checks.
 
 ## 1.0.0 - 2026-10-01
 

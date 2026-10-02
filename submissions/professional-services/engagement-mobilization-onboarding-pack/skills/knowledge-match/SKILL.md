@@ -17,10 +17,10 @@ After `engagement-retrieve`, when Closeout `governed.json` is available.
 - Whether this joiner may access an item - use `wall-check`; matched items are candidates until it runs.
 - Drafting the digest prose - use `pack-draft`.
 ## Inputs
-`scope.json` and Scenario 01 `governed.json` (`ps.engagement-closeout-knowledge-harvest.v1`).
+`scope.json` and Scenario 01 `governed.json` (`ps.engagement-closeout-knowledge-harvest.v1`), plus the raw directory, staffing input and confirmed roster `engagement-retrieve` read: the engine re-runs `scope_digest` on them and refuses a `scope.json` that differs from the re-derivation in any field (`confidentiality-and-ethical-wall-rules.md #1.4`).
 ## Steps
-1. Run `python3 scripts/knowledge_match.py --scope scope.json --closeout <closeout governed.json> --wall-register <raw>/ethical-wall-register.csv --out matched.json --generated-at <YYYY-MM-DDTHH:MM:SSZ>`.
-2. If the engine exits non-zero (wrong contract, missing or malformed `knowledge_record`/`released_assets`, wrong field types such as a string `confidence` or non-boolean `review_required`, a scope.json that fails its stage schema or carries hold evidence without its hold), stop and report (see Failure handling; `knowledge-reuse-rules.md #1.4`).
+1. Run `python3 scripts/knowledge_match.py --scope scope.json --raw-dir <raw> --staffing <staffing.json> --confirmed-roster <raw>/confirmed-roster.csv --closeout <closeout governed.json> --wall-register <raw>/ethical-wall-register.csv --out matched.json --generated-at <YYYY-MM-DDTHH:MM:SSZ>`.
+2. If the engine exits non-zero (wrong contract, missing or malformed `knowledge_record`/`released_assets`, wrong field types such as a string `confidence` or non-boolean `review_required`, a scope.json that fails its stage schema, carries hold evidence without its hold, or is not the document `scope_digest` re-derives from the raw inputs), stop and report (see Failure handling; `knowledge-reuse-rules.md #1.4`).
 3. Report included items with `relevance_score`, `review_status` and citations; `pending_practice_review` items may be referenced by title and citation only (`knowledge-reuse-rules.md #2.3`).
 4. Report `excluded_items` by ID and reason; never describe held or candidate assets.
 5. Hand `matched.json` to `wall-check`.

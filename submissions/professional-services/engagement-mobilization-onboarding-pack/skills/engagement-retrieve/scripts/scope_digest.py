@@ -149,11 +149,13 @@ def verdict_for(entries,role):
     # Prefer the Scenario 02 verdict for the confirmed role; otherwise the most restrictive verdict across roles.
     same=[x for x in entries if canon_text(x.get("role_title"))==canon_text(role)] or entries
     return max(same,key=lambda x:RANK.get(x.get("verdict"),2.5),default={})
-def main():
-    ap=ArgParser(); ap.add_argument("--raw-dir",required=True); ap.add_argument("--staffing",required=True); ap.add_argument("--confirmed-roster",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); ap.add_argument("--scenario",default=""); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
-    sowp=os.path.join(a.raw_dir,"sow-extract.md")
+def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
+    """scope.json for the raw inputs (SOW, engagement letter, pursuit record and wall register in raw_dir; the staffing
+    input; the confirmed roster), the demo label and the run timestamp. Every later stage re-runs this derivation on the
+    raw inputs and requires the carried scope to equal it in every field (confidentiality-and-ethical-wall-rules.md #1.4)."""
+    sowp=os.path.join(raw_dir,"sow-extract.md")
     if not os.path.exists(sowp): raise InputError("missing required SOW extract: raw/sow-extract.md")
-    sow=read_text(sowp,"SOW extract"); letter=read_text(os.path.join(a.raw_dir,"engagement-letter-extract.md"),"engagement letter extract"); pursuit=read_text(os.path.join(a.raw_dir,"pursuit-record.md"),"pursuit record"); rows=read_csv(a.confirmed_roster,label="confirmed roster"); st=load_json(a.staffing,"staffing input")  # fixed labels: no message echoes a supplied path (#1.3)
+    sow=read_text(sowp,"SOW extract"); letter=read_text(os.path.join(raw_dir,"engagement-letter-extract.md"),"engagement letter extract"); pursuit=read_text(os.path.join(raw_dir,"pursuit-record.md"),"pursuit record"); rows=read_csv(confirmed_roster,label="confirmed roster"); st=load_json(staffing,"staffing input")  # fixed labels: no message echoes a supplied path (#1.3)
     miss=missing_columns(rows,ROSTER_COLUMNS)
     if miss: raise InputError(f"confirmed roster is missing required column(s): {', '.join(miss)}; fail closed")
     if rows.duplicate_columns: raise InputError("confirmed roster "+DUPLICATE_HEADER_REASON+"; fail closed")
@@ -190,14 +192,14 @@ def main():
     # before the roster is derived. The trusted own vocabulary is the SOW's own identity only: a roster person or a
     # staffing affiliate never makes another client trusted (#3.3).
     own=engagement_words(fld(sow,"Client"),fld(sow,"Engagement ID"),fld(sow,"Matter ID"),fld(sow,"Title"))
-    rterms=register_terms(os.path.join(a.raw_dir,"ethical-wall-register.csv"),{"client_name":fld(sow,"Client"),"matter_id":fld(sow,"Matter ID")},own)
+    rterms=register_terms(os.path.join(raw_dir,"ethical-wall-register.csv"),{"client_name":fld(sow,"Client"),"matter_id":fld(sow,"Matter ID")},own)
     # --scenario is copied into run_metadata: a short slug only, and never instruction-like or another client's name (#1.3, #3.3).
-    sc=re.sub(r"[._-]+"," ",a.scenario)
-    need(bool(SCENARIO_RE.fullmatch(a.scenario)) and not hits(sc) and not names_client(sc,rterms),"--scenario must be a short slug (letters, digits, '.', '_' or '-'; at most 64 characters) that is not instruction-like and names no other client (value not repeated); fail closed")
+    sc=re.sub(r"[._-]+"," ",scenario)
+    need(bool(SCENARIO_RE.fullmatch(scenario)) and not hits(sc) and not names_client(sc,rterms),"--scenario must be a short slug (letters, digits, '.', '_' or '-'; at most 64 characters) that is not instruction-like and names no other client (value not repeated); fail closed")
     st,soh=screen_other(st,rterms,ENGINE,"upstream/staffing.")
     rsh=scan_rows(rows,"raw/confirmed-roster.csv"); roh=screen_csv_other(rows,"raw/confirmed-roster.csv",rterms,ENGINE)
     # A register client_name/matter_id that trips the wire and names no usable identity holds anyway (#3.3).
-    soh=soh+roh+register_identity_holds(os.path.join(a.raw_dir,"ethical-wall-register.csv"),ENGINE)
+    soh=soh+roh+register_identity_holds(os.path.join(raw_dir,"ethical-wall-register.csv"),ENGINE)
     holds=h1+h2+h3+rsh+sth+soh
     # Linked staffing records must name the same person: read from the screened staffing input only (#1.5, #4.3).
     badlinks,lh=staffing_links(st); holds+=lh
@@ -276,13 +278,16 @@ def main():
     body=redact(body)
     # Other clients named in the wall register never reach scope.json either: the same identities and own words every
     # later engine uses, whatever the register's validity for the wall decision (#2.1, #3.3).
-    body,rh=screen_other(body,register_terms(os.path.join(a.raw_dir,"ethical-wall-register.csv"),body["engagement"],own_words(body)),ENGINE,"scope.")
+    body,rh=screen_other(body,register_terms(os.path.join(raw_dir,"ethical-wall-register.csv"),body["engagement"],own_words(body)),ENGINE,"scope.")
     if rh: holds=dedup_holds(holds+rh); body["escalations"].append(other_escalation(len(rh)))
     if mism:
         body,oh=screen_other(body,client_terms([x for k_ in mism for x in other[k_]],own),ENGINE,"scope.")  # only the identity that differs, from the raw input
         if oh: holds=dedup_holds(holds+oh); body["escalations"].append(other_escalation(len(oh)))
     body=settle_trust(body)  # a declaration line screening withheld backs no trusted domain (#4.4)
-    out={"contract_version":CONTRACT_VERSION,"run_metadata":{"generated_at":ts,"demo_scenario":a.scenario},**body,"holds":holds,"provenance":{"engines":[f"scope_digest/{VERSION}"],"generated_at":ts,"sources":["raw/sow-extract.md","raw/engagement-letter-extract.md","raw/pursuit-record.md","raw/confirmed-roster.csv","upstream/staffing"]}}
+    out={"contract_version":CONTRACT_VERSION,"run_metadata":{"generated_at":ts,"demo_scenario":scenario},**body,"holds":holds,"provenance":{"engines":[f"scope_digest/{VERSION}"],"generated_at":ts,"sources":["raw/sow-extract.md","raw/engagement-letter-extract.md","raw/pursuit-record.md","raw/confirmed-roster.csv","upstream/staffing"]}}
     out=bind_withheld(out,"scope",ENGINE)  # every placeholder bound to a hold at its field (#1.4, #4.3)
-    check_contract(out,"scope","scope"); dump_json(a.out,out,"scope output")  # the document written is held to the contract (#1.3)
+    check_contract(out,"scope","scope"); return out  # the document written is held to the contract (#1.3)
+def main():
+    ap=ArgParser(); ap.add_argument("--raw-dir",required=True); ap.add_argument("--staffing",required=True); ap.add_argument("--confirmed-roster",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); ap.add_argument("--scenario",default=""); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
+    dump_json(a.out,derive(a.raw_dir,a.staffing,a.confirmed_roster,a.scenario,ts),"scope output")
 if __name__=="__main__": guard(main)

@@ -302,10 +302,10 @@ def hooks(): return dict(HOOKS, trusted_domains=_TRUSTED)
 def _trust(ds): return tuple(sorted({canon_text(d).lstrip("@.") for d in (ds or []) if isinstance(d, str) and domain_ok(canon_text(d).lstrip("@."))}))
 # Trusted domains are re-derived at every stage, never taken from a carried list (#1.4, #4.4). scope_digest reads the
 # signed SOW and engagement letter and carries the declaration lines it accepted (engagement.domain_declarations) with
-# the domains they declare (engagement.trusted_domains). Every later stage re-derives the trusted set from those
-# carried lines, screened like every other string, with the same rule (domain_trust) and refuses a document whose
-# trusted_domains list names any domain the lines do not back, or that carries a line that is not an accepted
-# declaration. An edited trusted_domains list can therefore never switch off transfer screening.
+# the domains they declare (engagement.trusted_domains). Every later stage first proves the carried document equal to
+# its whole-document re-derivation from the raw inputs (same_document), declaration lines and trusted list included,
+# then sets the trusted set from those lines with the same rule (adopt_trust, domain_trust). An edited
+# trusted_domains list or declaration line can therefore never switch off transfer screening.
 DOMAIN_LABELS = ("Client domains", "Client domain", "Firm domains", "Firm domain")  # confidentiality-and-ethical-wall-rules.md #4.4
 def declaration_value(line):
     """The value of a labelled domain declaration line ("Client domains: a.example; b.example"), else None."""
@@ -334,20 +334,16 @@ def domain_trust(lines):
         if not drop: break
         acc = [n for n in acc if n not in drop]
     return [lines[n] for n in acc], list(_trust([d for n in acc for d in declared_domains(declaration_value(lines[n]))[0]]))
-def reconcile_trusted(doc, where):
-    """Re-derive the trusted domains of an intermediate document from its carried declaration lines and refuse it when
-    the carried trusted_domains list disagrees with the re-derivation item by item (a substituted or repeated domain at
-    the same count included), or a carried line is not an accepted declaration (values not repeated). Sets and returns
-    the trusted domains (#1.4, #4.4)."""
-    e = doc.get("engagement") if isinstance(doc.get("engagement"), dict) else {}
-    carried = e.get("trusted_domains") or []; decls = e.get("domain_declarations") or []
-    acc, ds = domain_trust(decls)
-    need(isinstance(carried, list) and isinstance(decls, list) and acc == list(decls) and all(isinstance(d, str) for d in carried) and [canon_text(d).lstrip("@.") for d in carried] == list(ds),
-        f"{where}.engagement.trusted_domains is not backed by the domain declarations it carries (every trusted domain must come from an accepted SOW or engagement-letter declaration line; values not repeated); intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #4.4)")
-    return list(set_trusted_domains(ds))
+def adopt_trust(doc):
+    """Set the detector's trusted domains from a document's carried declaration lines with the shared rule
+    (domain_trust) and return them. A stage calls this only on scope_digest's output or on a document same_document
+    has proved equal to its re-derivation, so the lines are scope_digest's own accepted declarations (#1.4, #4.4)."""
+    e = doc.get("engagement") if isinstance(doc, dict) and isinstance(doc.get("engagement"), dict) else {}
+    decls = e.get("domain_declarations") if isinstance(e.get("domain_declarations"), list) else []
+    return list(set_trusted_domains(domain_trust(decls)[1]))
 def settle_trust(doc):
     """Before an engine writes its document: drop any declaration line screening withheld and re-derive the carried
-    trusted domains from the lines left, so the next stage's reconcile_trusted always agrees (#1.4, #4.4)."""
+    trusted domains from the lines left, so the document stays its own re-derivation (#1.4, #4.4)."""
     e = doc.get("engagement") if isinstance(doc.get("engagement"), dict) else None
     if e is None or ("domain_declarations" not in e and "trusted_domains" not in e): return doc
     kept, ds = domain_trust([x for x in e.get("domain_declarations") or [] if not is_withheld(x)])
@@ -869,44 +865,7 @@ def _strings(v):
     elif isinstance(v, list):
         for x in v: yield from _strings(x)
     elif isinstance(v, str): yield v
-JOINER_LINK = {"person": canon_person, "role": canon_text, "assignment_status": canon_text, "onboarding_status": canon_text}
-ITEM_LINK = {"knowledge_id": canon_id, "title": canon_text, "summary": canon_text, "clearance_state": canon_text, "confidentiality_permission": canon_text, "review_status": canon_text}
-def check_links(doc, where):
-    """Records an intermediate resolves through another's identity must be the same subject (#1.4, #1.5): the joiner
-    is exactly one team_roster member with the same canonical person and the same role, assignment and onboarding
-    status (the fields the wall and access decisions read); every knowledge_digest item states the same title,
-    summary, clearance, permission and review status as the prior_knowledge_candidates record with its knowledge_id;
-    no staffing exclusion is also on the roster. The engines write these as copies, so a mismatch means edited state:
-    refused, values not repeated."""
-    roster = [r for r in doc.get("team_roster") or [] if isinstance(r, dict)]
-    j = doc.get("joiner") if isinstance(doc.get("joiner"), dict) else {}
-    if j:
-        # Joined by the stated canonical person. A joiner whose name is withheld has no key (join_key): it must be,
-        # field for field, exactly one roster record (the engine copies the record whole); a blank never joins.
-        pk = join_key(j.get("person"), canon_person)
-        same = [r for r in roster if join_key(r.get("person"), canon_person) == pk] if pk is not None else [r for r in roster if r == j and is_withheld(j.get("person"))]
-        need(len(same) == 1 and not subjects_differ(j, same[0], JOINER_LINK) and all(stated(same[0].get(k)) == stated(j.get(k)) for k in JOINER_LINK), f"{where}.joiner is not the team_roster member it names (person, role, assignment and onboarding status must match one roster record; values not repeated); intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #1.5)")
-    kd = doc.get("knowledge_digest") if isinstance(doc.get("knowledge_digest"), dict) else {}
-    cands = {join_key(c.get("knowledge_id")): c for c in doc.get("prior_knowledge_candidates") or [] if isinstance(c, dict) and join_key(c.get("knowledge_id")) is not None}
-    for n, it in enumerate(kd.get("items") or []):
-        c = cands.get(join_key(it.get("knowledge_id"))) if isinstance(it, dict) and join_key(it.get("knowledge_id")) is not None else None
-        if isinstance(it, dict): need(c is not None and not subjects_differ(it, c, ITEM_LINK) and all(stated(c.get(k)) == stated(it.get(k)) for k in ITEM_LINK), f"{where}.knowledge_digest.items[{n}] is not the prior_knowledge_candidates record with its knowledge_id (values not repeated); intermediate state is inconsistent; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #1.5)")
-    # A subject the source excludes is named in no derived section (#1.4, #1.5; role-access-matrix.md #3.2): a person
-    # in staffing_exclusions is not the joiner, a roster member, a point of contact or a proposed candidate, and an
-    # excluded knowledge asset or lesson is neither a candidate nor a digest item. The engines never write such a
-    # document, so one means edited state: refused, names not repeated.
-    ex = {join_key(x.get("person"), canon_person) for x in doc.get("staffing_exclusions") or [] if isinstance(x, dict)} - {None}
-    named = [(f"{where}.joiner.{k}", j.get(k)) for k in ("person", "point_of_contact")]
-    named += [(f"{where}.team_roster[{n}].{k}", r.get(k)) for n, r in enumerate(roster) for k in ("person", "point_of_contact")]
-    named += [(f"{where}.proposed_staffing[{n}].candidate_name", x.get("candidate_name")) for n, x in enumerate(doc.get("proposed_staffing") or []) if isinstance(x, dict)]
-    bad = [w for w, v in named if join_key(v, canon_person) in ex]
-    need(not bad, f"{bad[0] if bad else where} names a person who is also in staffing_exclusions (name not repeated); an excluded subject is named in no derived section; intermediate state is inconsistent; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #1.5; role-access-matrix.md #3.2)")
-    xi = {join_key(x.get(k)) for x in kd.get("excluded_items") or [] if isinstance(x, dict) for k in ("asset_id", "lesson_id")} - {None}
-    used = [(f"{where}.prior_knowledge_candidates[{n}]", c) for n, c in enumerate(doc.get("prior_knowledge_candidates") or [])] + [(f"{where}.knowledge_digest.items[{n}]", c) for n, c in enumerate(kd.get("items") or [])]
-    badk = [w for w, c in used if isinstance(c, dict) and join_key(c.get("knowledge_id")) in xi]
-    need(not badk, f"{badk[0] if badk else where} is a knowledge record the digest excludes (ID not repeated); an excluded subject is named in no derived section; intermediate state is inconsistent; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #1.5)")
 def check_hold_evidence(doc, where):
-    check_links(doc, where)
     holds = [h for h in doc.get("holds") or [] if isinstance(h, dict)]
     ids = [str(h.get("hold_id") or "") for h in holds]; reasons = [str(h.get("reason") or "") for h in holds]; cids = {canon_id(i) for i in ids}  # hold kinds and IDs compared canonically (#1.3)
     safety = any(r == OVERSIZE_REASON or r.startswith("embedded_instruction:") for r in reasons) or any(hold_is(i, "HOLD-SCREENED-") for i in ids)
@@ -932,29 +891,72 @@ def check_hold_evidence(doc, where):
     # Each placeholder is bound to a same-kind hold at its own field (bind_withheld), not to any hold of the document.
     ub = unbound_withheld(doc)
     need(not ub, f"{where} carries {len(ub)} withheld placeholder(s) ({', '.join(sorted({k for _, k in ub}))}) with no hold of the same kind at that field or its source run (field paths not repeated); an unrelated hold does not account for a placeholder; intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #4.3)")
-def knowledge_ids(items): return [x.get("knowledge_id") if isinstance(x, dict) else None for x in items or []]
-def check_digest(doc, where, wall_status=None):
-    """The digest is gating state: re-derive it from the holds, the candidates and the wall status and refuse a
-    document whose supplied digest disagrees - status, and every item compared in full (IDs and content), never by
-    count; at the wall stages the wall decision's knowledge ID lists and the digest's denied and excluded items too
-    (knowledge-reuse-rules.md #3.1; confidentiality-and-ethical-wall-rules.md #1.4, #2.3)."""
-    kd = doc["knowledge_digest"]; cands = doc.get("prior_knowledge_candidates") or []; cids = knowledge_ids(cands)
-    if wall_status is None: exp, exp_items = ("hold" if doc.get("holds") else "ready" if cands else "empty"), cands  # as knowledge_match writes it
-    elif wall_status == "denied": exp, exp_items = "denied_by_wall", []
-    elif wall_status == "hold": exp, exp_items = "hold", []
-    else:
-        need(not doc.get("holds"), f"{where}.wall_decision is clear while holds are open; wall_check never clears with open holds; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #4.1)")
-        exp, exp_items = ("ready" if cands else "empty"), cands
-    items = kd.get("items")
-    need(kd.get("status") == exp and items == exp_items, f"{where}.knowledge_digest (status and {len(items) if isinstance(items, list) else 0} item(s)) does not match the state re-derived from its holds, candidates and wall decision (expected status {exp}, {len(exp_items)} item(s), every item identical to its candidate); fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
-    bad = []
-    if "excluded_items" in doc and kd.get("excluded_items") != doc.get("excluded_items"): bad.append("knowledge_digest.excluded_items")
-    if wall_status is not None:
-        wd = doc.get("wall_decision") if isinstance(doc.get("wall_decision"), dict) else {}
-        exp_ids = {"allowed_knowledge_ids": cids if wall_status == "clear" else [], "denied_knowledge_ids": cids if wall_status == "denied" else []}
-        bad += [f"wall_decision.{k}" for k, v in exp_ids.items() if item_keys(wd.get(k)) != item_keys(v)]
-        if wall_status == "denied" and item_keys(kd.get("denied_items")) != item_keys(cids): bad.append("knowledge_digest.denied_items")
-    need(not bad, f"{where}: {', '.join(bad)} do(es) not match the list re-derived from the knowledge candidates and the wall status item by item (values not repeated); intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
+# ---------------------------------------------------------------- whole-document re-derivation (#1.4)
+# A carried intermediate is never reconciled field by field: per-field checks always left the next field open. Each
+# downstream stage re-runs every upstream engine's derivation on the raw inputs (scope_digest on the SOW, engagement
+# letter, pursuit record, wall register, staffing input and confirmed roster; knowledge_match on that scope, the
+# Closeout record and the wall register; wall_check on that matched document, the wall register and the workspace
+# inventory) and requires the carried document to equal the re-derivation in every field and section, provenance
+# included (same_document). A missing, extra or changed field anywhere is an InputError and nothing is written.
+# The only carried values the derivation cannot produce from the raw inputs are command-line run parameters. The
+# re-derivation runs WITH the carried value, so each is validated and screened instead; nothing else is exempt.
+# Path -> (stages whose carried document takes it as a parameter, justification).
+CARRIED_PARAMETERS = {
+    "run_metadata.generated_at": (("scope", "matched", "governed"), "scope_digest's --generated-at run timestamp, a command-line parameter no raw input determines; contract date-time, ISO-8601 UTC (run_parameters) and screened"),
+    "run_metadata.demo_scenario": (("scope", "matched", "governed"), "scope_digest's --scenario demo label, a command-line parameter; contract slug pattern, and the re-derivation re-applies scope_digest's slug, instruction and other-client checks to it"),
+    "provenance.generated_at": (("matched", "governed"), "the writing stage's own --generated-at run timestamp, a command-line parameter; contract date-time, ISO-8601 UTC (stage_timestamp) and screened (in scope.json it equals run_metadata.generated_at and is compared)"),
+}
+def _iso_z(v): return isinstance(v, str) and _ISO_Z.fullmatch(v) is not None and timestamp_ok(v)
+def run_parameters(doc, where):
+    """(demo scenario, run timestamp) a carried document states for its scope_digest run (CARRIED_PARAMETERS), as the
+    arguments of the scope re-derivation. Validated here; scope_digest re-applies its --scenario checks (#1.3)."""
+    rm = doc.get("run_metadata") if isinstance(doc, dict) and isinstance(doc.get("run_metadata"), dict) else {}
+    sc, ts = rm.get("demo_scenario"), rm.get("generated_at")
+    need(isinstance(sc, str) and _iso_z(ts), f"{where}.run_metadata must state a demo scenario label and an ISO-8601 UTC generated_at like 2026-10-01T00:00:00Z (values not repeated); fail closed")
+    return sc, ts
+def stage_timestamp(doc, where):
+    """The run timestamp a carried matched or governed document states for the stage that wrote it (CARRIED_PARAMETERS)."""
+    pv = doc.get("provenance") if isinstance(doc, dict) and isinstance(doc.get("provenance"), dict) else {}
+    ts = pv.get("generated_at")
+    need(_iso_z(ts), f"{where}.provenance.generated_at must be an ISO-8601 UTC timestamp like 2026-10-01T00:00:00Z (value not repeated); fail closed")
+    return ts
+def reread(doc, label="re-derived document"):
+    """doc exactly as the next stage reads it back: serialised like dump_json, parsed like load_json."""
+    return json.loads(json_bytes(None, doc, label).decode("utf-8"), parse_constant=_no_constant, parse_float=_finite_float, object_pairs_hook=_unique_keys)
+CANONICAL_ID_LISTS = (("wall_decision", ("allowed_knowledge_ids", "denied_knowledge_ids", "denied_workspace_ids", "held_workspace_ids", "name_withheld_workspace_ids")), ("knowledge_digest", ("denied_items",)))
+HOLD_CANON = {"hold_id": canon_id, "path": canon_text, "reason": canon_text, "source": canon_text, "citation": canon_text}
+def canonical_document(doc):
+    """The comparison form of a pipeline document: every value exactly as written (types included), except where the
+    engines already compare canonically (#1.3): trusted domains in domain form, the wall decision's and the digest's
+    ID lists by item_key, and each hold's ID, path, reason, source and citation. A canonical variant compares equal;
+    nothing is dropped, so an extra member anywhere still differs."""
+    if not isinstance(doc, dict): return doc
+    d = dict(doc); e = d.get("engagement")
+    if isinstance(e, dict) and isinstance(e.get("trusted_domains"), list):
+        d["engagement"] = dict(e, trusted_domains=[("domain", canon_text(x).lstrip("@.")) if isinstance(x, str) else x for x in e["trusted_domains"]])
+    for sec, keys in CANONICAL_ID_LISTS:
+        x = d.get(sec)
+        if isinstance(x, dict): d[sec] = dict(x, **{k: item_keys(x[k]) for k in keys if isinstance(x.get(k), list)})
+    if isinstance(d.get("holds"), list):
+        d["holds"] = [{k: (("canon", HOLD_CANON[k](v)) if k in HOLD_CANON and isinstance(v, str) else v) for k, v in h.items()} if isinstance(h, dict) else h for h in d["holds"]]
+    return d
+def document_differences(carried, derived):
+    """(missing, extra, changed) member counts between a carried document and its re-derivation, both in comparison
+    form: objects member by member, lists item by item in order, scalars by type and value (1, 1.0 and true differ)."""
+    miss = extra = changed = 0; stack = [(carried, derived)]
+    while stack:
+        x, y = stack.pop()
+        if isinstance(x, dict) and isinstance(y, dict):
+            extra += len(x.keys() - y.keys()); miss += len(y.keys() - x.keys()); stack.extend((x[k], y[k]) for k in x.keys() & y.keys())
+        elif isinstance(x, list) and isinstance(y, list):
+            extra += max(0, len(x) - len(y)); miss += max(0, len(y) - len(x)); stack.extend(zip(x, y))
+        elif type(x) is not type(y) or x != y: changed += 1
+    return miss, extra, changed
+def same_document(carried, derived, where):
+    """Refuse a carried intermediate that is not, in every member and section (provenance included), the document the
+    upstream engines derive from the raw inputs. The message gives counts only: no value, member name or path (#1.3, #1.4)."""
+    m, x, c = document_differences(canonical_document(carried), canonical_document(reread(derived, where)))
+    need(not (m or x or c), f"the {where} is not the document the upstream engines re-derive from the raw inputs ({m} missing, {x} extra and {c} changed field(s); values and field paths not repeated); every field and section, provenance included, must equal its re-derivation - the file was edited or is stale for the inputs given; re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
 
 # ---------------------------------------------------------------- other-client identities from the wall register
 # Every engine screens upstream text for other clients with the same identities wall_check uses: other register rows'
@@ -1224,13 +1226,6 @@ def merge_own_holds(carried, own):
     mine = {}
     for h in own: mine.setdefault(hold_key(h), h)
     return dedup_holds([mine.get(hold_key(h), h) for h in carried] + list(own))
-_DOC_PATH_RE = re.compile(r"(?:matched|governed)(?:[.\[ ]|$)")
-def document_screen_hold(h):
-    """True for a screening hold (instruction, other-client or briefing-topic kind) on a field of the matched or
-    governed document itself. wall_check raises these once, when it screens the document; the text is then replaced by
-    its placeholder, so a re-derivation cannot raise them again. Every other hold wall_check claims is re-derived from
-    the raw wall register and workspace inventory and must reconcile with that re-derivation (#1.4)."""
-    return isinstance(h, dict) and _hold_kind(h) is not None and isinstance(h.get("path"), str) and bool(_DOC_PATH_RE.match(h["path"]))
 def toks(*parts):
     stop = {"the", "and", "for", "with", "from", "into", "client", "engagement", "team", "work", "draft", "record"}
     return {x for p in parts for x in re.findall(r"[a-z0-9]+", norm(unwithheld(p) or "")) if len(x) > 2 and x not in stop}  # withheld text scores nothing (#4.3)

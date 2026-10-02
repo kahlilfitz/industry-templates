@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse, copy
 from safety_text import *
+import wall_check
 from wall_check import govern
 ENGINE="engine:access_checklist"
 M={"delivery analyst":{"engagement-sharepoint":"viewer","delivery-planner":"viewer","client-teams-channel":"member","knowledge-repository":"viewer"},"delivery manager":{"engagement-sharepoint":"contributor","delivery-planner":"contributor","client-teams-channel":"member","knowledge-repository":"viewer"},"client delivery manager":{"engagement-sharepoint":"contributor","delivery-planner":"contributor","client-teams-channel":"member","knowledge-repository":"viewer"},"engagement coordinator":{"engagement-sharepoint":"viewer","delivery-planner":"contributor","client-teams-channel":"member","knowledge-repository":"viewer"}}  # role-access-matrix.md #1.1-#1.3
@@ -33,46 +34,15 @@ def check_governed(p):
     if p.get("contract_version")!=CONTRACT_VERSION: raise InputError(f"expected contract {CONTRACT_VERSION} in governed input")
     if not isinstance(p.get("wall_decision"),dict): raise InputError("governed input has no wall_decision object; run wall_check first; fail closed")
     check_contract(p,"governed","governed")  # whole stage schema, closed enums included (confidentiality-and-ethical-wall-rules.md #1.3)
-    check_hold_evidence(p,"governed"); check_digest(p,"governed",p["wall_decision"]["status"])  # holds are cumulative (#1.4)
+    check_hold_evidence(p,"governed")  # holds are cumulative (#1.4); every other field is proved equal to its re-derivation (same_document)
 UNION=("held_workspace_ids","name_withheld_workspace_ids")  # merged canonically with late screening holds' re-derivation (most restrictive wins)
-ID_LISTS=("denied_workspace_ids","allowed_knowledge_ids","denied_knowledge_ids")
-MAY="may_not_access_discuss"
-DERIVED_SOURCES={canon_id("engine:wall_check"),canon_id("engine:access_checklist")}  # a hold claiming these is re-derived here, never trusted
-RAW_PATHS=(canon_text(REGISTER_LABEL),canon_text("raw/workspace-inventory.csv"))
-def claims_derivation(h):
-    """A carried hold that only this derivation can raise: one claiming wall_check (or this engine), other than a
-    screening hold on the document itself (document_screen_hold), or a shared safety_text hold on the raw wall register
-    or workspace inventory. The claim is read from the hold's own source and path, so the match is canonical and broad:
-    any spelling of the claim is held to the re-derivation (#1.3, #1.4)."""
-    src=canon_id(h.get("source")); path=canon_text(h.get("path"))
-    if src in DERIVED_SOURCES: return not document_screen_hold(h)
-    return src==canon_id("engine:safety_text") and path.startswith(RAW_PATHS)
-def rederive(p,register,inventory,new=()):
-    """The wall decision, workspace decisions and digest gating are re-derived from the raw wall register and
-    workspace inventory by re-running wall_check's derivation, never taken from the governed file. Every carried
-    field is reconciled with its re-derivation by content, item by item (IDs canonically, never by count), and no
-    reconciliation is filtered or keyed on a field the input controls (a hold's source, a briefing entry's type, a
-    status): a governed document whose decision state disagrees in any field or item, carries an entry or hold the
-    derivation does not produce, or lacks or alters a hold the derivation raises, is refused (#1.4). The holds this
-    engine raised itself while screening the governed document (new) are then merged and the decision re-derived once
-    more, so a late screening hold gates knowledge and access exactly as an upstream hold would (#1.4, #2.1). Returns
-    the effective wall_decision."""
-    fresh=[]; r=govern(copy.deepcopy(p),register,inventory,fresh); W=p["wall_decision"]; R=r["wall_decision"]
-    bad=[k for k in sorted(set(W)|set(R)) if k not in UNION+ID_LISTS+(MAY,) and W.get(k)!=R.get(k)]
-    bad+=[k for k in ID_LISTS+UNION if item_keys(W.get(k))!=item_keys(R.get(k))]  # every list item by item; a carried extra is refused too
-    # Briefing entries are exactly the re-derived ones, in order: an extra entry of any type is refused (#2.3).
-    if not isinstance(W.get(MAY),list) or W[MAY]!=R[MAY]: bad.append(MAY)
-    # Holds are matched by canonical key alone and every field must match, source included (wall_check carries its
-    # own copy of every hold it derives, merge_own_holds). A carried hold that claims this derivation but is not
-    # re-derived is an extra hold and refused (#1.3, #1.4).
-    carried=[h for h in p.get("holds",[]) if isinstance(h,dict)]; fk={hold_key(f) for f in fresh}
-    missing=[f for f in fresh if [hold_content(h) for h in carried if hold_key(h)==hold_key(f)]!=[hold_content(f)]]
-    extra=[h for h in carried if hold_key(h) not in fk and claims_derivation(h)]
-    def ids(hs): return ", ".join(sorted({h.get('hold_id') if ENGINE_HOLD_ID_RE.fullmatch(str(h.get('hold_id'))) else 'supplied hold' for h in hs}))
-    if missing: bad.append(f"{len(missing)} re-derived hold(s) missing or altered: "+ids(missing))
-    if extra: bad.append(f"{len(extra)} carried hold(s) claiming wall_check or access_checklist that the derivation does not raise: "+ids(extra))
-    if r["knowledge_digest"]!=p["knowledge_digest"]: bad.append("knowledge_digest")
-    need(not bad,f"governed decision state does not match the state re-derived from the wall register and workspace inventory ({', '.join(bad)}); the governed file was edited or is stale - re-run wall_check; fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
+def effective_wall(p,register,inventory,new=()):
+    """The effective wall decision for a governed document already proved equal to its re-derivation from the raw
+    inputs (same_document, #1.4). wall_check's derivation is re-run on the screened document; the holds this engine
+    raised itself while screening it (new) are then merged and the decision re-derived once more, so a late screening
+    hold gates knowledge and access exactly as an upstream hold would (#1.4, #2.1). Held and name-withheld workspace
+    IDs are merged canonically with the carried ones (most restrictive wins)."""
+    W=p["wall_decision"]; R=govern(copy.deepcopy(p),register,inventory)["wall_decision"]
     for k in UNION: R[k]=canon_union(W.get(k),R[k])
     if new:
         q=copy.deepcopy(p); q["holds"]=dedup_holds(list(q.get("holds",[]))+list(new)); R2=govern(q,register,inventory)["wall_decision"]
@@ -80,8 +50,13 @@ def rederive(p,register,inventory,new=()):
         R=R2
     return R
 def main():
-    ap=ArgParser(); ap.add_argument("--governed",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--pack-out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
-    p=load_json(a.governed,"governed input"); check_governed(p); reconcile_trusted(p,"governed")  # re-derived from the carried declaration lines, never the carried list (#1.4, #4.4)
+    ap=ArgParser()
+    for k in ("--governed","--raw-dir","--staffing","--confirmed-roster","--closeout","--wall-register","--workspace-inventory","--out","--pack-out","--generated-at"): ap.add_argument(k,required=True)
+    a=ap.parse_args(); ts=require_iso_z(a.generated_at)
+    p=load_json(a.governed,"governed input"); check_governed(p)
+    g=wall_check.rederive(p,a.raw_dir,a.staffing,a.confirmed_roster,a.closeout,a.wall_register,a.workspace_inventory,stage_timestamp(p,"governed input"),"governed input")
+    same_document(p,g,"governed input")  # every field equals the scope_digest + knowledge_match + wall_check re-derivation from the raw inputs (#1.4)
+    adopt_trust(p)  # from the declaration lines scope_digest accepted, never a carried list (#1.4, #4.4)
     # The governed document is untrusted input: its upstream holds and every content field are screened for embedded
     # instructions and for other clients named in the wall register, and flagged text withheld, before anything is
     # derived from it (confidentiality-and-ethical-wall-rules.md #3.3, #4.1, #4.3).
@@ -137,7 +112,7 @@ def main():
         return out,ah
     # Access-decision holds (missing or unusable inventory, role not in the matrix, and below an invalid row or a
     # clamped permission) govern their checklist rows and the pack status, not the wall (role-access-matrix.md #2.3).
-    wall=rederive(p,a.wall_register,a.workspace_inventory,gh+oh+screened); out,ah=build(wall)
+    wall=effective_wall(p,a.wall_register,a.workspace_inventory,gh+oh+screened); out,ah=build(wall)
     p["wall_decision"]=wall; wstat=wall.get("status"); need(wstat in WALL_STATUSES,"re-derived wall status is not recognised; fail closed")
     if wstat in {"hold","denied"}:
         # No knowledge is released while the effective wall status is hold or denied, whatever the digest says (#2.2, #2.3).

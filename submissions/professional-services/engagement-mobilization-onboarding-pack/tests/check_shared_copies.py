@@ -14,6 +14,9 @@ def main():
     for name in ("safety_text.py","contract_validate.py"):
         helper=os.path.join(ROOT,"skills","engagement-retrieve","scripts",name); pairs += [(helper,os.path.join(s,"scripts",name)) for s in skills]
     pairs += [(STEERING_GUARD,os.path.join(s,"scripts","steering_guard.py")) for s in skills]
+    # Each downstream stage re-runs the upstream engines on the raw inputs (#1.4), so it carries their exact copies.
+    for skill,name,users in (("engagement-retrieve","scope_digest.py",("knowledge-match","wall-check")),("knowledge-match","knowledge_match.py",("wall-check",))):
+        src=os.path.join(ROOT,"skills",skill,"scripts",name); pairs += [(src,os.path.join(ROOT,"skills",u,"scripts",name)) for u in users]
     bad=0
     if not os.path.exists(STEERING_GUARD) or d(STEERING_GUARD)!=STEERING_GUARD_SHA256: print("PIN     steering_guard.py does not match STEERING_GUARD_SHA256"); bad+=1
     for src,cp in pairs:

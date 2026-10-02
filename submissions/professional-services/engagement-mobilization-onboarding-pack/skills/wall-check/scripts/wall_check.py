@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse, hashlib, re
 from safety_text import *
+import knowledge_match
 ENGINE="engine:wall_check"; CLEAR={"clear","cleared"}  # confidentiality-and-ethical-wall-rules.md #2.2
 RESTRICT={"restricted","walled","conflicted","deny"}  # confidentiality-and-ethical-wall-rules.md #2.3
 MISSING_REGISTER_HOLDS=True  # confidentiality-and-ethical-wall-rules.md #2.1
@@ -39,9 +40,9 @@ def check_matched(p):
     if p.get("contract_version")!=CONTRACT_VERSION: raise InputError(f"expected contract {CONTRACT_VERSION} in matched input")
     if "prior_knowledge_candidates" not in p or "knowledge_digest" not in p: raise InputError("matched input has no prior_knowledge_candidates/knowledge_digest; run knowledge_match first; fail closed")
     field(p,"knowledge_digest","obj","matched",required=True); check_contract(p,"matched","matched")  # confidentiality-and-ethical-wall-rules.md #1.3
-    # Gating state is reconciled, never trusted: the digest must match its holds and candidates, and every placeholder,
-    # escalation or held status from an earlier stage must still have its hold (#1.4).
-    check_hold_evidence(p,"matched"); check_digest(p,"matched")
+    # Every placeholder, escalation or held status from an earlier stage must still have its hold (#1.4); the rest of
+    # the document is proved equal to its re-derivation from the raw inputs (same_document).
+    check_hold_evidence(p,"matched")
 def govern(p,register,inventory,raised=None):
     """Derive the wall decision, the workspace decisions and the digest gating for document p from the raw wall
     register and workspace inventory. access_checklist re-runs this on the governed document to re-derive, never
@@ -153,10 +154,24 @@ def govern(p,register,inventory,raised=None):
     elif status=="denied": kd.update({"status":"denied_by_wall","items":[],"denied_items":deniedk})
     else: kd.update({"status":"hold","items":[]})
     p["knowledge_digest"]=kd; p["holds"]=holds; return p
-def main():
-    ap=ArgParser(); ap.add_argument("--matched",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
-    p=load_json(a.matched,"matched input"); check_matched(p); reconcile_trusted(p,"matched")  # re-derived from the carried declaration lines, never the carried list (#1.4, #4.4)
-    p=govern(p,a.wall_register,a.workspace_inventory)
+def derive(p,register,inventory,ts):
+    """governed.json for a matched document (knowledge_match's output, or a carried one proved equal to it), the wall
+    register, the workspace inventory and this stage's run timestamp. access_checklist re-runs it (rederive, #1.4)."""
+    adopt_trust(p)  # from the declaration lines scope_digest accepted, never a carried list (#1.4, #4.4)
+    p=govern(p,register,inventory)
     p.setdefault("provenance",{}).setdefault("engines",[]).append(f"wall_check/{VERSION}"); p["provenance"]["generated_at"]=ts
-    p=bind_withheld(settle_trust(p),"governed",ENGINE); check_contract(p,"governed","governed"); dump_json(a.out,p,"governed output")  # the document written is held to the same contract (#1.3)
+    p=bind_withheld(settle_trust(p),"governed",ENGINE); check_contract(p,"governed","governed"); return p  # the document written is held to the same contract (#1.3)
+def rederive(doc,raw_dir,staffing,roster,closeout,register,inventory,ts,where):
+    """The governed document the raw inputs give: scope_digest, knowledge_match and this engine, re-run whole. The
+    matched stage ran under its own timestamp, which only the governed document's provenance overwrote (#1.4)."""
+    m=knowledge_match.rederive(doc,raw_dir,staffing,roster,closeout,register,ts,where)
+    return derive(reread(m,"re-derived matched document"),register,inventory,ts)
+def main():
+    ap=ArgParser()
+    for k in ("--matched","--raw-dir","--staffing","--confirmed-roster","--closeout","--wall-register","--workspace-inventory","--out","--generated-at"): ap.add_argument(k,required=True)
+    a=ap.parse_args(); ts=require_iso_z(a.generated_at)
+    p=load_json(a.matched,"matched input"); check_matched(p)
+    m=knowledge_match.rederive(p,a.raw_dir,a.staffing,a.confirmed_roster,a.closeout,a.wall_register,stage_timestamp(p,"matched input"),"matched input")
+    same_document(p,m,"matched input")  # every field equals the scope_digest + knowledge_match re-derivation from the raw inputs (#1.4)
+    dump_json(a.out,derive(p,a.wall_register,a.workspace_inventory,ts),"governed output")
 if __name__=="__main__": guard(main)

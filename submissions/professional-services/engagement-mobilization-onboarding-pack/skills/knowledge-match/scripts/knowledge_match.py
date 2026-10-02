@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse, copy
 from safety_text import *
+import scope_digest
 ENGINE="engine:knowledge_match"; CLOSE="ps.engagement-closeout-knowledge-harvest.v1"  # knowledge-reuse-rules.md #1.1
 STATES={"RELEASE_CANDIDATE_SANITISED","RELEASE_CANDIDATE_SANITIZED"}  # knowledge-reuse-rules.md #2.1
 PERM="cleared_for_internal_engagement_reuse"  # knowledge-reuse-rules.md #2.2
@@ -51,12 +52,13 @@ def rel(scope,item):
     ss=scope["scope_summary"]
     over=sorted(toks(item.get("title") or "",item.get("description") or ""," ".join(item.get("tags") or []),item.get("category") or "") & toks((scope.get("joiner") or {}).get("role") or ""," ".join(ss.get("objectives",[]))," ".join(ss.get("in_scope",[]))," ".join(ss.get("deliverables",[]))))
     return (round(min(.99,.55+.08*len(over)),2) if over else .4),over
-def main():
-    ap=ArgParser(); ap.add_argument("--scope",required=True); ap.add_argument("--closeout",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
-    s=load_json(a.scope,"scope input"); check_scope(s); reconcile_trusted(s,"scope")  # re-derived from the carried declaration lines, never the carried list (#1.4, #4.4)
+def derive(s,closeout,register,ts):
+    """matched.json for a scope document (scope_digest's output, or a carried scope proved equal to it), the Closeout
+    record, the wall register and this stage's run timestamp. Later stages re-run it (rederive, #1.4)."""
+    adopt_trust(s)  # from the declaration lines scope_digest accepted, never a carried list (#1.4, #4.4)
     # Both upstream documents are screened whole (every string, holds included) and redacted before use (#4.1, #4.3).
     s,sh=screen_upstream(s,"scope",ENGINE)
-    raw=adapt(a.closeout); ce=copy.deepcopy(raw["engagement"])  # the closed engagement's identity, harvested from the UNMODIFIED closeout before screening redacts it (#3.3)
+    raw=adapt(closeout); ce=copy.deepcopy(raw["engagement"])  # the closed engagement's identity, harvested from the UNMODIFIED closeout before screening redacts it (#3.3)
     c,own_h=screen_upstream(raw,"upstream/closeout",ENGINE,raw=True); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES and canon_id(x.get("asset_id")) and not is_withheld(x.get("asset_id"))}  # joined by canon_id (#1.3); a blank or withheld ID joins nothing (#4.3)
     inc=[]; exc=[]; kr=c["knowledge_record"]; ceng=c.get("engagement") or {}; lh=[]  # subjects compared on screened text only (#4.3)
     for i,asset in enumerate(kr.get("reusable_assets",[])):
@@ -87,11 +89,11 @@ def main():
     cdiff=bool(other_parts(ce.get("client_name"),mine.get("client_name"),"client_name"))
     terms=client_terms([x for k_ in ("client_name","engagement_id") for x in (identity_parts(ce.get(k_)) if cdiff and k_=="engagement_id" else other_parts(ce.get(k_),mine.get(k_),k_,own_words(s)))],own_words(s))
     # Every other client named in the wall register is screened out here too, not only at wall_check (#3.3).
-    terms+=[t for t in register_terms(a.wall_register,mine,own_words(s)) if t[0] not in {x[0] for x in terms}]
+    terms+=[t for t in register_terms(register,mine,own_words(s)) if t[0] not in {x[0] for x in terms}]
     # Upstream scope holds are supplied content: screened for other-client names and steering text (#3.3, #4.3).
     # A structured identity (Closeout engagement, register client_name/matter_id) that trips the wire and names no
     # usable identity holds anyway: the other-client screen cannot be confirmed (#3.3).
-    ih=[other_hold(f"upstream/closeout.engagement.{k_}",ce.get(k_),ENGINE) for k_ in ("client_name","engagement_id") if identity_unreadable(ce.get(k_))]+register_identity_holds(a.wall_register,ENGINE)
+    ih=[other_hold(f"upstream/closeout.engagement.{k_}",ce.get(k_),ENGINE) for k_ in ("client_name","engagement_id") if identity_unreadable(ce.get(k_))]+register_identity_holds(register,ENGINE)
     if ih: s.setdefault("escalations",[]).append(other_escalation(len(ih)))
     up,uh=screen_holds(s.get("holds",[]),terms,ENGINE,"scope.holds"); holds=dedup_holds(up+sh+own_h+uh+ih+lh)
     if lh: s.setdefault("escalations",[]).append(link_escalation(len(lh)))
@@ -103,5 +105,18 @@ def main():
     status="ready" if inc and not holds else "hold" if holds else "empty"
     if not inc and not holds: s.setdefault("escalations",[]).append("No released, permissioned prior-knowledge records matched the engagement (knowledge-reuse-rules.md #2.1,#2.2,#3.1)")
     s["prior_knowledge_candidates"]=inc; s["knowledge_digest"]={"status":status,"items":inc,"excluded_items":exc,"source":ENGINE,"confidence":.92 if inc else .7,"citation":"knowledge-reuse-rules.md #1.1-#3.2"}; s["holds"]=holds; s.setdefault("provenance",{}).setdefault("engines",[]).append(f"knowledge_match/{VERSION}"); s["provenance"]["generated_at"]=ts
-    s=bind_withheld(settle_trust(s),"matched",ENGINE); check_contract(s,"matched","matched"); dump_json(a.out,s,"matched output")  # the document written is held to the same contract (#1.3)
+    s=bind_withheld(settle_trust(s),"matched",ENGINE); check_contract(s,"matched","matched"); return s  # the document written is held to the same contract (#1.3)
+def rederive_scope(doc,raw_dir,staffing,roster,where):
+    """scope_digest's document for the raw inputs, under the run parameters the carried document states (#1.4)."""
+    return scope_digest.derive(raw_dir,staffing,roster,*run_parameters(doc,where))
+def rederive(doc,raw_dir,staffing,roster,closeout,register,ts,where):
+    """The matched document the raw inputs give: scope_digest then this engine, re-run whole (#1.4)."""
+    return derive(reread(rederive_scope(doc,raw_dir,staffing,roster,where),"re-derived scope"),closeout,register,ts)
+def main():
+    ap=ArgParser()
+    for k in ("--scope","--raw-dir","--staffing","--confirmed-roster","--closeout","--wall-register","--out","--generated-at"): ap.add_argument(k,required=True)
+    a=ap.parse_args(); ts=require_iso_z(a.generated_at)
+    s=load_json(a.scope,"scope input"); check_scope(s)
+    same_document(s,rederive_scope(s,a.raw_dir,a.staffing,a.confirmed_roster,"scope input"),"scope input")  # every field equals scope_digest's re-derivation from the raw inputs (#1.4)
+    dump_json(a.out,derive(s,a.closeout,a.wall_register,ts),"matched output")
 if __name__=="__main__": guard(main)
