@@ -72,7 +72,7 @@ Fix release after the v1.0.3 evaluation (`evaluate-time-expense-narrative-compli
 ### QA round 2 of 82d06b9 (fixed in 1.0.4, no version bump)
 - **1. Withheld draft hid a reject:** `billing_rules.govern` now treats a withheld or instruction-like draft as absent and runs every rule on the entry's own timesheet narrative (or none), so the re-run in `reconcile_governed` reproduces each flag. The withheld-draft branch no longer `continue`s. It merges the `embedded_instruction` hold into the rule-derived verdict and checks every deterministic flag, so a `block_billing` or `prohibited_term` reject relabelled `hold_for_review` is refused. Side effect, stricter: a withheld draft on an entry with no timesheet narrative is now a reject (`minimum_detail`, `required_elements_missing`), not only a hold.
 - **2. Entry citations unscreened:** `signal_policy.entry_texts` now includes the entry's own `citations`, and `safe_citations` treats a split across citations as a hit. `narrative_draft.main` screens each entry: a hit or a dropped entry citation empties the narrative, sets `needs_review_embedded_instruction`, adds #11.1/#11.2 and copies only safe entry citations into the fallback.
-- **3. Supplied flag detail rendered:** `billing_rules.rendered_flags` replaces each entry's flags before rendering with the re-run's flags, details and citations. An extra recorded flag keeps its name and severity, with the neutral detail "recorded by guideline_check but not raised by a re-run of the rules on this governed data". Supplied detail and citation text is never printed.
+- **3. Supplied flag detail rendered:** `billing_rules.rendered_flags` replaces each entry's flags before rendering with the re-run's flags, details and citations. An extra recorded flag keeps its name and severity, with the neutral detail "recorded by guideline_check but not raised by a re-run of the rules on this governed data" (superseded by the Mobilization round 13 sweep below: such a flag is now refused). Supplied detail and citation text is never printed.
 - **4. Phase code ignored:** `billing_rules.code_mapping` compares `submitted_phase_code` as well as `submitted_task_code`. A mismatch in either raises `submitted_code_mismatch`; the phase-only detail names both phases.
 - **5. Supplied excluded IDs rendered:** new `billing_rules.excluded_ids` derives the IDs from `provenance.excluded_signals`, and the report prints only those. `reconcile_governed` refuses data whose `prebill_summary.excluded_signal_ids` or `prebill_summary.period` disagree with provenance or the packet period, whose re-run excludes different signals, that still carries an excluded signal, or whose entry `excluded_activity_ids` are not in provenance. Every other rendered summary value was already derived (`summary_figures`) or reconciled.
 - **6. Reversed period:** `signal_policy.validate_packet` rejects `period.start` after `period.end` with a clean input error at every downstream engine, as activity-pull already did.
@@ -328,7 +328,40 @@ All five classes reproduced before the fix. New guidelines are client-billing-gu
     - the report's other-engagement filter.
   - Links still have to use the activity's exact ID at every stage. These changes make each rule agree with that check, rather than depending on it.
 
+### Mobilization round 13 class sweep: reconciliation never filters on a field the input controls (1.0.4, no version bump; hardening checklist B5; new guideline #13.7)
+- **Reproduced (High): a source-only edit at an intermediate stage dropped or relaxed a record.** Previously `filter_packet` ran at every stage and silently excluded any record whose source or `engagement_id` named another engagement. So, at the coded stage:
+  - changing TE-B-001's (a 12-flag reject) source to `connector:timesheet:OTHER-999` made guideline-check drop the entry into `provenance.excluded_entries`, and its linked activity became missing time;
+  - scoping B-CAL-003 to `OTHER-999` excluded the signal and turned TE-B-003 from a reject (duplicate meeting) into a hold;
+  - the same applied at the drafted stage (TE-B-004 dropped by code-map).
+  - Fix: `signal_policy.check_record_sources(packet, level)`, called from `validate_packet` at every engine.
+    - Every time entry's source must be the timesheet connector at every stage.
+    - From the drafted stage on, an entry or signal that names another engagement is refused with no output. Only the stage that first reads a record (activity-pull, or narrative-draft for the activity packet) may exclude it (#13.3 wording updated).
+    - From the drafted stage on, a signal's source must match every signal-export citation it carries (`raw/calendar-export.csv` → calendar, `raw/document-activity-log.csv` → document activity, `raw/mailbox-summary.txt` → mailbox) and the connector namespace of its activity ID (`-CAL-`, `-DOC-`, `-MAIL-`, canonical). A signal with neither binding is refused. A relabel to another enabled source is therefore refused, even with the citations removed.
+- **Reproduced (Medium): six single-field edits were accepted silently at the report.** These were the `source` of an exclusion record (None → the mailbox connector), its `excluded_by` (→ code-map), `compliance.source`, `compliance.confidence`, `compliance.citations`, and `prebill_summary.source`.
+  - Fix: `reconcile_governed` now compares each entry's whole `compliance` object and the whole `prebill_summary` to the re-run's. Messages name the differing field keys only.
+    - A carried extra flag or a stricter verdict the rules do not re-derive is refused. It was previously kept and rendered with a neutral detail, so `rendered_flags` now renders only re-derived flags and `NOT_REDERIVED` is removed.
+    - `signal_policy.exclusion_record_agrees` checks every field of an exclusion record against its reason, and is used in place of the reason-and-citations check. A disabled-source record carries the signal's source with that source's policy key; every other record has no source. A link resolved at activity-pull names activity-pull as its writer, another engagement's record names a first reader, and any other record names an engine that has run.
+    - The engines that may have run are fixed by the stage (`stage_writers`), never by the carried `provenance.engines` list, so adding a label there widens nothing.
+    - Each `provenance.excluded_entries` record must name a first reader as its writer.
+- **Already refused (no change):** an exclusion record's reason or policy key, a stricter verdict with an inconsistent exception list, `code_mapping.source` and `basis`, a missing-time item's `source`, evidence hours, a signal relabelled to a disabled or skipped source, and items matched by canonical key (drafts, missing time, the exception list, IDs).
+- **Not changed:** at the activity stage a relabelled or unknown source is still excluded and listed by ID (`unknown or unapproved signal source`). That stage is the record's first read, and the exclusion is equivalent to deleting the row.
+
 ### Tests and goldens
+- Mobilization round 13: 857 to 906 checks. There are 48 new checks in `r13_tests`, plus one `rendered_flags` unit check:
+  - 16 single-field edits at the report, each refused with no report and nothing echoed: the exclusion record's source and writer (including a writer added together with a widened `provenance.engines`), the compliance source, confidence and citations, a flag's source and confidence, the summary source and citations, an entry source and scope, and a missing-time signal's source and scope;
+  - a carried extra flag that leaves the verdict unchanged;
+  - an excluded entry's writer;
+  - 8 edits each at code-map and guideline-check: entry and signal scope (by source and by `engagement_id`), a relabelled entry or signal source, and a signal relabelled or renamed with its citations removed;
+  - a non-timesheet entry source at narrative-draft;
+  - controls: all eight goldens pass their next engine unchanged, an activity-stage look-alike connector is still excluded and listed, and the narrative-draft exclusion of another engagement's entry still reconciles;
+  - `exclusion_record_agrees`, `id_namespace_keys` and `stage_writers` units.
+  - Retargeted, each now stricter:
+    - qa2 item3 (a stricter verdict was accepted) and qa3 item3 (a forged flag detail or an extra flag was rendered with re-derived or neutral text) now expect a refusal;
+    - qa4 item4 (another engagement's signal added to coded data) now expects a refusal at guideline-check;
+    - the forged missing-time case now starts from the golden;
+    - the inventory moves `compliance.source`, `flags[].source`, `prebill_summary.source` and `citations`, and `excluded_signals[].source` from `not_rendered` to `reconciled`;
+    - the r7 and r12 fixtures now give disabled-source records and an added mailbox signal the source and citation the engines write.
+  - Goldens are byte-identical. Runtime is about 130 s.
 - T&E QA round 10: 843 to 857 checks. The 14 new checks are in `r10qa_tests`:
   - both reproducers, end to end;
   - a respelled entry ID;

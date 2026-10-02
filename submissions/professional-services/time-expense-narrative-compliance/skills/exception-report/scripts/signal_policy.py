@@ -105,6 +105,19 @@ SOURCE_KEYS = (
     ("connector:mailbox-content", "mailbox_content"),
     ("connector:mailbox", "mailbox_content"),
 )
+# #13.7 (Mobilization round 13): which records stay in a comparison is never decided by a field the input can edit.
+# Activity-pull fixes each record's source and engagement scope when it reads the raw export; a later stage re-derives
+# the source key from the export a signal cites and refuses a record whose source or scope disagrees.
+RECORD_CITATION = "client-billing-guidelines.md #13.7"
+TIMESHEET_SOURCE = "connector:timesheet"
+EXPORT_KEYS = {"calendar-export.csv": ("calendar",), "document-activity-log.csv": ("document_activity",),
+               "mailbox-summary.txt": ("mailbox_metadata", "mailbox_content")}
+RAW_CITATION_RE = re.compile(r"raw/([A-Za-z0-9._-]+) (?:row|line) [1-9][0-9]*")
+# Connector namespaces in activity IDs (activity_pull.ID_NAMESPACE), canonical token -> policy keys.
+ID_NAMESPACE_KEYS = {"cal": ("calendar",), "doc": ("document_activity",),
+                     "mail": ("mailbox_metadata", "mailbox_content")}
+# The engines that read a record first; only they may exclude it as another engagement's (#13.3).
+FIRST_READERS = frozenset({"engine:activity_pull", "engine:narrative_draft"})
 
 # Documented default posture when no policy file or packet policy is available.
 NARROW_DEFAULT = {
@@ -1646,6 +1659,97 @@ def _person_key(name):
     return key if key else object()
 
 
+PIPELINE_WRITERS = ("engine:activity_pull", "engine:narrative_draft", "engine:code_map", "engine:guideline_check")
+
+
+def stage_writers(level):
+    """The engines that have written a packet at stage `level` (0 activity .. 3 governed). Fixed by the stage the
+    packet is read as, never by the carried provenance.engines list, so an added label never widens trust."""
+    return frozenset(PIPELINE_WRITERS[:level + 1])
+
+
+def check_record_sources(packet, level):
+    """#13.7: a field the input can edit never decides which records stay in the comparison. Activity-pull fixes each
+    time entry's source (the timesheet connector) and each signal's source (the export it read) and drops other
+    engagements' rows; narrative-draft, reading the activity packet, may still exclude another engagement's record
+    before any derived value exists. From the drafted stage on every record carries derived state (a draft, a mapping,
+    a verdict), so a record whose source or engagement scope now says another engagement, or whose source no longer
+    matches the export it cites, is an edited intermediate: it is refused, never silently excluded. An exact
+    engine-withheld value (bound to its own hold, #11.4) is not compared. Messages name positions only."""
+    engagement_id = (packet.get("engagement") or {}).get("engagement_id")
+    for i, entry in enumerate(packet.get("time_entries") or []):
+        source = entry.get("source")
+        if not is_withheld(source) and not (isinstance(source, str) and (
+                source == TIMESHEET_SOURCE or source.startswith(TIMESHEET_SOURCE + ":"))):
+            raise SchemaError(f"invalid input: time_entries[{i}].source is not the timesheet connector activity_pull "
+                              f"records ({RECORD_CITATION})")
+        if level >= 1 and other_engagement(entry, engagement_id):
+            raise SchemaError(f"invalid input: time_entries[{i}] now names another engagement, but an earlier stage "
+                              f"kept it in this one; engagement scope is fixed when a record is first read "
+                              f"({ENGAGEMENT_CITATION}, {RECORD_CITATION})")
+    if level < 1:
+        return
+    for i, signal in enumerate(packet.get("activity_signals") or []):
+        if other_engagement(signal, engagement_id):
+            raise SchemaError(f"invalid input: activity_signals[{i}] now names another engagement, but an earlier stage "
+                              f"kept it in this one; engagement scope is fixed when a record is first read "
+                              f"({ENGAGEMENT_CITATION}, {RECORD_CITATION})")
+        source, cites = signal.get("source"), signal.get("citations") or []
+        if is_withheld(source):
+            continue
+        key = source_key(source)
+        bound = False
+        for cite in cites:
+            match = RAW_CITATION_RE.fullmatch(cite) if isinstance(cite, str) and not is_withheld(cite) else None
+            if match and match.group(1) in EXPORT_KEYS:
+                bound = True
+                if key not in EXPORT_KEYS[match.group(1)]:
+                    raise SchemaError(f"invalid input: activity_signals[{i}].source does not match the raw export a "
+                                      f"citation names; a signal's source is fixed when it is read ({RECORD_CITATION})")
+        implied = id_namespace_keys(signal.get("activity_id"))
+        if implied:
+            bound = True
+            if key not in implied:
+                raise SchemaError(f"invalid input: activity_signals[{i}].source does not match the connector namespace "
+                                  f"of its activity ID; a signal's source is fixed when it is read ({RECORD_CITATION})")
+        if not bound and not any(is_withheld(c) for c in cites):
+            raise SchemaError(f"invalid input: activity_signals[{i}] has neither a raw-export citation nor a connector "
+                              f"activity-ID namespace, so its source cannot be reconciled ({RECORD_CITATION})")
+
+
+def id_namespace_keys(activity_id):
+    """The policy keys an activity ID's connector namespace implies (A-CAL-001 -> calendar), canonical form."""
+    tokens = canon_id(activity_id).split()[1:]
+    return {k for token in tokens for k in ID_NAMESPACE_KEYS.get(token, ())}
+
+
+def exclusion_record_agrees(record, packet, level=3):
+    """#13.7: every field of an exclusion record agrees with what the engines write, not only its reason and
+    citations: a disabled-source record keeps the signal's source and that source's policy key, every other record
+    has no source; a record excluded while resolving links at activity-pull names activity_pull as its writer, another
+    engagement's record names an engine that reads records first, and any other names an engine that has run at this
+    stage (stage_writers)."""
+    reason, source, key = record.get("reason"), record.get("source"), record.get("policy_key")
+    if (reason, record.get("citations")) not in exclusion_texts(record, packet):
+        return False
+    pulled = set()
+    rid = _id_key(record.get("activity_id"))
+    for entry in packet.get("time_entries", []):
+        cites = entry.get("citations") or []
+        if cites and rid in {_id_key(a) for a in entry.get("excluded_activity_ids") or []}:
+            pulled.add(pull_missing_reason(entry.get("entry_id"), cites[0]))
+            if key:
+                pulled.add(pull_disabled_reason(entry.get("entry_id"), cites[0], key))
+    run = stage_writers(level)
+    writers = ({"engine:activity_pull"} if reason in pulled else
+               FIRST_READERS & run if reason == OTHER_ENGAGEMENT_REASON else run)
+    if record.get("excluded_by") not in writers:
+        return False
+    if reason == disabled_source_reason(key) and record.get("citations") == [POLICY_CITATION]:
+        return source is not None and (is_withheld(source) or source_key(source) == key)
+    return source is None
+
+
 def check_scope_state(packet):
     """provenance.timekeeper_scope agrees with itself (#12.1, A20): a self-scope lists only the requester and no team
     view; a team scope lists the requester among its people and withholds no one; a withheld colleague is never the
@@ -2300,6 +2404,7 @@ def validate_packet(packet, stage):
     refuse_supplied_markers(packet, exact_ok=True)
     check_unique_ids(packet)
     check_scope_state(packet)
+    check_record_sources(packet, level)
     check_withheld_bindings(packet)
     if level >= 3:
         for key in ("missing_time_report", "exception_list", "prebill_summary"):

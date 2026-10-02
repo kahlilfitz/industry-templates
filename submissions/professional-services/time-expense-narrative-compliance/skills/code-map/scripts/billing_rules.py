@@ -658,38 +658,32 @@ def excluded_ids(packet):
     return [e.get("activity_id") for e in (packet.get("provenance") or {}).get("excluded_signals", [])]
 
 
-NOT_REDERIVED = "recorded by guideline_check but not raised by a re-run of the rules on this governed data"
-
-
 def rendered_flags(recorded, rederived):
     """The flags exception_report prints for one entry (#13.2): the re-run's flags with their re-derived detail
-    and citations. A recorded flag the re-run does not raise (a stricter earlier run) keeps its name and
-    severity with a neutral detail. Supplied detail and citation text is never printed."""
-    out = [{"flag": f["flag"], "severity": f["severity"], "detail": f.get("detail", ""),
-            "citations": list(f.get("citations", []))} for f in rederived]
-    derived = _flag_keys(rederived)
-    for flag in recorded or []:
-        if isinstance(flag, dict) and (flag.get("flag"), flag.get("severity")) not in derived:
-            out.append({"flag": flag.get("flag"), "severity": flag.get("severity"), "detail": NOT_REDERIVED,
-                        "citations": [RECONCILE_CITATION]})
-    return out
+    and citations. reconcile_governed has already refused any recorded flag the re-run does not raise (#13.7), so
+    nothing carried is kept; supplied detail and citation text is never printed."""
+    return [{"flag": f["flag"], "severity": f["severity"], "detail": f.get("detail", ""),
+             "citations": list(f.get("citations", []))} for f in rederived]
 
 
 def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_path=None):
     """Re-run govern() on a copy of governed data; return (problems, rerun). No problems = consistent (#13.2).
 
-    - Entries: the recorded verdict may never be less severe than the re-run's, and every re-run
-      (flag, severity) must be recorded. Extra recorded flags are allowed (a stricter earlier run). An entry
-      whose draft was withheld (#11.2) is re-checked on its own narrative like any other, with the
-      embedded_instruction hold merged in: a reject stays a reject.
+    - Entries: the recorded verdict may never be less severe than the re-run's, every re-run (flag, severity)
+      must be recorded, and then the whole compliance object must equal the re-run's (#13.7): no carried extra
+      flag, stricter verdict, source, confidence or citation is kept. An entry whose draft was withheld (#11.2)
+      is re-checked on its own narrative like any other, with the embedded_instruction hold merged in: a reject
+      stays a reject.
     - Drafts: every entry's draft must equal the re-run's, which starts from the draft re-derived from the entry and
       its linked activity (signal_policy.derive_draft) and applies guideline-check's withholding (#13.5).
     - Missing time: the recorded items must equal the re-run's exactly.
     - Summary: totals, hours, verdict counts, missing-time hours, the exception count, the period and the
-      excluded signal IDs must match the line items, the packet period and provenance.excluded_signals.
+      excluded signal IDs must match the line items, the packet period and provenance.excluded_signals, and the
+      whole summary (source, confidence, citations) must equal the re-run's.
     - Exclusions: provenance.excluded_signals must cover every entry's excluded links, list no signal still
       present, be unchanged when the signal policy is re-applied, and carry only the engines' own reason and
-      citation wording (signal_policy.exclusion_texts); provenance.excluded_entries only the #13.3 citation.
+      citation wording with a source, policy key and writer that agree (signal_policy.exclusion_record_agrees);
+      provenance.excluded_entries only the #13.3 citation and an engine that reads entries first.
     - Signal policy: the re-run applies the same effective policy the report uses (config_path, the report's
       --signal-config), so a narrower report-time policy that excludes evidence an entry was governed on is a
       mismatch, never a compliant entry rendered from excluded evidence.
@@ -719,6 +713,15 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_
         if rank[recorded["verdict"]] < rank[floor] or absent:
             problems.append(f"{where}: recorded verdict {recorded['verdict']}, the rules give {floor}"
                             + (f" (flags not recorded: {', '.join(absent)})" if absent else ""))
+        elif recorded != want["compliance"]:
+            # #13.7: the whole compliance object is compared (verdict, every flag with its detail and citations,
+            # source, confidence, required elements, evidence hours, citations); a carried extra flag or a stricter
+            # verdict the rules do not give is not kept either. Only the engine's own field names are named.
+            fields = [k for k in want["compliance"] if recorded.get(k) != want["compliance"].get(k)]
+            extra = len(set(recorded) - set(want["compliance"]))
+            problems.append(f"{where}.compliance does not match its re-derivation (differing: "
+                            f"{', '.join(fields + ([f'{extra} unexpected field(s)'] if extra else []))}; "
+                            f"{signal_policy.RECORD_CITATION})")
     for i, (got, want) in enumerate(zip(supplied, rerun["time_entries"])):
         if got.get("draft") != want["draft"]:
             fields = [k for k in want["draft"] if (got.get("draft") or {}).get(k) != want["draft"].get(k)]
@@ -736,6 +739,13 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_
     derived_exceptions = sum(1 for e in supplied if e["compliance"].get("flags")) + bool(packet["missing_time_report"])
     if "exception_count" in summary and summary["exception_count"] != derived_exceptions:
         problems.append("prebill_summary.exception_count does not match the line items")
+    if summary != rerun["prebill_summary"]:
+        # #13.7: every summary field (source, confidence and citations included) equals the re-run's.
+        fields = [k for k in rerun["prebill_summary"] if summary.get(k) != rerun["prebill_summary"].get(k)]
+        extra = len(set(summary) - set(rerun["prebill_summary"]))
+        problems.append(f"prebill_summary does not match its re-derivation (differing: "
+                        f"{', '.join(fields + ([f'{extra} unexpected field(s)'] if extra else []))}; "
+                        f"{signal_policy.RECORD_CITATION})")
     if len(packet["exception_list"]) != derived_exceptions:
         problems.append("exception_list does not match the line items")
     else:
@@ -770,9 +780,14 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown", config_
     # Exclusion reasons and citations are printed only when they are the engines' own wording (#13.2).
     provenance = packet.get("provenance") or {}
     for i, record in enumerate(provenance.get("excluded_signals", [])):
-        if (record.get("reason"), record.get("citations")) not in signal_policy.exclusion_texts(record, packet):
-            problems.append(f"provenance.excluded_signals[{i}] reason or citations are not the signal policy's wording")
+        if not signal_policy.exclusion_record_agrees(record, packet):
+            problems.append(f"provenance.excluded_signals[{i}] reason, citations, source or writer are not the "
+                            "signal policy's own record")
+    first_readers = signal_policy.FIRST_READERS
     for i, record in enumerate(provenance.get("excluded_entries", [])):
         if record.get("citations") != [signal_policy.ENGAGEMENT_CITATION]:
             problems.append(f"provenance.excluded_entries[{i}] citations are not the engagement-identity rule's")
+        if record.get("excluded_by") not in first_readers:
+            problems.append(f"provenance.excluded_entries[{i}] names a writer that does not read entries first "
+                            f"({signal_policy.RECORD_CITATION})")
     return problems, rerun

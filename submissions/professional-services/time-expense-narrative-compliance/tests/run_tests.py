@@ -1565,8 +1565,11 @@ def integrity_tests(tmp):
         gov["time_entries"], gov["missing_time_report"])
     _clean_counts(gov)
     gov["prebill_summary"]["exception_count"] = len(gov["exception_list"])
-    code, msg, _ = report_for(tmp, "i3-stricter", gov)
-    check("qa2 item3 control: a stricter recorded verdict with consistent totals is accepted", code == 0, msg)
+    code, msg, report = report_for(tmp, "i3-stricter", gov)
+    # #13.7 (Mobilization round 13): a carried extra flag or stricter verdict is kept only when the rules re-derive it.
+    check("qa2 item3 a stricter recorded verdict the rules do not re-derive (consistent totals) -> refused, no report",
+          code == 1 and report == "" and "compliance does not match its re-derivation" in msg
+          and "flagged by an earlier run" not in msg, msg)
     code, msg, report = report_for(tmp, "i3-golden", _golden("scenario-b-drama", "governed.json"))
     check("qa2 item3 control: genuine governed B reconciles", code == 0 and report, msg)
 
@@ -1751,8 +1754,8 @@ def integrity2_tests(tmp):
     first = entry(gov, "TE-B-001")["compliance"]["flags"][0]
     first.update(detail="FORGED DETAIL: no issue found", citations=["forged-citation.md #0"])
     code, msg, report = report_for(tmp, "r3", gov)
-    check("qa3 item3 forged flag detail and citation are never printed; the report equals the golden",
-          code == 0 and "FORGED" not in report and "forged-citation" not in report and report == golden_b_report, msg)
+    check("qa3 item3 forged flag detail and citation -> refused (#13.7 compares every flag field), nothing printed "
+          "or echoed", code == 1 and report == "" and "FORGED" not in msg and "forged-citation" not in msg, msg)
     gov = _golden("scenario-b-drama", "governed.json")
     stricter = entry(gov, "TE-B-002")
     stricter["compliance"].update(verdict="hold_for_review", flags=[{
@@ -1765,9 +1768,11 @@ def integrity2_tests(tmp):
     _clean_counts(gov)
     gov["prebill_summary"]["exception_count"] = len(gov["exception_list"])
     code, msg, report = report_for(tmp, "r3-extra", gov)
-    check("qa3 item3 a recorded flag the re-run does not raise prints a neutral detail, not the supplied one",
-          code == 0 and "SUPPLIED DETAIL" not in report and "supplied-citation" not in report
-          and getattr(br, "NOT_REDERIVED", "\0") in report and "TE-B-002" in section(report, "## Held for review", "## Needs review"), msg)
+    check("qa3 item3 a recorded flag the re-run does not raise -> refused (#13.7), the supplied detail never printed",
+          code == 1 and report == "" and "SUPPLIED DETAIL" not in msg and "supplied-citation" not in msg, msg)
+    check("qa3 item3 rendered_flags renders only re-derived flags, never a carried extra",
+          br.rendered_flags([{"flag": "embedded_instruction", "severity": "hold_for_review", "detail": "SUPPLIED"}], [])
+          == [], br.rendered_flags([{"flag": "embedded_instruction", "severity": "hold_for_review"}], []))
 
     # 4. The submitted phase code is compared too.
     for label, phase, task, mismatch in (("phase-only", "AN", "DL300", True), ("task-only", "DL", "AN200", True),
@@ -1938,8 +1943,8 @@ INVENTORY = {
     "time_entries[].compliance.flags[].severity": "closed",
     "time_entries[].compliance.flags[].detail": "rederived",
     "time_entries[].compliance.flags[].citations[]": "rederived",
-    "time_entries[].compliance.flags[].source": "not_rendered",
-    "time_entries[].compliance.source": "not_rendered",
+    "time_entries[].compliance.flags[].source": "reconciled",  # #13.7: compared field by field with the re-run
+    "time_entries[].compliance.source": "reconciled",  # #13.7: compared field by field with the re-run
     "time_entries[].compliance.citations[]": "reconciled",  # A22: equals its exception item's citations
     "time_entries[].source": "screened:entry",
     "time_entries[].citations[]": "screened:entry",
@@ -1974,8 +1979,8 @@ INVENTORY = {
     "prebill_summary.period.start": "closed",
     "prebill_summary.period.end": "closed",
     "prebill_summary.excluded_signal_ids[]": "reconciled",
-    "prebill_summary.source": "not_rendered",
-    "prebill_summary.citations[]": "not_rendered",
+    "prebill_summary.source": "reconciled",  # #13.7: compared field by field with the re-run
+    "prebill_summary.citations[]": "reconciled",  # #13.7: compared field by field with the re-run
     "provenance.engines[]": "not_rendered",
     "provenance.withheld_fields[]": "closed",  # #11.4 placeholder ledger: anchored path pattern
     "provenance.generated_at": "closed",
@@ -1988,7 +1993,7 @@ INVENTORY = {
     "provenance.engagement_identity.recorded_by": "closed",
     "provenance.engagement_identity.citations[]": "not_rendered",
     "provenance.excluded_signals[].activity_id": "reconciled",
-    "provenance.excluded_signals[].source": "not_rendered",
+    "provenance.excluded_signals[].source": "reconciled",  # #13.7: agrees with its reason and policy key
     "provenance.excluded_signals[].policy_key": "closed",
     "provenance.excluded_signals[].reason": "reconciled",
     "provenance.excluded_signals[].excluded_by": "closed",
@@ -2237,11 +2242,11 @@ def integrity3_tests(tmp):
           and "1 activity signal(s) and 0 time entr(ies) scoped to another engagement" in report, msg)
     coded = _golden("scenario-a-happy", "coded.json")
     coded["activity_signals"].append(copy.deepcopy(OTHER_CLIENT_SIGNAL))
-    code, msg, _, gov = _engine_on(tmp, "x3-gc", "guideline_check", "--coded", coded)
-    check("qa4 item4 reproducer: guideline_check excludes the signal; all entries keep their verdicts",
-          code == 0 and gov["prebill_summary"]["verdict_counts"] == {"compliant": 3}
-          and no_other(json.dumps({k: v for k, v in gov.items() if k != "provenance" and k != "prebill_summary"})), msg)
-    forged = copy.deepcopy(gov)
+    code, msg, wrote, gov = _engine_on(tmp, "x3-gc", "guideline_check", "--coded", coded)
+    # #13.7: from the drafted stage on, a record naming another engagement is an edited intermediate: refused.
+    check("qa4 item4 reproducer: another engagement's signal added to coded data -> guideline_check refuses, no output",
+          code == 1 and not wrote and no_other(msg) and "#13.7" in msg, msg)
+    forged = _golden("scenario-a-happy", "governed.json")
     forged["missing_time_report"].append({k: OTHER_CLIENT_SIGNAL[k] for k in ("activity_id", "person", "date",
                                           "activity_class", "duration_hours", "subject")})
     forged["missing_time_report"][-1].update(finding="activity has no time entry", source="engine:guideline_check",
@@ -2256,16 +2261,9 @@ def integrity3_tests(tmp):
         sig_x = dict(copy.deepcopy(OTHER_CLIENT_SIGNAL), source="connector:m365-calendar")
         sig_x.update(change)
         coded["activity_signals"].append(sig_x)
-        code, msg, _, gov = _engine_on(tmp, "x3-var", "guideline_check", "--coded", coded)
-        code2, msg2, report = report_for(tmp, "x3-var", gov) if gov else (1, "no governed", "")
-        # A look-alike connector is an unknown source (#10.1): it is excluded and listed by ID like any other
-        # unapproved source; only a declared other-engagement scope (#13.3) hides the ID as well.
-        foreign = "engagement_id" in change
-        check(f"qa4 item4 signal with {label} is excluded and its text never rendered",
-              code == 0 and code2 == 0 and all(s["activity_id"] != "OTHER-CLIENT-CAL-001" for s in gov["activity_signals"])
-              and "contoso" not in _governed_view(gov) and "contoso" not in report.lower()
-              and (no_other(report) if foreign else "OTHER-CLIENT-CAL-001: unknown or unapproved signal source" in report),
-              msg or msg2)
+        code, msg, wrote, _ = _engine_on(tmp, "x3-var", "guideline_check", "--coded", coded)
+        check(f"qa4 item4 signal with {label} added to coded data -> refused (#13.7), its text never echoed",
+              code == 1 and not wrote and "contoso" not in msg.lower(), msg)
     coded = _golden("scenario-a-happy", "coded.json")
     own = dict(copy.deepcopy(OTHER_CLIENT_SIGNAL), activity_id="A-CAL-009", subject="billing controls follow-up",
                purpose="confirm the workflow", deliverable="Billing Workflow Requirements Specification",
@@ -3409,7 +3407,8 @@ def r7_tests(tmp):
     act = _golden("scenario-b-drama", "activity.json")
     mail = act["provenance"]["excluded_signals"][0]
     act["provenance"]["excluded_signals"] += [
-        dict(mail, activity_id=t, reason=sp.disabled_source_reason(mail["policy_key"]), citations=[sp.POLICY_CITATION])
+        dict(mail, activity_id=t, source="connector:mailbox-metadata", reason=sp.disabled_source_reason(mail["policy_key"]),
+             citations=[sp.POLICY_CITATION])
         for t in R7_SPLIT]
     r = _qa5_run(tmp, "r7-unlinked-ids", act)
     check("r7 chain: two unlinked excluded IDs that read as one instruction are withheld and hold the packet; the "
@@ -3422,8 +3421,8 @@ def r7_tests(tmp):
     act["provenance"]["excluded_signals"] += [
         dict(mail, activity_id=R7_SPLIT[0], policy_key=None, reason=sp.unlinked_reason("TE-B-002"),
              citations=[sp.POLICY_CITATION]),
-        dict(mail, activity_id=R7_SPLIT[1], reason=sp.disabled_source_reason(mail["policy_key"]),
-             citations=[sp.POLICY_CITATION])]
+        dict(mail, activity_id=R7_SPLIT[1], source="connector:mailbox-metadata",
+             reason=sp.disabled_source_reason(mail["policy_key"]), citations=[sp.POLICY_CITATION])]
     r = _qa5_run(tmp, "r7-linked-ids", act)
     check("r7 chain: a linked and an unlinked excluded ID that read as one instruction are withheld in provenance and "
           "in the linking entry; TE-B-002 is held, the report reconciles and never prints the text",
@@ -4541,7 +4540,8 @@ def r12_tests(tmp):
           "no output", refused(at_stage("code_map", "--drafted", pkt)))
     pkt = _golden(B, "drafted.json")
     pkt["activity_signals"].append(dict(copy.deepcopy(signal_of(pkt, "B-DOC-004")), activity_id="B-MAIL-002",
-                                        source="connector:mailbox-metadata"))
+                                        source="connector:mailbox-metadata",
+                                        citations=["raw/mailbox-summary.txt row 2"]))
     check("r12 A20 code_map: a signal from a source activity_pull skipped (not read) -> refused, no output",
           refused(at_stage("code_map", "--drafted", pkt), "#13.6"))
     pkt = _golden(B, "drafted.json")
@@ -4746,6 +4746,162 @@ def r10qa_tests(tmp):
           (record["reason"], record["citations"]) in sp.exclusion_texts(record, gov))
 
 
+def r13_tests(tmp):
+    """Mobilization round 13 class sweep (#13.7): reconciliation never selects records by a field the input can
+    edit. Re-derived items are matched on the canonical key alone and every field is compared (source, type, status,
+    confidence, citations); a carried extra is kept only when the rules re-derive it; an edited source or scope never
+    takes a record out of the comparison."""
+    sp = MODULES["exception_report"].signal_policy
+    br = MODULES["exception_report"].billing_rules
+    B = "scenario-b-drama"
+    serial = iter(range(10 ** 6))
+
+    def at_stage(engine, flag, packet):
+        name = f"r13-{next(serial)}"
+        if engine == "exception_report":
+            code, msg, report = report_for(tmp, name, packet)
+            return code, msg, report != ""
+        code, msg, wrote, _ = _engine_on(tmp, name, engine, flag, packet)
+        return code, msg, wrote
+
+    def refused(result, *marks):
+        code, msg, wrote = result
+        return code == 1 and not wrote and "Traceback" not in msg and all(m in msg for m in marks)
+
+    def signal_of(pkt, aid):
+        return next(x for x in pkt["activity_signals"] if x["activity_id"] == aid)
+
+    def mail_record(pkt):
+        return next(r for r in pkt["provenance"]["excluded_signals"] if r["activity_id"] == "B-MAIL-001")
+
+    # --- Report stage: each single-field edit the report used to accept is now refused ---------------------------
+    def comp(pkt, eid="TE-B-001"):
+        return entry(pkt, eid)["compliance"]
+
+    edits = (
+        ("exclusion record source (None -> the mailbox connector)",
+         lambda g: mail_record(g).update(source="connector:mailbox-metadata"), "excluded_signals[0]"),
+        ("exclusion record writer (activity_pull -> code_map)",
+         lambda g: mail_record(g).update(excluded_by="engine:code_map"), "excluded_signals[0]"),
+        ("exclusion record writer naming an engine that has not run, with provenance.engines widened to match",
+         lambda g: (mail_record(g).update(excluded_by="engine:exception_report"),
+                    g["provenance"]["engines"].append("exception_report/1.0.4")), "excluded_signals[0]"),
+        ("compliance.source", lambda g: comp(g).update(source="engine:code_map"), "differing: source"),
+        ("compliance.confidence", lambda g: comp(g).update(confidence=0.11), "differing: confidence"),
+        ("compliance.citations", lambda g: comp(g).update(citations=["client-billing-guidelines.md #1.1"]),
+         "differing: citations"),
+        ("a flag's source", lambda g: comp(g)["flags"][0].update(source="engine:code_map"), "differing: flags"),
+        ("a flag's confidence", lambda g: comp(g)["flags"][0].update(confidence=0.01), "differing: flags"),
+        ("prebill_summary.source", lambda g: g["prebill_summary"].update(source="engine:code_map"),
+         "prebill_summary does not match"),
+        ("prebill_summary.citations", lambda g: g["prebill_summary"].update(citations=["client-billing-guidelines.md #1.1"]),
+         "prebill_summary does not match"),
+        ("a time entry's source (another connector)",
+         lambda g: entry(g, "TE-B-002").update(source="connector:timesheet-import"), "#13.7"),
+        ("a time entry's source scoped to another engagement",
+         lambda g: entry(g, "TE-B-001").update(source="connector:timesheet:OTHER-999"), "#13.7"),
+        ("a time entry's engagement_id naming another engagement",
+         lambda g: entry(g, "TE-B-004").update(engagement_id="OTHER-999"), "#13.7"),
+        ("a missing-time signal relabelled to another enabled source",
+         lambda g: signal_of(g, "B-DOC-003").update(source="connector:m365-calendar"), "#13.7"),
+        ("a missing-time signal scoped to another engagement",
+         lambda g: signal_of(g, "B-DOC-004").update(source="connector:engagement-document-activity:OTHER-999"),
+         "#13.7"),
+        ("a missing-time item's source", lambda g: g["missing_time_report"][0].update(source="engine:code_map"), ""),
+    )
+    for label, mutate, mark in edits:
+        gov = _golden(B, "governed.json")
+        mutate(gov)
+        result = at_stage("exception_report", "--governed", gov)
+        check(f"r13 report: editing only {label} -> refused, no report, nothing echoed",
+              refused(result, mark) and "OTHER-999" not in result[1] and "timesheet-import" not in result[1], result[:2])
+
+    gov = _golden(B, "governed.json")
+    comp(gov)["flags"].append({"flag": "minimum_detail", "severity": "hold_for_review", "detail": "x",
+                               "source": "engine:guideline_check", "confidence": 0.9,
+                               "citations": ["client-billing-guidelines.md #1.3"]})
+    gov["exception_list"] = br.exception_items(gov["time_entries"], gov["missing_time_report"])
+    _clean_counts(gov)
+    gov["prebill_summary"]["exception_count"] = len(gov["exception_list"])
+    check("r13 report: a carried extra flag that leaves the verdict unchanged (the rules do not raise it) -> refused",
+          refused(at_stage("exception_report", "--governed", gov), "compliance does not match its re-derivation"))
+
+    act = _golden("scenario-a-happy", "activity.json")
+    act["time_entries"].append(dict(copy.deepcopy(entry(act, "TE-A-002")), entry_id="TE-OTHER-1",
+                                    engagement_id="OTHER-999", narrative="Other engagement work"))
+    _, _, gov_x = through_governed(tmp, "r13-entry", act)
+    check("r13 control: an entry another engagement scopes in the activity packet is excluded by narrative_draft "
+          "(the stage that first reads it) and the report accepts it",
+          gov_x["provenance"]["excluded_entries"][0]["excluded_by"] == "engine:narrative_draft"
+          and at_stage("exception_report", "--governed", copy.deepcopy(gov_x))[0] == 0)
+    for writer in ("engine:guideline_check", "engine:exception_report"):
+        g = copy.deepcopy(gov_x)
+        g["provenance"]["excluded_entries"][0]["excluded_by"] = writer
+        check(f"r13 report: an excluded entry's writer edited to {writer} (not a first reader) -> refused",
+              refused(at_stage("exception_report", "--governed", g), "excluded_entries[0]"))
+
+    # --- Intermediate stages: an edited source or scope is refused, never a silent exclusion -------------------------
+    for golden, engine, flag in (("drafted.json", "code_map", "--drafted"), ("coded.json", "guideline_check", "--coded")):
+        cases = (
+            ("TE-B-001 (a reject) scoped to another engagement by its source",
+             lambda p: entry(p, "TE-B-001").update(source="connector:timesheet:OTHER-999")),
+            ("TE-B-004 scoped to another engagement by engagement_id",
+             lambda p: entry(p, "TE-B-004").update(engagement_id="OTHER-999")),
+            ("TE-B-002's source changed to another connector",
+             lambda p: entry(p, "TE-B-002").update(source="connector:timesheet-import")),
+            ("B-CAL-003 (TE-B-003's duplicate meeting) scoped to another engagement",
+             lambda p: signal_of(p, "B-CAL-003").update(source="connector:m365-calendar:OTHER-999")),
+            ("B-CAL-003 scoped to another engagement by engagement_id",
+             lambda p: signal_of(p, "B-CAL-003").update(engagement_id="OTHER-999")),
+            ("B-CAL-003 relabelled to another enabled source",
+             lambda p: signal_of(p, "B-CAL-003").update(source="connector:engagement-document-activity")),
+            ("B-DOC-003 relabelled with its citations removed (the ID namespace still binds it)",
+             lambda p: signal_of(p, "B-DOC-003").update(source="connector:m365-calendar", citations=[])),
+            ("B-DOC-003 renamed out of its namespace with its citations removed",
+             lambda p: signal_of(p, "B-DOC-003").update(activity_id="B-X-003", citations=[])),
+        )
+        for label, mutate in cases:
+            pkt = _golden(B, golden)
+            mutate(pkt)
+            result = at_stage(engine, flag, pkt)
+            check(f"r13 {engine}: {label} -> refused, no output, nothing echoed",
+                  refused(result) and "OTHER-999" not in result[1] and "timesheet-import" not in result[1], result[:2])
+    pkt = _golden(B, "activity.json")
+    entry(pkt, "TE-B-002")["source"] = "connector:timesheet-import"
+    check("r13 narrative_draft: a time entry whose source is not the timesheet connector -> refused, no output",
+          refused(at_stage("narrative_draft", "--activity", pkt), "#13.7"))
+
+    # --- Controls --------------------------------------------------------------------------------------------------
+    for sc in SCENARIOS:
+        for golden, engine, flag in (("activity.json", "narrative_draft", "--activity"),
+                                     ("drafted.json", "code_map", "--drafted"),
+                                     ("coded.json", "guideline_check", "--coded"),
+                                     ("governed.json", "exception_report", "--governed")):
+            check(f"r13 control: {sc} {golden} passes {engine} unchanged",
+                  at_stage(engine, flag, _golden(sc, golden))[0] == 0)
+    act = _golden("scenario-a-happy", "activity.json")
+    act["activity_signals"].append(dict(copy.deepcopy(OTHER_CLIENT_SIGNAL), source="connector:m365-calendar-x"))
+    _, _, gov = through_governed(tmp, "r13-lookalike", act)
+    code, msg, report = report_for(tmp, "r13-lookalike", gov)
+    check("r13 control: a look-alike connector in the activity packet is still excluded as an unknown source and "
+          "listed by ID", code == 0 and "OTHER-CLIENT-CAL-001: unknown or unapproved signal source" in report, msg)
+    gov = _golden(B, "governed.json")
+    check("r13 unit: the engines' own exclusion records agree field by field; ID namespaces imply their sources",
+          all(sp.exclusion_record_agrees(r, gov) for r in gov["provenance"]["excluded_signals"])
+          and sp.id_namespace_keys("B-CAL-003") == {"calendar"} and sp.id_namespace_keys("b_doc_003") == {"document_activity"}
+          and sp.id_namespace_keys("A-MAIL-1") == {"mailbox_metadata", "mailbox_content"}
+          and sp.id_namespace_keys("CAL-001") == set() and sp.stage_writers(1) == {"engine:activity_pull",
+                                                                                  "engine:narrative_draft"})
+    record = dict(mail_record(gov), source="connector:mailbox-metadata",
+                  reason=sp.disabled_source_reason("mailbox_metadata"), citations=[sp.POLICY_CITATION],
+                  excluded_by="engine:code_map")
+    check("r13 unit: a later stage's disabled-source record keeps the signal's source; without it, or with another "
+          "source's, it disagrees",
+          sp.exclusion_record_agrees(record, gov)
+          and not sp.exclusion_record_agrees(dict(record, source=None), gov)
+          and not sp.exclusion_record_agrees(dict(record, source="connector:m365-calendar"), gov))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         golden_tests(tmp)
@@ -4771,6 +4927,7 @@ def main():
         r11_tests(tmp)
         r12_tests(tmp)
         r10qa_tests(tmp)
+        r13_tests(tmp)
     failed = [r for r in RESULTS if not r[1]]
     for label, ok, detail in RESULTS:
         detail = str(detail).encode("ascii", "backslashreplace").decode("ascii") if detail else ""
