@@ -34,16 +34,14 @@ def adapt(p):
 def check_scope(s):
     need(isinstance(s,dict),f"scope input must be a JSON object, got {type(s).__name__}; fail closed")
     if s.get("contract_version")!=CONTRACT_VERSION: raise InputError(f"expected contract {CONTRACT_VERSION} in scope input")
-    field(s,"scope_summary","obj","scope",required=True); check_contract(s,"scope")  # confidentiality-and-ethical-wall-rules.md #1.3
-def own_words(s):
-    e=s.get("engagement") or {}; j=s.get("joiner") or {}
-    return words(e.get("client_name"),e.get("matter_id"),e.get("engagement_id"),e.get("title"),*(e.get("affiliates") or []),j.get("person"),*[r.get("person") for r in s.get("team_roster",[])],*(s.get("scope_summary") or {}).get("systems",[]))
+    field(s,"scope_summary","obj","scope",required=True); check_contract(s,"scope","scope")  # confidentiality-and-ethical-wall-rules.md #1.3
+    check_hold_evidence(s,"scope")  # holds are cumulative: a placeholder, escalation or held status without its hold is refused (#1.4)
 def rel(scope,item):
     ss=scope["scope_summary"]
     over=sorted(toks(item.get("title") or "",item.get("description") or ""," ".join(item.get("tags") or []),item.get("category") or "") & toks((scope.get("joiner") or {}).get("role") or ""," ".join(ss.get("objectives",[]))," ".join(ss.get("in_scope",[]))," ".join(ss.get("deliverables",[]))))
     return (round(min(.99,.55+.08*len(over)),2) if over else .4),over
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--scope",required=True); ap.add_argument("--closeout",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
+    ap=argparse.ArgumentParser(); ap.add_argument("--scope",required=True); ap.add_argument("--closeout",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
     s=load_json(a.scope); check_scope(s); set_trusted_domains((s.get("engagement") or {}).get("trusted_domains"))
     # Both upstream documents are screened whole (every string, holds included) and redacted before use (#4.1, #4.3).
     s,sh=screen_upstream(s,"scope",ENGINE)
@@ -67,14 +65,17 @@ def main():
     # The closed engagement is usually another client: its name and IDs never reach this pack (#3.3).
     ce=c["engagement"]; mine=s.get("engagement") or {}
     terms=client_terms([v for k_,v in (("client_name",ce.get("client_name")),("engagement_id",ce.get("engagement_id"))) if v and norm(v)!=norm(mine.get(k_) or "")],own_words(s))
+    # Every other client named in the wall register is screened out here too, not only at wall_check (#3.3).
+    terms+=[t for t in register_terms(a.wall_register,mine,own_words(s)) if t[0] not in {x[0] for x in terms}]
     # Upstream scope holds are supplied content: screened for other-client names and steering text (#3.3, #4.3).
     up,uh=screen_holds(s.get("holds",[]),terms,ENGINE,"scope.holds"); holds=dedup_holds(up+sh+own_h+uh)
     if sh or own_h: s.setdefault("escalations",[]).append(upstream_escalation(len(sh)+len(own_h)))
     if any(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh): s.setdefault("escalations",[]).append(other_escalation(sum(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh)))
     if terms:
-        s["prior_knowledge_candidates"]=inc; s,oh=screen_other(s,terms,ENGINE,"matched."); inc=s.pop("prior_knowledge_candidates")
+        s["prior_knowledge_candidates"]=inc; s["excluded_items"]=exc; s,oh=screen_other(s,terms,ENGINE,"matched."); inc=s.pop("prior_knowledge_candidates"); exc=s.pop("excluded_items")
         if oh: holds=dedup_holds(holds+oh); s.setdefault("escalations",[]).append(other_escalation(len(oh)))
     status="ready" if inc and not holds else "hold" if holds else "empty"
     if not inc and not holds: s.setdefault("escalations",[]).append("No released, permissioned prior-knowledge records matched the engagement (knowledge-reuse-rules.md #2.1,#2.2,#3.1)")
-    s["prior_knowledge_candidates"]=inc; s["knowledge_digest"]={"status":status,"items":inc,"excluded_items":exc,"source":ENGINE,"confidence":.92 if inc else .7,"citation":"knowledge-reuse-rules.md #1.1-#3.2"}; s["holds"]=holds; s.setdefault("provenance",{}).setdefault("engines",[]).append(f"knowledge_match/{VERSION}"); s["provenance"]["generated_at"]=ts; dump_json(a.out,s)
+    s["prior_knowledge_candidates"]=inc; s["knowledge_digest"]={"status":status,"items":inc,"excluded_items":exc,"source":ENGINE,"confidence":.92 if inc else .7,"citation":"knowledge-reuse-rules.md #1.1-#3.2"}; s["holds"]=holds; s.setdefault("provenance",{}).setdefault("engines",[]).append(f"knowledge_match/{VERSION}"); s["provenance"]["generated_at"]=ts
+    check_contract(s,"matched","matched"); dump_json(a.out,s)  # the document written is held to the same contract (#1.3)
 if __name__=="__main__": guard(main)

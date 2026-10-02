@@ -22,7 +22,7 @@ After `knowledge-match`, before anything is drafted for the joiner, and whenever
 `matched.json`, `raw/ethical-wall-register.csv`, `raw/workspace-inventory.csv`.
 ## Steps
 1. Run `python3 scripts/wall_check.py --matched matched.json --wall-register <raw>/ethical-wall-register.csv --workspace-inventory <raw>/workspace-inventory.csv --out governed.json --generated-at <ISO>`.
-2. Run `python3 scripts/access_checklist.py --governed governed.json --workspace-inventory <raw>/workspace-inventory.csv --out access-checklist.json --pack-out mobilization-pack.md --generated-at <ISO>`.
+2. Run `python3 scripts/access_checklist.py --governed governed.json --wall-register <raw>/ethical-wall-register.csv --workspace-inventory <raw>/workspace-inventory.csv --out access-checklist.json --pack-out mobilization-pack.md --generated-at <ISO>`.
 3. Report `wall_decision.status` verbatim. Missing or malformed register, no joiner, unknown status or no named clear row all hold (`confidentiality-and-ethical-wall-rules.md #2.1,#2.2`); any restricted row denies (`#2.3`).
 4. Report every access row with its status and permission; admin/owner is never requested (`role-access-matrix.md #2.2`). `not_requested_invalid_row` and `hold_pending_wall_review` rows keep the pack on hold; report `mobilization_pack.hold_reasons` (`workspace-inventory-rules.md #1.3,#3.3`).
 5. Use only the engine's `may_not_access_discuss` wording in any briefing (`#3.1`). Briefing topics or workspace names that named another client or matter are already replaced or shown by ID (`#3.2`); never restore them.

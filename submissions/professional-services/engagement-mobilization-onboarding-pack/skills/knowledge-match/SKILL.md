@@ -19,8 +19,8 @@ After `engagement-retrieve`, when Closeout `governed.json` is available.
 ## Inputs
 `scope.json` and Scenario 01 `governed.json` (`ps.engagement-closeout-knowledge-harvest.v1`).
 ## Steps
-1. Run `python3 scripts/knowledge_match.py --scope scope.json --closeout <closeout governed.json> --out matched.json --generated-at <YYYY-MM-DDTHH:MM:SSZ>`.
-2. If the engine exits non-zero (wrong contract, missing or malformed `knowledge_record`/`released_assets`, wrong field types such as a string `confidence` or non-boolean `review_required`), stop and report (see Failure handling; `knowledge-reuse-rules.md #1.4`).
+1. Run `python3 scripts/knowledge_match.py --scope scope.json --closeout <closeout governed.json> --wall-register <raw>/ethical-wall-register.csv --out matched.json --generated-at <YYYY-MM-DDTHH:MM:SSZ>`.
+2. If the engine exits non-zero (wrong contract, missing or malformed `knowledge_record`/`released_assets`, wrong field types such as a string `confidence` or non-boolean `review_required`, a scope.json that fails its stage schema or carries hold evidence without its hold), stop and report (see Failure handling; `knowledge-reuse-rules.md #1.4`).
 3. Report included items with `relevance_score`, `review_status` and citations; `pending_practice_review` items may be referenced by title and citation only (`knowledge-reuse-rules.md #2.3`).
 4. Report `excluded_items` by ID and reason; never describe held or candidate assets.
 5. Hand `matched.json` to `wall-check`.

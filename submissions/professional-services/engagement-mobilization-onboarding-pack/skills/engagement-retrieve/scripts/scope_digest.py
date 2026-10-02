@@ -78,8 +78,11 @@ def main():
     trusted=list(set_trusted_domains(declared))
     h1,sow=scan_lines(sow,"raw/sow-extract.md"); h2,letter=scan_lines(letter,"raw/engagement-letter-extract.md"); h3,pursuit=scan_lines(pursuit,"raw/pursuit-record.md")
     st,sth=screen_upstream(st,"upstream/staffing",ENGINE)  # every upstream string screened and redacted before use (#4.1, #4.3)
-    holds=h1+h2+h3+scan_rows(rows,"raw/confirmed-roster.csv")+sth
-    smap,prop=statuses(st); roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]
+    # Other clients named in the wall register are screened out of the staffing upstream as well (#3.3).
+    own=words(fld(sow,"Client"),fld(sow,"Engagement ID"),fld(sow,"Matter ID"),fld(sow,"Title"),*((st.get("engagement") or {}).get("affiliates") or []),*[r.get("person") for r in rows])
+    st,soh=screen_other(st,register_terms(os.path.join(a.raw_dir,"ethical-wall-register.csv"),{"client_name":fld(sow,"Client"),"matter_id":fld(sow,"Matter ID")},own),ENGINE,"upstream/staffing.")
+    holds=h1+h2+h3+scan_rows(rows,"raw/confirmed-roster.csv")+sth+soh
+    smap,prop=statuses(st); roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]+([other_escalation(len(soh))] if soh else [])
     for i,r in enumerate(rows,2):
         name=(r.get("person") or "").strip()
         if not name: continue
@@ -129,5 +132,5 @@ def main():
         body,oh=screen_other(body,client_terms([eng.get("client_name"),eng.get("engagement_id")],own),ENGINE,"scope.")
         if oh: holds=dedup_holds(holds+oh); body["escalations"].append(other_escalation(len(oh)))
     out={"contract_version":CONTRACT_VERSION,"run_metadata":{"generated_at":ts,"demo_scenario":a.scenario},**body,"holds":holds,"provenance":{"engines":[f"scope_digest/{VERSION}"],"generated_at":ts,"sources":["raw/sow-extract.md","raw/engagement-letter-extract.md","raw/pursuit-record.md","raw/confirmed-roster.csv","upstream/staffing"]}}
-    dump_json(a.out,out)
+    check_contract(out,"scope","scope"); dump_json(a.out,out)  # the document written is held to the contract (#1.3)
 if __name__=="__main__": guard(main)

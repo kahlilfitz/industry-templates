@@ -1,4 +1,5 @@
 import csv, functools, hashlib, json, re, unicodedata
+import contract_validate as _cv
 from datetime import datetime
 CONTRACT_VERSION = "ps.engagement-mobilization-onboarding-pack.v1"
 VERSION = "1.0.1"
@@ -390,40 +391,103 @@ def screen_upstream(doc, label, engine, terms=()):
 def upstream_escalation(n): return f"{n} upstream field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)"
 def other_escalation(n): return f"{n} field(s) withheld because they name another client or matter; Risk/Conflicts review before the pack is shared (confidentiality-and-ethical-wall-rules.md #3.3)"
 
-# ---------------------------------------------------------------- contract validation of pipeline inputs
-# Every engine validates the intermediate document it reads against the shared contract: nested types, list
-# element types, enums and ranges. A violation is a clean InputError, never a coercion
-# (confidentiality-and-ethical-wall-rules.md #1.3).
-_JT = {"object": dict, "array": list, "string": str, "boolean": bool, "null": type(None)}
-def _contract():
-    import os
-    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "contracts", CONTRACT_VERSION + ".json")
-    try:
-        with open(p, encoding="utf-8-sig") as f: return json.load(f)
-    except (OSError, ValueError) as e: raise InputError(f"bundled contract schema unreadable ({p}); fail closed") from e
-def _type_ok(v, t):
-    if t == "number": return is_num(v)
-    if t == "integer": return isinstance(v, int) and not isinstance(v, bool)
-    return isinstance(v, _JT[t])
-def _validate(v, s, path, root, lenient):
-    if path in lenient: return
-    if "$ref" in s: s = root["$defs"][s["$ref"].rsplit("/", 1)[1]]
-    if "type" in s:
-        ts = s["type"] if isinstance(s["type"], list) else [s["type"]]
-        need(any(_type_ok(v, t) for t in ts), f"{path} must be {' or '.join(ts)}, got {type(v).__name__}; fail closed")
-    if "const" in s: need(v == s["const"], f"{path} must be {s['const']!r}, got {v!r}; fail closed")
-    if "enum" in s: need(v in s["enum"], f"{path} has unrecognised value {v!r}; expected one of {', '.join(map(str, s['enum']))}; fail closed")
-    if is_num(v):
-        if "minimum" in s: need(v >= s["minimum"], f"{path} must be >= {s['minimum']}; fail closed")
-        if "maximum" in s: need(v <= s["maximum"], f"{path} must be <= {s['maximum']}; fail closed")
+# ---------------------------------------------------------------- contract validation of pipeline documents
+# Every engine validates every intermediate document it reads, and the one it writes, against the stage schema in the
+# shipped contract (required fields, nested types, list element types, closed enums, ranges, provenance engine
+# prefixes) through the shared stdlib walker contract_validate.py. A violation is a clean InputError, never a coercion
+# or a hold, and no output is written (confidentiality-and-ethical-wall-rules.md #1.3).
+def check_contract(doc, where, stage=None):
+    try: _cv.validate(doc, where, stage)
+    except _cv.ContractViolation as e: raise InputError(str(e)) from None
+
+# ---------------------------------------------------------------- cumulative holds (#1.4)
+# Hold- and decision-bearing state is never taken from an intermediate file. Whatever an engine cannot re-derive from
+# the raw sources it holds is reconciled: a document that still carries evidence of an earlier hold (a placeholder,
+# an engine escalation, a held status) but not the matching hold has been edited, and is refused.
+_ESC_SAFETY = re.compile(r"\d+ (?:source|upstream) field\(s\) held for embedded instruction review \(confidentiality-and-ethical-wall-rules\.md #4\.1-#4\.5\)")
+_ESC_OTHER = re.compile(r"\d+ field\(s\) withheld because they name another client or matter; .*")
+_ESC_TOPIC = re.compile(r"\d+ wall briefing topic\(s\) withheld from the pack; .*")
+_ESC_ID = [(re.compile(r"Confirmed roster row .+ has a blank or unrecognised Scenario 02 verdict; .*"), "HOLD-UNRECOGNISED-STAFFING-VERDICT"),
+    (re.compile(r"Roster row \d+ has a blank or unrecognised onboarding_status; .*"), "HOLD-UNKNOWN-ONBOARDING-STATUS"),
+    (re.compile(r"A declared client/firm domain is malformed or a consumer/file-sharing domain; .*"), "HOLD-DOMAIN-NOT-TRUSTED"),
+    (re.compile(r"Staffing input is for a different client or engagement than the SOW; .*"), "HOLD-STAFFING-ENGAGEMENT-MISMATCH")]
+def _strings(v):
     if isinstance(v, dict):
-        for k in s.get("required", []): need(k in v, f"{path}.{k} is required; fail closed")
-        for k, sub in s.get("properties", {}).items():
-            if k in v: _validate(v[k], sub, f"{path}.{k}", root, lenient)
-    if isinstance(v, list) and "items" in s:
-        for i, x in enumerate(v): _validate(x, s["items"], f"{path}[{i}]", root, lenient)
-def check_contract(doc, where, lenient=()):
-    c = _contract(); _validate(doc, c, where, c, {f"{where}.{x}" for x in lenient})
+        for x in v.values(): yield from _strings(x)
+    elif isinstance(v, list):
+        for x in v: yield from _strings(x)
+    elif isinstance(v, str): yield v
+def check_hold_evidence(doc, where):
+    holds = [h for h in doc.get("holds") or [] if isinstance(h, dict)]
+    ids = [str(h.get("hold_id") or "") for h in holds]; reasons = [str(h.get("reason") or "") for h in holds]
+    safety = any(r == OVERSIZE_REASON or r.startswith("embedded_instruction:") for r in reasons) or any(i.startswith("HOLD-SCREENED-") for i in ids)
+    other = any(i.startswith("HOLD-OTHER-CLIENT-") for i in ids)
+    body = list(_strings({k: v for k, v in doc.items() if k != "holds"}))
+    esc = [e for e in doc.get("escalations") or [] if isinstance(e, str)]
+    kd = doc.get("knowledge_digest") if isinstance(doc.get("knowledge_digest"), dict) else {}
+    wd = doc.get("wall_decision") if isinstance(doc.get("wall_decision"), dict) else {}
+    people = [doc.get("joiner") or {}] + [r for r in doc.get("team_roster") or [] if isinstance(r, dict)]
+    checks = [(any(WITHHELD in x for x in body), safety, "text withheld for embedded-instruction review"),
+        (any(OTHER_WITHHELD in x for x in body), other, "text withheld because it names another client or matter"),
+        (any(TOPIC_WITHHELD in x for x in body), any(i.startswith("HOLD-BRIEFING-TOPIC-") for i in ids) or safety, "wall briefing topic withheld"),
+        (any(_ESC_SAFETY.fullmatch(e) for e in esc), safety or other, "embedded-instruction escalation"),
+        (any(_ESC_OTHER.fullmatch(e) for e in esc), other, "other-client escalation"),
+        (any(_ESC_TOPIC.fullmatch(e) for e in esc), any(i.startswith("HOLD-BRIEFING-TOPIC-") for i in ids) or safety, "briefing-topic escalation"),
+        (bool(wd.get("name_withheld_workspace_ids")), safety or other, "workspace name withheld"),
+        (kd.get("status") == "hold", bool(holds), "knowledge_digest.status hold"),
+        (wd.get("status") == "hold", bool(holds), "wall_decision.status hold"),
+        (any(isinstance(x.get("staffing_review"), dict) and x["staffing_review"].get("verdict") == "unrecognised" for x in people if isinstance(x, dict)), "HOLD-UNRECOGNISED-STAFFING-VERDICT" in ids, "unrecognised staffing verdict")]
+    checks += [(any(r.fullmatch(e) for e in esc), hid in ids, hid.lower()) for r, hid in _ESC_ID]
+    missing = [what for ev, ok, what in checks if ev and not ok]
+    need(not missing, f"{where} carries evidence of an earlier hold ({'; '.join(missing)}) but the matching hold is missing; intermediate state is inconsistent - re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
+def knowledge_ids(items): return [x.get("knowledge_id") if isinstance(x, dict) else None for x in items or []]
+def check_digest(doc, where, wall_status=None):
+    """The digest is gating state: re-derive its status from the holds, the items and the wall status and refuse a
+    document whose supplied digest disagrees (knowledge-reuse-rules.md #3.1; confidentiality-and-ethical-wall-rules.md #1.4, #2.3)."""
+    kd = doc["knowledge_digest"]; items = knowledge_ids(kd.get("items")); cands = knowledge_ids(doc.get("prior_knowledge_candidates"))
+    if wall_status is None: exp, exp_items = ("hold" if doc.get("holds") else "ready" if cands else "empty"), cands  # as knowledge_match writes it
+    elif wall_status == "denied": exp, exp_items = "denied_by_wall", []
+    elif wall_status == "hold": exp, exp_items = "hold", []
+    else:
+        need(not doc.get("holds"), f"{where}.wall_decision is clear while holds are open; wall_check never clears with open holds; fail closed (confidentiality-and-ethical-wall-rules.md #1.4, #4.1)")
+        exp, exp_items = ("ready" if cands else "empty"), cands
+    need(kd.get("status") == exp and items == exp_items, f"{where}.knowledge_digest (status {kd.get('status')!r}, {len(items)} item(s)) does not match the state re-derived from its holds, candidates and wall decision (expected {exp!r}, {len(exp_items)} item(s)); fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
+
+# ---------------------------------------------------------------- other-client identities from the wall register
+# Every engine screens upstream text for other clients with the same identities wall_check uses: other register rows'
+# client_name / matter_id and proper-noun runs in restriction free text (#3.2, #3.3).
+ALLOW_CAPS = {"sharepoint", "teams", "planner", "sow", "gdpr", "pci", "pii", "hipaa", "api", "it", "risk", "conflicts", "knowledge", "repository", "channel", "engagement", "delivery", "client", "q1", "q2", "q3", "q4", "i"}
+TOPIC_WITHHELD = "[briefing topic withheld - it names another client or matter, Risk/Conflicts brief the joiner directly]"  # #3.2
+def cap_runs(text):
+    for m in re.finditer(r"[A-Z][A-Za-z0-9&'.-]*(?:\s+(?:&\s+)?[A-Z][A-Za-z0-9&'.-]*)*", text or ""):
+        start = m.start() == 0 or bool(re.search(r"[.;:!?]\s*$", text[:m.start()])); yield m.group(0).strip(" .'-"), start
+def key_low(v): return (v or "").strip().lower()
+def other_names(rows, e, own):
+    """Every other client's identity in the register: other rows' client_name/matter_id and proper-noun runs in
+    restriction free text (confidentiality-and-ethical-wall-rules.md #3.2,#3.3). Withheld cells name nobody."""
+    names = []
+    for r in rows:
+        if r.get("client_name") and key_low(r.get("client_name")) != key_low(e.get("client_name")): names.append(r["client_name"].strip())
+        if r.get("matter_id") and key_low(r.get("matter_id")) != key_low(e.get("matter_id")): names.append(r["matter_id"].strip())
+        rest = r.get("restriction") or ""
+        if rest in (WITHHELD, OTHER_WITHHELD): continue
+        for run, start in cap_runs(rest):
+            ws = words(run)
+            if not ws or ws <= own | GENERIC | ALLOW_CAPS or (start and len(run.split()) == 1): continue
+            names.append(run)
+    return names
+def own_words(doc):
+    e = doc.get("engagement") or {}; j = doc.get("joiner") or {}
+    return words(e.get("client_name"), e.get("matter_id"), e.get("engagement_id"), e.get("title"), *(e.get("affiliates") or []), j.get("person"), *[r.get("person") for r in doc.get("team_roster", []) if isinstance(r, dict)], *(doc.get("scope_summary") or {}).get("systems", []))
+REGISTER_COLUMNS = ("person", "client_name", "matter_id", "status")  # confidentiality-and-ethical-wall-rules.md #2.1
+def register_terms(path, e, own):
+    """Other-client terms from the wall register at path, read and screened exactly as wall_check reads it; an absent
+    or malformed register yields none (wall_check then holds the pack)."""
+    rows = read_csv(path, False)
+    if rows is None or missing_columns(rows, REGISTER_COLUMNS): return []
+    scan_rows(rows, "raw/ethical-wall-register.csv")
+    return client_terms(other_names(rows, e, own), own)
+
 def dedup_holds(holds):
     seen = set(); out = []
     for h in holds:

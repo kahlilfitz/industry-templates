@@ -11,7 +11,8 @@ def main():
     skills=sorted(x for x in glob.glob(os.path.join(ROOT,"skills","*")) if os.path.isdir(x)); pairs=[]
     for src in sorted(glob.glob(os.path.join(ROOT,"contracts","*.json"))): pairs += [(src,os.path.join(s,"contracts",os.path.basename(src))) for s in skills]
     for src in sorted(glob.glob(os.path.join(ROOT,"references","*.md"))): pairs += [(src,os.path.join(s,"references",os.path.basename(src))) for s in skills]
-    helper=os.path.join(ROOT,"skills","engagement-retrieve","scripts","safety_text.py"); pairs += [(helper,os.path.join(s,"scripts","safety_text.py")) for s in skills]
+    for name in ("safety_text.py","contract_validate.py"):
+        helper=os.path.join(ROOT,"skills","engagement-retrieve","scripts",name); pairs += [(helper,os.path.join(s,"scripts",name)) for s in skills]
     pairs += [(STEERING_GUARD,os.path.join(s,"scripts","steering_guard.py")) for s in skills]
     bad=0
     if not os.path.exists(STEERING_GUARD) or d(STEERING_GUARD)!=STEERING_GUARD_SHA256: print("PIN     steering_guard.py does not match STEERING_GUARD_SHA256"); bad+=1
