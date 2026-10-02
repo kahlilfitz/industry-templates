@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse
+import argparse, copy
 from safety_text import *
 ENGINE="engine:knowledge_match"; CLOSE="ps.engagement-closeout-knowledge-harvest.v1"  # knowledge-reuse-rules.md #1.1
 STATES={"RELEASE_CANDIDATE_SANITISED","RELEASE_CANDIDATE_SANITIZED"}  # knowledge-reuse-rules.md #2.1
@@ -49,26 +49,30 @@ def main():
     s=load_json(a.scope); check_scope(s); set_trusted_domains((s.get("engagement") or {}).get("trusted_domains"))
     # Both upstream documents are screened whole (every string, holds included) and redacted before use (#4.1, #4.3).
     s,sh=screen_upstream(s,"scope",ENGINE)
-    c,own_h=screen_upstream(adapt(a.closeout),"upstream/closeout",ENGINE); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES and not is_withheld(x.get("asset_id"))}  # joined by canon_id (#1.3); a withheld ID joins nothing (#4.3)
+    raw=adapt(a.closeout); ce=copy.deepcopy(raw["engagement"])  # the closed engagement's identity, harvested from the UNMODIFIED closeout before screening redacts it (#3.3)
+    c,own_h=screen_upstream(raw,"upstream/closeout",ENGINE); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES and canon_id(x.get("asset_id")) and not is_withheld(x.get("asset_id"))}  # joined by canon_id (#1.3); a blank or withheld ID joins nothing (#4.3)
     inc=[]; exc=[]; kr=c["knowledge_record"]
     for asset in kr.get("reusable_assets",[]):
         aid=asset.get("asset_id")
-        if is_withheld(aid) or canon_id(aid) not in rels: exc.append({"asset_id":aid,"reason":"not_in_released_assets","citation":"knowledge-reuse-rules.md #2.1"}); continue
+        if not canon_id(aid) or is_withheld(aid) or canon_id(aid) not in rels: exc.append({"asset_id":aid,"reason":"not_in_released_assets","citation":"knowledge-reuse-rules.md #2.1"}); continue
         perm=asset.get("confidentiality_permission",rels[canon_id(aid)].get("confidentiality_permission"))
         if perm is not None and perm!=PERM: exc.append({"asset_id":aid,"reason":"confidentiality_permission_not_internal_reuse","citation":"knowledge-reuse-rules.md #2.2"}); continue
         score,over=rel(s,asset)
         if score<.5: exc.append({"asset_id":aid,"reason":"below_relevance_floor","citation":"knowledge-reuse-rules.md #3.1"}); continue
-        inc.append({"knowledge_id":aid,"title":asset.get("title"),"summary":asset.get("description") or "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.","relevance_score":score,"matched_terms":over,"clearance_state":rels[canon_id(aid)].get("clearance_state"),"confidentiality_permission":perm or "release_candidate_state","review_status":review_status(asset,rels[canon_id(aid)]),"source":"adapter:closeout-governed.knowledge_record","confidence":min(asset.get("confidence",.9),rels[canon_id(aid)].get("confidence",.9)),"citations":[asset.get("citation") or "knowledge_record.reusable_assets",rels[canon_id(aid)].get("citation") or "released_assets","knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"]})
+        inc.append({"knowledge_id":aid,"title":asset.get("title") or rels[canon_id(aid)].get("title") or f"Released knowledge asset {aid}","summary":asset.get("description") or "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.","relevance_score":score,"matched_terms":over,"clearance_state":rels[canon_id(aid)].get("clearance_state"),"confidentiality_permission":perm or "release_candidate_state","review_status":review_status(asset,rels[canon_id(aid)]),"source":"adapter:closeout-governed.knowledge_record","confidence":min(asset.get("confidence",.9),rels[canon_id(aid)].get("confidence",.9)),"citations":[asset.get("citation") or "knowledge_record.reusable_assets",rels[canon_id(aid)].get("citation") or "released_assets","knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"]})
     for lesson in kr.get("lessons",[]):
         lp=lesson.get("confidentiality_permission")
+        if not canon_id(lesson.get("cluster_id")) or is_withheld(lesson.get("cluster_id")): exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"no_lesson_id","citation":"knowledge-reuse-rules.md #1.4"}); continue  # every knowledge item carries its identity (contract $defs/knowledge_item)
         if lp is not None and lp!=PERM: exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"confidentiality_permission_not_internal_reuse","citation":"knowledge-reuse-rules.md #2.2"}); continue
         if lesson.get("rewrite_required") is not False: exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"rewrite_required_or_unknown","citation":"knowledge-reuse-rules.md #2.4"}); continue
         score,over=rel(s,{"title":lesson.get("category") or "","description":lesson.get("drafting_guidance") or "","tags":lesson.get("tags") or []})
-        if score>=.5: inc.append({"knowledge_id":lesson.get("cluster_id"),"title":f"Lesson: {lesson.get('category')}","summary":lesson.get("drafting_guidance"),"relevance_score":score,"matched_terms":over,"clearance_state":"LESSON_FOR_INTERNAL_DRAFT","confidentiality_permission":lp or "closeout_governed_lesson","review_status":review_status({"review_required":lesson.get("review_candidate")}),"source":"adapter:closeout-governed.knowledge_record.lessons","confidence":lesson.get("confidence",.85),"citations":(lesson.get("evidence_citations") or [])+[lesson.get("citation") or "knowledge_record.lessons","knowledge-reuse-rules.md #2.2,#2.4,#3.2"]})
+        if score>=.5: inc.append({"knowledge_id":lesson.get("cluster_id"),"title":f"Lesson: {lesson.get('category') or 'uncategorised'}","summary":lesson.get("drafting_guidance") or "Closeout lesson; use the title and citation only until practice review confirms.","relevance_score":score,"matched_terms":over,"clearance_state":"LESSON_FOR_INTERNAL_DRAFT","confidentiality_permission":lp or "closeout_governed_lesson","review_status":review_status({"review_required":lesson.get("review_candidate")}),"source":"adapter:closeout-governed.knowledge_record.lessons","confidence":lesson.get("confidence",.85),"citations":(lesson.get("evidence_citations") or [])+[lesson.get("citation") or "knowledge_record.lessons","knowledge-reuse-rules.md #2.2,#2.4,#3.2"]})
     inc=redact(inc)  # flagged Closeout text never travels (confidentiality-and-ethical-wall-rules.md #4.3)
     # The closed engagement is usually another client: its name and IDs never reach this pack (#3.3).
-    ce=c["engagement"]; mine=s.get("engagement") or {}
-    terms=client_terms([v for k_,v in (("client_name",ce.get("client_name")),("engagement_id",ce.get("engagement_id"))) if v and (canon_id if k_.endswith("_id") else canon_person)(v)!=(canon_id if k_.endswith("_id") else canon_person)(mine.get(k_))],own_words(s))
+    # Its identity comes from the raw closeout (ce): a client_name that also trips the wire still names the client,
+    # and only the parts that are not this engagement's own become terms (identity_parts, #3.3).
+    mine=s.get("engagement") or {}
+    terms=client_terms([x for k_ in ("client_name","engagement_id") for x in other_parts(ce.get(k_),mine.get(k_),k_,own_words(s))],own_words(s))
     # Every other client named in the wall register is screened out here too, not only at wall_check (#3.3).
     terms+=[t for t in register_terms(a.wall_register,mine,own_words(s)) if t[0] not in {x[0] for x in terms}]
     # Upstream scope holds are supplied content: screened for other-client names and steering text (#3.3, #4.3).

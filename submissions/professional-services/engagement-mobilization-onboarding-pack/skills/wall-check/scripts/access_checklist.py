@@ -72,17 +72,20 @@ def main():
     # The workspace inventory is read and every cell screened (instructions and other clients) before anything is
     # gated: screening holds, like the governed document's own, are merged before the decision is re-derived, so they
     # hold the wall, the digest and knowledge-dependent or client-confidential access (#1.4, #2.1, #3.3; checklist B6).
+    # Cells are screened from the rows AS READ, before an unusable header or a repeated ID empties the collection the
+    # decisions use: an inventory that is not used is still screened and its flagged cells held (#1.3, #3.3, #4.3).
     rows=read_csv(a.workspace_inventory,False)
     if rows is None:
         add_hold(fixed,"HOLD-MISSING-WORKSPACE-INVENTORY",a.workspace_inventory,"missing workspace inventory; no access is requested","workspace-inventory-rules.md #1.2"); rows=[]
-    elif rows.duplicate_columns:
-        add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv header","workspace inventory "+DUPLICATE_HEADER_REASON+"; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
-    elif missing_columns(rows,INVENTORY_COLUMNS):
-        add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv header",f"workspace inventory is missing required column(s): {', '.join(missing_columns(rows,INVENTORY_COLUMNS))}; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
-    elif duplicate_rows(rows,"workspace_id"):  # keyed by workspace_id: a repeat holds, never last-wins (#1.3)
-        add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv rows "+", ".join(map(str,duplicate_rows(rows,"workspace_id")))+" workspace_id","workspace inventory workspace_id "+DUPLICATE_ID_REASON+"; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
     else:
+        dup=duplicate_rows(rows,"workspace_id")  # keyed by workspace_id: a repeat holds, never last-wins (#1.3)
         screened=scan_rows(rows,"raw/workspace-inventory.csv")+screen_csv_other(rows,"raw/workspace-inventory.csv",terms,ENGINE)
+        if rows.duplicate_columns:
+            add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv header","workspace inventory "+DUPLICATE_HEADER_REASON+"; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
+        elif missing_columns(rows,INVENTORY_COLUMNS):
+            add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv header",f"workspace inventory is missing required column(s): {', '.join(missing_columns(rows,INVENTORY_COLUMNS))}; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
+        elif dup:
+            add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv rows "+", ".join(map(str,dup))+" workspace_id","workspace inventory workspace_id "+DUPLICATE_ID_REASON+"; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
     bad_rows=set(getattr(rows,"malformed",()))
     role=low((p.get("joiner") or {}).get("role")); allowed={canon_id(k):v for k,v in next((v for k,v in M.items() if low(k)==role),{}).items()}
     if not allowed: add_hold(fixed,"HOLD-ROLE-NOT-IN-MATRIX","scope.joiner.role",f"joiner role {role or '(none)'} is not in the role-access matrix; no access is requested","role-access-matrix.md #4.3")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, os, re
+import argparse, copy, os, re
 from safety_text import *
 ENGINE="engine:scope_digest"; STAFF="ps.engagement-staffing-bench-match.v1"  # role-access-matrix.md #3.1
 SOW_CONTROLS_CONFLICTS=True  # confidentiality-and-ethical-wall-rules.md #1.2
@@ -11,7 +11,8 @@ RANK={"eligible":0,"needs_review":2,"unrecognised":2.5,"ineligible":3,"conflicte
 ONBOARDING={"active","joining","mid-engagement joiner","new_joiner"}; JOINING={"joining","mid-engagement joiner","new_joiner"}  # role-access-matrix.md #4.2,#4.4
 ROSTER_COLUMNS=("person","role","onboarding_status","assignment_status")
 def fld(t,n):
-    m=re.search(rf"^{re.escape(n)}:\s*(.*)$",t,re.I|re.M); return m.group(1).strip() if m else ""
+    # One labelled line: [ \t] and [^\r\n], never \s, so a blank "Client:" reads blank instead of consuming the next line (#1.2).
+    m=re.search(rf"^{re.escape(n)}:[ \t]*([^\r\n]*)$",t,re.I|re.M); return m.group(1).strip() if m else ""
 def lst(v): return split_items(v)
 DOMAIN_LABELS=("Client domains","Client domain","Firm domains","Firm domain")  # confidentiality-and-ethical-wall-rules.md #4.4
 def declarations(docs):
@@ -107,6 +108,7 @@ def main():
         if not gone: break
         for n in gone: del acc[n]
     sow,letter=s1,l1; h3,pursuit=scan_lines(pursuit,"raw/pursuit-record.md")
+    st_raw=copy.deepcopy(st)  # identities are harvested from the UNMODIFIED staffing input, before screening redacts them (#3.3)
     st,sth=screen_upstream(st,"upstream/staffing",ENGINE)  # every upstream string screened and redacted before use (#4.1, #4.3)
     # Other clients named in the wall register are screened out of the staffing upstream and every raw roster cell
     # before the roster is derived. The trusted own vocabulary is the SOW's own identity only: a roster person or a
@@ -153,24 +155,33 @@ def main():
         holds.append({"hold_id":"HOLD-DOMAIN-NOT-TRUSTED","path":"raw/sow-extract.md or raw/engagement-letter-extract.md domain declaration","reason":f"{bad_dom} declared client/firm domain(s) are malformed or consumer/file-sharing domains and are not trusted (not repeated)","source":ENGINE,"confidence":.97,"citation":"confidentiality-and-ethical-wall-rules.md #4.4"})
         esc.append("A declared client/firm domain is malformed or a consumer/file-sharing domain; confirm the engagement's domains with the engagement manager (confidentiality-and-ethical-wall-rules.md #4.4)")
     holds=dedup_holds(holds)
-    eng=st.get("engagement") or {}; sow_client=fld(sow,"Client"); sow_eid=fld(sow,"Engagement ID")
+    eng=st.get("engagement") or {}; reng=st_raw.get("engagement") or {}; sow_client=fld(sow,"Client"); sow_eid=fld(sow,"Engagement ID")
+    # The SOW alone declares the engagement's identity (#1.2): a blank SOW Client or Engagement ID is never filled
+    # from the staffing file, and the run holds.
+    blank=[n for n,v in (("Client",sow_client),("Engagement ID",sow_eid)) if not v]  # a withheld line already holds (#4.3)
+    if blank:
+        holds.append({"hold_id":"HOLD-SOW-IDENTITY-MISSING","path":"raw/sow-extract.md "+"/".join(blank),"reason":"the SOW does not declare the engagement's client or engagement ID; the engagement identity cannot be confirmed","source":ENGINE,"confidence":.99,"citation":"confidentiality-and-ethical-wall-rules.md #1.2"})
+        esc.append("The SOW does not declare the engagement's client or engagement ID; confirm the engagement identity with the engagement manager (confidentiality-and-ethical-wall-rules.md #1.2)")
     # A staffing file for another client or engagement is another client's data: hold it and screen its identity out
-    # of every output (confidentiality-and-ethical-wall-rules.md #3.3).
-    mism=[k_ for k_,mine in (("client_name",sow_client),("engagement_id",sow_eid)) if eng.get(k_) and mine and (canon_id if k_.endswith("_id") else canon_text)(eng[k_])!=(canon_id if k_.endswith("_id") else canon_text)(mine)]
+    # of every output (confidentiality-and-ethical-wall-rules.md #3.3). Its identity is read from the raw staffing
+    # input (identity_parts: a client_name that also trips the wire still names the client), compared canonically
+    # with the SOW; a value the SOW does not declare is unconfirmed and differs (#1.2, #1.3).
+    own=engagement_words(sow_client,sow_eid,fld(sow,"Matter ID"),fld(sow,"Title"))
+    other={k_:other_parts(reng.get(k_),unwithheld(mine),k_,own) for k_,mine in (("client_name",sow_client),("engagement_id",sow_eid))}
+    mism=[k_ for k_ in ("client_name","engagement_id") if other[k_]]
     if mism:
         holds.append({"hold_id":"HOLD-STAFFING-ENGAGEMENT-MISMATCH","path":"upstream/staffing.engagement."+"/".join(mism),"reason":"staffing input names a different client or engagement than the SOW (name not repeated); staffing evidence not trusted","source":ENGINE,"confidence":.99,"citation":"confidentiality-and-ethical-wall-rules.md #3.3; role-access-matrix.md #3.1"})
         esc.append("Staffing input is for a different client or engagement than the SOW; staffing evidence held for the engagement manager (confidentiality-and-ethical-wall-rules.md #3.3)")
     affiliates=[x for x in (eng.get("affiliates") or []) if x.strip()] if not mism else []
     if any(h.get("source")=="engine:safety_text" for h in holds): esc.append(f"{sum(h.get('source')=='engine:safety_text' for h in holds)} source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
-    body={"engagement":{"engagement_id":one(fld(sow,"Engagement ID")) or eng.get("engagement_id") or "","matter_id":one(fld(sow,"Matter ID")),"title":one(fld(sow,"Title")),"client_name":one(sow_client) or ("" if mism else eng.get("client_name")) or "","affiliates":affiliates,"sector":one(fld(pursuit,"Sector")),"region":one(fld(pursuit,"Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context",**({"trusted_domains":trusted} if trusted else {})},"joiner":joiner,"scope_summary":{"objectives":items(fld(sow,"Objectives")),"in_scope":items(fld(sow,"In scope")),"exclusions":exclusions,"deliverables":items(fld(sow,"Deliverables")),"key_dates":items(fld(sow,"Key dates")),"systems":items(fld(sow,"Systems")),"first_week_focus":items(fld(sow,"First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(fld(letter,"Confidentiality")),"ethical_wall_terms":items(fld(letter,"Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
+    body={"engagement":{"engagement_id":one(sow_eid),"matter_id":one(fld(sow,"Matter ID")),"title":one(fld(sow,"Title")),"client_name":one(sow_client),"affiliates":affiliates,"sector":one(fld(pursuit,"Sector")),"region":one(fld(pursuit,"Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context",**({"trusted_domains":trusted} if trusted else {})},"joiner":joiner,"scope_summary":{"objectives":items(fld(sow,"Objectives")),"in_scope":items(fld(sow,"In scope")),"exclusions":exclusions,"deliverables":items(fld(sow,"Deliverables")),"key_dates":items(fld(sow,"Key dates")),"systems":items(fld(sow,"Systems")),"first_week_focus":items(fld(sow,"First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(fld(letter,"Confidentiality")),"ethical_wall_terms":items(fld(letter,"Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
     body=redact(body)
     # Other clients named in the wall register never reach scope.json either: the same identities and own words every
     # later engine uses, whatever the register's validity for the wall decision (#2.1, #3.3).
     body,rh=screen_other(body,register_terms(os.path.join(a.raw_dir,"ethical-wall-register.csv"),body["engagement"],own_words(body)),ENGINE,"scope.")
     if rh: holds=dedup_holds(holds+rh); body["escalations"].append(other_escalation(len(rh)))
     if mism:
-        own=engagement_words(sow_client,sow_eid,fld(sow,"Matter ID"),fld(sow,"Title"))
-        body,oh=screen_other(body,client_terms([eng.get(k_) for k_ in mism],own),ENGINE,"scope.")  # only the identity that differs
+        body,oh=screen_other(body,client_terms([x for k_ in mism for x in other[k_]],own),ENGINE,"scope.")  # only the identity that differs, from the raw input
         if oh: holds=dedup_holds(holds+oh); body["escalations"].append(other_escalation(len(oh)))
     out={"contract_version":CONTRACT_VERSION,"run_metadata":{"generated_at":ts,"demo_scenario":a.scenario},**body,"holds":holds,"provenance":{"engines":[f"scope_digest/{VERSION}"],"generated_at":ts,"sources":["raw/sow-extract.md","raw/engagement-letter-extract.md","raw/pursuit-record.md","raw/confirmed-roster.csv","upstream/staffing"]}}
     check_contract(out,"scope","scope"); dump_json(a.out,out)  # the document written is held to the contract (#1.3)

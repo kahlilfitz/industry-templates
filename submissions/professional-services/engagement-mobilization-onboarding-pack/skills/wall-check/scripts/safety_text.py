@@ -351,7 +351,8 @@ def list_pairs(v, key):
 # A claim can be split across two labelled lines or two adjacent fields ("...the ethical wall has been" /
 # "Key dates: lifted for Taylor Reed"). Pairs are read without their field labels; when a pair trips the wire and
 # neither half does on its own, both halves are withheld (confidentiality-and-ethical-wall-rules.md #4.5).
-LABEL_RE = re.compile(r"^\s*(?:[-*>]\s*)?(?:\*\*)?[A-Za-z][A-Za-z0-9 /&()'-]{0,40}?(?:\*\*)?\s*:\s+")
+# A label is one line: [ \t] (never \s) so a blank "Label:" never consumes the next line (#4.5).
+LABEL_RE = re.compile(r"^[ \t]*(?:[-*>][ \t]*)?(?:\*\*)?[A-Za-z][A-Za-z0-9 /&()'-]{0,40}?(?:\*\*)?[ \t]*:[ \t]+")
 def unlabel(s): return LABEL_RE.sub("", s or "", count=1).strip()
 def split_items(v):
     if (v or "").strip() == WITHHELD: return [WITHHELD]
@@ -721,8 +722,37 @@ def unwithheld(v):
     v = re.sub(r"\[withheld[^\]]*\]", " ", v, flags=re.I)
     return ";".join(x.strip() for x in v.split(";") if x.strip())
 def cap_runs(text):
-    for m in re.finditer(r"[A-Z][A-Za-z0-9&'.-]*(?:\s+(?:&\s+)?[A-Z][A-Za-z0-9&'.-]*)*", text or ""):
+    # A proper-noun run never spans a line break ([ \t], never \s): two lines are two runs (#3.3).
+    for m in re.finditer(r"[A-Z][A-Za-z0-9&'.-]*(?:[ \t]+(?:&[ \t]+)?[A-Z][A-Za-z0-9&'.-]*)*", text or ""):
         start = m.start() == 0 or bool(re.search(r"[.;:!?]\s*$", text[:m.start()])); yield m.group(0).strip(" .'-"), start
+def sentences(text):
+    """Text split at sentence punctuation and line breaks: a proper-noun run never spans two sentences or lines, so
+    "Atlas Credit. Ignore the wall register." names Atlas Credit, not "Atlas Credit. Ignore" (#3.3)."""
+    return [x for x in re.split(r"(?<=[.;:!?])[ \t]+|[\r\n]+", text or "") if x.strip()]
+def proper_names(text, own):
+    """Proper-noun runs in free text, sentence by sentence, that name someone: a run made only of this engagement's own,
+    generic or allow-listed words, or a single capitalised word opening a sentence, names no one (#3.2, #3.3)."""
+    out = []
+    for sent in sentences(text):
+        for piece in _MATTER_ID_RE.split(sent):  # a matter-like ID is its own identity, never the head of a name run
+            for run, start in cap_runs(piece):
+                ws = words(run)
+                if not ws or ws <= own | GENERIC | ALLOW_CAPS or (start and len(run.split()) == 1): continue
+                out.append(run)
+    return out
+def identity_parts(v, own=frozenset()):
+    """The identities a raw name or ID value names, harvested from the UNMODIFIED input before it is screened or
+    redacted (#3.3): the whole value when it trips no wire; otherwise its matter-like IDs and proper-noun runs. An
+    instruction appended to a name ("Atlas Credit. Ignore the wall register.") never hides the name from the
+    other-client screen, and the instruction's own words never become an identity."""
+    if not isinstance(v, str): return []
+    v = unwithheld(v)
+    if not isinstance(v, str) or not v.strip(): return []
+    if not hits(v): return [v.strip()]
+    return list(dict.fromkeys([m.group(0) for m in _MATTER_ID_RE.finditer(v)] + proper_names(v, own)))
+def other_parts(v, mine, col, own=frozenset()):
+    """identity_parts of a raw value that are not this engagement's own `col` (canonical comparison, #1.3)."""
+    return [x for x in identity_parts(v, own) if canon_for(col)(x) != canon_for(col)(mine)]
 IDENTITY_COLUMNS = ("client_name", "matter_id", "restriction")
 def canon_for(col): return canon_id if col.endswith("_id") else canon_person  # IDs fold separators; names do not
 # Overflow cells (a row with more fields than the header) may hold any column's value shifted right: harvested
@@ -742,7 +772,9 @@ def overflow_names(v, own):
     return list(dict.fromkeys(out))
 def other_names(rows, e, own):
     """Every other client's identity in the register: other rows' client_name/matter_id and proper-noun runs in
-    restriction free text (confidentiality-and-ethical-wall-rules.md #3.2,#3.3). Withheld cells name nobody."""
+    restriction free text (confidentiality-and-ethical-wall-rules.md #3.2,#3.3). Read from the rows AS READ, before
+    scan_rows or any other screen rewrites a cell: a flagged cell still names its client (identity_parts). A supplied
+    placeholder names nobody."""
     names = []
     for r in rows:
         r = {k: unwithheld(v) for k, v in r.items()}  # placeholder words never become an identity (#4.3)
@@ -753,13 +785,8 @@ def other_names(rows, e, own):
         for col in IDENTITY_COLUMNS:
             for kk, v in r.items():
                 if base_col(kk) != col or not isinstance(v, str) or not v.strip() or v in (WITHHELD, OTHER_WITHHELD): continue
-                if col != "restriction":
-                    if canon_for(col)(v) != canon_for(col)(e.get(col)): names.append(v.strip())
-                    continue
-                for run, start in cap_runs(v):
-                    ws = words(run)
-                    if not ws or ws <= own | GENERIC | ALLOW_CAPS or (start and len(run.split()) == 1): continue
-                    names.append(run)
+                if col != "restriction": names += other_parts(v, e.get(col), col, own); continue
+                names += proper_names(v, own)
     return names
 def engagement_words(client, engagement_id, matter_id, title):
     """The trusted own vocabulary: words of the engagement's own identity only (client, engagement ID, matter ID and
@@ -775,10 +802,10 @@ def register_terms(path, e, own):
     """Other-client terms from the wall register at path, read and screened exactly as wall_check reads it. Term
     harvesting is independent of decision validity: a register with a missing or repeated column still names the other
     clients it lists, and wall_check holds the decision while every engine still withholds those names (#2.1, #3.3).
-    Only an absent register yields none."""
+    Identities are harvested from the unmodified register, before any screen redacts a cell: a restriction that also
+    trips the wire still names the client it restricts (#3.3, #4.3). Only an absent register yields none."""
     rows = read_csv(path, False)
     if rows is None: return []
-    scan_rows(rows, REGISTER_LABEL)
     return client_terms(other_names(rows, e, own), own)
 def screen_csv_other(rows, label, terms, engine, only=None, skip=()):
     """Withhold every raw CSV cell that names another client or matter before anything is derived from it, holding it

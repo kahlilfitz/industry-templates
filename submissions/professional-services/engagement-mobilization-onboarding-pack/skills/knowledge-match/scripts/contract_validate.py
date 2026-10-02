@@ -2,8 +2,8 @@
 """Stdlib validator for the shipped pipeline contract (ps.engagement-mobilization-onboarding-pack.v1).
 
 It walks the contract JSON itself, so the schema is the only definition of shape: $ref ("#" or "#/$defs/<name>"),
-allOf, type, const, enum, pattern, minimum, maximum, minItems, required, properties, prefixItems and items, through
-nested objects and arrays. The extension keyword x-uniqueKeys on an array of records names the keys that identify a
+allOf, anyOf, type, const, enum, pattern, minimum, maximum, minItems, maxProperties, required, properties, prefixItems
+and items, through nested objects and arrays. The extension keyword x-uniqueKeys on an array of records names the keys that identify a
 record: a repeat (unique_key, i.e. canon_id: NFKC, Cf stripped, case-folded, whitespace and -_. separators
 collapsed; blanks and withheld placeholders are not identifiers) is a violation, so no stage ever indexes records
 last-wins. canon_text / canon_person / canon_id / canon_header defined here are the plugin's one canonical comparison
@@ -64,6 +64,11 @@ def _walk(v, s, path, root):
     if isinstance(v, float): _need(math.isfinite(v), f"{path} must be a finite number; fail closed")  # NaN/inf never pass a range check
     if "$ref" in s: _walk(v, _target(s["$ref"], root), path, root)
     for sub in s.get("allOf", []): _walk(v, sub, path, root)
+    if "anyOf" in s:
+        for sub in s["anyOf"]:
+            try: _walk(v, sub, path, root); break
+            except ContractViolation: continue
+        else: raise ContractViolation(f"{path} matches none of the contract's allowed shapes for this field (value not repeated); fail closed")
     if "type" in s:
         ts = s["type"] if isinstance(s["type"], list) else [s["type"]]
         _need(any(_type_ok(v, t) for t in ts), f"{path} must be {' or '.join(ts)}, got {type(v).__name__}; fail closed")
@@ -74,6 +79,7 @@ def _walk(v, s, path, root):
         if "minimum" in s: _need(v >= s["minimum"], f"{path} must be >= {s['minimum']}; fail closed")
         if "maximum" in s: _need(v <= s["maximum"], f"{path} must be <= {s['maximum']}; fail closed")
     if isinstance(v, dict):
+        if "maxProperties" in s: _need(len(v) <= s["maxProperties"], f"{path} must have at most {s['maxProperties']} member(s); fail closed")
         for k in s.get("required", []): _need(k in v, f"{path}.{k} is required; fail closed")
         for k, sub in s.get("properties", {}).items():
             if k in v: _walk(v[k], sub, f"{path}.{k}", root)

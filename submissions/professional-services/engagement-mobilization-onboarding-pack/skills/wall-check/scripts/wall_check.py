@@ -55,8 +55,9 @@ def govern(p,register,inventory):
         holds.append({"hold_id":hid,"path":path,"reason":why,"source":ENGINE,"confidence":.99,"citation":f"confidentiality-and-ethical-wall-rules.md {rule}"}); return "hold",why,f"confidentiality-and-ethical-wall-rules.md {rule}"
     # Other-client identities are harvested whatever the register's validity for the decision: a register with a
     # missing or repeated column still names the clients it lists (every copy of a repeated column counts), so the
-    # names are withheld everywhere while the decision holds (#2.1, #3.3).
-    scr=scan_rows(rows,REGISTER_LABEL) if rows is not None else []; terms=client_terms(other_names(rows,e,own),own) if rows is not None else []
+    # names are withheld everywhere while the decision holds (#2.1, #3.3). They are harvested from the register AS
+    # READ, before scan_rows rewrites a flagged cell: a restriction that trips the wire still names its client (#3.3).
+    terms=client_terms(other_names(rows,e,own),own) if rows is not None else []; scr=scan_rows(rows,REGISTER_LABEL) if rows is not None else []
     p,oh=screen_other(p,terms,ENGINE,"matched.")  # every text field, not only the briefing (#3.3)
     esc=p.setdefault("escalations",[])  # screen_other returns a new document: always rebind (#3.2)
     if oh: esc.append(other_escalation(len(oh)))
@@ -103,16 +104,20 @@ def govern(p,register,inventory):
         elif not named_clear:
             status,reason,cit=hold_status("HOLD-UNKNOWN-WALL-STATUS","raw/ethical-wall-register.csv","no wall register row clears this joiner for this client or matter","#2.2")
         else: cit="; ".join(row_cite(r) for r in named_clear)
-    if ws is not None and ws.duplicate_columns:
-        holds.append({"hold_id":"HOLD-MALFORMED-WORKSPACE-INVENTORY","path":"raw/workspace-inventory.csv header","reason":"workspace inventory "+DUPLICATE_HEADER_REASON+"; no access is requested","source":ENGINE,"confidence":.99,"citation":"workspace-inventory-rules.md #1.3"}); ws=Rows()
-    if ws is not None and duplicate_rows(ws,"workspace_id"):  # keyed by workspace_id: a repeat holds, never last-wins (#1.3)
-        holds.append({"hold_id":"HOLD-MALFORMED-WORKSPACE-INVENTORY","path":"raw/workspace-inventory.csv rows "+", ".join(map(str,duplicate_rows(ws,"workspace_id")))+" workspace_id","reason":"workspace inventory workspace_id "+DUPLICATE_ID_REASON+"; no access is requested","source":ENGINE,"confidence":.99,"citation":"workspace-inventory-rules.md #1.3"}); ws=Rows()
     if ws is not None:
+        dupw=[] if ws.duplicate_columns else duplicate_rows(ws,"workspace_id")  # keyed by workspace_id: a repeat holds, never last-wins (#1.3)
+        if ws.duplicate_columns:
+            holds.append({"hold_id":"HOLD-MALFORMED-WORKSPACE-INVENTORY","path":"raw/workspace-inventory.csv header","reason":"workspace inventory "+DUPLICATE_HEADER_REASON+"; no access is requested","source":ENGINE,"confidence":.99,"citation":"workspace-inventory-rules.md #1.3"})
+        elif dupw:
+            holds.append({"hold_id":"HOLD-MALFORMED-WORKSPACE-INVENTORY","path":"raw/workspace-inventory.csv rows "+", ".join(map(str,dupw))+" workspace_id","reason":"workspace inventory workspace_id "+DUPLICATE_ID_REASON+"; no access is requested","source":ENGINE,"confidence":.99,"citation":"workspace-inventory-rules.md #1.3"})
+        # Every inventory cell is screened, for instructions and for other clients, from the rows AS READ - IDs,
+        # types, permissions, classifications and citations as well as names - before any decision uses them, and
+        # before an unusable header or a repeated ID empties the collection the decisions use: an inventory that
+        # is not used is still screened and its flagged cells held. A withheld identifier is never a decision key (#1.3, #3.3, #4.3).
         holds+=scan_rows(ws,"raw/workspace-inventory.csv")
-        # Every inventory cell is screened for other clients before any decision uses it: IDs, types, permissions,
-        # classifications and citations as well as names. A withheld identifier is never a decision key (#3.3).
         ih=screen_csv_other(ws,"raw/workspace-inventory.csv",terms,ENGINE)
         if ih: holds+=ih; esc.append(other_escalation(len(ih)))
+        if ws.duplicate_columns or dupw: ws=Rows()
         for i,w in enumerate(ws,2):
             nm=w.get("name") or ""; wid=w.get("workspace_id")
             if (hits(nm) or is_withheld(nm)) and wid and not is_withheld(wid) and not cin(wid,withheld_names): withheld_names.append(wid)
