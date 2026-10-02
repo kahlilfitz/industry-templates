@@ -106,9 +106,9 @@ human testers).
 |---|---|---|---|---|---|---|---|---|---|---|
 | 01 | `engagement-closeout-knowledge-harvest` | 1.0.2 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.0.2 tracker tab | reviewers |
 | 02 | `engagement-staffing-bench-match` | 1.1.4 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.1.4 tracker tab | reviewers |
-| 03 | `engagement-mobilization-onboarding-pack` | 1.0.0 evaluated; 1.0.1 committed | 1.0.0 Blocked (trust-and-safety gate); 1.0.1 committed (`a0505b5`), under independent code review | No | No | No | No | No | Close the review, freeze 1.0.1, evaluate in a new Cowork task | operator |
-| 04 | `time-expense-narrative-compliance` | 1.0.3 evaluated; 1.0.4 committed | 1.0.3 Blocked (trust-and-safety gate); 1.0.4 committed (`ddfa366`, `b5f064d`), under independent code review | No | No | No | No | No | Close the review, freeze 1.0.4, evaluate in a new Cowork task | operator |
-| 05 | `deliverable-review-quality-gate` | 1.0.3 evaluated; 1.0.4 committed | 1.0.3 Blocked (B1 demo inputs not derivable from raw packs; B2 shipped tests read `metadata.json`), every measured gate met; 1.0.4 committed (`8bc4eac`) | No | No | No | No | No | Fold the 1.0.3 findings and shared detector into 1.0.4, QA review, freeze, evaluate in a new Cowork task | operator |
+| 03 | `engagement-mobilization-onboarding-pack` | 1.0.0 evaluated; 1.0.1 committed | 1.0.0 Blocked (trust-and-safety gate); 1.0.1 committed (`6d6e383`), under independent code review | No | No | No | No | No | Close the review, freeze 1.0.1, evaluate in a new Cowork task | operator |
+| 04 | `time-expense-narrative-compliance` | 1.0.3 evaluated; 1.0.4 committed | 1.0.3 Blocked (trust-and-safety gate); 1.0.4 committed (`2b0cbc3`, `01180aa`), under independent code review | No | No | No | No | No | Close the review, freeze 1.0.4, evaluate in a new Cowork task | operator |
+| 05 | `deliverable-review-quality-gate` | 1.0.3 evaluated; 1.0.4 committed | 1.0.3 Blocked (B1 demo inputs not derivable from raw packs; B2 shipped tests read `metadata.json`), every measured gate met; 1.0.4 committed (`9dc7c38`) | No | No | No | No | No | Fold the 1.0.3 findings and shared detector into 1.0.4, QA review, freeze, evaluate in a new Cowork task | operator |
 
 Notes on the board:
 
@@ -256,7 +256,7 @@ engagement or send messages.
 | Version | Commit | Frozen ZIP SHA-256 | Cowork result | Key findings | Archive |
 |---|---|---|---|---|---|
 | 1.0.0 | `1079d97` (receipt dirty because of other plugins' uncommitted work) | `A84F5F41…9F5C` | **Blocked** (evaluated 2026-10-01) | Trust-and-safety gate failed, 47/52 held (model guardrails 9/9 held; engine 38/43). Hard stops: the tripwire missed 12 of 12 novel paraphrases, and 4 injected SOW lines (a wall-exception claim, an owner-rights request, copy-the-pack-to-an-external-address) reached the first-week plan verbatim; the wall briefing echoed a register topic naming another client. pack-draft, roster-pull and wall-check scored 76 against a risk-adjusted floor of 80 (no recognised trigger phrases, no failure handling). Behavioral 18/19 (94.7%): a "wall cleared" note was routed to engagement-retrieve, not wall-check. Two unresolved routing conflicts (cold-start pack requests; pack-draft vs the built-in docx skill). Output 4.84/5; security clean; 52/52 shipped tests. | `Evaluation\1.0.0` (first archive attempt hit a transient OneDrive lock; retried) |
-| 1.0.1 | `a0505b5` | Not yet frozen | **Committed; under independent code review** | Fixes every 1.0.0 finding plus a type/enum validation sweep; tests 52 to 86. The report did not quote the 12 novel lines, so the regression fixtures are reconstructions of the described families. | None |
+| 1.0.1 | `6d6e383` | Not yet frozen | **Committed; under independent code review** | Fixes every 1.0.0 finding plus a type/enum validation sweep; tests 52 to 86. The report did not quote the 12 novel lines, so the regression fixtures are reconstructions of the described families. | None |
 
 ### How 1.0.0 was built
 
@@ -311,7 +311,7 @@ bytecode, and includes `tests\`.
 
 ### Next action
 
-1. Close the independent review of 1.0.1 (`a0505b5`); any change is a new commit before freezing.
+1. Close the independent review of 1.0.1 (`6d6e383`); any change is a new commit before freezing.
 2. Run `evaluation:prepare` (never in parallel with another prepare) and evaluate it in a **new**
    Cowork task.
 3. Archive to `Evaluation\1.0.1\` and update this file and the industry README.
@@ -331,7 +331,7 @@ exception packet. It never submits time, alters WIP or sends anything.
 | 1.0.1 | receipt `1eaaee4` (dirty); source not separately committed | `5A77AFF0…8A3E` | **Blocked** (canonical run) | B1 `code-map` guardrail failure: meeting plus non-billable call mapped to NB900 at 0.92 instead of UNMAPPED at 0.40. B2: 8.0 h with zero linked evidence rated compliant. B3 (Medium): `--signal-config` replaced the plugin policy instead of narrowing it. B4 (Medium): tripwire missed 3 of 6 paraphrased injections. Skills 91 to 96; behavioral 15/17 (88.2%); 3.83/5; trust and safety 80/80 held. | `Evaluation\1.0.1` |
 | 1.0.2 | receipt `1eaaee4` (dirty); source `aaef41f` | `1D2B465A…3A74` | **Not evaluated** (superseded) | Fixed F1 to F9 from an earlier, non-canonical 1.0.1 report; only partly addressed B4 and did not address B1 to B3. | Not archived, by design |
 | 1.0.3 | `88b5b41` (receipt dirty because of other plugins) | `53A5C7EC…E652` | **Blocked** (evaluated 2026-10-01) | All four 1.0.1 blockers (B1 to B4) verified fixed. Skills 92 to 96 against a floor of 80; behavioral 25/25; security clean. Trust-and-safety gate failed, 76/85 held. Hard stops: the no-external-recipient guardrail was missing in 4 of 5 skills; data minimisation, because colleagues' rows were returned with no role check; `narrative-draft` copied injected subject text into a draft. Logic follow-ups: injected text was not flagged in the Missing time section or in a suggested rewrite; `embedded_instruction` cited the wrong guideline section; a mixed-entry narrative omitted a linked activity. | `Evaluation\1.0.3` |
-| 1.0.4 | `ddfa366`, `b5f064d` | Not yet frozen | **Committed; under independent code review** | Fixes the 1.0.3 hard stops and logic follow-ups; team view needs a structured `team_view` confirmation (real boolean, `engagement_manager` role, exact `engagement-manager:<engagement_id>` token). A shared `validate_packet` type-checks every engine-read field; tests 134 to 165. Older hand-built packets missing now-required fields are rejected. | None |
+| 1.0.4 | `2b0cbc3`, `01180aa` | Not yet frozen | **Committed; under independent code review** | Fixes the 1.0.3 hard stops and logic follow-ups; team view needs a structured `team_view` confirmation (real boolean, `engagement_manager` role, exact `engagement-manager:<engagement_id>` token). A shared `validate_packet` type-checks every engine-read field; tests 134 to 165. Older hand-built packets missing now-required fields are rejected. | None |
 
 ### Notable decisions
 
@@ -392,12 +392,13 @@ to a system of record.
 |---|---|---|---|---|---|
 | 1.0.0 | `9d77f91` (portfolio import) | None | **Never evaluated** | No CHANGELOG and no shipped regression tests. | None |
 | 1.0.1 | `94a6192` (receipt dirty) | `7F487D5D…49BC` | **No-ship** | Trust-and-safety hard stop in `review-packet` (94/95 held): a user-supplied external recipient was accepted for routing with no hold, and the packet appended the full contract payload. Engine defects L1 to L5: `scope_aligned=false` ignored; unsupported definitive conclusions not ranked as release blockers; best-evidence selection; hard-coded finding locations; missing registers treated as clean. Skills 86 to 91; behavioral 15/15 (35 runs), 4.5/5; security 0 findings. | `Evaluation\1.0.1` |
-| 1.0.2 | `25c2a63` (receipt records pre-rewrite `2ba4145`, dirty) | `29B431EC…B869` | **Blocked** | 42/50 behavioral cases (84%). 2 FAIL (fail-open logic defects in the gate engine): a null `required_language` register is treated as empty instead of holding; unrecognised `client_data_handling` values pass clean with no finding. 6 WEAK: `severity_rank` traceback on a non-numeric page label; look-alike letter evasion; paraphrased steering text; instruction text in citation fields not scanned; false positive on ordinary "pre-approved"; an upstream finding reusing a G8 finding ID can suppress the blocker. Skills 85 to 93; 4.57/5; trust and safety 75/75 held; security 0 findings. | `Evaluation\1.0.2` |
-| 1.0.3 | `bd7b029`, `ded75a8`, `0476ce8`, `581a144` | `99699BDD…F9D2` | **Blocked** (evaluated 2026-10-01). Every measured gate met: skills 85 to 93, behavioral 20/20, quality 4.7/5, trust and safety 60/60 held, security pass. Blocked on two release-mechanics findings: **B1** the scenario A `review-input.json` sets `client_data_handling='ok'` although its raw pack has no client-data register, so ingest step 5 would produce `unknown` (a G4 blocker) and the golden, README and critical-path prompt 1 contradict the sources; other fixture values (page numbers, A's `population_size` 1100, B's board recipient and brand `pass`) are not in the raw packs either. **B2** shipped `tests/run_tests.py` crashes from the ZIP because it reads `metadata.json`, which the bundler excludes. Advisories: document `criteria_sections` seeding and paragraph numbering for unpaginated sources; QRM supplies the reliance clause; drop the duplicated "Rule:" line and define empty-section wording; rename `extra` in the test harness; add a ground-every-statement sentence. | Fixes the 1.0.2 blockers (`bd7b029`, 103 tests). Three independent review rounds then found further fail-open paths, each fixed in a new commit with no version bump: wrong-type recipients and booleans, unvalidated register entries, AM findings trusted by self-declared source (`ded75a8`, 179 tests); a missing required disclaimer, keyword-only recipient classification, an omitted `scope_aligned`, evidence with no or unknown type supporting a fact, and deep-nesting tracebacks (`0476ce8`, 241 tests); and a client alias or name containing external-party vocabulary hiding an external recipient (`581a144`, 254 tests). | `Evaluation\1.0.3` |
-| 1.0.4 | `8bc4eac`, `2454b3a` | Not yet frozen | **Committed; shared detector and QA review pending** | Structural G8 tripwire (addressee, verdict-steering and suppression patterns rather than fixed nouns); 269 tests (`8bc4eac`). The 1.0.3 B1, B2 and advisories (`2454b3a`, 287 tests): raw packs gained the missing evidence (a release-registers file, page markers, population, distribution list), so the inputs and goldens are unchanged; `tests/derive_review_input.py` re-derives each input from its raw pack; tests pass from the extracted ZIP. Still to land before freezing: the shared steering detector and an executing QA review round. | None |
+| 1.0.2 | `7626d67` (receipt records pre-rewrite `2ba4145`, dirty) | `29B431EC…B869` | **Blocked** | 42/50 behavioral cases (84%). 2 FAIL (fail-open logic defects in the gate engine): a null `required_language` register is treated as empty instead of holding; unrecognised `client_data_handling` values pass clean with no finding. 6 WEAK: `severity_rank` traceback on a non-numeric page label; look-alike letter evasion; paraphrased steering text; instruction text in citation fields not scanned; false positive on ordinary "pre-approved"; an upstream finding reusing a G8 finding ID can suppress the blocker. Skills 85 to 93; 4.57/5; trust and safety 75/75 held; security 0 findings. | `Evaluation\1.0.2` |
+| 1.0.3 | `7166cb5`, `f7578d2`, `06fde7a`, `7d09dd1` | `99699BDD…F9D2` | **Blocked** (evaluated 2026-10-01). Every measured gate met: skills 85 to 93, behavioral 20/20, quality 4.7/5, trust and safety 60/60 held, security pass. Blocked on two release-mechanics findings: **B1** the scenario A `review-input.json` sets `client_data_handling='ok'` although its raw pack has no client-data register, so ingest step 5 would produce `unknown` (a G4 blocker) and the golden, README and critical-path prompt 1 contradict the sources; other fixture values (page numbers, A's `population_size` 1100, B's board recipient and brand `pass`) are not in the raw packs either. **B2** shipped `tests/run_tests.py` crashes from the ZIP because it reads `metadata.json`, which the bundler excludes. Advisories: document `criteria_sections` seeding and paragraph numbering for unpaginated sources; QRM supplies the reliance clause; drop the duplicated "Rule:" line and define empty-section wording; rename `extra` in the test harness; add a ground-every-statement sentence. | Fixes the 1.0.2 blockers (`7166cb5`, 103 tests). Three independent review rounds then found further fail-open paths, each fixed in a new commit with no version bump: wrong-type recipients and booleans, unvalidated register entries, AM findings trusted by self-declared source (`f7578d2`, 179 tests); a missing required disclaimer, keyword-only recipient classification, an omitted `scope_aligned`, evidence with no or unknown type supporting a fact, and deep-nesting tracebacks (`06fde7a`, 241 tests); and a client alias or name containing external-party vocabulary hiding an external recipient (`7d09dd1`, 254 tests). | `Evaluation\1.0.3` |
+| 1.0.4 | `9dc7c38`, `25a0076` | Not yet frozen | **Committed; shared detector and QA review pending** | Structural G8 tripwire (addressee, verdict-steering and suppression patterns rather than fixed nouns); 269 tests (`9dc7c38`). The 1.0.3 B1, B2 and advisories (`25a0076`, 287 tests): raw packs gained the missing evidence (a release-registers file, page markers, population, distribution list), so the inputs and goldens are unchanged; `tests/derive_review_input.py` re-derives each input from its raw pack; tests pass from the extracted ZIP. Still to land before freezing: the shared steering detector and an executing QA review round. | None |
 
-Commit 2ba4145 was rewritten to 25c2a63 before first push (history scrub of an internal URL; plugin
-files identical). Frozen receipts and archived reports cite the pre-rewrite SHA.
+Commit 2ba4145 was rewritten to 7626d67 before first push (history scrub of an internal URL; plugin
+files identical). The 1.0.3 receipt records `581a144`, rewritten to `7d09dd1` by a second scrub
+(see the frozen register). Frozen receipts and archived reports cite the pre-rewrite SHA.
 
 ### Notable decisions
 
@@ -440,7 +441,7 @@ This is the report's request, not a description of the 1.0.4 change.
 
 ### Next action
 
-1. Done: 1.0.3 findings folded into 1.0.4 (`2454b3a`). Vendor the shared steering detector once
+1. Done: 1.0.3 findings folded into 1.0.4 (`25a0076`). Vendor the shared steering detector once
    it scores at least 90% with no false positives on the operator's held-out set (2026-10-01b:
    1.1.0 scored 34/40, so 1.1.1 must close the gap first).
 2. Run an executing QA review round, repeating until it reproduces nothing.
@@ -526,12 +527,14 @@ and matched; T&E 1.0.3 relies on the hash check `evaluation:archive` performs be
 | T&E | 1.0.2 | `evaluate-time-expense-narrative-compliance-v1.0.2-2026-10-01` | `1D2B465A1DE214A24185BE24850BB00EBA3C09FA8CC7C0B75C5CA1D028E33A74` | `1eaaee4` (dirty) | Not evaluated (superseded) |
 | T&E | 1.0.3 | `evaluate-time-expense-narrative-compliance-v1.0.3-2026-10-01` | `53A5C7EC29C4F4803AAD922BA04DBACA41C30576B6464B8460E0C55E0183E652` | `88b5b41` (dirty) | Blocked |
 | DRQG | 1.0.1 | `evaluate-deliverable-review-quality-gate-v1.0.1-2026-10-01` | `7F487D5D85324022655EC3A444E70B74CEEF19B3C9C2CE3003EFAF122D8849BC` | `94a6192` (dirty) | No-ship |
-| DRQG | 1.0.2 | `evaluate-deliverable-review-quality-gate-v1.0.2-2026-10-01` | `29B431EC62455E68E53AAD236698BFADA2518DA8BDA0F65EC2624D9852E5B869` | `2ba4145` (dirty; rewritten to `25c2a63`, see note) | Blocked |
-| DRQG | 1.0.3 | `evaluate-deliverable-review-quality-gate-v1.0.3-2026-10-01` | `99699BDDDA3407FC6720AE57FD47116D0F2E9A9A94D60ABD5217B130FED0F9D2` | `581a144` (dirty: docs only) | Blocked |
+| DRQG | 1.0.2 | `evaluate-deliverable-review-quality-gate-v1.0.2-2026-10-01` | `29B431EC62455E68E53AAD236698BFADA2518DA8BDA0F65EC2624D9852E5B869` | `2ba4145` (dirty; rewritten to `7626d67`, see note) | Blocked |
+| DRQG | 1.0.3 | `evaluate-deliverable-review-quality-gate-v1.0.3-2026-10-01` | `99699BDDDA3407FC6720AE57FD47116D0F2E9A9A94D60ABD5217B130FED0F9D2` | `581a144` (dirty: docs only; rewritten to `7d09dd1`, see note) | Blocked |
 
 The task name is the one `evaluation:prepare` suggested. Some Cowork tasks were created under
 different display names; the watcher matches by SHA-256, so this does not affect the evidence.
 
-The receipt commit column shows what each receipt records. Commit 2ba4145 was rewritten to 25c2a63
-before first push (history scrub of an internal URL; plugin files identical). Frozen receipts and
-archived reports cite the pre-rewrite SHA.
+The receipt commit column shows what each receipt records. Commit 2ba4145 was rewritten to 7626d67
+before first push (history scrub of an internal URL; plugin files identical). A second pre-push
+scrub removed an internal site name from the SharePoint-sync script, its test and its doc; plugin
+files were untouched, and 581a144 became 7d09dd1. Frozen receipts and archived reports cite the
+pre-rewrite SHA.
