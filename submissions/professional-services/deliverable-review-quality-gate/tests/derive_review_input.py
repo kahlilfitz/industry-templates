@@ -71,12 +71,14 @@ def parse_draft(text):
     lines = text.splitlines()
     paginated = any(PAGE_MARKER.match(line.strip()) for line in lines)
     page, paragraph, section, title = 1, 0, None, None
-    blocks, current, disclaimers = {}, [], []
+    blocks, current, disclaimers, pages = {}, [], [], set()
 
     def flush():
         nonlocal paragraph
         if current:
             paragraph += 1
+            if (page, paragraph) in blocks:
+                raise ValueError(f"draft has two blocks at page {page} paragraph {paragraph}; a later one would overwrite the earlier")
             blocks[(page, paragraph)] = {"section": section, "text": " ".join(current), "lines": list(current)}
             current.clear()
 
@@ -86,6 +88,10 @@ def parse_draft(text):
         if marker:
             flush()
             page, paragraph = int(marker.group(1)), 0
+            # A repeated page marker would restart paragraph numbering and overwrite that page's blocks.
+            if page in pages:
+                raise ValueError(f"draft repeats the page {page} marker; page markers must be unique")
+            pages.add(page)
         elif line.startswith("# "):
             flush()
             title, section = line[2:].strip(), "Cover"
@@ -108,6 +114,8 @@ def parse_draft(text):
         for part in line.split(" | "):
             key, sep, value = part.partition(": ")
             if sep:
+                if key.strip() in cover:
+                    raise ValueError(f"draft cover repeats the {key.strip()!r} field; a later value would overwrite the earlier")
                 cover[key.strip()] = value.strip()
     return title, cover, blocks, disclaimers
 
@@ -124,6 +132,8 @@ def register_sections(text):
     for line in text.splitlines():
         if line.startswith("## "):
             name = line[3:].strip()
+            if name in sections:
+                raise ValueError(f"release registers repeat the {name!r} section; a later one would replace the earlier")
             sections[name] = []
         elif name and line.strip():
             sections[name].append(line.strip())
@@ -167,6 +177,8 @@ def parse_evidence(text):
             items.append({"evidence_id": match["id"], "type": match["type"], "title": match["title"], "confidence": float(match["conf"]),
                           "source": "connector:" + match["source"].strip().lower().replace(" ", "-"),
                           "citation": f"supporting-evidence-index.md {match['id']}"})
+            if match["id"] in lines:
+                raise ValueError(f"supporting evidence index repeats evidence ID {match['id']}; evidence IDs must be unique")
             lines[match["id"]] = line
     return items, lines
 
@@ -280,6 +292,11 @@ def compare_list(path, expected, actual, key, judgement, problems):
         problems.append(f"{path}: raw pack gives a list of {len(expected)}, review input has {actual!r}")
         return
     want, have = [item[key] for item in expected], [item.get(key) for item in actual if isinstance(item, dict)]
+    for side, ids in (("raw pack", want), ("review input", have)):
+        repeated = sorted({str(item) for item in ids if ids.count(item) > 1})
+        if repeated:
+            problems.append(f"{path}: {side} repeats {key} {', '.join(repeated)}; IDs must be unique")
+            return
     if want != have:
         problems.append(f"{path}: raw pack gives {want!r}, review input has {have!r}")
         return
@@ -332,6 +349,10 @@ def compare(scenario_dir, payload):
             problems += location_problems(f"deliverable.{name}[{index}]", item["location"], blocks)
     for index, item in enumerate(derived["prior_findings"]):
         problems += location_problems(f"prior_findings[{index}]", item["location"], blocks)
+    assertion_ids = [item.get("assertion_id") for item in payload.get("assertions") or [] if isinstance(item, dict)]
+    repeated = sorted({str(item) for item in assertion_ids if assertion_ids.count(item) > 1})
+    if repeated:
+        problems.append(f"assertions: review input repeats assertion_id {', '.join(repeated)}; IDs must be unique")
     for index, assertion in enumerate(payload.get("assertions") or []):
         problems += assertion_problems(index, assertion, blocks, evidence_lines)
     return problems
@@ -342,8 +363,11 @@ def main(argv):
     scenarios = argv or [os.path.join(root, "demo-data", name) for name in sorted(os.listdir(os.path.join(root, "demo-data")))]
     failed = False
     for scenario_dir in scenarios:
-        with open(os.path.join(scenario_dir, "review-input.json"), encoding="utf-8") as fh:
-            problems = compare(scenario_dir, json.load(fh))
+        try:
+            with open(os.path.join(scenario_dir, "review-input.json"), encoding="utf-8") as fh:
+                problems = compare(scenario_dir, json.load(fh))
+        except ValueError as exc:
+            problems = [f"raw pack is malformed: {exc}"]
         print(f"{os.path.basename(os.path.normpath(scenario_dir))}: {'derives from its raw pack' if not problems else f'{len(problems)} difference(s)'}")
         for problem in problems:
             print("  - " + problem)

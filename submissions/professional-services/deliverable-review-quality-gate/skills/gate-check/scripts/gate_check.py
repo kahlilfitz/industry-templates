@@ -412,11 +412,7 @@ def validate_deliverable(deliverable):
         string_list(deliverable, key, f"deliverable.{key}")
 
 def require_unique_ids(items, label, id_key):
-    seen = {}
-    for index, item in enumerate(items):
-        if item[id_key] in seen:
-            raise InputError(f"{label}[{index}].{id_key} duplicates {label}[{seen[item[id_key]]}].{id_key}; each register entry must be unique so no entry can mask another")
-        seen[item[id_key]] = index
+    rules.require_unique_ids(items, label, id_key)
 
 def require_entry_basics(item, label, id_key):
     if not isinstance(item, dict):

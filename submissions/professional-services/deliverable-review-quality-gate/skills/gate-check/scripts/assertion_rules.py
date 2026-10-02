@@ -463,7 +463,48 @@ def validate_contract(payload, stage):
             error = f"$ is missing {', '.join(missing)}, which {stage} requires (see the contract descriptions)"
     if error is not None:
         raise InputError(f"contract violation: {error}")
+    validate_unique_ids(payload)
     return payload
+
+
+# Every array an engine indexes or matches by ID (quality-gate-criteria.md #8.11). gate_results (one entry per gate) is
+# checked by severity_rank's reconciliation; findings[] allows identical copies, which collapse (severity-rules.md #3.4).
+ID_KEYED_ARRAYS = (
+    (("assertions",), "assertion_id"),
+    (("evidence_set",), "evidence_id"),
+    (("assertion_mappings",), "assertion_id"),
+    (("deliverable", "brand_checks"), "check_id"),
+    (("deliverable", "licensed_content"), "content_id"),
+    (("prior_findings",), "finding_id"),
+    (("findings",), "finding_id"),
+    (("ranked_findings",), "finding_id"),
+)
+
+
+def require_unique_ids(items, label, id_key, allow_identical=False, prefix=""):
+    """Refuse two entries whose IDs are equal exactly or after the detector's fold (Unicode, case, separators), so a
+    lookup keyed by ID can never let one entry overwrite or mask another. With allow_identical, entries that are equal
+    in every field are not a conflict: nothing differs, so nothing can be hidden. The message names positions only."""
+    seen = {}
+    for index, item in enumerate(items):
+        if not isinstance(item, dict) or not isinstance(item.get(id_key), str):
+            continue
+        key = field_name_key(item[id_key]) if len(item[id_key]) <= MAX_FIELD_NAME_CHARS else item[id_key]
+        if key in seen:
+            first = seen[key]
+            if allow_identical and items[first] == item:
+                continue
+            raise InputError(f"{prefix}{label}[{index}].{id_key} duplicates {label}[{first}].{id_key} (equal exactly or after Unicode, case and separator folding); IDs must be unique so no entry can overwrite or mask another")
+        seen[key] = index
+
+
+def validate_unique_ids(payload):
+    for path, id_key in ID_KEYED_ARRAYS:
+        items = payload
+        for part in path:
+            items = items.get(part) if isinstance(items, dict) else None
+        if isinstance(items, list):
+            require_unique_ids(items, ".".join(path), id_key, allow_identical=path == ("findings",), prefix="contract violation: ")
 
 
 def linked_evidence(assertion, evidence_by_id):

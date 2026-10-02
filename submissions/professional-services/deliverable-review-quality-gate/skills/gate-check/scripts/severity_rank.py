@@ -90,7 +90,8 @@ def sort_key(item):
 
 def collapse_duplicates(findings):
     """Keep one finding per finding_id at the highest severity (first occurrence on a tie), so a duplicate is never
-    counted twice and can never lower severity (severity-rules.md #3.1). Returns (kept, {finding_id: copies})."""
+    counted twice and can never lower severity (severity-rules.md #3.1). Entry validation already refuses copies that
+    differ (quality-gate-criteria.md #8.11), so this is a backstop. Returns (kept, {finding_id: copies})."""
     kept, positions, copies = [], {}, {}
     for item in findings:
         finding_id = item["finding_id"]
