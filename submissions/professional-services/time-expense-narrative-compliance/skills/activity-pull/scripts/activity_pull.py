@@ -511,7 +511,7 @@ def main():
                 reason = signal_policy.pull_disabled_reason(row["entry_id"], cite, hint)
             else:
                 reason = signal_policy.pull_missing_reason(row["entry_id"], cite)
-            if activity_id not in {e["activity_id"] for e in excluded}:
+            if signal_policy.canon_id(activity_id) not in {signal_policy.canon_id(e["activity_id"]) for e in excluded}:
                 excluded.append({"activity_id": activity_id, "source": None, "policy_key": hint, "reason": reason,
                                  "excluded_by": ENGINE, "citations": [cite, POLICY_CITATION]})
         entry = {

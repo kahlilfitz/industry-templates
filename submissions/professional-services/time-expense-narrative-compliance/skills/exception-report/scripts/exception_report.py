@@ -132,7 +132,7 @@ def main():
     packet_hold = signal_policy.packet_held(data)
     period = data.get("period") or {}
     figures = billing_rules.summary_figures(data["time_entries"], data["missing_time_report"])
-    other_ids = signal_policy.other_engagement_ids(data)
+    other_ids = {signal_policy._id_key(x) for x in signal_policy.other_engagement_ids(data)}
     other_entries = len(data.get("provenance", {}).get("excluded_entries", []))
     other_note = (f"{len(other_ids)} activity signal(s) and {other_entries} time entr(ies) scoped to another engagement "
                   f"were excluded and are not shown ({signal_policy.ENGAGEMENT_CITATION})"
@@ -202,7 +202,7 @@ def main():
         f"- Entries: {figures['total_entries']} ({figures['total_hours']} h)",
         "- Verdicts: " + ", ".join(f"{cell(k)} {cell(v)}" for k, v in sorted(figures["verdict_counts"].items())),
         f"- Missing time: {figures['missing_time_hours']} h across {len(data['missing_time_report'])} activity signal(s)",
-        f"- Excluded by signal policy: {cells([x for x in billing_rules.excluded_ids(data) if x not in other_ids]) or 'none'}",
+        f"- Excluded by signal policy: {cells([x for x in billing_rules.excluded_ids(data) if signal_policy._id_key(x) not in other_ids]) or 'none'}",
     ]
     if other_note:
         lines.append(f"- Other engagements: {other_note}")
@@ -242,7 +242,7 @@ def main():
         lines.append("None.")
     lines += ["", "## Privacy exclusions", ""]
     excluded = [x for x in data.get("provenance", {}).get("excluded_signals", [])
-                if x.get("activity_id") not in other_ids]
+                if signal_policy._id_key(x.get("activity_id")) not in other_ids]
     # reconcile_governed has already matched every reason and citation to the engines' own wording (#13.2).
     for x in excluded:
         lines.append(f"- {cell(x.get('activity_id'))}: {cell(x.get('reason'))} [{cells(x.get('citations', []))}]")

@@ -351,7 +351,7 @@ def govern(out):
     prebill_summary. Returns the number of entries whose supplied code mapping was rejected.
     """
     signals = out["activity_signals"]
-    by_id = {a["activity_id"]: a for a in signals}
+    by_id = signal_policy.signal_index(signals)
     # #11.3: a hold on packet metadata governs every entry, so it is known before any entry is gated (B6).
     packet_hold = signal_policy.packet_held(out)
     used_activity_ids = set()
@@ -360,7 +360,7 @@ def govern(out):
 
     for entry in out["time_entries"]:
         draft = entry.get("draft") or {}
-        linked = [by_id[a] for a in entry.get("activity_ids", []) if a in by_id]
+        linked = signal_policy.linked_signals(entry, by_id)
         draft_text = draft.get("narrative").strip() if isinstance(draft.get("narrative"), str) else ""
         draft_found = []
         if draft_text and not signal_policy.is_withheld(draft_text):
@@ -375,7 +375,7 @@ def govern(out):
         any_withheld = draft_withheld or own_withheld
         text_withheld = own_withheld and not narrative
         narrative_norm = normalize(narrative)
-        used_activity_ids.update(a["activity_id"] for a in linked)
+        used_activity_ids.update(signal_policy._id_key(a["activity_id"]) for a in linked)
         # Distinct classes in canonical form (a variant spelling of one class is one class); first spelling shown.
         class_names = {}
         for a in linked:
@@ -565,7 +565,7 @@ def govern(out):
         }
 
     missing_time = [missing_time_item(a) for a in signals
-                    if a["activity_id"] not in used_activity_ids
+                    if signal_policy._id_key(a["activity_id"]) not in used_activity_ids
                     and a.get("billable_signal") and a.get("duration_hours", 0) >= MISSING_TIME_MIN_HOURS]
     exception_list = exception_items(out["time_entries"], missing_time)
 

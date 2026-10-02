@@ -70,10 +70,10 @@ def main():
     except (InputError, signal_policy.PolicyError) as exc:
         sys.exit(f"code_map: {signal_policy.error_text(exc)}")
 
-    by_id = {a["activity_id"]: a for a in out["activity_signals"]}
+    by_id = signal_policy.signal_index(out["activity_signals"])
     mismatches = held = 0
     for entry in out["time_entries"]:
-        linked = [by_id[a] for a in entry.get("activity_ids", []) if a in by_id]
+        linked = signal_policy.linked_signals(entry, by_id)
         entry["code_mapping"] = mapping = billing_rules.code_mapping(entry, linked)
         held += mapping["recommended_task_code"] == "UNMAPPED"
         mismatches += any(f["flag"] == "submitted_code_mismatch" for f in mapping["flags"])

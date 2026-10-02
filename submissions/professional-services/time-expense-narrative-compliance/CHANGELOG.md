@@ -309,7 +309,37 @@ All five classes reproduced before the fix. New guidelines are client-billing-gu
   - The missing-time exception rolls people up by canonical name, so "Morgan Lee" and "  morgan   lee  " are one person, not "multiple".
   - The report's excluded-signal and excluded-entry cross-checks compare canonical IDs.
 
+### QA round 10 of eee58a5 (fixed in 1.0.4, no version bump; hardening checklist A13, A22)
+- **Exception list reconciled by count only** (`te-r10-entry-id-mismatch.py`). This was already fixed by the A22 rebuild above: renaming governed entry TE-B-003 to TE-B-903, or respelling it `te_b_003`, with its exception item unchanged, is now refused with no report and the edited ID is not echoed.
+  - Class sweep: every other carried derived list was checked. Each one is compared by content, not count:
+    - drafts, field by field;
+    - `missing_time_report`, exactly;
+    - `provenance.excluded_signals`, as an ordered ID list, with its exact wording and its copy in `prebill_summary.excluded_signal_ids`;
+    - verdicts and flags, entry by entry;
+    - summary figures, re-derived.
+  - Scope note (B5): a `provenance.excluded_entries` record has no other copy, because another engagement's entry is dropped at the first stage. Each record is checked by content: an enum reason, the exact #13.3 citation, a canonical-unique ID, and no overlap with active entries. A record added with the engine's own wording is a consistent rewrite of that list.
+- **Missing-time roll-up compared timekeepers exactly** (`te-r10-canonical-missing-time.py`). This was already fixed by the canonical `_rolled_up` above, so the roll-up gives `Morgan Lee`, not `multiple`.
+  - Sweep (A13): every remaining set, membership test and lookup on activity or entry IDs now uses the canonical key, keeping original values for output. The changed sites:
+    - a shared `signal_index` / `linked_signals` pair resolves links in `derive_drafts`, `check_drafts`, `govern()` and code-map. A blank link matches nothing;
+    - `govern()`'s used-activity set and missing-time filter;
+    - `filter_packet`'s recorded-entry, excluded-signal and kept-signal sets, and its merge of an entry's excluded links;
+    - `exclusion_texts`, which matches a record to the entry that excluded it;
+    - activity-pull's exclusion de-duplication;
+    - the report's other-engagement filter.
+  - Links still have to use the activity's exact ID at every stage. These changes make each rule agree with that check, rather than depending on it.
+
 ### Tests and goldens
+- T&E QA round 10: 843 to 857 checks. The 14 new checks are in `r10qa_tests`:
+  - both reproducers, end to end;
+  - a respelled entry ID;
+  - the exception-list rebuild control;
+  - the roll-up unit check;
+  - canonical link resolution, including blank links;
+  - `govern()` not double-counting a canonically linked activity as missing time;
+  - `derive_drafts`;
+  - `filter_packet` de-duplication of signals, links and other-engagement entries;
+  - `exclusion_texts`.
+  - Goldens are byte-identical.
 - Mobilization round 12 and T&E QA round 10: 794 to 843 checks. 49 are new in `r12_tests`, one or more per reproducer, with controls:
   - A21:
     - a blank workplan key that never joins;

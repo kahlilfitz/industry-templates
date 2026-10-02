@@ -4648,6 +4648,104 @@ def r12_tests(tmp):
                   for g in ("activity.json", "drafted.json", "coded.json", "governed.json")))
 
 
+def r10qa_tests(tmp):
+    """T&E QA round 10 (eee58a5): (1) a carried derived list is reconciled by content, never by count; (2) sets,
+    group-bys and single-versus-multiple decisions on names and IDs use the canonical form (A22, A13)."""
+    sp = MODULES["code_map"].signal_policy
+    br = MODULES["guideline_check"].billing_rules
+    B = "scenario-b-drama"
+
+    # (1) te-r10-entry-id-mismatch: a governed entry ID changed, its exception item left alone.
+    for new_id, label in (("TE-B-903", "another ID"), ("te_b_003", "a variant spelling of its own ID")):
+        gov = _golden(B, "governed.json")
+        gov["time_entries"][2]["entry_id"] = new_id
+        code, msg, report = report_for(tmp, f"r10qa-eid-{new_id}", gov)
+        check(f"r10qa A22: governed TE-B-003 renamed to {label} with its exception item unchanged -> report refused, "
+              "nothing written, the edited ID not echoed",
+              code == 1 and report == "" and new_id not in msg and "Traceback" not in msg, msg[:240])
+    gov = _golden(B, "governed.json")
+    check("r10qa A22 control: every carried exception item equals its rebuild from the line items",
+          gov["exception_list"] == br.exception_items(gov["time_entries"], gov["missing_time_report"]))
+
+    # (2) te-r10-canonical-missing-time: one timekeeper in two spellings rolls up as one person, end to end.
+    act = _golden(B, "activity.json")
+    variant = copy.deepcopy(next(s for s in act["activity_signals"] if s["activity_id"] == "B-DOC-003"))
+    variant.update(activity_id="B-DOC-903", person="  morgan   lee  ", subject="integration decision log",
+                   deliverable="Integration Decision Log", citations=["raw/document-activity-log.csv row 903"])
+    act["activity_signals"].append(variant)
+    try:
+        _, _, gov = through_governed(tmp, "r10qa-mt", act)
+    except RuntimeError as exc:
+        gov = None
+        check("r10qa A13: the respelled-timekeeper chain runs", False, str(exc)[:240])
+    if gov:
+        roll = next(x for x in gov["exception_list"] if x["verdict"] == "missing_time")
+        check("r10qa A13: 'Morgan Lee' and '  morgan   lee  ' missing time rolls up as person 'Morgan Lee', not "
+              "'multiple'", roll["person"] == "Morgan Lee" and len(gov["missing_time_report"]) == 3, roll)
+        code, msg, report = report_for(tmp, "r10qa-mt", gov)
+        check("r10qa A13: that governed packet reconciles and renders at the report", code == 0 and "B-DOC-903" in report,
+              msg[:240])
+    check("r10qa A13: the roll-up names a person only when every value is canonically one person",
+          br._rolled_up(["Morgan Lee", "  MORGAN\u3000lee "], sp.person_key) == "Morgan Lee"
+          and br._rolled_up(["Morgan Lee", "Priya Shah"], sp.person_key) == "multiple")
+
+    # A13 sweep: every link lookup, exclusion set and missing-time filter resolves IDs canonically.
+    sigs = _golden(B, "coded.json")["activity_signals"]
+    index = sp.signal_index(sigs)
+    got = sp.linked_signals({"activity_ids": ["b_cal_002", "B.CAL.003", "", None, "B-NONE-001"]}, index)
+    check("r10qa A13: linked_signals resolves variant spellings to the packet's signal and blank links to nothing",
+          [s["activity_id"] for s in got] == ["B-CAL-002", "B-CAL-003"])
+    blank = sp.signal_index([{"activity_id": ""}])
+    check("r10qa A13/A21: a blank link never resolves to a blank-ID signal",
+          sp.linked_signals({"activity_ids": ["", None]}, blank) == [])
+
+    coded = _golden(B, "coded.json")
+    entry(coded, "TE-B-002")["activity_ids"] = ["b_cal_002"]
+    out = _govern_forged(coded)
+    check("r10qa A13: govern() counts a canonically linked activity as used, so it is never also missing time",
+          "B-CAL-002" not in [m["activity_id"] for m in out["missing_time_report"]]
+          and [m["activity_id"] for m in out["missing_time_report"]] == ["B-DOC-003", "B-DOC-004"])
+
+    drafted = _golden(B, "drafted.json")
+    want = entry(drafted, "TE-B-002")["draft"]["narrative"]
+    entry(drafted, "TE-B-002")["activity_ids"] = ["b_cal_002"]
+    sp.derive_drafts(drafted, only={1})
+    check("r10qa A13: derive_drafts reads a canonically linked activity (same narrative as the exact link)",
+          entry(drafted, "TE-B-002")["draft"]["narrative"] == want)
+
+    script_dir = os.path.join(ROOT, "skills", "code-map", "scripts")
+    act = _golden(B, "activity.json")
+    entry(act, "TE-B-002")["activity_ids"] = ["B-CAL-002", "b_mail_001"]
+    sp.filter_packet(act, script_dir=script_dir, engine="engine:code_map")
+    recs = [r for r in act["provenance"]["excluded_signals"] if sp.canon_id(r["activity_id"]) == sp.canon_id("B-MAIL-001")]
+    e2 = entry(act, "TE-B-002")
+    check("r10qa A13: filter_packet records one activity once, whatever spelling a later link uses",
+          len(recs) == 1 and e2["activity_ids"] == ["B-CAL-002"] and e2["excluded_activity_ids"] == ["b_mail_001"],
+          recs)
+    entry(act, "TE-B-002")["activity_ids"] = ["B-MAIL-001"]
+    sp.filter_packet(act, script_dir=script_dir, engine="engine:code_map")
+    check("r10qa A13: an entry's excluded links are merged canonically (no second spelling of one activity)",
+          entry(act, "TE-B-002")["excluded_activity_ids"] == ["b_mail_001"])
+
+    act = _golden(B, "activity.json")
+    act["provenance"]["excluded_entries"] = [{"entry_id": "TE-X-001", "reason": sp.OTHER_ENGAGEMENT_ENTRY_REASON,
+                                              "excluded_by": "engine:activity_pull",
+                                              "citations": [sp.ENGAGEMENT_CITATION]}]
+    foreign = copy.deepcopy(entry(act, "TE-B-002"))
+    foreign.update(entry_id="te_x_001", source="connector:timesheet:OTHER-999")
+    act["time_entries"].append(foreign)
+    sp.filter_packet(act, script_dir=script_dir, engine="engine:code_map")
+    check("r10qa A13: another engagement's entry already recorded under a variant spelling is not recorded twice",
+          [r["entry_id"] for r in act["provenance"]["excluded_entries"]] == ["TE-X-001"]
+          and "te_x_001" not in [e["entry_id"] for e in act["time_entries"]])
+
+    gov = _golden(B, "governed.json")
+    record = next(r for r in gov["provenance"]["excluded_signals"] if r["activity_id"] == "B-MAIL-001")
+    entry(gov, "TE-B-001")["excluded_activity_ids"] = ["b_mail_001"]
+    check("r10qa A13: exclusion_texts matches the record to the entry that excluded it by canonical ID",
+          (record["reason"], record["citations"]) in sp.exclusion_texts(record, gov))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         golden_tests(tmp)
@@ -4672,6 +4770,7 @@ def main():
         r9qa_tests(tmp)
         r11_tests(tmp)
         r12_tests(tmp)
+        r10qa_tests(tmp)
     failed = [r for r in RESULTS if not r[1]]
     for label, ok, detail in RESULTS:
         detail = str(detail).encode("ascii", "backslashreplace").decode("ascii") if detail else ""

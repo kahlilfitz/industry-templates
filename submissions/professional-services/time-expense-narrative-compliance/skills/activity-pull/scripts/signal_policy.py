@@ -202,7 +202,8 @@ def exclusion_texts(record, packet):
     key = record.get("policy_key")
     out = [(OTHER_ENGAGEMENT_REASON, [ENGAGEMENT_CITATION]), (disabled_source_reason(key), [POLICY_CITATION])]
     for entry in packet.get("time_entries", []):
-        if record.get("activity_id") not in (entry.get("excluded_activity_ids") or []):
+        # A22/A13: the record and the entry's exclusion name one activity when their IDs are canonically equal.
+        if _id_key(record.get("activity_id")) not in {_id_key(a) for a in entry.get("excluded_activity_ids") or []}:
             continue
         out.append((unlinked_reason(entry.get("entry_id")), [POLICY_CITATION]))
         cites = entry.get("citations") or []
@@ -335,11 +336,12 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
     if foreign:
         packet["time_entries"] = [e for e in entries if not other_engagement(e, engagement_id)]
         recorded = provenance.setdefault("excluded_entries", [])
-        known = {e.get("entry_id") for e in recorded}
+        known = {_id_key(e.get("entry_id")) for e in recorded}
         recorded += [{"entry_id": e.get("entry_id"), "reason": OTHER_ENGAGEMENT_ENTRY_REASON, "excluded_by": engine,
-                      "citations": [ENGAGEMENT_CITATION]} for e in foreign if e.get("entry_id") not in known]
+                      "citations": [ENGAGEMENT_CITATION]} for e in foreign if _id_key(e.get("entry_id")) not in known]
     excluded = list(provenance.get("excluded_signals", []))
-    seen = {e.get("activity_id") for e in excluded}
+    # A13: one activity is recorded once, whatever spelling of its ID a later signal or link uses.
+    seen = {_id_key(e.get("activity_id")) for e in excluded}
     kept = []
     for signal in packet.get("activity_signals", []):
         key = source_key(signal.get("source"))
@@ -347,7 +349,7 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
         if key is not None and enabled.get(key) is True and not foreign:
             kept.append(signal)
             continue
-        if signal.get("activity_id") not in seen:
+        if _id_key(signal.get("activity_id")) not in seen:
             excluded.append({
                 "activity_id": signal.get("activity_id"),
                 # Another engagement's source label is not kept either: nothing of it is rendered (#13.3).
@@ -357,21 +359,22 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
                 "excluded_by": engine,
                 "citations": [ENGAGEMENT_CITATION] if foreign else [POLICY_CITATION],
             })
-            seen.add(signal.get("activity_id"))
+            seen.add(_id_key(signal.get("activity_id")))
     packet["activity_signals"] = kept
-    kept_ids = {s.get("activity_id") for s in kept}
+    kept_ids = {_id_key(s.get("activity_id")) for s in kept}
     moved = set()
     for n, entry in enumerate(packet.get("time_entries", [])):
         links = entry.get("activity_ids") or []
-        dropped = [a for a in links if a not in kept_ids]
+        dropped = [a for a in links if _id_key(a) not in kept_ids]
         if not dropped:
             continue
         moved.add(n)
-        entry["activity_ids"] = [a for a in links if a in kept_ids]
+        entry["activity_ids"] = [a for a in links if _id_key(a) in kept_ids]
         prior = entry.get("excluded_activity_ids") or []
-        entry["excluded_activity_ids"] = prior + [a for a in dropped if a not in prior]
+        prior_keys = {_id_key(a) for a in prior}
+        entry["excluded_activity_ids"] = prior + [a for a in dropped if _id_key(a) not in prior_keys]
         for activity_id in dropped:
-            if activity_id not in seen:
+            if _id_key(activity_id) not in seen:
                 excluded.append({
                     "activity_id": activity_id,
                     "source": None,
@@ -380,7 +383,7 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
                     "excluded_by": engine,
                     "citations": [POLICY_CITATION],
                 })
-                seen.add(activity_id)
+                seen.add(_id_key(activity_id))
     provenance["excluded_signals"] = excluded
     provenance["signal_policy"] = {
         "enabled_sources": sorted(k for k, v in enabled.items() if v),
@@ -1537,6 +1540,16 @@ def _id_key(value):
     return key if key else object()
 
 
+def signal_index(signals):
+    """Activity signals keyed by canonical ID (A13, A22); check_unique_ids has already refused canonical repeats."""
+    return {_id_key(s.get("activity_id")): s for s in signals}
+
+
+def linked_signals(entry, index):
+    """The signals an entry links, resolved by canonical ID through signal_index (a blank link matches nothing)."""
+    return [index[k] for k in (_id_key(a) for a in entry.get("activity_ids") or []) if k in index]
+
+
 def check_unique_ids(packet):
     """IDs the engines index by must be unique (#13.2): an index keyed by a repeated ID would keep one record and
     silently drop the other (a hidden signal, missing time or entry). The error names positions, never the ID.
@@ -2136,8 +2149,8 @@ def draft_hold(packet):
 
 def derive_draft(entry, by_id, packet, packet_hold):
     """The draft narrative-draft builds for one entry from the entry, its linked signals and the packet (#13.5).
-    by_id maps activity IDs to the packet's signals; packet_hold is draft_hold(packet)."""
-    linked = [by_id[a] for a in entry.get("activity_ids", []) if a in by_id]
+    by_id is signal_index(packet signals); packet_hold is draft_hold(packet)."""
+    linked = linked_signals(entry, by_id)
     narrative, status, confidence, reasons, suggestions, covered = build_narrative(entry, linked)
     # The entry's own text, citations included, is screened like signal text (#11.1): when it trips, the
     # draft is withheld and no flagged entry citation is copied (#11.2).
@@ -2202,7 +2215,7 @@ def derive_draft(entry, by_id, packet, packet_hold):
 
 def derive_drafts(packet, only=None):
     """Draft (or re-draft) every entry in place, or only the entries at the positions in `only`."""
-    by_id = {a["activity_id"]: a for a in packet.get("activity_signals", [])}
+    by_id = signal_index(packet.get("activity_signals", []))
     hold = draft_hold(packet)
     for n, entry in enumerate(packet.get("time_entries", [])):
         if only is None or n in only:
@@ -2213,7 +2226,7 @@ def check_drafts(packet):
     """Every carried draft equals its re-derivation from the packet (#13.5); used on drafted and coded packets.
     A difference in any field is refused with no output, so no edited narrative, status, confidence, reason, link or
     rewrite reaches a rule. Messages name the entry position and the differing field names only."""
-    by_id = {a["activity_id"]: a for a in packet.get("activity_signals", [])}
+    by_id = signal_index(packet.get("activity_signals", []))
     hold = draft_hold(packet)
     for i, entry in enumerate(packet.get("time_entries") or []):
         want, got = derive_draft(entry, by_id, packet, hold), entry["draft"]
