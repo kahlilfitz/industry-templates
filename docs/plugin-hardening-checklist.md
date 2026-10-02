@@ -114,6 +114,19 @@ How to read a report:
   row 1 or a hard-coded section. If a location is unknown, say so.
   [deliverable-review-quality-gate 1.0.2 L4]
   Test: a finding whose source has no page must not report `p1`.
+- [ ] **B5. Every stage distrusts the previous stage's output.** Each engine that reads an
+  intermediate JSON (mapped, coded, governed, gate-checked and so on) treats it as untrusted input:
+  - it validates the whole document against the contract (required fields, types, closed enums,
+    provenance prefixes);
+  - it re-derives or reconciles every verdict, flag, count, total and summary from the line items,
+    and refuses on mismatch rather than rendering supplied values;
+  - it re-screens every free-text string, including hold reasons, sources and citations, through
+    the shared detector.
+
+  A self-declared `source: engine:*` is not proof of origin.
+  [Wave 1 pre-freeze QA, 2026-10-01: all three plugins]
+  Test: hand-edit each intermediate file to (a) relabel a reject or blocker as clean, (b) change a
+  summary total, (c) add instruction-like text to a nested field; each must hold or be refused.
 
 ## C. Policy and config
 
