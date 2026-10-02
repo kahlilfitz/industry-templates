@@ -18,7 +18,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STEERING_GUARD_SHA256 = "982086a1cd8d9bfdae794df561f9709065bfac02a2a8ded98dbc12a34eb53f28"  # steering_guard 1.1.0
+STEERING_GUARD_SHA256 = "825d0550190150e78fd3a66fc3b8c8b6e5f4867e6620e47ed7381b0d796f4123"  # steering_guard 1.1.0
 STEERING_GUARD = os.path.join(ROOT, "skills", "activity-pull", "scripts", "steering_guard.py")
 
 
