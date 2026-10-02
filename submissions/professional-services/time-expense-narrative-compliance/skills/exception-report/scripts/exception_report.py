@@ -68,6 +68,11 @@ def cell(text):
     return signal_policy.redact(text).replace("|", "\\|").replace("\n", " ")
 
 
+def bound(value):
+    """A period bound for display: a null bound is an open period, never a blank or 'None'."""
+    return cell(value) if value else "open"
+
+
 def cells(values):
     """Join a list of data-derived values, each passed through cell(); a non-list is treated as one value."""
     if values is None:
@@ -170,8 +175,9 @@ def main():
         lines.append(f"- **Metadata withheld:** {signal_policy.PACKET_HOLD_REASON}; every entry is held for review "
                      f"({signal_policy.METADATA_CITATION})")
     lines += [
-        f"- Period covered by the governed data: {cell(period.get('start'))} to {cell(period.get('end'))} "
-        f"(entries and activity actually dated {cell(actual[0])} to {cell(actual[1])})",
+        f"- Period covered by the governed data: {bound(period.get('start'))} to {bound(period.get('end'))} "
+        + (f"(entries and activity actually dated {cell(actual[0])} to {cell(actual[1])})" if data_dates
+           else "(no dated entries or activity)"),
     ]
     if args.requested_start or args.requested_end:
         req = (args.requested_start or period.get("start") or actual[0], args.requested_end or period.get("end") or actual[1])
@@ -180,8 +186,10 @@ def main():
         beyond_data = not data_dates or req[0] < actual[0] or req[1] > actual[1]
         narrower = bool(data_dates) and (actual[0] < req[0] or actual[1] > req[1])
         if beyond_declared or beyond_data:
-            lines.append(f"- **Period caveat:** you asked about {req[0]} to {req[1]}, but the governed data contains entries "
-                         f"and activity dated only {actual[0]} to {actual[1]}. Time outside those dates has not been "
+            lines.append(f"- **Period caveat:** you asked about {bound(req[0])} to {bound(req[1])}, but the governed data "
+                         + (f"contains entries and activity dated only {actual[0]} to {actual[1]}" if data_dates
+                            else "contains no dated entries or activity")
+                         + ". Time outside those dates has not been "
                          "checked; re-run the chain for the requested period, or confirm no other time exists, before relying on this packet.")
         elif narrower:
             lines.append(f"- **Period caveat:** you asked about {req[0]} to {req[1]}, but this packet also covers entries and "

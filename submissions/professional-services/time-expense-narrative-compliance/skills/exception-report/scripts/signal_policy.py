@@ -962,6 +962,52 @@ def _sweep_excluded_ids(packet, owners):
             owners.update(linking or ["packet"])
 
 
+def _name_slots(packet):
+    """(holder, key) for every field that holds a timekeeper or manager name compared by name later (timekeeper scope,
+    team-view check, rows): the line items' person, the scope's requester, people and requested colleagues, and the
+    engagement manager in the header and the recorded identity."""
+    slots = []
+    for name in ("time_entries", "activity_signals", "missing_time_report", "exception_list"):
+        records = packet.get(name)
+        for record in records if isinstance(records, list) else []:
+            if isinstance(record, dict) and isinstance(record.get("person"), str):
+                slots.append((record, "person"))
+    provenance = packet.get("provenance") if isinstance(packet.get("provenance"), dict) else {}
+    scope = provenance.get("timekeeper_scope")
+    if isinstance(scope, dict):
+        holders = [(scope, "requester"), (scope, "people")]
+        if isinstance(scope.get("withheld"), dict):
+            holders.append((scope["withheld"], "requested"))
+        for holder, key in holders:
+            value = holder.get(key)
+            if isinstance(value, str):
+                slots.append((holder, key))
+            elif isinstance(value, list):
+                slots += [(value, i) for i, v in enumerate(value) if isinstance(v, str)]
+    for holder in (packet.get("engagement"), provenance.get("engagement_identity")):
+        if isinstance(holder, dict) and isinstance(holder.get("engagement_manager"), str):
+            slots.append((holder, "engagement_manager"))
+    return slots
+
+
+def _withhold_names(packet, originals, owners):
+    """Names are harvested before the sweep and withheld consistently after it: a name withheld in any slot (for
+    example a scope list whose adjacent names read as an instruction) is withheld in every slot, so the scope check
+    still matches the rows and the team-view check still matches the manager. A row whose person is withheld is held,
+    never dropped as another timekeeper's."""
+    names = {canon_text(old) for holder, key, old in originals
+             if old != WITHHELD_TEXT and holder[key] == WITHHELD_TEXT} - {""}
+    if not names:
+        return
+    for holder, key, old in originals:
+        if holder[key] != WITHHELD_TEXT and canon_text(old) in names:
+            holder[key] = WITHHELD_TEXT
+    for name in ("time_entries", "activity_signals"):
+        for n, record in enumerate(packet.get(name) or []):
+            if isinstance(record, dict) and record.get("person") == WITHHELD_TEXT:
+                owners.add((name, n))
+
+
 def sweep_packet(packet):
     """Screen every member name and uncovered string in the packet in place (#11.3). A hit is replaced by a marker
     (a member name by a unique MEMBER_MARKER, a value by WITHHELD_TEXT). A hit inside an activity signal or time
@@ -969,9 +1015,11 @@ def sweep_packet(packet):
     is a packet-level hold (packet_held). Idempotent: an earlier stage's markers are kept and still hold."""
     if not isinstance(packet, dict):
         return
+    originals = [(holder, key, holder[key]) for holder, key in _name_slots(packet)]
     sweep = _Sweep(_contract_root())
     sweep.walk(packet, sweep.root, ())
     _sweep_excluded_ids(packet, sweep.owners)
+    _withhold_names(packet, originals, sweep.owners)
     for owner in sweep.owners - {"packet"}:
         records = packet.get(owner[0])
         if isinstance(records, list) and isinstance(owner[1], int) and owner[1] < len(records) \

@@ -10,7 +10,10 @@
     "period",
     "activity_signals",
     "time_entries",
-    "provenance"
+    "provenance",
+    "signal_config",
+    "code_structure",
+    "guidelines"
   ],
   "definitions": {
     "text": {
@@ -83,7 +86,10 @@
       "required": [
         "flag",
         "severity",
-        "detail"
+        "detail",
+        "confidence",
+        "citations",
+        "source"
       ],
       "properties": {
         "flag": {
@@ -154,7 +160,12 @@
       "required": [
         "engagement_id",
         "client_name",
-        "matter_name"
+        "matter_name",
+        "billing_guidelines_id",
+        "engagement_manager",
+        "source",
+        "confidence",
+        "citations"
       ],
       "properties": {
         "engagement_id": {
@@ -221,7 +232,12 @@
             "store_raw_mail": {
               "type": "boolean"
             }
-          }
+          },
+          "required": [
+            "default",
+            "store_document_body",
+            "store_raw_mail"
+          ]
         },
         "sources": {
           "type": "object",
@@ -273,7 +289,9 @@
           "billable_signal",
           "source",
           "confidence",
-          "citations"
+          "citations",
+          "deliverable",
+          "meeting_id"
         ],
         "properties": {
           "activity_id": {
@@ -354,7 +372,11 @@
           "duration_hours",
           "source",
           "confidence",
-          "citations"
+          "citations",
+          "narrative",
+          "activity_ids",
+          "submitted_phase_code",
+          "submitted_task_code"
         ],
         "properties": {
           "entry_id": {
@@ -392,7 +414,14 @@
               "status",
               "needs_review",
               "confidence",
-              "citations"
+              "citations",
+              "review_reasons",
+              "word_count",
+              "sufficiency",
+              "linked_activity_ids",
+              "covered_activity_ids",
+              "excluded_activity_ids",
+              "source"
             ],
             "properties": {
               "narrative": {
@@ -437,7 +466,12 @@
                   "type": "object",
                   "required": [
                     "narrative",
-                    "status"
+                    "status",
+                    "review_reasons",
+                    "linked_activity_ids",
+                    "confidence",
+                    "source",
+                    "citations"
                   ],
                   "properties": {
                     "narrative": {
@@ -486,7 +520,13 @@
               "recommended_phase_code",
               "recommended_task_code",
               "basis",
-              "confidence"
+              "confidence",
+              "recommended_label",
+              "submitted_phase_code",
+              "submitted_task_code",
+              "flags",
+              "source",
+              "citations"
             ],
             "properties": {
               "recommended_phase_code": {
@@ -534,7 +574,12 @@
             "type": "object",
             "required": [
               "verdict",
-              "confidence"
+              "confidence",
+              "flags",
+              "required_elements",
+              "evidence_hours_same_date",
+              "source",
+              "citations"
             ],
             "properties": {
               "verdict": {
@@ -563,7 +608,12 @@
                   "purpose": {
                     "type": "boolean"
                   }
-                }
+                },
+                "required": [
+                  "actor",
+                  "subject",
+                  "purpose"
+                ]
               },
               "evidence_hours_same_date": {
                 "$ref": "#/definitions/hours"
@@ -618,7 +668,13 @@
         "citations": {
           "$ref": "#/definitions/strings"
         }
-      }
+      },
+      "required": [
+        "code_set_id",
+        "source",
+        "confidence",
+        "citations"
+      ]
     },
     "guidelines": {
       "type": "object",
@@ -638,7 +694,14 @@
         "citations": {
           "$ref": "#/definitions/strings"
         }
-      }
+      },
+      "required": [
+        "guidelines_id",
+        "summary",
+        "source",
+        "confidence",
+        "citations"
+      ]
     },
     "missing_time_report": {
       "type": "array",
@@ -649,7 +712,13 @@
           "activity_id",
           "person",
           "date",
-          "duration_hours"
+          "duration_hours",
+          "activity_class",
+          "subject",
+          "finding",
+          "source",
+          "confidence",
+          "citations"
         ],
         "properties": {
           "activity_id": {
@@ -665,10 +734,10 @@
             "$ref": "#/definitions/hours"
           },
           "activity_class": {
-            "$ref": "#/definitions/text_or_null"
+            "$ref": "#/definitions/text"
           },
           "subject": {
-            "$ref": "#/definitions/text_or_null"
+            "$ref": "#/definitions/text"
           },
           "finding": {
             "$ref": "#/definitions/text"
@@ -694,7 +763,15 @@
         "type": "object",
         "required": [
           "verdict",
-          "flags"
+          "flags",
+          "entry_id",
+          "person",
+          "date",
+          "duration_hours",
+          "recommended_action",
+          "source",
+          "confidence",
+          "citations"
         ],
         "properties": {
           "entry_id": {
@@ -771,7 +848,13 @@
         "total_entries",
         "total_hours",
         "verdict_counts",
-        "missing_time_hours"
+        "missing_time_hours",
+        "period",
+        "exception_count",
+        "excluded_signal_ids",
+        "source",
+        "confidence",
+        "citations"
       ],
       "properties": {
         "period": {
@@ -838,7 +921,16 @@
     "provenance": {
       "type": "object",
       "required": [
-        "engagement_identity"
+        "engagement_identity",
+        "engines",
+        "generated_at",
+        "sources_read",
+        "excluded_signals",
+        "signal_policy",
+        "skipped_sources",
+        "out_of_scope_rows",
+        "timekeeper_scope",
+        "period_check"
       ],
       "properties": {
         "engines": {
@@ -894,7 +986,9 @@
               "activity_id",
               "reason",
               "excluded_by",
-              "citations"
+              "citations",
+              "source",
+              "policy_key"
             ],
             "properties": {
               "activity_id": {
@@ -974,7 +1068,15 @@
             "citations": {
               "$ref": "#/definitions/strings"
             }
-          }
+          },
+          "required": [
+            "enabled_sources",
+            "disabled_sources",
+            "policies_applied",
+            "rule",
+            "engine",
+            "citations"
+          ]
         },
         "skipped_sources": {
           "type": "array",
@@ -999,7 +1101,13 @@
               "citations": {
                 "$ref": "#/definitions/strings"
               }
-            }
+            },
+            "required": [
+              "policy_key",
+              "file",
+              "reason",
+              "citations"
+            ]
           }
         },
         "out_of_scope_rows": {
@@ -1016,14 +1124,24 @@
               "citations": {
                 "$ref": "#/definitions/strings"
               }
-            }
+            },
+            "required": [
+              "activity_id",
+              "reason",
+              "citations"
+            ]
           }
         },
         "timekeeper_scope": {
           "type": "object",
           "description": "Recorded by activity_pull and enforced by every engine: only the requester's rows unless a confirmed engagement-manager team view is recorded (client-billing-guidelines.md #12.1).",
           "required": [
-            "mode"
+            "mode",
+            "requester",
+            "people",
+            "team_view",
+            "withheld",
+            "citations"
           ],
           "properties": {
             "mode": {
@@ -1053,7 +1171,9 @@
               "required": [
                 "confirmed",
                 "role",
-                "confirmation"
+                "confirmation",
+                "verified_against",
+                "citations"
               ],
               "properties": {
                 "confirmed": {
@@ -1097,7 +1217,12 @@
                 "citations": {
                   "$ref": "#/definitions/strings"
                 }
-              }
+              },
+              "required": [
+                "requested",
+                "reason",
+                "citations"
+              ]
             },
             "withheld_by_engines": {
               "type": "array",
@@ -1117,7 +1242,13 @@
                   "citations": {
                     "$ref": "#/definitions/strings"
                   }
-                }
+                },
+                "required": [
+                  "engine",
+                  "rows_withheld",
+                  "reason",
+                  "citations"
+                ]
               }
             },
             "citations": {
@@ -1129,7 +1260,8 @@
           "type": "object",
           "description": "Whether the requested period holds any data (status data_found, no_data_in_period or no_period_requested) with a warning naming the dates that do.",
           "required": [
-            "status"
+            "status",
+            "warning"
           ],
           "properties": {
             "status": {

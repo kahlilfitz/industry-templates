@@ -157,19 +157,28 @@ def unique(index, key, cite, what, value=None):
     index[key] = value if value is not None else cite
 
 
+ENGAGEMENT_FIELDS = ("engagement_id", "client_name", "matter_name", "billing_guidelines_id", "engagement_manager")
+# One labelled field per line. The text is split with str.splitlines() (every line boundary, including U+2028, \x85
+# and \x0b-\x0c), and the value can never cross a line, so a blank field can't take the next line as its value.
+ENGAGEMENT_LABEL_RE = re.compile(r"- (" + "|".join(ENGAGEMENT_FIELDS) + r"):([^\r\n]*)")
+
+
 def read_engagement(path):
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
     except (OSError, UnicodeError) as exc:
         raise InputError(f"cannot read engagement-letter-extract.md: {exc}") from exc
-    found = re.findall(r"^- (engagement_id|client_name|matter_name|billing_guidelines_id|engagement_manager): (.+)$",
-                       text, re.M)
+    found = [(m.group(1), m.group(2).strip()) for m in map(ENGAGEMENT_LABEL_RE.fullmatch, text.splitlines()) if m]
     repeated = sorted({k for k, _ in found if [n for n, _ in found].count(k) > 1})
     if repeated:
         raise InputError(f"engagement-letter-extract.md gives {', '.join(repeated)} more than once (a repeated field "
                          "is malformed, never overwritten)")
-    fields = {k: v.strip() for k, v in found}
+    blank = sorted(k for k, v in found if not v)
+    if blank:
+        raise InputError(f"engagement-letter-extract.md gives an empty {', '.join(blank)} (a labelled field needs a "
+                         "value on its own line; omit an optional field rather than leave it blank)")
+    fields = dict(found)
     missing = [k for k in ("engagement_id", "client_name", "matter_name") if k not in fields]
     if missing:
         raise InputError(f"engagement-letter-extract.md is missing: {', '.join(missing)}")
