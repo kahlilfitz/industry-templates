@@ -58,7 +58,7 @@ def generated_at(override):
         try:
             datetime.datetime.fromisoformat(override.replace("Z", "+00:00"))
         except ValueError as exc:
-            raise InputError(f"--generated-at is not an ISO-8601 timestamp: {override!r}") from exc
+            raise InputError(f"--generated-at must be an ISO-8601 timestamp, got a string of {len(override)} character(s)") from exc
         return override
     return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -68,7 +68,7 @@ def load_packet(path):
     if not isinstance(payload, dict):
         raise InputError("input is not a JSON object")
     if payload.get("contract_version") != CONTRACT:
-        raise InputError(f"expected contract {CONTRACT}, got {payload.get('contract_version')!r}")
+        raise InputError(f"expected a {CONTRACT} object (contract_version must be the contract constant)")
     signal_policy.validate_packet(payload, "activity")
     return payload
 
@@ -225,6 +225,7 @@ def main():
         sys.exit(f"narrative_draft: {exc}")
 
     by_id = {a["activity_id"]: a for a in out["activity_signals"]}
+    packet_hold = signal_policy.packet_held(out)
     drafted_count = 0
     for entry in out["time_entries"]:
         linked = [by_id[a] for a in entry.get("activity_ids", []) if a in by_id]
@@ -246,10 +247,18 @@ def main():
         uncovered = [a.get("activity_id") for a in linked if a.get("activity_id") not in covered]
         if uncovered and status != "needs_review_embedded_instruction":
             reasons.append("linked activity not described in any draft or suggested rewrite: " + ", ".join(uncovered))
+        if packet_hold:
+            reasons.append(signal_policy.PACKET_HOLD_REASON + f" ({signal_policy.METADATA_CITATION})")
+        # Reasons found after the draft was built still gate it: a draft with any reason is never left as a clean
+        # engine draft (B6).
+        if status == "engine_generated_from_activity" and reasons:
+            status = "needs_review"
         if any(signal_policy.INJECTION_CITATION in r for r in reasons):
             citations_extra = [signal_policy.INJECTION_CITATION, signal_policy.WITHHOLD_CITATION]
         else:
             citations_extra = []
+        if packet_hold:
+            citations_extra.append(signal_policy.METADATA_CITATION)
         if status in ("engine_generated_from_activity", "needs_review", "needs_review_insufficient_detail"):
             drafted_count += 1
         citations = []

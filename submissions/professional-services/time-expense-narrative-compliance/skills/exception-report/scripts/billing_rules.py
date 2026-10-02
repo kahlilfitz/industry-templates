@@ -303,6 +303,8 @@ def govern(out):
     """
     signals = out["activity_signals"]
     by_id = {a["activity_id"]: a for a in signals}
+    # #11.3: a hold on packet metadata governs every entry, so it is known before any entry is gated (B6).
+    packet_hold = signal_policy.packet_held(out)
     used_activity_ids = set()
     meeting_seen = {}
     exception_list = []
@@ -398,10 +400,13 @@ def govern(out):
                   or any(a.get("embedded_instruction") is True for a in linked)
                   or any(r.get("status") == "withheld_embedded_instruction" for r in rewrites)
                   or signal_policy.WITHHELD_TEXT in reasons)
-        if marked or hits:
+        if marked or hits or packet_hold:
+            causes = ([signal_policy.hold_reason(hits, EMBEDDED_DEFAULT)] if marked or hits else []) \
+                + ([signal_policy.PACKET_HOLD_REASON] if packet_hold else [])
             add_flag(flags, "embedded_instruction", "hold_for_review",
-                     signal_policy.hold_reason(hits, EMBEDDED_DEFAULT) + "; treated as data and not followed",
-                     [signal_policy.INJECTION_CITATION], 0.95)
+                     "; ".join(causes) + "; treated as data and not followed",
+                     [signal_policy.INJECTION_CITATION] + ([signal_policy.METADATA_CITATION] if packet_hold else []),
+                     0.95)
         if record_hits and record_hits[0]:
             withhold_texts(draft)
         if draft_hits:

@@ -11,8 +11,10 @@ other validation keyword, so a keyword it cannot enforce is never silently ignor
 Rules: "number" is a finite int or float and never a boolean; "integer" is an int and never a boolean;
 "pattern" is a regular-expression search, as in JSON Schema. strict_load() is the only JSON parser the engines
 use: NaN, Infinity and -Infinity, numbers that overflow to infinity (1e999) and integers beyond +/-2**53 are
-refused while parsing, so a non-finite or unrepresentable number never reaches a range check. Error messages name the field path, the rule
-and the JSON type of the value - never the value itself, which is untrusted text.
+refused while parsing, so a non-finite or unrepresentable number never reaches a range check. A member name repeated
+in one object is refused too (json.load would silently keep the last one). Error messages name the field path, the rule
+and the JSON type of the value - never the value itself, which is untrusted text; a map key in a path is written
+as its position ("<member #2>").
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
@@ -78,9 +80,20 @@ def _bounded_int(text):
     return value
 
 
+def _unique_members(pairs):
+    """object_pairs_hook: a member name given twice in one object is malformed (json.load would keep the last)."""
+    out = {}
+    for key, value in pairs:
+        if key in out:
+            raise ValueError("a JSON object repeats a member name (duplicate keys are refused, never overwritten)")
+        out[key] = value
+    return out
+
+
 def strict_load(fh):
-    """json.load that refuses non-finite and unrepresentable numbers instead of parsing them (ValueError)."""
-    return json.load(fh, parse_constant=_no_constant, parse_float=_finite_float, parse_int=_bounded_int)
+    """json.load that refuses non-finite and unrepresentable numbers and duplicate member names (ValueError)."""
+    return json.load(fh, parse_constant=_no_constant, parse_float=_finite_float, parse_int=_bounded_int,
+                     object_pairs_hook=_unique_members)
 
 
 @functools.lru_cache(maxsize=8)
@@ -158,15 +171,16 @@ def validate(value, schema, root, where="packet"):
         properties = schema.get("properties", {})
         extra = schema.get("additionalProperties", True)
         names = schema.get("propertyNames")
-        for key, item in value.items():
+        for n, (key, item) in enumerate(value.items(), start=1):
             if names is not None:
-                validate(key, names, root, f"{where} key")
+                validate(key, names, root, f"{where} member #{n} name")
             if key in properties:
                 validate(item, properties[key], root, f"{where}.{key}")
             elif extra is False:
                 raise ContractError(f"invalid input: {where} has a field the contract does not allow")
             elif isinstance(extra, dict):
-                validate(item, extra, root, f"{where}.{key}")
+                # A map key is input text: the path names its position, never the key itself.
+                validate(item, extra, root, f"{where}.<member #{n}>")
     if isinstance(value, list) and "items" in schema:
         for i, item in enumerate(value):
             validate(item, schema["items"], root, f"{where}[{i}]")

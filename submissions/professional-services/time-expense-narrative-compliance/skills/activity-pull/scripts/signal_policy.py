@@ -34,7 +34,12 @@
    (NaN, Infinity, -Infinity, 1e999 and integers beyond +/-2**53 are input errors). Every engine serialises
    its whole output first (dump_json refuses NaN; text is encoded to UTF-8, so a lone surrogate fails here)
    and write_output() then writes a temp file in the output folder and os.replace()s it: on any error the
-   output path is neither created nor truncated.
+   output path is neither created nor truncated. A member name repeated in one JSON object is refused while parsing.
+7. Member names and metadata are data (client-billing-guidelines.md #11.3). filter_packet() ends with sweep_packet():
+   every member name the contract does not fix, and every string no other screen covers (engagement, period, signal
+   policy, provenance, code structure, guidelines and summary text, and undeclared members anywhere), is screened -
+   alone, as adjacent array entries and as one record per object. A hit is replaced by a marker; inside an activity
+   signal or time entry it sets that record's embedded_instruction, anywhere else packet_held() holds every entry.
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
@@ -335,6 +340,7 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
         "engine": SIGNAL_POLICY_VERSION,
         "citations": [POLICY_CITATION],
     }
+    sweep_packet(packet)  # last: screens member names and metadata, including what this function recorded (#11.3)
     return {e.get("activity_id") for e in excluded}
 
 
@@ -624,6 +630,259 @@ def redact(text):
     return WITHHELD_TEXT if embedded_instruction(text) else text
 
 
+# --- Whole-packet sweep: member names and metadata are data too (client-billing-guidelines.md #11.3) --------
+# The contract leaves most objects open, so a packet can carry members it does not declare, and its engagement,
+# period, policy, provenance and summary text is copied from stage to stage. sweep_packet() (run by filter_packet in
+# every engine) screens all of it: every member name the contract does not fix, and every string that no other screen
+# covers. The fields signal_texts(), entry_texts() and draft_records() screen, and the re-derived missing-time and
+# exception items, are left to those screens. Strings in an array are also screened as adjacent pairs, and an
+# object's strings as one record, so text split across entries or fields is caught (#11.1).
+
+METADATA_CITATION = "client-billing-guidelines.md #11.3"
+MEMBER_MARKER = "[withheld member {n}: flagged as embedded_instruction - client-billing-guidelines.md #11.3]"
+MEMBER_MARKER_RE = re.compile(r"\[withheld member \d+: flagged as embedded_instruction - "
+                              r"client-billing-guidelines\.md #11\.3\]")
+PACKET_HOLD_REASON = ("packet metadata (a member name, or engagement, period, policy, provenance or summary text) "
+                      "flagged as embedded_instruction; withheld from every output and never followed")
+COVERED_ALL = "*"
+# Strings at these positions are screened elsewhere (or re-derived and compared); the sweep skips them.
+COVERED_KEYS = {
+    "signal": set(SIGNAL_TEXT_KEYS),
+    "entry": set(ENTRY_TEXT_KEYS),
+    "draft": set(DRAFT_TEXT_KEYS) | {"narrative"},
+    "rewrite": set(REWRITE_TEXT_KEYS),
+    "item": COVERED_ALL,
+    "exclusion": {"activity_id", "reason", "citations"},
+    "excluded_entry": {"reason", "citations"},
+    "summary": {"excluded_signal_ids"},
+}
+LINE_ITEMS = ("activity_signals", "time_entries", "missing_time_report", "exception_list")
+# The only exemptions: the engines' own origin labels. "engine:code_map" reads to the detector like a vocative
+# ("engine, code ..."), and these exact values are written by the engines, never by a user.
+ENGINE_LABELS = frozenset({"engine:activity_pull", "engine:narrative_draft", "engine:code_map",
+                           "engine:guideline_check", "engine:exception_report", "engine:unknown"})
+
+
+def _contract_root():
+    return contract_check.load_contract(contract_check.contract_path(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _role(path):
+    n = len(path)
+    if n == 2 and path[0] == "activity_signals":
+        return "signal"
+    if n == 2 and path[0] == "time_entries":
+        return "entry"
+    if n == 3 and path[0] == "time_entries" and path[2] == "draft":
+        return "draft"
+    if n == 5 and path[0] == "time_entries" and path[2:4] == ("draft", "suggested_rewrites"):
+        return "rewrite"
+    # Re-derived and compared: missing-time and exception items (exception_report re-runs the rules), and an entry's
+    # code mapping (guideline_check recomputes and compares it whole) and compliance (re-run; only re-derived detail
+    # is printed). Their member names are still swept.
+    if n >= 2 and path[0] in ("missing_time_report", "exception_list"):
+        return "item"
+    if n >= 3 and path[0] == "time_entries" and path[2] in ("code_mapping", "compliance"):
+        return "item"
+    # Exclusion records: the engines' own reason wording, reconciled exactly by exception_report (#13.2); the IDs and
+    # citations it quotes are screened with the time entry that links them (entry_texts).
+    if n == 3 and path[:2] == ("provenance", "excluded_signals"):
+        return "exclusion"
+    if n == 3 and path[:2] == ("provenance", "excluded_entries"):
+        return "excluded_entry"
+    # excluded_signal_ids is written by guideline_check from provenance.excluded_signals (already swept) and
+    # reconciled against it exactly by exception_report.
+    if path == ("prebill_summary",):
+        return "summary"
+    return None
+
+
+def _member_texts(key, value):
+    """A member's name and every member name and string under its value, in document order."""
+    out = [key]
+    if isinstance(value, str):
+        out.append(value)
+    elif isinstance(value, dict):
+        for k, v in value.items():
+            out += _member_texts(str(k), v)
+    elif isinstance(value, list):
+        for v in value:
+            out += [v] if isinstance(v, str) else _member_texts("", v)
+    return [t for t in out if isinstance(t, str) and t.strip()]
+
+
+def _tripping_seq(texts):
+    """Indices to withhold in a sequence of strings: each alone, then each adjacent pair (an instruction split
+    across neighbouring array entries), then the whole sequence (every index when only the whole trips)."""
+    live = [i for i, t in enumerate(texts) if isinstance(t, str) and t.strip()]
+    bad = {i for i in live if _scan_text(texts[i])}
+    for a, b in zip(live, live[1:]):
+        if a not in bad and b not in bad and _scan_record({"a": texts[a], "b": texts[b]}):
+            bad |= {a, b}
+    rest = [i for i in live if i not in bad]
+    if not bad and len(rest) > 2 and _scan_record({str(i): texts[i] for i in rest}):
+        bad = set(rest)
+    return bad
+
+
+def _tripping_fields(fields):
+    """Keys to withhold in one object's strings: each alone, then the record and its ordered pairs (both members of
+    a tripping pair; every field when only the whole record trips)."""
+    bad = {k for k, t in fields.items() if _scan_text(t)}
+    rest = {k: t for k, t in fields.items() if k not in bad}
+    if len(rest) > 1 and _scan_record(rest):
+        keys = list(rest)
+        pairs = {k for a in keys for b in keys if a != b and _scan_record({a: rest[a], b: rest[b]}) for k in (a, b)}
+        bad |= pairs or set(keys)
+    return bad
+
+
+class _Sweep:
+    def __init__(self, root):
+        self.root = root
+        self.owners = set()
+
+    def hold(self, path):
+        self.owners.add((path[0], path[1]) if len(path) >= 2 and path[0] in ("activity_signals", "time_entries")
+                        else "packet")
+
+    def walk(self, value, schema, path, covered=False):
+        schema = contract_check._resolve(schema, self.root) if isinstance(schema, dict) else {}
+        if isinstance(value, dict):
+            self.object(value, schema, path)
+        elif isinstance(value, list):
+            self.array(value, schema, path, covered)
+
+    def array(self, items, schema, path, covered):
+        sub = schema.get("items") if isinstance(schema.get("items"), dict) else {}
+        closed = _closed(contract_check._resolve(sub, self.root)) if sub else False
+        if not covered and not closed:
+            for i in _tripping_seq([v if isinstance(v, str) and v not in ENGINE_LABELS else "" for v in items]):
+                items[i] = WITHHELD_TEXT
+                self.hold(path + (i,))
+        for i, item in enumerate(items):
+            if isinstance(item, (dict, list)):
+                self.walk(item, sub, path + (i,), covered)
+
+    def object(self, obj, schema, path):
+        props = schema.get("properties", {})
+        extra = schema.get("additionalProperties", True)
+        cover = COVERED_KEYS.get(_role(path), ())
+        siblings = None
+        rebuilt, swept, changed, used = [], {}, False, set(obj)
+        for key, item in obj.items():
+            if key not in props and not isinstance(extra, dict):
+                # A member the contract does not define: its name and content are screened as one record and with
+                # the object's own strings; a hit (or an earlier marker) renames it to a marker and withholds it.
+                if siblings is None:
+                    siblings = {k: v for k, v in obj.items()
+                                if k in props and isinstance(v, str) and v.strip() and not _scan_text(v)}
+                if MEMBER_MARKER_RE.fullmatch(key) or self.member_trips(key, item, siblings):
+                    self.hold(path)
+                    if not MEMBER_MARKER_RE.fullmatch(key):
+                        key, item, changed = self.marker(used), WITHHELD_TEXT, True
+                rebuilt.append((key, item))
+                continue
+            sub = props.get(key, extra)
+            if key not in props and "propertyNames" not in schema and _scan_text(key):
+                # An open-map member name (signal_config.sources) is input text: renamed, its object kept.
+                self.hold(path)
+                key, changed = self.marker(used), True
+            resolved = contract_check._resolve(sub, self.root) if isinstance(sub, dict) else {}
+            covered = cover == COVERED_ALL or key in cover
+            if isinstance(item, str):
+                if not covered and not _closed(resolved) and item.strip() and item not in ENGINE_LABELS:
+                    swept[key] = item
+            else:
+                self.walk(item, resolved, path + (key,), covered)
+            rebuilt.append((key, item))
+        bad = _tripping_fields(swept) if swept else set()
+        if bad:
+            self.hold(path)
+            rebuilt, changed = [(k, WITHHELD_TEXT if k in bad else v) for k, v in rebuilt], True
+        if changed:
+            obj.clear()
+            obj.update(rebuilt)
+
+    def member_trips(self, key, item, siblings):
+        texts = _member_texts(str(key), item)
+        if _tripping_seq(texts) or (len(texts) > 1 and _scan_record({str(i): t for i, t in enumerate(texts)})):
+            return True
+        return any(_scan_record({"a": a, "b": b}) for s in siblings.values() for t in texts for a, b in ((s, t), (t, s)))
+
+    def marker(self, used):
+        n = 1
+        while MEMBER_MARKER.format(n=n) in used:
+            n += 1
+        name = MEMBER_MARKER.format(n=n)
+        used.add(name)
+        return name
+
+
+def _closed(schema):
+    return "enum" in schema or "const" in schema
+
+
+def sweep_packet(packet):
+    """Screen every member name and uncovered string in the packet in place (#11.3). A hit is replaced by a marker
+    (a member name by a unique MEMBER_MARKER, a value by WITHHELD_TEXT). A hit inside an activity signal or time
+    entry sets that record's embedded_instruction, so every engine holds it and withholds its text; any other hit
+    is a packet-level hold (packet_held). Idempotent: an earlier stage's markers are kept and still hold."""
+    if not isinstance(packet, dict):
+        return
+    sweep = _Sweep(_contract_root())
+    sweep.walk(packet, sweep.root, ())
+    # An excluded signal's ID that no time entry links is screened by nothing else: screen it here.
+    linked = {a for e in packet.get("time_entries") or [] if isinstance(e, dict)
+              for key in ("activity_ids", "excluded_activity_ids") for a in (e.get(key) or []) if isinstance(a, str)}
+    for record in (packet.get("provenance") or {}).get("excluded_signals") or []:
+        activity_id = record.get("activity_id") if isinstance(record, dict) else None
+        if isinstance(activity_id, str) and activity_id not in linked and activity_id != WITHHELD_TEXT \
+                and _scan_text(activity_id):
+            record["activity_id"] = WITHHELD_TEXT
+            sweep.owners.add("packet")
+    for owner in sweep.owners - {"packet"}:
+        records = packet.get(owner[0])
+        if isinstance(records, list) and isinstance(owner[1], int) and owner[1] < len(records) \
+                and isinstance(records[owner[1]], dict):
+            records[owner[1]]["embedded_instruction"] = True
+    # Engagement identity stays in step with the header, so a withheld name is withheld in both (#13.3).
+    header = packet.get("engagement")
+    identity = (packet.get("provenance") or {}).get("engagement_identity")
+    if isinstance(header, dict) and isinstance(identity, dict):
+        for key in IDENTITY_KEYS:
+            if WITHHELD_TEXT in (header.get(key), identity.get(key)):
+                header[key] = identity[key] = WITHHELD_TEXT
+
+
+def _holds_marker(value):
+    if isinstance(value, str):
+        return value == WITHHELD_TEXT
+    if isinstance(value, dict):
+        return any(MEMBER_MARKER_RE.fullmatch(str(k)) or _holds_marker(v) for k, v in value.items())
+    if isinstance(value, list):
+        return any(_holds_marker(v) for v in value)
+    return False
+
+
+def packet_held(packet):
+    """True when packet metadata (anything outside the line items) carries a withheld marker (#11.3): every entry
+    is held for review. A marker-named member inside a line item holds the packet too."""
+    if not isinstance(packet, dict):
+        return False
+    for key, value in packet.items():
+        if MEMBER_MARKER_RE.fullmatch(str(key)):
+            return True
+        if key in LINE_ITEMS:
+            if key in ("missing_time_report", "exception_list") and isinstance(value, list) and any(
+                    isinstance(item, dict) and any(MEMBER_MARKER_RE.fullmatch(str(k)) for k in item) for item in value):
+                return True
+            continue
+        if _holds_marker(value):
+            return True
+    return False
+
+
 # --- Strict input validation (wrong JSON types and unknown enum values fail closed) --------
 
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -780,8 +1039,10 @@ def check_list(value, where, spec):
 
 def check_sources(sources, where):
     check_object(sources, where)
-    for key, value in sources.items():
-        check_fields(value, f"{where}.{key}", (("enabled", "bool", True),))
+    known = {key for _, key in SOURCE_KEYS}
+    for n, (key, value) in enumerate(sources.items(), start=1):
+        # Only the documented source names are echoed; any other key is input text and named by position.
+        check_fields(value, f"{where}.{key}" if key in known else f"{where}.<member #{n}>", (("enabled", "bool", True),))
 
 
 ENGAGEMENT_SPEC = (("engagement_id", "id", True), ("client_name", "text", False), ("matter_name", "text", False),

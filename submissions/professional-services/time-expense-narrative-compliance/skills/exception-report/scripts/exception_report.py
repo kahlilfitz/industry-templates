@@ -50,7 +50,7 @@ def generated_at(override):
         try:
             datetime.datetime.fromisoformat(override.replace("Z", "+00:00"))
         except ValueError as exc:
-            raise InputError(f"--generated-at is not an ISO-8601 timestamp: {override!r}") from exc
+            raise InputError(f"--generated-at must be an ISO-8601 timestamp, got a string of {len(override)} character(s)") from exc
         return override
     return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -118,8 +118,10 @@ def main():
     # The header fields are one record: an instruction split across client and matter name is withheld.
     header = {k: eng.get(k) for k in HEADER_KEYS if isinstance(eng.get(k), str)}
     header_hits = signal_policy.screen_record(header, pair_keys=HEADER_KEYS)
-    if header_hits:
+    header_withheld = bool(header_hits) or signal_policy.WITHHELD_TEXT in header.values()
+    if header_withheld:
         eng = {k: signal_policy.WITHHELD_TEXT for k in HEADER_KEYS}
+    packet_hold = signal_policy.packet_held(data)
     period = data.get("period") or {}
     figures = billing_rules.summary_figures(data["time_entries"], data["missing_time_report"])
     other_ids = signal_policy.other_engagement_ids(data)
@@ -140,6 +142,8 @@ def main():
         if verdict == "compliant" and (compliance.get("flags")
                                        or signal_policy.embedded_instruction(entry.get("draft", {}).get("narrative"))):
             verdict = "needs_review"  # a flagged entry is never listed as a compliant draft
+        if packet_hold and signal_policy.SEVERITY_RANK[verdict] < signal_policy.SEVERITY_RANK["hold_for_review"]:
+            verdict = "hold_for_review"  # a metadata hold governs every entry (#11.3); reconcile refuses it first
         by_verdict.setdefault(verdict, []).append(entry)
         for flag in compliance.get("flags", []):
             severity = flag.get("severity") if flag.get("severity") in signal_policy.SEVERITIES else "hold_for_review"
@@ -153,10 +157,13 @@ def main():
         "",
         f"- Prepared for: engagement manager and billing coordinator (review only)",
     ]
-    if header_hits:
+    if header_withheld:
         lines.append("- **Engagement names withheld:** " + signal_policy.hold_reason(
             header_hits, "the client, matter and engagement fields read together as an instruction")
             + "; check the engagement record (client-billing-guidelines.md #11.1, #11.2)")
+    if packet_hold:
+        lines.append(f"- **Metadata withheld:** {signal_policy.PACKET_HOLD_REASON}; every entry is held for review "
+                     f"({signal_policy.METADATA_CITATION})")
     lines += [
         f"- Period covered by the governed data: {cell(period.get('start'))} to {cell(period.get('end'))} "
         f"(entries and activity actually dated {cell(actual[0])} to {cell(actual[1])})",

@@ -72,7 +72,7 @@ def generated_at(override):
         try:
             datetime.datetime.fromisoformat(override.replace("Z", "+00:00"))
         except ValueError as exc:
-            raise InputError(f"--generated-at is not an ISO-8601 timestamp: {override!r}") from exc
+            raise InputError(f"--generated-at must be an ISO-8601 timestamp, got a string of {len(override)} character(s)") from exc
         return override
     return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -80,7 +80,14 @@ def generated_at(override):
 def read_csv(path, required):
     try:
         with open(path, encoding="utf-8", newline="") as fh:
-            rows = list(csv.DictReader(fh))
+            reader = csv.DictReader(fh)
+            header = reader.fieldnames or []
+            # A repeated column (after whitespace and case folding) would let its last cell overwrite the first.
+            names = [" ".join(str(h).split()).casefold() for h in header]
+            if len(set(names)) != len(names):
+                raise InputError(f"{os.path.basename(path)} repeats a column name in its header row (duplicate "
+                                 "columns are malformed, never overwritten)")
+            rows = list(reader)
     except (OSError, UnicodeError, csv.Error) as exc:
         raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
     if rows:
@@ -138,9 +145,13 @@ def read_engagement(path):
             text = fh.read()
     except (OSError, UnicodeError) as exc:
         raise InputError(f"cannot read engagement-letter-extract.md: {exc}") from exc
-    fields = dict(re.findall(r"^- (engagement_id|client_name|matter_name|billing_guidelines_id|engagement_manager): (.+)$",
-                             text, re.M))
-    fields = {k: v.strip() for k, v in fields.items()}
+    found = re.findall(r"^- (engagement_id|client_name|matter_name|billing_guidelines_id|engagement_manager): (.+)$",
+                       text, re.M)
+    repeated = sorted({k for k, _ in found if [n for n, _ in found].count(k) > 1})
+    if repeated:
+        raise InputError(f"engagement-letter-extract.md gives {', '.join(repeated)} more than once (a repeated field "
+                         "is malformed, never overwritten)")
+    fields = {k: v.strip() for k, v in found}
     missing = [k for k in ("engagement_id", "client_name", "matter_name") if k not in fields]
     if missing:
         raise InputError(f"engagement-letter-extract.md is missing: {', '.join(missing)}")
@@ -183,8 +194,9 @@ def resolve_scope(args, engagement):
             raise InputError("--team-view-confirmation must be exactly 'engagement-manager:<engagement_id>' "
                              "(no spaces or other characters)")
         if token != signal_policy.team_view_token(eng_id):
-            raise InputError(f"--team-view-confirmation is for another engagement; expected "
-                             f"'{signal_policy.team_view_token(eng_id)}'")
+            raise InputError("--team-view-confirmation is for another engagement; it must be "
+                             "'engagement-manager:<engagement_id>' with the engagement_id recorded in "
+                             "raw/engagement-letter-extract.md")
     scope = {"mode": "self", "requester": requester, "people": [requester], "team_view": None, "withheld": None,
              "citations": [signal_policy.SCOPE_CITATION]}
     if not wants_team:

@@ -55,7 +55,7 @@ def generated_at(override):
         try:
             datetime.datetime.fromisoformat(override.replace("Z", "+00:00"))
         except ValueError as exc:
-            raise InputError(f"--generated-at is not an ISO-8601 timestamp: {override!r}") from exc
+            raise InputError(f"--generated-at must be an ISO-8601 timestamp, got a string of {len(override)} character(s)") from exc
         return override
     return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -65,7 +65,7 @@ def load_packet(path):
     if not isinstance(payload, dict):
         raise InputError("input is not a JSON object")
     if payload.get("contract_version") != CONTRACT:
-        raise InputError(f"expected contract {CONTRACT}, got {payload.get('contract_version')!r}")
+        raise InputError(f"expected a {CONTRACT} object (contract_version must be the contract constant)")
     signal_policy.validate_packet(payload, "coded")
     return payload
 
