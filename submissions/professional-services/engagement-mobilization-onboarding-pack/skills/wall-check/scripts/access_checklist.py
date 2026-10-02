@@ -57,8 +57,8 @@ def rederive(p,register,inventory,new=()):
         R=R2
     return R
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--governed",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--pack-out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
-    p=load_json(a.governed); check_governed(p); set_trusted_domains((p.get("engagement") or {}).get("trusted_domains"))
+    ap=ArgParser(); ap.add_argument("--governed",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--pack-out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
+    p=load_json(a.governed,"governed input"); check_governed(p); set_trusted_domains((p.get("engagement") or {}).get("trusted_domains"))
     # The governed document is untrusted input: its upstream holds and every content field are screened for embedded
     # instructions and for other clients named in the wall register, and flagged text withheld, before anything is
     # derived from it (confidentiality-and-ethical-wall-rules.md #3.3, #4.1, #4.3).
@@ -74,7 +74,7 @@ def main():
     # hold the wall, the digest and knowledge-dependent or client-confidential access (#1.4, #2.1, #3.3; checklist B6).
     # Cells are screened from the rows AS READ, before an unusable header or a repeated ID empties the collection the
     # decisions use: an inventory that is not used is still screened and its flagged cells held (#1.3, #3.3, #4.3).
-    rows=read_csv(a.workspace_inventory,False)
+    rows=read_csv(a.workspace_inventory,False,"workspace inventory")
     if rows is None:
         add_hold(fixed,"HOLD-MISSING-WORKSPACE-INVENTORY",a.workspace_inventory,"missing workspace inventory; no access is requested","workspace-inventory-rules.md #1.2"); rows=[]
     else:
@@ -126,5 +126,5 @@ def main():
     reasons=(["open_holds"] if holds else [])+(["wall_status_hold"] if wstat=="hold" else [])+(["workspaces_pending_wall_review"] if pend else [])  # workspace-inventory-rules.md #3.3
     if pend: esc.append(f"{pend} workspace(s) held pending wall review; the pack stays on hold until Risk/Conflicts resolve the wall decision (workspace-inventory-rules.md #3.3)")
     p["access_checklist"]=out; p["holds"]=holds; p["mobilization_pack"]={"status":"on_hold_internal_only" if reasons else "draft_internal_only","hold_reasons":reasons,"label":"DRAFT - for internal review only. Do not send to the client or provision access.","sections":["client_context","scope","prior_knowledge","team_roster","access_checklist","wall_briefing","first_week_plan"],"source":ENGINE,"confidence":.94,"citation":"workspace-inventory-rules.md #3.1,#3.3; confidentiality-and-ethical-wall-rules.md #3.1"}; p.setdefault("provenance",{}).setdefault("engines",[]).append(f"access_checklist/{VERSION}"); p["provenance"]["generated_at"]=ts
-    check_contract(p,"access","access"); write_atomic([(a.out,json_bytes(a.out,p)),(a.pack_out,text_bytes(a.pack_out,pack(p)))])  # both serialised first, then written atomically together  # the document written is held to the contract (#1.3)
+    check_contract(p,"access","access"); write_atomic([(a.out,json_bytes(a.out,p,"access checklist output"),"access checklist output"),(a.pack_out,text_bytes(a.pack_out,pack(p),"pack output"),"pack output")])  # both serialised first, then written atomically together  # the document written is held to the contract (#1.3)
 if __name__=="__main__": guard(main)

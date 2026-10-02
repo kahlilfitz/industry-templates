@@ -48,7 +48,7 @@ def govern(p,register,inventory):
     trust, the decision state (confidentiality-and-ethical-wall-rules.md #1.4)."""
     p,mh=screen_upstream(p,"matched",ENGINE)  # every upstream string screened and redacted before use; any hit holds the wall (#4.1, #4.3)
     if mh: p.setdefault("escalations",[]).append(upstream_escalation(len(mh)))
-    rows=read_csv(register,False); ws=read_csv(inventory,False); up=list(p.get("holds",[])); holds=list(mh); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
+    rows=read_csv(register,False,"wall register"); ws=read_csv(inventory,False,"workspace inventory"); up=list(p.get("holds",[])); holds=list(mh); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
     status="clear"; reason="wall register marks joiner clear for this client/matter"; cit="confidentiality-and-ethical-wall-rules.md #2.2"
     own=own_words(p); own_ids={canon_id(e.get("matter_id")),canon_id(e.get("engagement_id"))}-{""}
     def hold_status(hid,path,why,rule):
@@ -148,9 +148,9 @@ def govern(p,register,inventory):
     else: kd.update({"status":"hold","items":[]})
     p["knowledge_digest"]=kd; p["holds"]=holds; return p
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--matched",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
-    p=load_json(a.matched); check_matched(p); set_trusted_domains((p.get("engagement") or {}).get("trusted_domains"))
+    ap=ArgParser(); ap.add_argument("--matched",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
+    p=load_json(a.matched,"matched input"); check_matched(p); set_trusted_domains((p.get("engagement") or {}).get("trusted_domains"))
     p=govern(p,a.wall_register,a.workspace_inventory)
     p.setdefault("provenance",{}).setdefault("engines",[]).append(f"wall_check/{VERSION}"); p["provenance"]["generated_at"]=ts
-    check_contract(p,"governed","governed"); dump_json(a.out,p)  # the document written is held to the same contract (#1.3)
+    check_contract(p,"governed","governed"); dump_json(a.out,p,"governed output")  # the document written is held to the same contract (#1.3)
 if __name__=="__main__": guard(main)

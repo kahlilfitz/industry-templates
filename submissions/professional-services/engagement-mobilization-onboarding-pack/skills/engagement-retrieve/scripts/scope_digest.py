@@ -58,7 +58,24 @@ def validate_staffing(st):
                 cw=f"{w}.{key}[{j}]"; field(c,"candidate_name","str",cw,nullable=True); field(c,"confidence","num01",cw); field(c,"fit_score","num",cw,nullable=True); field(c,"citation","str",cw,nullable=True)
                 el=field(c,"eligibility","obj",cw,nullable=True)
                 if el: field(el,"blocking_rule","str",cw+".eligibility",nullable=True); field(el,"citation","str",cw+".eligibility",nullable=True)
-def statuses(st):
+def staffing_links(st):
+    """Staffing records name a candidate by candidate_id in several places (bench, scored, ranked and governed slates,
+    recommendations). A candidate_id whose records state different people (canonical names, #1.3) links one person's
+    verdict or recommendation to another: every record with that ID is held and not used (#1.5).
+    Returns (conflicted canonical IDs, holds)."""
+    seen={}; first={}
+    def add(path,c,nk):
+        if not isinstance(c,dict) or not stated(c.get("candidate_id")) or not stated(c.get(nk)): return  # withheld text is already held (#4.3)
+        k=canon_id(c["candidate_id"]); seen.setdefault(k,set()).add(canon_person(c[nk])); first.setdefault(k,[]).append(path)
+    W="upstream/staffing"
+    for i,c in enumerate(st.get("bench_candidates") or []): add(f"{W}.bench_candidates[{i}].name",c,"name")
+    for sec,key in (("scored_roles","candidate_scores"),("ranked_roles","candidate_slate"),("governed_roles","candidate_slate"),("governed_roles","recommended_candidates")):
+        for i,r in enumerate(st.get(sec) or []):
+            if isinstance(r,dict) and isinstance(r.get(key),list):
+                for j,c in enumerate(r[key]): add(f"{W}.{sec}[{i}].{key}[{j}].candidate_name",c,"candidate_name")
+    bad={k for k,v in seen.items() if len(v)>1}
+    return bad,[link_hold(first[k][1],ENGINE) for k in sorted(bad)]
+def statuses(st,bad=frozenset()):
     s={}; p=[]
     for r in st["governed_roles"]:
         rt=r.get("role_title") if (r.get("role_title") or "").strip() else "role"
@@ -67,9 +84,11 @@ def statuses(st):
             el=c.get("eligibility") or {}; v=el.get("verdict")
             v=canon_text(v) if isinstance(v,str) else None
             if v not in VERDICTS: v="unrecognised"  # blank, null or unknown verdicts fail closed (#3.4)
+            if canon_id(c.get("candidate_id")) in bad: v="unrecognised"  # a candidate_id naming two people is not evidence (#1.5)
             if is_withheld(c["candidate_name"]): continue  # a withheld name joins no roster row (confidentiality-and-ethical-wall-rules.md #4.3)
             s.setdefault(canon_person(c["candidate_name"]),[]).append({"role_title":rt,"verdict":v,"blocking_rule":el.get("blocking_rule"),"confidence":c.get("confidence",.9),"citation":el.get("citation") or c.get("citation") or "staffing"})
         for c in r.get("recommended_candidates",[]):
+            if canon_id(c.get("candidate_id")) in bad: continue  # never propose through an ID that names another person (#1.5)
             if (c.get("candidate_name") or "").strip(): p.append({"candidate_name":c["candidate_name"],"role_title":rt,"fit_score":c.get("fit_score"),"assignment_status":"proposed_not_assigned","source":"adapter:staffing-slate","confidence":c.get("confidence",.9),"citation":c.get("citation") or "staffing recommended_candidates"})
     return s,p
 def verdict_for(entries,role):
@@ -77,10 +96,10 @@ def verdict_for(entries,role):
     same=[x for x in entries if canon_text(x.get("role_title"))==canon_text(role)] or entries
     return max(same,key=lambda x:RANK.get(x.get("verdict"),2.5),default={})
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--raw-dir",required=True); ap.add_argument("--staffing",required=True); ap.add_argument("--confirmed-roster",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); ap.add_argument("--scenario",default=""); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
+    ap=ArgParser(); ap.add_argument("--raw-dir",required=True); ap.add_argument("--staffing",required=True); ap.add_argument("--confirmed-roster",required=True); ap.add_argument("--out",required=True); ap.add_argument("--generated-at",required=True); ap.add_argument("--scenario",default=""); a=ap.parse_args(); ts=require_iso_z(a.generated_at)
     sowp=os.path.join(a.raw_dir,"sow-extract.md")
     if not os.path.exists(sowp): raise InputError("missing required SOW extract: raw/sow-extract.md")
-    sow=read_text(sowp); letter=read_text(os.path.join(a.raw_dir,"engagement-letter-extract.md")); pursuit=read_text(os.path.join(a.raw_dir,"pursuit-record.md")); rows=read_csv(a.confirmed_roster); st=load_json(a.staffing)
+    sow=read_text(sowp,"SOW extract"); letter=read_text(os.path.join(a.raw_dir,"engagement-letter-extract.md"),"engagement letter extract"); pursuit=read_text(os.path.join(a.raw_dir,"pursuit-record.md"),"pursuit record"); rows=read_csv(a.confirmed_roster,label="confirmed roster"); st=load_json(a.staffing,"staffing input")  # fixed labels: no message echoes a supplied path (#1.3)
     miss=missing_columns(rows,ROSTER_COLUMNS)
     if miss: raise InputError(f"confirmed roster is missing required column(s): {', '.join(miss)}; fail closed")
     if rows.duplicate_columns: raise InputError("confirmed roster "+DUPLICATE_HEADER_REASON+"; fail closed")
@@ -120,7 +139,9 @@ def main():
     # A register client_name/matter_id that trips the wire and names no usable identity holds anyway (#3.3).
     soh=soh+roh+register_identity_holds(os.path.join(a.raw_dir,"ethical-wall-register.csv"),ENGINE)
     holds=h1+h2+h3+rsh+sth+soh
-    smap,prop=statuses(st); roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]+([other_escalation(len(soh))] if soh else [])
+    # Linked staffing records must name the same person: read from the screened staffing input only (#1.5, #4.3).
+    badlinks,lh=staffing_links(st); holds+=lh
+    smap,prop=statuses(st,badlinks); roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]+([other_escalation(len(soh))] if soh else [])
     for i,r in enumerate(rows,2):
         name=(r.get("person") or "").strip()
         if not name: continue
@@ -175,6 +196,7 @@ def main():
     other={k_:other_parts(reng.get(k_),unwithheld(mine),k_,own) for k_,mine in (("client_name",sow_client),("engagement_id",sow_eid))}
     # A staffing identity that trips the wire and names no usable identity cannot be confirmed: a mismatch (#1.2, #3.3).
     mism=[k_ for k_ in ("client_name","engagement_id") if other[k_] or identity_unreadable(reng.get(k_))]
+    if lh: esc.append(link_escalation(len(lh)))
     if mism:
         holds.append({"hold_id":"HOLD-STAFFING-ENGAGEMENT-MISMATCH","path":"upstream/staffing.engagement."+"/".join(mism),"reason":"staffing input names a different client or engagement than the SOW (name not repeated); staffing evidence not trusted","source":ENGINE,"confidence":.99,"citation":"confidentiality-and-ethical-wall-rules.md #3.3; role-access-matrix.md #3.1"})
         esc.append("Staffing input is for a different client or engagement than the SOW; staffing evidence held for the engagement manager (confidentiality-and-ethical-wall-rules.md #3.3)")
@@ -190,5 +212,5 @@ def main():
         body,oh=screen_other(body,client_terms([x for k_ in mism for x in other[k_]],own),ENGINE,"scope.")  # only the identity that differs, from the raw input
         if oh: holds=dedup_holds(holds+oh); body["escalations"].append(other_escalation(len(oh)))
     out={"contract_version":CONTRACT_VERSION,"run_metadata":{"generated_at":ts,"demo_scenario":a.scenario},**body,"holds":holds,"provenance":{"engines":[f"scope_digest/{VERSION}"],"generated_at":ts,"sources":["raw/sow-extract.md","raw/engagement-letter-extract.md","raw/pursuit-record.md","raw/confirmed-roster.csv","upstream/staffing"]}}
-    check_contract(out,"scope","scope"); dump_json(a.out,out)  # the document written is held to the contract (#1.3)
+    check_contract(out,"scope","scope"); dump_json(a.out,out,"scope output")  # the document written is held to the contract (#1.3)
 if __name__=="__main__": guard(main)
