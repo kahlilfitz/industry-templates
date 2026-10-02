@@ -9,7 +9,15 @@ Engine flags are quoted verbatim; nothing is dropped or softened.
 v1.0.4: governed data that holds rows outside the recorded timekeeper scope is refused
 (client-billing-guidelines.md #12.1). Every data-derived cell (person, subject, narrative,
 flag detail, exclusion reason, engagement names) passes the shared embedded-instruction
-tripwire; flagged text is replaced by a withheld marker and never printed (#11.2).
+tripwire; flagged text is replaced by a withheld marker and never printed (#11.2). The engagement
+header fields are screened together as one record, so an instruction split across them is withheld.
+
+Governed data is never taken on trust (client-billing-guidelines.md #13.2): before rendering, the
+engine re-runs the shared guideline rules (billing_rules.py) on a copy. An entry whose recorded verdict
+or flags are less severe than the rules', missing-time items that differ from the rules', or summary
+totals, verdict counts or missing-time hours that contradict the line items are refused: no packet
+is written, and the user is told to re-run guideline_check.py. A reject never renders as compliant.
+Summary figures are derived from the line items.
 """
 import argparse
 import datetime
@@ -19,11 +27,13 @@ import sys
 from copy import deepcopy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import billing_rules  # noqa: E402  (shared rules, identical copies next to code_map.py and guideline_check.py)
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:exception_report"
 ENGINE_VERSION = "exception_report/1.0.4"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
+HEADER_KEYS = ("client_name", "matter_name", "engagement_id")
 
 
 class InputError(ValueError):
@@ -87,14 +97,27 @@ def main():
             raise InputError("--requested-start is after --requested-end")
         data = deepcopy(load_governed(args.governed))
         signal_policy.enforce_timekeeper_scope(data, engine=ENGINE, strict=True)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        problems = billing_rules.reconcile_governed(data, script_dir=script_dir, engine=ENGINE)
+        if problems:
+            raise InputError(
+                f"governed data does not match a re-run of the guideline-check rules ({billing_rules.RECONCILE_CITATION}): "
+                + "; ".join(problems[:6]) + (f"; and {len(problems) - 6} more" if len(problems) > 6 else "")
+                + ". No packet was written; re-run guideline_check.py on the coded data")
         signal_policy.filter_packet(data, config_path=args.signal_config,
-                                    script_dir=os.path.dirname(os.path.abspath(__file__)), engine=ENGINE)
+                                    script_dir=script_dir, engine=ENGINE)
     except (InputError, signal_policy.PolicyError) as exc:
         sys.exit(f"exception_report: {exc}")
 
     eng = data.get("engagement", {})
+    # The header fields are one record: an instruction split across client and matter name is withheld.
+    header = {k: eng.get(k) for k in HEADER_KEYS if isinstance(eng.get(k), str)}
+    header_hits = signal_policy.screen_record(header, pair_keys=HEADER_KEYS)
+    if header_hits:
+        eng = {k: signal_policy.WITHHELD_TEXT for k in HEADER_KEYS}
     period = data.get("period") or {}
     summary = data["prebill_summary"]
+    figures = billing_rules.summary_figures(data["time_entries"], data["missing_time_report"])
     data_dates = sorted({d for d in [e.get("date") for e in data["time_entries"]]
                          + [s.get("date") for s in data.get("activity_signals", [])] if isinstance(d, str) and d})
     actual = (data_dates[0], data_dates[-1]) if data_dates else (None, None)
@@ -120,6 +143,12 @@ def main():
         f"({cell(eng.get('engagement_id'))})",
         "",
         f"- Prepared for: engagement manager and billing coordinator (review only)",
+    ]
+    if header_hits:
+        lines.append("- **Engagement names withheld:** " + signal_policy.hold_reason(
+            header_hits, "the client, matter and engagement fields read together as an instruction")
+            + "; check the engagement record (client-billing-guidelines.md #11.1, #11.2)")
+    lines += [
         f"- Period covered by the governed data: {cell(period.get('start'))} to {cell(period.get('end'))} "
         f"(entries and activity actually dated {cell(actual[0])} to {cell(actual[1])})",
     ]
@@ -143,9 +172,9 @@ def main():
         "",
         "## Summary",
         "",
-        f"- Entries: {summary.get('total_entries')} ({summary.get('total_hours')} h)",
-        "- Verdicts: " + ", ".join(f"{cell(k)} {cell(v)}" for k, v in sorted(summary.get("verdict_counts", {}).items())),
-        f"- Missing time: {summary.get('missing_time_hours')} h across {len(data['missing_time_report'])} activity signal(s)",
+        f"- Entries: {figures['total_entries']} ({figures['total_hours']} h)",
+        "- Verdicts: " + ", ".join(f"{cell(k)} {cell(v)}" for k, v in sorted(figures["verdict_counts"].items())),
+        f"- Missing time: {figures['missing_time_hours']} h across {len(data['missing_time_report'])} activity signal(s)",
         f"- Excluded by signal policy: {cells(summary.get('excluded_signal_ids') or []) or 'none'}",
         "",
     ]

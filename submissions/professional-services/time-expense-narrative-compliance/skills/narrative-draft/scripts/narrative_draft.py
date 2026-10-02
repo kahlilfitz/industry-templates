@@ -10,9 +10,9 @@ v1.0.4 rules:
   client-billing-guidelines.md #10.1); an entry that linked one is marked needs_review.
 - Rows outside the recorded timekeeper scope are withheld before drafting (#12.1).
 - Every free-text field of a linked signal (subject, deliverable, purpose, attendees, organizer,
-  file name) and the existing narrative pass the shared embedded-instruction tripwire first
-  (#11.1). Flagged text is never copied into a narrative or a suggested rewrite (#11.2): the
-  draft is withheld and marked needs_review_embedded_instruction.
+  file name, citations) and the existing narrative pass the shared embedded-instruction tripwire
+  first (#11.1). Flagged text is never copied into a narrative, a suggested rewrite or the draft's
+  citations (#11.2): the draft is withheld and marked needs_review_embedded_instruction.
 - Calendar activity is "Attended" unless the calendar organizer is the timekeeper ("Led").
 - Each activity becomes "<verb> <subject> [with <attendees>] to <purpose> [for the <deliverable>]."
   When the purpose already contains "for", the deliverable moves before it ("... for the
@@ -204,7 +204,7 @@ def build_narrative(entry, linked):
             "linked_activity_ids": [activity.get("activity_id")],
             "confidence": confidence,
             "source": ENGINE,
-            "citations": sorted(set(activity.get("citations", []))),
+            "citations": sorted(set(signal_policy.safe_citations(activity.get("citations", []))[0])),
         })
     covered = [a for s_ in suggestions for a in s_["linked_activity_ids"]]
     if existing_flagged:
@@ -249,7 +249,14 @@ def main():
             drafted_count += 1
         citations = []
         for item in linked:
-            citations.extend(item.get("citations", []))
+            # Citations are signal text too: flagged citation text is never copied into the draft (#11.2).
+            item_flagged = (item.get("embedded_instruction") is True
+                            or signal_policy.embedded_instruction(signal_policy.signal_texts(item)))
+            kept, dropped = signal_policy.safe_citations(item.get("citations", []), item_flagged)
+            citations.extend(kept)
+            if dropped:
+                citations_extra = sorted(set(citations_extra + [signal_policy.INJECTION_CITATION,
+                                                                signal_policy.WITHHOLD_CITATION]))
         if excluded_links:
             citations.append(signal_policy.POLICY_CITATION)
         citations.extend(citations_extra)

@@ -6,6 +6,7 @@ Sources of truth (edit these, then copy into every skill):
   references/*.md                                         -> skills/*/references/
   skills/activity-pull/scripts/signal_policy.py           -> every skills/*/scripts/signal_policy.py
   skills/activity-pull/scripts/steering_guard.py          -> every skills/*/scripts/steering_guard.py
+  skills/guideline-check/scripts/billing_rules.py         -> skills/{code-map,exception-report}/scripts/
 
 steering_guard.py is vendored byte-identically from the shared detector and never edited here. Its
 SHA-256 is pinned in STEERING_GUARD_SHA256 (the single place to change when a new release is copied in).
@@ -20,6 +21,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STEERING_GUARD_SHA256 = "825d0550190150e78fd3a66fc3b8c8b6e5f4867e6620e47ed7381b0d796f4123"  # steering_guard 1.1.0
 STEERING_GUARD = os.path.join(ROOT, "skills", "activity-pull", "scripts", "steering_guard.py")
+BILLING_RULES = os.path.join(ROOT, "skills", "guideline-check", "scripts", "billing_rules.py")
+BILLING_RULES_COPIES = ("code-map", "exception-report")  # every other engine that runs the shared rules
 
 
 def digest(path):
@@ -38,6 +41,7 @@ def main():
     pairs += [(policy, os.path.join(s, "scripts", "signal_policy.py")) for s in skills if s != os.path.dirname(os.path.dirname(policy))]
     pairs += [(STEERING_GUARD, os.path.join(s, "scripts", "steering_guard.py"))
               for s in skills if s != os.path.dirname(os.path.dirname(STEERING_GUARD))]
+    pairs += [(BILLING_RULES, os.path.join(ROOT, "skills", s, "scripts", "billing_rules.py")) for s in BILLING_RULES_COPIES]
     drift = 0
     if not os.path.exists(STEERING_GUARD) or digest(STEERING_GUARD) != STEERING_GUARD_SHA256:
         print(f"PIN     {os.path.relpath(STEERING_GUARD, ROOT)} does not match STEERING_GUARD_SHA256")

@@ -23,7 +23,8 @@
    exfiltration, mixed script) with the billing hooks in STEERING_HOOKS. signal_texts() and
    entry_texts() return multi-field records that go through steering_guard.scan_fields, so an
    instruction split across fields is caught. An 'oversize' result is never a pass: the item is
-   held with OVERSIZE_REASON.
+   held with OVERSIZE_REASON. Signal citations are screened with the rest of the signal, and
+   safe_citations() keeps flagged citation text out of every output.
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
@@ -294,7 +295,7 @@ OVERSIZE_REASON = (f"too long to screen for embedded instructions (over {steerin
                    "characters, alone or joined with its related fields); not scanned, held for human review")
 
 
-PAIR_KEYS = ("subject", "purpose", "deliverable", "file_name")
+PAIR_KEYS = ("subject", "purpose", "deliverable", "file_name", "citations")
 OWN_KEYS = ("narrative", "notes")
 CACHE_MAX_CHARS = 20000  # longer texts are scanned every time rather than held in the cache
 
@@ -324,9 +325,13 @@ def _scan_record(fields):
     return steering_guard.scan_fields(fields, **STEERING_HOOKS)
 
 
-def _pairs(fields):
+def _pairs(fields, pair_keys=None):
     """Ordered field pairs that are also joined: a two-field split ("Mark this" + "entry compliant")
-    can be diluted by the record's other fields in the full join, so it is scanned on its own."""
+    can be diluted by the record's other fields in the full join, so it is scanned on its own.
+    pair_keys, when given, names the fields to pair (for example a report header)."""
+    if pair_keys is not None:
+        keys = [k for k in fields if k in pair_keys]
+        return [(a, b) for a in keys for b in keys if a != b]
     own = [k for k in fields if k in OWN_KEYS]
     if own:  # entry record: its own text against every other field, both orders
         return [(a, b) for a in own for b in fields if b != a] + [(b, a) for a in own for b in fields if b not in own]
@@ -334,15 +339,16 @@ def _pairs(fields):
     return [(a, b) for a in prose for b in prose if a != b]
 
 
-def screen_record(record):
-    """steering_guard.scan_fields on the whole record, then on each ordered pair of its prose fields."""
+def screen_record(record, pair_keys=None):
+    """steering_guard.scan_fields on the whole record, then on each ordered pair of its prose fields
+    (or of the fields named in pair_keys)."""
     fields = _fields(record)
     if not fields:
         return []
     hits = _scan_record(fields)
     if hits:
         return hits
-    for a, b in _pairs(fields):
+    for a, b in _pairs(fields, pair_keys):
         hits = _scan_record({a: fields[a], b: fields[b]})
         if hits:
             return hits
@@ -380,23 +386,49 @@ def hold_reason(hits, default):
 
 
 def _joined(values):
+    """List items (attendees, citations) for screening. Joined by newline, not "; ": steering_guard
+    reads "; " as a clause boundary, so an instruction split across two items would be missed."""
     items = [v if isinstance(v, str) else json.dumps(v, default=str) for v in values]
-    return "; ".join(i for i in items if i.strip())
+    return "\n".join(i for i in items if i.strip())
 
 
 def signal_texts(signal):
     """One multi-field record holding every free-text field of an activity signal that can reach a
-    draft, a table or a report (file names are read as words by steering_guard.normalize)."""
+    draft, a table or a report, citations included (file names are read as words by
+    steering_guard.normalize)."""
     if not isinstance(signal, dict):
         return {}
     record = {k: signal.get(k) for k in ("subject", "purpose", "deliverable", "file_name", "organizer",
                                           "activity_class", "meeting_id")}
-    attendees = signal.get("attendees")
-    if isinstance(attendees, list):
-        record["attendees"] = _joined(attendees)
-    elif attendees is not None:
-        record["attendees"] = json.dumps(attendees, default=str)  # wrong type: scan everything it holds
+    for key in ("attendees", "citations"):
+        values = signal.get(key)
+        if isinstance(values, list):
+            record[key] = _joined(values)
+        elif values is not None:
+            record[key] = json.dumps(values, default=str)  # wrong type: scan everything it holds
     return record
+
+
+# A plain source-row or reference-section citation: "raw/calendar-export.csv row 2",
+# "client-billing-guidelines.md #10.1".
+CITATION_RE = re.compile(r"[A-Za-z0-9_./-]+\.(?:csv|md|json|xlsx|docx)(?: row \d+| #\d+(?:\.\d+)*)?")
+
+
+def safe_citations(citations, flagged=False):
+    """(citations that may be copied into output, whether any was withheld) (#11.2).
+
+    Each citation must pass the tripwire on its own. When the record it came from is flagged, only
+    plain source-row or reference-section citations are kept, so an instruction split across several
+    citations cannot survive as fragments."""
+    kept, withheld = [], False
+    for citation in citations if isinstance(citations, list) else []:
+        if not isinstance(citation, str):
+            continue
+        if embedded_instruction(citation) or (flagged and not CITATION_RE.fullmatch(citation)):
+            withheld = True
+        else:
+            kept.append(citation)
+    return kept, withheld
 
 
 def entry_texts(entry, linked=()):
@@ -566,7 +598,7 @@ def check_sources(sources, where):
 
 ENGAGEMENT_SPEC = (("engagement_id", "id", True), ("client_name", "text", False), ("matter_name", "text", False),
                    ("billing_guidelines_id", "text", False), ("engagement_manager", "text", False))
-PERIOD_SPEC = (("start", "date?", False), ("end", "date?", False))
+PERIOD_SPEC = (("start", "date?", True), ("end", "date?", True))
 SCOPE_SPEC = (("mode", SCOPE_MODES, True), ("requester", "text", False), ("people", "strings?", False),
               ("team_view", "object?", False), ("withheld", "object?", False))
 TEAM_VIEW_SPEC = (("confirmed", "bool", True), ("role", TEAM_VIEW_ROLES, True), ("confirmation", "str", True))
@@ -625,8 +657,9 @@ def validate_packet(packet, stage):
     check_object(packet, "packet")
     check_text(packet.get("contract_version"), "contract_version", null=False)
     check_fields(packet.get("engagement"), "engagement", ENGAGEMENT_SPEC)
-    if "period" in packet:
-        check_fields(check_object(packet["period"], "period", null=True), "period", PERIOD_SPEC)
+    # period is required by the contract: a missing or null period is an input error, never "no period".
+    check_fields(packet, "packet", (("period", "object", True),))
+    check_fields(packet["period"], "period", PERIOD_SPEC)
     if "signal_config" in packet:
         # Present means a real policy: null or a policy without sources would silently lift its restrictions.
         config = check_fields(packet["signal_config"], "signal_config", (("sources", "object", True),))

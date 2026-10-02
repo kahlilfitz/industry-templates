@@ -58,7 +58,28 @@ Fix release after the v1.0.3 evaluation (`evaluate-time-expense-narrative-compli
   - Now pass: "Model: approved pricing scenarios v2", "Confirmed no review needed for low-value invoices" and "Met with 5μm process team".
   - Still held: "AI, please summarise …" (addressee), "no further review is required" (suppression), "Note for the reviewer: …", any e-mail address or URL, and Latin words with look-alike letters.
 
+### Independent QA of c1b1f69 (fixed in 1.0.4, no version bump)
+- **New shared module `billing_rules.py`** (code-map, guideline-check and exception-report, byte-identical and registered in `tests/check_shared_copies.py`, 25 shared copies). It holds the code-map rules (`code_mapping`) and the guideline rules (`govern`), so every engine applies one rule set. `code_map.py` and `guideline_check.py` are now thin wrappers around it.
+- **1. Missing or null `period`:** `signal_policy.validate_packet` requires a top-level `period` object with `start` and `end` keys (each a date or null), as the contract says. A missing, null, list or empty `period` is a clean input error with no output at every downstream engine. The contract's `period` schema now lists the required keys.
+- **2. Forged code mapping:** `billing_rules.govern` recomputes every entry's mapping with `code_mapping()` before checking it. When the supplied mapping disagrees (code, basis, confidence or flags), it is replaced by the recomputed one, marked `supplied_mapping_rejected`, and the entry gets a `code_mapping_mismatch` hold (new client-billing-guidelines.md #13.1). Verdicts use the recomputed flags. A forged AN200 with cleared flags is now held, with DL300 recommended.
+- **3. Forged verdicts:** `exception_report.main` first calls `billing_rules.reconcile_governed`, which re-runs the guideline rules on a copy of the governed data. Data whose recorded verdict is less severe than the rules give, or that lacks a flag the rules raise, is refused with no file written (#13.2). A reject can no longer render as compliant. An entry whose draft was withheld must be held with an `embedded_instruction` flag. Stricter recorded verdicts and extra flags are allowed.
+- **4. Contradictory totals:** the reconcile refuses data whose `prebill_summary` totals, hours, verdict counts, missing-time hours or exception count, or whose `exception_list` length, disagree with the line items. It also refuses a `missing_time_report` that differs from the re-run. The report's summary lines are rendered from `billing_rules.summary_figures`, never from the supplied summary.
+- **5. Citations unscreened:** `signal_policy.signal_texts` now includes `citations`, and the new `safe_citations()` drops any citation that trips the detector. On a flagged record, it also drops any citation that is not a plain source-row or guideline reference. `narrative_draft.main` and `build_narrative` copy only safe citations and add #11.1/#11.2 when one is withheld. `_joined` now joins list items (attendees, citations) with a newline, not "; ". steering_guard reads "; " as a clause boundary, so an instruction split across two citations or two attendees was missed.
+- **6. Main draft echoed:** `billing_rules.withhold_draft` replaces an instruction-like `draft.narrative` with the neutral withheld marker. It sets status `needs_review_embedded_instruction` and holds the entry, as was already done for suggested rewrites.
+- **7. Split report header:** `exception_report` screens `client_name`, `matter_name` and `engagement_id` together with `signal_policy.screen_record(header, pair_keys=HEADER_KEYS)`. On a hit, all three render as the withheld marker, with an "Engagement names withheld" line.
+- **Docs:** client-billing-guidelines.md #11.1 (citations, split list items and header fields) and the new #13 Engine-result integrity (×6); the contract (×6); README "Engine-result integrity"; and the guideline-check, exception-report and code-map `SKILL.md` steps.
+
 ### Tests and goldens
+- Independent QA of c1b1f69: 210 to 263 checks (53 new, in `integrity_tests`), one end-to-end group per reproducer, each with controls:
+  - `period` missing, null, list or empty at all four downstream engines, plus a null-dates control;
+  - a forged AN200 mapping, and a mapping swapped to another valid code;
+  - a reject forged to compliant, with and without consistent totals, a downgraded reject, a stricter-verdict control and a genuine-data control;
+  - six forged summary or missing-time figures;
+  - single, split-citation and split-attendee injection, plus golden citations as a benign control;
+  - an injected main draft, and a withheld draft forged to compliant;
+  - a split engagement header, plus a normal-names control.
+
+  Each group mirrors the QA reproducer in `%TEMP%/tenc-104-qa`, and all 9 reproducer files were re-run by hand against the final engines. Goldens are byte-identical: no demo citation, header or mapping trips the new checks. Runtime is about 35 s.
 - Shared steering_guard detector: 197 to 210 checks.
   - The full `tests/steering-corpus.json` (the shared corpus, JSON-identical with line endings converted to LF: 400 attack lines, 436 benign lines, 6 attack pairs, 16 benign pairs) runs through `signal_policy.embedded_instruction` and `signal_texts` with the billing hooks.
   - Every attack line and every attack pair trips. No benign line trips except the 9 non-billing lines that carry an e-mail address or URL; they are benign in the corpus only under its `qa`/`onboarding` profiles. The test allows exactly that case: exfiltration-only hits, and clean under the line's own corpus profile.

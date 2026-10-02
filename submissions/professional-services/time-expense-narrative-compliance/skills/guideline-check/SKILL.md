@@ -15,7 +15,7 @@ After `code-map` in every chain, and directly whenever a user asks whether an en
 ## Inputs
 `coded.json` from code-map (drafted narratives, mapped codes, activity signals, guidelines and provenance).
 ## Steps
-1. Run `python3 scripts/guideline_check.py --coded coded.json --out governed.json`. The engine re-applies the signal policy and the recorded timekeeper scope first.
+1. Run `python3 scripts/guideline_check.py --coded coded.json --out governed.json`. The engine re-applies the signal policy and the recorded timekeeper scope first, and recomputes every code mapping rather than trusting the supplied one.
 2. Quote verdicts, flags, missing-time findings and citations verbatim.
 3. Do not override a reject, hold or missing-time finding because the prose sounds professional.
 4. Send `governed.json` to `exception-report` when the user wants the engagement-manager packet.
@@ -29,7 +29,7 @@ Only tool needed: python3 running the bundled engine (stdlib only).
 python3 scripts/guideline_check.py --coded coded.json --out governed.json
 ```
 ## Grounding requirements
-Every flag cites the guideline section that fired; missing-time findings cite the unrecorded activity signal. Rules: #1.1 under 12 words = reject; #1.2 one missing element = needs_review, two or more = reject; #2.1/#2.2 block billing; #3.2 uncured vague phrase = reject; #6.2 evidence counts same-date links only, and an entry over 0.2 h with no linked evidence gets a `no_linked_evidence` hold; #7.1 near-duplicate at similarity 0.92 or more; #11.1 `embedded_instruction` hold for reviewer- or AI-addressed notes, approval, sign-off or waiver claims, requests to leave an entry unchecked, forward/send requests, or any e-mail address or URL in narrative, note, suggested-rewrite or linked activity text; #11.2 flagged suggested rewrites and missing-time subjects are replaced by a withheld marker; #12.1 rows outside the recorded timekeeper scope are withheld before any check.
+Every flag cites the guideline section that fired; missing-time findings cite the unrecorded activity signal. Rules: #1.1 under 12 words = reject; #1.2 one missing element = needs_review, two or more = reject; #2.1/#2.2 block billing; #3.2 uncured vague phrase = reject; #6.2 evidence counts same-date links only, and an entry over 0.2 h with no linked evidence gets a `no_linked_evidence` hold; #7.1 near-duplicate at similarity 0.92 or more; #11.1 `embedded_instruction` hold for reviewer- or AI-addressed notes, approval, sign-off or waiver claims, requests to leave an entry unchecked, forward/send requests, or any e-mail address or URL in narrative, note, suggested-rewrite or linked activity text; #11.2 a flagged main draft narrative, suggested rewrites and missing-time subjects are replaced by a withheld marker, and flagged citation text is never copied; #13.1 every code mapping is recomputed from the code-map rules, and a supplied mapping that disagrees is discarded with a `code_mapping_mismatch` hold; #12.1 rows outside the recorded timekeeper scope are withheld before any check.
 ## Constraints
 - Govern is explicit: the compliance verdict is a determination, not a preference.
 - The model never decides compliance and never suppresses a flag.

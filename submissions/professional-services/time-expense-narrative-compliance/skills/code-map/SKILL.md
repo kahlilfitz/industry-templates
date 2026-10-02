@@ -18,7 +18,7 @@ After `narrative-draft`, whenever drafted entries need a recommended code or an 
 1. Run `python3 scripts/code_map.py --drafted drafted.json --out coded.json`. The engine re-applies the signal policy and the recorded timekeeper scope before mapping.
 2. Quote the recommended phase/task code, basis, confidence and every flag exactly.
 3. Report `submitted_code_mismatch` flags as pre-bill exceptions and `unmapped_code` flags (conflicting or unknown classes) as held for review.
-4. Pass `coded.json` to `guideline-check`.
+4. Pass `coded.json` to `guideline-check`. Never edit a mapping in `coded.json` by hand: guideline-check recomputes every mapping from the same rules and holds any entry whose supplied mapping disagrees (client-billing-guidelines.md #13.1).
 ## Output
 `coded.json` with `code_mapping` on each entry: recommended phase/task, submitted code, basis, flags, confidence, source and citations.
 ## Output format
