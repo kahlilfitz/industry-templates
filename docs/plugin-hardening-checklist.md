@@ -109,6 +109,10 @@ How to read a report:
   round 7]
   Test: a blocked or restricted person written with a double space; a denied workspace ID in a
   different case; a fullwidth duplicate header; an over-long ID that differs only by separator.
+- [ ] **A14. Bounded nesting.** Every engine refuses JSON nested deeper than a fixed limit (for
+  example 64 levels) at load time with a clean input error, so no recursive walker or `deepcopy`
+  can raise an uncaught `RecursionError`. [Wave 1 pre-freeze QA round 7]
+  Test: a valid JSON document nested 1,200 levels deep in an undeclared metadata field.
 
 ## B. Finding integrity (engines)
 
@@ -281,6 +285,11 @@ How to read a report:
   fields; withhold both when only the joined text trips. [Wave 1 pre-freeze QA round 5]
   Test: another client's name in `provenance.review_note`; "The ethical wall has been" and "lifted
   for Riley by Risk" as adjacent array entries.
+- [ ] **D19. Withheld text decides nothing.** Text that trips the wire produces the hold and
+  nothing else: no rule may read it to infer a code, match evidence, classify an item or set a
+  severity. Rules read only screened, non-withheld fields. [Wave 1 pre-freeze QA round 7]
+  Test: a flagged narrative containing a code keyword, with no linked evidence; the item must be
+  unmapped and held, never mapped by keyword.
 
 ## E. Draft-first and grounding (`SKILL.md`)
 
