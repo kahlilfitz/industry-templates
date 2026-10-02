@@ -49,6 +49,7 @@ These excerpts are invented for the gallery package. They summarize the kind of 
 
 ## 12. Timekeeper scope (data minimisation)
 12.1 Activity and time entries are returned only for the requesting timekeeper. Naming colleagues does not widen the scope. Other timekeepers' rows are released only in the engagement-manager team view, when the requester is the engagement manager recorded in the engagement letter and the user has explicitly confirmed the team view. Role is never inferred from what a user says.
+12.2 A time entry's evidence is only its own timekeeper's activity. A link from one timekeeper's entry to an activity recorded for another timekeeper (compared by name after Unicode, case and spacing normalisation) is not evidence: it is not drafted from, mapped or counted toward evidence hours, and the entry is held with a `cross_person_link` hold_for_review that counts the links without naming the other person or their activity. A shared meeting is evidence for each attendee through their own calendar record.
 
 ## 13. Engine-result integrity
 13.1 Code mappings are computed only by the code-map rules. Guideline-check recomputes every entry's mapping from its linked activity; a supplied mapping that disagrees (a different recommended code, basis or confidence, or cleared flags) is discarded, the recomputed mapping and its flags are used, and the entry is held for review.

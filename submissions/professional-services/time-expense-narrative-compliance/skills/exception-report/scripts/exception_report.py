@@ -54,7 +54,7 @@ def generated_at(override):
 
 
 def load_governed(path):
-    payload = signal_policy.read_json(path, InputError)
+    payload = signal_policy.read_json(path, InputError, "governed input")
     if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT:
         raise InputError(f"expected a {CONTRACT} object")
     signal_policy.validate_packet(payload, "governed")
@@ -116,7 +116,7 @@ def main():
         signal_policy.filter_packet(data, config_path=args.signal_config,
                                     script_dir=script_dir, engine=ENGINE)
     except (InputError, signal_policy.PolicyError) as exc:
-        sys.exit(f"exception_report: {exc}")
+        sys.exit(f"exception_report: {signal_policy.error_text(exc)}")
 
     # Only re-derived flag detail and citations are printed; supplied detail text never is (#13.2).
     for entry, want in zip(data["time_entries"], rerun["time_entries"]):
@@ -267,8 +267,8 @@ def main():
     try:
         signal_policy.write_output(args.out, text)  # encodes first, then temp file + os.replace
     except (OSError, UnicodeError) as exc:
-        sys.exit(f"exception_report: cannot write output: {exc}")
-    print(f"exception_report: DRAFT written (not sent) -> {os.path.basename(args.out)}")
+        sys.exit(f"exception_report: cannot write output: {signal_policy.error_text(exc)}")
+    print("exception_report: DRAFT exception packet written (not sent)")
     return 0
 
 

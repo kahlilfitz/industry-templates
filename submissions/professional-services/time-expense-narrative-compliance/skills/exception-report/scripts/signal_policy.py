@@ -219,13 +219,26 @@ def find_plugin_config(start_dir):
     return None
 
 
-def read_json(path, error, label=None):
-    """Parse a JSON input strictly (contract_check.strict_load); any failure is raised as error(...)."""
+def error_text(exc):
+    """An error message that never echoes a path or a value taken from input (A18): the engines' own messages as
+    written, an OS error as its reason only (str(OSError) embeds the file name), and a Unicode error as its kind."""
+    if isinstance(exc, OSError):
+        return exc.strerror or type(exc).__name__
+    if isinstance(exc, UnicodeError):
+        return f"text is not valid UTF-8 or cannot be encoded ({type(exc).__name__})"
+    if isinstance(exc, json.JSONDecodeError):
+        return f"{exc.msg}: line {exc.lineno} column {exc.colno}"
+    return str(exc)
+
+
+def read_json(path, error, label):
+    """Parse a JSON input strictly (contract_check.strict_load); any failure is raised as error(...). label is a
+    fixed, trusted name for the input ("activity input" and so on), never its file name or path (A18)."""
     try:
         with open(path, encoding="utf-8") as fh:
             return contract_check.strict_load(fh)
     except (OSError, ValueError) as exc:  # ValueError covers JSONDecodeError, UnicodeDecodeError and strict_load
-        raise error(f"cannot read {label or os.path.basename(path)}: {exc}") from exc
+        raise error(f"cannot read {label}: {error_text(exc)}") from exc
 
 
 def dump_json(packet):
@@ -256,12 +269,13 @@ def write_output(path, text):
         raise
 
 
-def load_policy_file(path):
-    data = read_json(path, PolicyError, label=f"signal policy {os.path.basename(path)}")
+def load_policy_file(path, label):
+    """label is fixed by the caller ("config/signal-sources.json" or "--signal-config"), never the file name."""
+    data = read_json(path, PolicyError, label=f"signal policy {label}")
     sources = data.get("sources") if isinstance(data, dict) else None
     if not isinstance(sources, dict):
-        raise PolicyError(f"signal policy {os.path.basename(path)} has no 'sources' object")
-    check_sources(sources, f"signal policy {os.path.basename(path)} sources")
+        raise PolicyError(f"signal policy {label} has no 'sources' object")
+    check_sources(sources, f"signal policy {label} sources")
     return sources
 
 
@@ -275,14 +289,13 @@ def effective_sources(packet, config_path=None, script_dir=None):
     policies = []
     found = find_plugin_config(script_dir) if script_dir else None
     if found:
-        policies.append(("config/signal-sources.json", load_policy_file(found)))
+        policies.append(("config/signal-sources.json", load_policy_file(found, "config/signal-sources.json")))
     else:
         policies.append(("narrow default", NARROW_DEFAULT))
     if config_path:
         same = found and os.path.normcase(os.path.realpath(config_path)) == os.path.normcase(os.path.realpath(found))
         if not same:
-            policies.append((f"--signal-config {os.path.basename(config_path)} (additional)",
-                             load_policy_file(config_path)))
+            policies.append(("--signal-config (additional)", load_policy_file(config_path, "--signal-config")))
     packet_sources = (packet.get("signal_config") or {}).get("sources")
     if isinstance(packet_sources, dict):
         policies.append(("packet signal_config", packet_sources))
@@ -372,6 +385,9 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
 
 
 # --- Timekeeper scope / data minimisation (client-billing-guidelines.md #12.1) -------------
+
+CROSS_PERSON_CITATION = "client-billing-guidelines.md #12.2"
+
 
 def same_person(a, b):
     """Exact name match after whitespace and case folding; never a fuzzy or inferred match."""
@@ -607,7 +623,8 @@ SIGNAL_TEXT_KEYS = ("subject", "purpose", "deliverable", "file_name", "organizer
                     "source", "review_reason", "engagement_id", "activity_id", "person", "attendees", "citations")
 SIGNAL_LIST_KEYS = ("attendees", "citations")
 ENTRY_TEXT_KEYS = ("narrative", "notes", "source", "engagement_id", "entry_id", "person", "submitted_phase_code",
-                   "submitted_task_code", "activity_ids", "excluded_activity_ids", "citations")
+                   "submitted_task_code", "activity_ids", "excluded_activity_ids", "cross_person_activity_ids",
+                   "citations")
 DRAFT_TEXT_KEYS = ("review_reasons", "citations")
 REWRITE_TEXT_KEYS = ("narrative", "review_reasons", "citations")
 
@@ -1342,6 +1359,7 @@ SIGNAL_SPEC = (("activity_id", "id", True), ("person", "id", True), ("date", "da
 ENTRY_SPEC = (("entry_id", "id", True), ("person", "id", True), ("date", "date", True),
               ("duration_hours", "hours", True), ("narrative", "text", False), ("notes", "text", False),
               ("activity_ids", "strings", False), ("excluded_activity_ids", "strings", False),
+    ("cross_person_activity_ids", "strings", False),
               ("submitted_phase_code", "text", False), ("submitted_task_code", "text", False),
               ("embedded_instruction", "bool", False), ("source", "str", False),
               ("confidence", "confidence", False), ("citations", "strings", False))
@@ -1420,8 +1438,10 @@ def check_unique_ids(packet):
         for r in records:
             if isinstance(r.get("activity_id"), str) and r.get("activity_id") != WITHHELD_TEXT:
                 known.setdefault(canon_id(r["activity_id"]), r["activity_id"])
+    owners = {_id_key(s.get("activity_id")): s.get("person") for s in lists[0][1]
+              if isinstance(s, dict) and s.get("activity_id") != WITHHELD_TEXT}
     for i, entry in enumerate(packet.get("time_entries") or []):
-        for key in ("activity_ids", "excluded_activity_ids"):
+        for key in ("activity_ids", "excluded_activity_ids", "cross_person_activity_ids"):
             links = entry.get(key) or []
             # A withheld link (#11.3) is the shared marker, never an index key: repeats of it are not duplicates.
             repeat = _first_repeat([object() if a == WITHHELD_TEXT else _id_key(a) for a in links])
@@ -1432,11 +1452,27 @@ def check_unique_ids(packet):
                 if isinstance(link, str) and link != WITHHELD_TEXT and known.get(canon_id(link), link) != link:
                     raise SchemaError(f"invalid input: time_entries[{i}].{key}[{j}] names a known activity ID "
                                       "in a variant spelling; links must use the activity's exact ID")
-        excluded = {_id_key(a) for a in entry.get("excluded_activity_ids") or []}
-        both = [j for j, a in enumerate(entry.get("activity_ids") or []) if _id_key(a) in excluded]
-        if both:
-            raise SchemaError(f"invalid input: time_entries[{i}].activity_ids[{both[0]}] is also in "
-                              f"time_entries[{i}].excluded_activity_ids; a link is either active or excluded")
+        lists_of = {key: [_id_key(a) for a in entry.get(key) or [] if a != WITHHELD_TEXT]
+                    for key in ("activity_ids", "excluded_activity_ids", "cross_person_activity_ids")}
+        for one, other in (("activity_ids", "excluded_activity_ids"), ("activity_ids", "cross_person_activity_ids"),
+                           ("excluded_activity_ids", "cross_person_activity_ids")):
+            both = [j for j, a in enumerate(lists_of[one]) if a in set(lists_of[other])]
+            if both:
+                rule = ("a link is either active or excluded" if other == "excluded_activity_ids" and one == "activity_ids"
+                        else "a link is listed in one place only")
+                raise SchemaError(f"invalid input: time_entries[{i}].{one}[{both[0]}] is also in "
+                                  f"time_entries[{i}].{other}; {rule}")
+        # #12.2: an active link is evidence only for the same timekeeper. A link to another person's activity is
+        # malformed at every stage (activity_pull records it in cross_person_activity_ids instead). A withheld name
+        # is not compared: the entry or signal carrying it is already held.
+        person = entry.get("person")
+        for j, link in enumerate(entry.get("activity_ids") or []):
+            owner = owners.get(_id_key(link)) if link != WITHHELD_TEXT else None
+            if (isinstance(owner, str) and isinstance(person, str) and not is_withheld(owner)
+                    and not is_withheld(person) and not same_person(owner, person)):
+                raise SchemaError(f"invalid input: time_entries[{i}].activity_ids[{j}] links an activity recorded for "
+                                  "another timekeeper; a linked activity is evidence only for its own timekeeper "
+                                  f"({CROSS_PERSON_CITATION})")
 
 
 def validate_packet(packet, stage):

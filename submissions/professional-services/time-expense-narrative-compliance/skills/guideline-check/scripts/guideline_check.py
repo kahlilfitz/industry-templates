@@ -59,7 +59,7 @@ def generated_at(override):
 
 
 def load_packet(path):
-    payload = signal_policy.read_json(path, InputError)
+    payload = signal_policy.read_json(path, InputError, "coded input")
     if not isinstance(payload, dict):
         raise InputError("input is not a JSON object")
     if payload.get("contract_version") != CONTRACT:
@@ -83,7 +83,7 @@ def main():
         signal_policy.filter_packet(out, config_path=args.signal_config,
                                     script_dir=os.path.dirname(os.path.abspath(__file__)), engine=ENGINE)
     except (InputError, signal_policy.PolicyError) as exc:
-        sys.exit(f"guideline_check: {exc}")
+        sys.exit(f"guideline_check: {signal_policy.error_text(exc)}")
 
     rejected = billing_rules.govern(out)
     exception_list = out["exception_list"]
@@ -94,10 +94,10 @@ def main():
     try:
         signal_policy.write_output(args.out, signal_policy.dump_json(out))
     except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError
-        sys.exit(f"guideline_check: cannot write output: {exc}")
+        sys.exit(f"guideline_check: cannot write output: {signal_policy.error_text(exc)}")
     print(f"guideline_check: {len(out['time_entries'])} entries, {len(exception_list)} exception(s), "
           f"{len(missing_time)} missing-time item(s), {len(excluded)} excluded signal(s), "
-          f"{rejected} supplied code mapping(s) rejected -> {os.path.basename(args.out)}")
+          f"{rejected} supplied code mapping(s) rejected -> governed packet written")
     return 0
 
 

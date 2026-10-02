@@ -62,7 +62,7 @@ def generated_at(override):
 
 
 def load_packet(path):
-    payload = signal_policy.read_json(path, InputError)
+    payload = signal_policy.read_json(path, InputError, "activity input")
     if not isinstance(payload, dict):
         raise InputError("input is not a JSON object")
     if payload.get("contract_version") != CONTRACT:
@@ -220,7 +220,7 @@ def main():
         signal_policy.filter_packet(out, config_path=args.signal_config,
                                     script_dir=os.path.dirname(os.path.abspath(__file__)), engine=ENGINE)
     except (InputError, signal_policy.PolicyError) as exc:
-        sys.exit(f"narrative_draft: {exc}")
+        sys.exit(f"narrative_draft: {signal_policy.error_text(exc)}")
 
     by_id = {a["activity_id"]: a for a in out["activity_signals"]}
     packet_hold = signal_policy.packet_held(out)
@@ -242,6 +242,10 @@ def main():
         if excluded_links:
             reasons.append("linked signal(s) from a disabled or unresolvable source were excluded from evidence: "
                            + signal_policy.describe_excluded(excluded_links, out) + " (client-billing-guidelines.md #10.1)")
+        cross = entry.get("cross_person_activity_ids") or []
+        if cross:
+            reasons.append(f"{len(cross)} linked activit{'y' if len(cross) == 1 else 'ies'} recorded for another "
+                           f"timekeeper; not drafted from or counted as evidence ({signal_policy.CROSS_PERSON_CITATION})")
         uncovered = [a.get("activity_id") for a in linked if a.get("activity_id") not in covered]
         if uncovered and status != "needs_review_embedded_instruction":
             reasons.append("linked activity not described in any draft or suggested rewrite: " + ", ".join(uncovered))
@@ -293,9 +297,9 @@ def main():
     try:
         signal_policy.write_output(args.out, signal_policy.dump_json(out))
     except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError
-        sys.exit(f"narrative_draft: cannot write output: {exc}")
+        sys.exit(f"narrative_draft: cannot write output: {signal_policy.error_text(exc)}")
     print(f"narrative_draft: {len(out['time_entries'])} entries, {drafted_count} drafted, "
-          f"{len(out['provenance'].get('excluded_signals', []))} excluded signal(s) -> {os.path.basename(args.out)}")
+          f"{len(out['provenance'].get('excluded_signals', []))} excluded signal(s) -> drafted packet written")
     return 0
 
 

@@ -44,7 +44,7 @@ def generated_at(override):
 
 
 def load_packet(path):
-    payload = signal_policy.read_json(path, InputError)
+    payload = signal_policy.read_json(path, InputError, "drafted input")
     if not isinstance(payload, dict):
         raise InputError("input is not a JSON object")
     if payload.get("contract_version") != CONTRACT:
@@ -68,7 +68,7 @@ def main():
         signal_policy.filter_packet(out, config_path=args.signal_config,
                                     script_dir=os.path.dirname(os.path.abspath(__file__)), engine=ENGINE)
     except (InputError, signal_policy.PolicyError) as exc:
-        sys.exit(f"code_map: {exc}")
+        sys.exit(f"code_map: {signal_policy.error_text(exc)}")
 
     by_id = {a["activity_id"]: a for a in out["activity_signals"]}
     mismatches = held = 0
@@ -82,9 +82,9 @@ def main():
     try:
         signal_policy.write_output(args.out, signal_policy.dump_json(out))
     except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError
-        sys.exit(f"code_map: cannot write output: {exc}")
+        sys.exit(f"code_map: cannot write output: {signal_policy.error_text(exc)}")
     print(f"code_map: {len(out['time_entries'])} entries, {mismatches} submitted-code mismatch(es), "
-          f"{held} unmapped/held -> {os.path.basename(args.out)}")
+          f"{held} unmapped/held -> coded packet written")
     return 0
 
 

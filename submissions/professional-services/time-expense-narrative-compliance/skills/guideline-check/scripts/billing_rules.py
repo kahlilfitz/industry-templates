@@ -400,6 +400,14 @@ def govern(out):
                      f"linked signal(s) from a disabled or unresolvable source were excluded and not counted as evidence: "
                      f"{signal_policy.describe_excluded(excluded_links, out)}", [signal_policy.POLICY_CITATION], 0.99)
 
+        cross = entry.get("cross_person_activity_ids") or []
+        if cross:
+            # Counted, never named: the other timekeeper and their activity stay out of this entry's output (#12.1).
+            add_flag(flags, "cross_person_link", "hold_for_review",
+                     f"{len(cross)} linked activit{'y is' if len(cross) == 1 else 'ies are'} recorded for another "
+                     "timekeeper; not drafted from, mapped or counted as evidence", [signal_policy.CROSS_PERSON_CITATION],
+                     0.99)
+
         wc = word_count(narrative)
         if wc < MIN_NARRATIVE_WORDS and not text_withheld:
             add_flag(flags, "minimum_detail", "reject", f"{wc} words < {MIN_NARRATIVE_WORDS} required words",

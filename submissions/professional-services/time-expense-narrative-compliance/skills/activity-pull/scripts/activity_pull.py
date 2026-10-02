@@ -89,7 +89,7 @@ def read_csv(path, required):
                                  "columns are malformed, never overwritten)")
             rows = list(reader)
     except (OSError, UnicodeError, csv.Error) as exc:
-        raise InputError(f"cannot read {os.path.basename(path)}: {exc}") from exc
+        raise InputError(f"cannot read {os.path.basename(path)}: {signal_policy.error_text(exc)}") from exc
     # Each column is read under the declared name it canonically matches; other columns keep their own name.
     declared = {signal_policy.canon_id(c): c for c in required}
     rename = {h: declared.get(n, h) for h, n in zip(header, names)}
@@ -166,7 +166,7 @@ def read_engagement(path):
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
     except (OSError, UnicodeError) as exc:
-        raise InputError(f"cannot read engagement-letter-extract.md: {exc}") from exc
+        raise InputError(f"cannot read engagement-letter-extract.md: {signal_policy.error_text(exc)}") from exc
     found = [(m.group(1), m.group(2).strip()) for m in map(ENGAGEMENT_LABEL_RE.fullmatch, text.splitlines()) if m]
     repeated = sorted({k for k, _ in found if [n for n, _ in found].count(k) > 1})
     if repeated:
@@ -323,7 +323,7 @@ def main():
         if args.period_start and args.period_end and args.period_start > args.period_end:
             raise InputError("--period-start is after --period-end")
     except (InputError, signal_policy.PolicyError, OSError, UnicodeError, json.JSONDecodeError) as exc:
-        sys.exit(f"activity_pull: {exc}")
+        sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
 
     eng_id = engagement["engagement_id"]
     eng_key = signal_policy.canon_id(eng_id)
@@ -343,7 +343,7 @@ def main():
                 unique(workplan, (signal_policy.canon_id(row["item_type"]), signal_policy.canon_id(row["match_key"])),
                        cite, "item_type and match_key", value=(idx, row))
         except InputError as exc:
-            sys.exit(f"activity_pull: {exc}")
+            sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
 
     signals, skipped_sources, out_of_scope = [], [], []
     activity_rows = {}
@@ -366,7 +366,7 @@ def main():
             else:
                 rows = read_csv(path, ("activity_id", "date", "person", "file_name", "activity_type", "duration_hours", "engagement_id"))
         except InputError as exc:
-            sys.exit(f"activity_pull: {exc}")
+            sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
         for idx, row in enumerate(rows, start=2):
             cite = f"raw/{filename} row {idx}"
             if not allowed(row["person"]):
@@ -377,7 +377,7 @@ def main():
                 cell_id(row, "person", cite)
                 row["date"] = cell_date(row, "date", cite)
             except InputError as exc:
-                sys.exit(f"activity_pull: {exc}")
+                sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
             if signal_policy.canon_id(row["engagement_id"]) != eng_key:
                 out_of_scope.append({"activity_id": row["activity_id"], "reason": "outside engagement scope", "citations": [cite]})
                 continue
@@ -392,7 +392,7 @@ def main():
                 try:
                     duration = hours_between(row["start"], row["end"], cite)
                 except InputError as exc:
-                    sys.exit(f"activity_pull: {exc}")
+                    sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
                 meeting_id = row["event_id"]
                 extra = {"organizer": row["organizer"].strip() or None,
                          "attendees": [a.strip() for a in row["attendees"].split(";") if a.strip()]}
@@ -406,7 +406,7 @@ def main():
                 try:
                     duration = round(cell_hours(row, "duration_hours", cite), 2)
                 except InputError as exc:
-                    sys.exit(f"activity_pull: {exc}")
+                    sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
                 meeting_id = None
                 extra = {"file_name": row["file_name"]}
             citations = [cite]
@@ -454,6 +454,8 @@ def main():
     # Links resolve in canonical form to the exact ID of the signal (or excluded record) they name, so a variant
     # spelling neither drops the evidence nor creates a second record for one activity (A13).
     kept_ids = {signal_policy.canon_id(s["activity_id"]): s["activity_id"] for s in signals}
+    # #12.2: a link is evidence only when the activity is the same timekeeper's (canonical person equality).
+    owners = {signal_policy.canon_id(s["activity_id"]): s["person"] for s in signals}
     excluded_ids = {}
     entries, excluded, entry_rows = [], [], {}
     for idx, row in enumerate(timesheet_rows, start=2):
@@ -471,16 +473,19 @@ def main():
             for link in links:
                 unique(linked, signal_policy.canon_id(link), cite, "activity_ids link")
         except InputError as exc:
-            sys.exit(f"activity_pull: {exc}")
+            sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
         dates_available.add(row["date"])
         if not in_period(row["date"], period):
             continue
         dates_in_period.add(row["date"])
-        kept_links, dropped = [], []
+        kept_links, dropped, cross = [], [], []
         for link in links:
             link_key = signal_policy.canon_id(link)
             if link_key in kept_ids:
-                kept_links.append(kept_ids[link_key])
+                # Another timekeeper's activity is never this entry's evidence: it is not drafted from, mapped or
+                # counted, and the entry is held (cross_person_link, #12.2).
+                (kept_links if signal_policy.same_person(owners[link_key], row["person"]) else cross).append(
+                    kept_ids[link_key])
                 continue
             activity_id = excluded_ids.setdefault(link_key, link)
             dropped.append(activity_id)
@@ -508,6 +513,8 @@ def main():
         }
         if dropped:
             entry["excluded_activity_ids"] = dropped
+        if cross:
+            entry["cross_person_activity_ids"] = cross
         linked_signals = [s for s in signals if s["activity_id"] in kept_links]
         if signal_policy.embedded_instruction(signal_policy.entry_texts({"narrative": row["narrative"]}, linked_signals)):
             entry["embedded_instruction"] = True
@@ -566,18 +573,18 @@ def main():
     try:
         signal_policy.refuse_supplied_markers(packet, exact_ok=False)  # D20: raw input never carries a marker
     except signal_policy.SchemaError as exc:
-        sys.exit(f"activity_pull: {exc}")
+        sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
     signal_policy.filter_packet(packet, config_path=args.signal_config, script_dir=script_dir, engine=ENGINE)
     try:
         signal_policy.validate_packet(packet, "activity")  # never emit a packet the next engine would reject
     except signal_policy.SchemaError as exc:
-        sys.exit(f"activity_pull: {exc}")
+        sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
     try:
         signal_policy.write_output(args.out, signal_policy.dump_json(packet))
     except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError
-        sys.exit(f"activity_pull: cannot write output: {exc}")
+        sys.exit(f"activity_pull: cannot write output: {signal_policy.error_text(exc)}")
     print(f"activity_pull: {len(signals)} signal(s), {len(entries)} time entr(ies), "
-          f"{len(packet['provenance']['excluded_signals'])} excluded link(s) -> {os.path.basename(args.out)}")
+          f"{len(packet['provenance']['excluded_signals'])} excluded link(s) -> activity packet written")
     if timekeeper_scope["withheld"]:
         print(f"activity_pull: WARNING {timekeeper_scope['withheld']['reason']} ({signal_policy.SCOPE_CITATION})")
     if packet["provenance"]["period_check"].get("warning"):

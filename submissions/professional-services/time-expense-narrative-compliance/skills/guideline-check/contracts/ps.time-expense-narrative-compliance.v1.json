@@ -121,6 +121,7 @@
             "date_mismatch",
             "no_linked_evidence",
             "evidence_overrun",
+            "cross_person_link",
             "unmapped_code",
             "submitted_code_mismatch",
             "duplicate_meeting",
@@ -656,6 +657,10 @@
             "$ref": "#/definitions/strings",
             "description": "Links removed because the signal came from a disabled, unknown or unresolvable source (client-billing-guidelines.md #10.1)."
           },
+          "cross_person_activity_ids": {
+            "$ref": "#/definitions/strings",
+            "description": "Links to an activity recorded for another timekeeper; never evidence, and the entry is held (client-billing-guidelines.md #12.2)."
+          },
           "embedded_instruction": {
             "type": "boolean",
             "description": "True when the existing narrative or notes trip the embedded-instruction tripwire or are too long to screen (client-billing-guidelines.md #11.1)."
@@ -826,6 +831,7 @@
                 "date_mismatch",
                 "no_linked_evidence",
                 "evidence_overrun",
+                "cross_person_link",
                 "unmapped_code",
                 "submitted_code_mismatch",
                 "duplicate_meeting",
