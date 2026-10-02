@@ -145,6 +145,18 @@ How to read a report:
   never appear in holds or outputs. [Wave 1 pre-freeze QA round 11]
   Test: add one domain only to an intermediate's trusted list, then send text to that domain; it
   must still be withheld and held.
+- [ ] **A20. Exclusions apply in every section.** A subject the source marks excluded,
+  ineligible, withheld or out of scope (a person, activity or item) is refused, in canonical form,
+  in every derived section that names it at every stage, not only the first section that was
+  guarded. [Wave 1 pre-freeze QA round 12]
+  Test: move an excluded candidate into `proposed_staffing` alone; the stage must refuse.
+- [ ] **A21. Blank keys never match.** A missing, null or blank ID or key never equals another
+  missing key in a join, link, ownership check or reconciliation (watch for normalisers that turn
+  `None` into `""`); both sides must state a value. Every keyed collection, including secondary
+  ones such as recommendation lists, is checked for canonical duplicate keys before linking.
+  [Wave 1 pre-freeze QA round 12]
+  Test: null `candidate_id` on both a recommendation and its slate record; the recommendation must
+  not be proposed. Duplicate a recommendation; the stage must refuse.
 
 ## B. Finding integrity (engines)
 
@@ -330,6 +342,12 @@ How to read a report:
   [Wave 1 pre-freeze QA round 9]
   Test: append a marker-shaped string to an unsupported definitive assertion; the verdict must not
   improve.
+- [ ] **D21. Every placeholder has its own hold.** Each withheld placeholder in an intermediate is
+  bound to a hold for that field path or source location. A hold elsewhere in the document never
+  makes a newly placed placeholder valid; an unbound placeholder is a refusal.
+  [Wave 1 pre-freeze QA round 12]
+  Test: replace one objective with the engine placeholder while the only hold points elsewhere;
+  the next stage must refuse.
 
 ## E. Draft-first and grounding (`SKILL.md`)
 
