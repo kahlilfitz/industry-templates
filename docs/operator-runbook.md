@@ -495,7 +495,9 @@ not generalisation.
    "38/40, 0/30 false positives, held-out 2026-10-01") in the wave log, never the lines.
 8. **Rotate it.** Once you have described a missed class to a build agent, those lines are partly
    seen: write at least five fresh lines for that class in a new dated version and keep the old file
-   for comparison. Write a fresh set at least once per wave.
+   for comparison. Score the fresh lines on their own as well as the full set: a large gap means
+   the fix matched the described wording, not the structure. Write a fresh set at least once per
+   wave.
 
 ## Ready path: human gate and promotion
 
