@@ -3838,7 +3838,7 @@ def te_round8_sweep_tests(tmp):
               code == 2 and f"the following arguments are required: {flag}" in stderr and not os.path.exists(out), stderr.strip())
     check("TE8-1 the shared loader names the input by a fixed label and drops the OS error's file name",
           "could not read the wall register (FileNotFoundError" in show_error(lambda: rules.load_json_file(os.path.join(attack_dir, f"{attack}.json"), "wall register")))
-    sources = {name: read_text(path) for name, path in ENGINES.items()}
+    sources = {name: read_text(os.path.join(ROOT, path)) for name, path in ENGINES.items()}
     sources["assertion_rules"] = read_text(os.path.join(ROOT, "skills", "gate-check", "scripts", "assertion_rules.py"))
     sources["derive_review_input"] = read_text(os.path.join(ROOT, "tests", "derive_review_input.py"))
     leaks = sorted(name for name, text in sources.items()
