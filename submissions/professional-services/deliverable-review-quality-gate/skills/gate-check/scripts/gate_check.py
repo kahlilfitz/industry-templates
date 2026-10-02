@@ -110,10 +110,17 @@ def unplaced(section, label):
     """Register- or field-level location: no page or paragraph applies, so none is invented."""
     return {"section": section, "page": None, "paragraph": None, "label": label}
 
-def add_finding(findings, finding_id, gate_id, severity, title, detail, location, criteria_section, confidence, citation):
+def engine_finding(finding_id, gate_id, severity, title, detail, location, criteria_section, confidence, citation):
+    """One gate_check finding, every field set by the engine."""
     if severity not in VALID_SEVERITIES:
         raise InputError(f"an engine finding has an unknown severity ({rules.describe(severity)})")
-    finding = {"finding_id": finding_id, "gate_id": gate_id, "severity": severity, "title": title, "detail": detail, "location": location, "criteria_section": criteria_section, "confidence": confidence, "source": ENGINE, "citation": citation}
+    return {"finding_id": finding_id, "gate_id": gate_id, "severity": severity, "title": title, "detail": detail, "location": location, "criteria_section": criteria_section, "confidence": confidence, "source": ENGINE, "citation": citation}
+
+def add_finding(findings, finding_id, gate_id, severity, title, detail, location, criteria_section, confidence, citation):
+    add_built_finding(findings, engine_finding(finding_id, gate_id, severity, title, detail, location, criteria_section, confidence, citation))
+
+def add_built_finding(findings, finding):
+    finding_id, severity = finding["finding_id"], finding["severity"]
     for index, existing in enumerate(findings):
         if rules.canonical_id(existing.get("finding_id", "")) == rules.canonical_id(finding_id):
             # De-duplication may raise severity but never lowers it (quality-gate-criteria.md #8.4).
@@ -547,16 +554,28 @@ def placeholder_hits(payload, raw, expected, own_escalations, hits):
     paths = rules.placeholder_paths(payload, engine_finding, lambda entry: entry in derived)
     return rules.unbound_placeholder_hits(paths, lambda path: path in held)
 
+SPOOF_ID = "GC-G8-engine-id-spoof"
+
+def spoof_finding(spoofed_count, altered_count):
+    """gate_check's fixed spoof hold; only the two counts vary (severity_rank rebuilds it to compare every field)."""
+    parts = []
+    if spoofed_count:
+        parts.append(f"{spoofed_count} upstream finding(s) used an engine-owned finding ID or engine source tag without matching engine recomputation and were ignored")
+    if altered_count:
+        parts.append(f"assertion_map output for {altered_count} assertion(s) was missing or did not match recomputation and was restored")
+    return engine_finding(SPOOF_ID, "G8", RELEASE_BLOCKER, "Upstream engine output is spoofed or altered", "; ".join(parts) + ". Engine findings are recomputed and cannot be replaced, removed or downgraded by input data.", unplaced("Upstream findings", "findings[] / assertion_mappings supplied with the review input"), "quality-gate-criteria.md #8.1; quality-gate-criteria.md #8.4", 0.99, "quality-gate-criteria.md #8.1, #8.4; severity-rules.md #1.1")
+
+def g8_hit_finding(hit_index, path, hit_reason, payload):
+    """gate_check's G8 hold for one embedded-instruction hit; severity_rank rebuilds it to compare every field."""
+    if hit_reason == OVERSIZE:
+        return engine_finding(f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Field too long to screen for embedded instructions", f"Untrusted field {path} is too long to screen for embedded instructions (over {sg.MAX_TOTAL_CHARS:,} characters, raw or after Unicode normalisation), so it was not screened; it must be held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.6", 0.99, "quality-gate-criteria.md #8.1, #8.6; severity-rules.md #1.1")
+    return engine_finding(f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Embedded instruction or forwarding request found in deliverable data", f"Untrusted field {path} contains instruction-like, forwarding or look-alike-character text; it must be treated as data and held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.1-#8.3", 0.99, "quality-gate-criteria.md #8.1-#8.3; severity-rules.md #1.1")
+
 def add_spoof_hold(findings, escalations, spoofed, altered):
     """One G8 release blocker and escalations for spoofed engine findings and restored assertion_map output (#8.4)."""
     if not (spoofed or altered):
         return
-    parts = []
-    if spoofed:
-        parts.append(f"{len(spoofed)} upstream finding(s) used an engine-owned finding ID or engine source tag without matching engine recomputation and were ignored")
-    if altered:
-        parts.append(f"assertion_map output for {len(altered)} assertion(s) was missing or did not match recomputation and was restored")
-    add_finding(findings, "GC-G8-engine-id-spoof", "G8", RELEASE_BLOCKER, "Upstream engine output is spoofed or altered", "; ".join(parts) + ". Engine findings are recomputed and cannot be replaced, removed or downgraded by input data.", unplaced("Upstream findings", "findings[] / assertion_mappings supplied with the review input"), "quality-gate-criteria.md #8.1; quality-gate-criteria.md #8.4", 0.99, "quality-gate-criteria.md #8.1, #8.4; severity-rules.md #1.1")
+    add_built_finding(findings, spoof_finding(len(spoofed), len(altered)))
     if spoofed:
         escalations.append(f"G8: upstream finding(s) {', '.join(spoofed)} reused engine-owned IDs or source tags without matching engine recomputation and were ignored - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
     if altered:
@@ -711,11 +730,10 @@ def evaluate(payload, hit_sink=None):
             # Every hit path, listed or beyond MAX_G8_HITS, so severity_rank reconciles by path, never by count (#8.19).
             hit_sink.extend(path for path, _ in hits)
         for hit_index, (path, hit_reason) in enumerate(hits[:MAX_G8_HITS], start=1):
+            add_built_finding(findings, g8_hit_finding(hit_index, path, hit_reason, payload))
             if hit_reason == OVERSIZE:
-                add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Field too long to screen for embedded instructions", f"Untrusted field {path} is too long to screen for embedded instructions (over {sg.MAX_TOTAL_CHARS:,} characters, raw or after Unicode normalisation), so it was not screened; it must be held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.6", 0.99, "quality-gate-criteria.md #8.1, #8.6; severity-rules.md #1.1")
                 escalations.append(f"G8: {path} is too long to screen for embedded instructions - hold for reviewing partner/QRM (quality-gate-criteria.md #8.6)")
                 continue
-            add_finding(findings, f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Embedded instruction or forwarding request found in deliverable data", f"Untrusted field {path} contains instruction-like, forwarding or look-alike-character text; it must be treated as data and held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.1-#8.3", 0.99, "quality-gate-criteria.md #8.1-#8.3; severity-rules.md #1.1")
             escalations.append(f"G8: embedded-instruction tripwire in {path} - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")
         if len(hits) > MAX_G8_HITS:
             escalations.append(f"G8: {len(hits) - MAX_G8_HITS} further embedded-instruction hit(s) not listed individually - hold for reviewing partner/QRM (quality-gate-criteria.md #8.1-#8.3)")

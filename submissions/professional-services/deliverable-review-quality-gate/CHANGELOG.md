@@ -452,6 +452,41 @@ The structural patterns described at the top of this entry are replaced, not sup
 
   Goldens are byte-identical. Old test changed: QR5-1's severity_rank member-name placement moved from a `gate_results` entry to `provenance`, plus a new QR5-1 check that the `gate_results` placement is refused without echo.
 
+### Class sweep from Mobilization round 13 (reconciliations never filter on an input-controlled field)
+
+- **Defect: a history hold could be selected by editable fields.** severity_rank kept any `GC-`/`SR-G8-…` history-hold ID that was a G8 release blocker with its engine's `source`. All of those fields are editable. So an edited copy of a *re-derived* `GC-G8-embedded-instruction-N` hold, with a new title, detail, location or citation, escaped the full-field comparison. Fix:
+  - a finding under a derived canonical ID is always compared field by field with the derived finding;
+  - a history hold (an ID re-derivation cannot produce) stands only when it equals, in every field, the hold its own engine builds for the counts or path its detail names (`history_template`, using gate_check's new `spoof_finding`/`g8_hit_finding` and severity_rank's `sr_spoof_finding`/`sr_g8_finding` builders);
+  - anything else is removed, the genuine finding restored and an `SR-G8-engine-id-spoof` hold added.
+
+  This is the one documented exception to re-derivation: a history hold cannot re-derive because its evidence has been corrected, and it can only add a blocker.
+- **Defect: the own-escalation exemption followed a self-declared `source`.** `placeholder_hits` exempted severity_rank's own escalations for any finding with an engine `source` tag. Fix:
+  - the exemption now applies only to findings that re-derive;
+  - the quoted confidence must be a number.
+
+  End to end, the QR9-1 embedded-marker screen already held this case; this closes it at the function level as well.
+- **Presence is matched on the canonical ID alone.** Carried copies are then compared with the derived finding, never selected by gate or `source`. The refusal now names the kind:
+  - **missing:** no copy under the exact ID;
+  - **re-gated:** copies only under another gate;
+  - **downgraded:** copies only at a lower severity.
+
+  gate_check already matched `GC-` claims on the canonical ID and compared every field; a source tag there only routes a finding into a spoof check, never out of one. That is now documented.
+- Docs: quality-gate-criteria.md #8.20 is new, and severity-rules.md #3.7 and #3.8 are updated, in all six copies.
+- Tests: 1166 checks (were 1078), with 88 new in `mobilization_round13_sweep_tests`. They cover:
+  - a re-derived GC-G8 hold with each field edited (source only included);
+  - seven history-hold templates kept exactly and re-run idempotently, each with eight field edits forged;
+  - template rebuild limits;
+  - GC and AM findings re-sourced at severity_rank, and a GC claim re-sourced at gate_check;
+  - the own-escalation exemption and its numeric confidence slot;
+  - re-gated, variant-only and downgraded findings, each also with `source` edited;
+  - both demos end to end.
+
+  Goldens are byte-identical. Old tests changed:
+  - QR7-3's accepted history-hold probes now use the engine-built hold rather than the footer finding's text;
+  - M12-8's carried hold now uses gate_check's own builder, so its location is the one gate_check writes.
+
+  Both old fixtures were history holds with hand-written fields, which round 13 correctly refuses.
+
 ## 1.0.3 - 2026-10-01
 
 Fixes every FAIL, WEAK and should-fix item in the Cowork 1.0.2 evaluation (42/50, Blocked).

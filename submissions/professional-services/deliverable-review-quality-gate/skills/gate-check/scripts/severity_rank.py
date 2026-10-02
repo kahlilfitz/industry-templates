@@ -27,7 +27,8 @@ SR_SPOOF_ID = "SR-G8-engine-id-spoof"
 ESCALATION_GATES = GATE_IDS + ("other",)
 # G8 holds that re-derivation cannot reproduce from gate-checked.json alone: gate_check's spoof and pre-restoration hits
 # depend on input it has since corrected, and severity_rank's own holds come from an earlier severity_rank run. Each is
-# accepted only as a G8 release blocker carrying its own engine's source tag, so accepting one can only hold the run.
+# accepted only when it equals, in every field, the hold its engine builds for the path or counts it names
+# (history_template), so accepting one can only hold the run and no field of it can be edited (#8.20).
 # The numbered suffix is bounded by what the engines can emit (1..MAX_G8_HITS), so an impossible sixth hold is forged.
 G8_HIT_NUMBER = "(?:" + "|".join(str(number) for number in range(1, MAX_G8_HITS + 1)) + ")"
 HISTORY_HOLD_ID = re.compile(r"^(?:GC|SR)-G8-(?:engine-id-spoof|embedded-instruction-" + G8_HIT_NUMBER + r")$")
@@ -153,24 +154,30 @@ def rederive_gate_findings(payload):
     except InputError as exc:
         raise InputError(f"gate_check re-derivation failed on the carried mapped input ({exc}); re-run gate_check") from exc
     derived = evaluated["findings"]
-    # Presence is keyed by the exact engine ID: a variant spelling, or any one-field edit to an ID, counts as missing
-    # and is refused, never matched (quality-gate-criteria.md #8.19).
-    supplied = {}
+    # Carried copies are matched to each derived finding on the canonical finding ID alone, never selected by a field the
+    # input can edit (gate, severity, source); the copies are then compared field by field. No copy with the exact
+    # engine ID is missing (a variant spelling is refused, never matched, #8.19); copies only under another gate are
+    # re-gated; copies only at a lower severity are downgraded. Any other differing field is a forgery that
+    # remove_forged_engine_findings removes and holds (quality-gate-criteria.md #8.20).
+    supplied = collections.defaultdict(list)
     for item in payload["findings"]:
-        key = (item["finding_id"], item.get("gate_id"))
-        supplied[key] = max(supplied.get(key, 0), SEVERITY_RANK[item["severity"]])
+        supplied[rules.canonical_id(item["finding_id"])].append(item)
     # Counted by gate and severity (engine constants), never named: an engine finding ID carries an assertion, register
     # or evidence ID from the input (quality-gate-criteria.md #8.9).
-    counts = {"missing": {}, "downgraded": {}}
+    kinds = ("missing", "re-gated", "downgraded")
+    counts = {"missing": {}, "re-gated": {}, "downgraded": {}}
     for item in derived:
-        present = supplied.get((item["finding_id"], item["gate_id"]), 0)
-        if present < SEVERITY_RANK[item["severity"]]:
-            tally = counts["downgraded" if present else "missing"]
+        exact = [copy_ for copy_ in supplied.get(rules.canonical_id(item["finding_id"]), []) if copy_["finding_id"] == item["finding_id"]]
+        same_gate = [copy_ for copy_ in exact if copy_.get("gate_id") == item["gate_id"]]
+        problem = 0 if not exact else 1 if not same_gate else \
+            2 if max(SEVERITY_RANK[copy_["severity"]] for copy_ in same_gate) < SEVERITY_RANK[item["severity"]] else None
+        if problem is not None:
+            tally = counts[kinds[problem]]
             tally[(item["gate_id"], item["severity"])] = tally.get((item["gate_id"], item["severity"]), 0) + 1
-    if counts["missing"] or counts["downgraded"]:
+    if any(counts.values()):
         shown = "; ".join(f"{sum(counts[kind].values())} {kind} (" + ", ".join(f"{gate} {severity} x{counts[kind][(gate, severity)]}" for gate in GATE_IDS for severity in SEVERITY_ORDER if (gate, severity) in counts[kind]) + ")"
-                          for kind in ("missing", "downgraded") if counts[kind])
-        raise InputError(f"findings[] do not contain every finding gate_check derives from the carried mapped input: {shown}. Re-run gate_check; engine findings cannot be removed or downgraded after the gate run (severity-rules.md #3.7)")
+                          for kind in ("missing", "re-gated", "downgraded") if counts[kind])
+        raise InputError(f"findings[] do not contain every finding gate_check derives from the carried mapped input: {shown}. Re-run gate_check; engine findings cannot be removed, re-gated or downgraded after the gate run (severity-rules.md #3.7)")
     reconcile_derived_escalations(payload["escalations"], evaluated["escalations"])
     reconcile_gate_fields(payload["gate_results"], evaluated["gate_results"])
     # Internal only, never written: every path gate_check's own G8 screen holds, listed or in its overflow note.
@@ -249,18 +256,83 @@ def engine_owner(item):
     return owner or (rules.canonical_tag(item.get("source")) if rules.is_engine_tag(item.get("source")) else None)
 
 
-def is_history_hold(item):
-    """A G8 history hold (HISTORY_HOLD_ID) carried as a release blocker under its own engine's source tag."""
-    return bool(HISTORY_HOLD_ID.match(item["finding_id"])) and item["gate_id"] == "G8" and item["severity"] == "release_blocker" \
-        and item.get("source") == (ENGINE if item["finding_id"].startswith("SR-") else gc.ENGINE)
+def sr_spoof_finding(forged_count):
+    """severity_rank's fixed spoof hold; only the count varies."""
+    return {"finding_id": SR_SPOOF_ID, "gate_id": "G8", "severity": "release_blocker", "title": "Engine finding forged or altered after the gate run",
+            "detail": f"{forged_count} finding(s) carried an engine-owned finding ID or engine source tag but are not what gate_check re-derives from the carried mapped input; they were removed and any engine finding they replaced was restored. Engine findings cannot be added, replaced or edited after the gate run.",
+            "location": gc.unplaced("Gate-check findings", "findings[] supplied to severity_rank"), "criteria_section": "quality-gate-criteria.md #8.4", "confidence": 0.99, "source": ENGINE,
+            "citation": "quality-gate-criteria.md #8.1, #8.4; severity-rules.md #1.1, #3.8"}
+
+
+def sr_g8_finding(hit_index, path, reason, payload):
+    """severity_rank's G8 hold for one embedded-instruction hit."""
+    if reason == gc.OVERSIZE:
+        title, detail, section = "Field too long to screen for embedded instructions", f"Field {path} reached severity_rank too long to screen for embedded instructions, so it was withheld and must be held for human review.", "quality-gate-criteria.md #8.6"
+    else:
+        title, detail, section = "Embedded instruction found in gate-check output", f"Field {path} reached severity_rank with instruction-like, forwarding or look-alike-character text that gate_check did not hold; the text was withheld and must be held for human review.", "quality-gate-criteria.md #8.1-#8.3"
+    return {"finding_id": f"{SR_G8_PREFIX}{hit_index}", "gate_id": "G8", "severity": "release_blocker", "title": title, "detail": detail, "location": gc.location_for_scan_path(payload, path),
+            "criteria_section": section, "confidence": 0.99, "source": ENGINE, "citation": "quality-gate-criteria.md #8.1-#8.3, #8.7; severity-rules.md #1.1, #3.6"}
+
+
+COUNT = r"([1-9][0-9]{0,8})"
+GC_SPOOF_COUNTS = re.compile(r"^(?:" + COUNT + r" upstream finding\(s\) used )?(?:.*?assertion_map output for " + COUNT + r" assertion\(s\) was )?")
+SR_SPOOF_COUNT = re.compile(r"^" + COUNT + r" finding\(s\) carried ")
+# The text each engine wraps around the path of a numbered G8 hold: (prefix, suffix) per hit reason.
+G8_PATH_FRAMES = {
+    "GC": ((gc.OVERSIZE, "Untrusted field ", " is too long to screen for embedded instructions"), (None, "Untrusted field ", " contains instruction-like, forwarding or look-alike-character text")),
+    "SR": ((gc.OVERSIZE, "Field ", " reached severity_rank too long to screen"), (None, "Field ", " reached severity_rank with instruction-like")),
+}
+
+
+def history_template(item, payload):
+    """The hold an engine would have written for a G8 history-hold ID (HISTORY_HOLD_ID), rebuilt from the counts or path
+    its detail names with every other field an engine constant; None when the ID is not a history-hold ID or the
+    detail names no path or count the engine could have written. The caller keeps the carried hold only when it
+    equals this template in every field, so no field of a hold that cannot re-derive is ever taken from the input on
+    trust (quality-gate-criteria.md #8.20)."""
+    finding_id, detail = item.get("finding_id"), item.get("detail")
+    if not (isinstance(finding_id, str) and HISTORY_HOLD_ID.match(finding_id) and isinstance(detail, str)):
+        return None
+    engine = finding_id[:2]
+    if finding_id == gc.SPOOF_ID:
+        match = GC_SPOOF_COUNTS.match(detail)
+        spoofed, altered = (int(match.group(1) or 0), int(match.group(2) or 0)) if match else (0, 0)
+        return gc.spoof_finding(spoofed, altered) if spoofed or altered else None
+    if finding_id == SR_SPOOF_ID:
+        match = SR_SPOOF_COUNT.match(detail)
+        return sr_spoof_finding(int(match.group(1))) if match else None
+    hit_index = int(finding_id.rsplit("-", 1)[1])
+    for reason, prefix, suffix in G8_PATH_FRAMES[engine]:
+        start = detail.find(suffix)
+        if detail.startswith(prefix) and start > len(prefix):
+            path = detail[len(prefix):start]
+            return gc.g8_hit_finding(hit_index, path, reason, payload) if engine == "GC" else sr_g8_finding(hit_index, path, reason, payload)
+    return None
+
+
+def is_history_hold(item, payload):
+    """A G8 history hold that equals, in every field, the hold its engine builds for the path or counts it names."""
+    template = history_template(item, payload)
+    return template is not None and item == template
+
+
+def rederives(item, derived_by_id, payload):
+    """True when a carried finding is exactly what an engine produces: equal in every field to the finding gate_check
+    re-derives at its canonical ID, or (for an ID re-derivation does not produce) an exact engine-template history hold.
+    Matched on the canonical ID alone; no input-editable field (source, gate, severity) selects or skips the comparison."""
+    derived = derived_by_id.get(rules.canonical_id(item["finding_id"]))
+    if derived is not None:
+        return item == derived
+    return is_history_hold(item, payload)
 
 
 def remove_forged_engine_findings(payload, derived, raw_owners=()):
     """Hold every engine-owned finding to re-derivation (severity-rules.md #3.8, quality-gate-criteria.md #8.4).
 
-    A finding with an engine-owned ID prefix (AM-, GC-, SR-) or an engine source tag stands only when gate_check
-    re-derivation produces exactly that finding (same ID and every field equal), or when it is a G8 history hold
-    (HISTORY_HOLD_ID) carried as a release blocker under its own engine's tag. Anything else is forged: it is removed,
+    A finding with an engine-owned ID prefix (AM-, GC-, SR-) or an engine source tag, or whose canonical ID is one
+    re-derivation produces, stands only when it re-derives (`rederives`): equal in every field to the derived finding
+    at that canonical ID, or, for an ID re-derivation does not produce, a G8 history hold equal to its engine template.
+    Editing only `source` never takes a finding out of the comparison. Anything else is forged: it is removed,
     and when its ID is one re-derivation produces and no exact copy remains, the derived finding is restored in its
     place. `raw_owners[i]` is the owner of findings[i] read before screening withheld any text, so a flagged engine ID
     is still treated as engine-owned. Returns the labels of the forged findings (never their text)."""
@@ -268,10 +340,8 @@ def remove_forged_engine_findings(payload, derived, raw_owners=()):
     kept, forged = [], []
     for index, item in enumerate(payload["findings"]):
         owner = (raw_owners[index] if index < len(raw_owners) else None) or engine_owner(item)
-        if owner is None or derived_by_id.get(rules.canonical_id(item["finding_id"])) == item:
-            kept.append(item)
-            continue
-        if is_history_hold(item):
+        derived_key = rules.canonical_id(item["finding_id"]) in derived_by_id
+        if (owner is None and not derived_key) or rederives(item, derived_by_id, payload):
             kept.append(item)
             continue
         forged.append((index, item))
@@ -287,10 +357,7 @@ def remove_forged_engine_findings(payload, derived, raw_owners=()):
 
 def add_spoof_hold(payload, forged):
     """One SR-G8 release blocker and an escalation for forged engine findings (severity-rules.md #3.8)."""
-    payload["findings"].append({"finding_id": SR_SPOOF_ID, "gate_id": "G8", "severity": "release_blocker", "title": "Engine finding forged or altered after the gate run",
-                                "detail": f"{len(forged)} finding(s) carried an engine-owned finding ID or engine source tag but are not what gate_check re-derives from the carried mapped input; they were removed and any engine finding they replaced was restored. Engine findings cannot be added, replaced or edited after the gate run.",
-                                "location": gc.unplaced("Gate-check findings", "findings[] supplied to severity_rank"), "criteria_section": "quality-gate-criteria.md #8.4", "confidence": 0.99, "source": ENGINE,
-                                "citation": "quality-gate-criteria.md #8.1, #8.4; severity-rules.md #1.1, #3.8"})
+    payload["findings"].append(sr_spoof_finding(len(forged)))
     payload["escalations"].append(f"G8: finding(s) {', '.join(forged)} used engine-owned IDs or source tags without matching gate_check re-derivation and were removed - hold for reviewing partner/QRM (severity-rules.md #3.8)")
 
 
@@ -311,7 +378,7 @@ def covered_by_gate_check(rederived, path):
 # Escalations severity_rank itself writes about an engine finding (severity-rules.md #2.1, #3.4); the finding ID may
 # carry a withheld assertion ID, which the engine finding binds.
 OWN_ESCALATIONS = (
-    re.compile(r": confidence [^\r\n]* below " + re.escape(str(CONFIDENCE_FLOOR)) + r" - human confirmation required \(severity-rules\.md #2\.1\)"),
+    re.compile(r": confidence -?[0-9]+(?:\.[0-9]+)?(?:e[-+][0-9]+)? below " + re.escape(str(CONFIDENCE_FLOOR)) + r" - human confirmation required \(severity-rules\.md #2\.1\)"),
     re.compile(r": [0-9]+ findings shared this finding_id; one was kept at the highest severity \((?:release_blocker|must_fix|advisory)\) - reviewing partner/QRM to confirm \(severity-rules\.md #3\.4\)"),
 )
 
@@ -328,11 +395,14 @@ def placeholder_hits(payload, rederived, raw_owners, hits):
     engine derived, provenance or another note) that no standing G8 hold names exactly (quality-gate-criteria.md
     #8.18). A hold binds a placeholder only when it names that path: gate_check's `Untrusted field <path> ` or
     severity_rank's `Field <path> reached`, from a re-derived finding or a G8 history hold. A hold elsewhere never
-    binds a newly placed placeholder."""
+    binds a newly placed placeholder. severity_rank's own escalations are recognised only for findings that re-derive
+    (never for a finding whose `source` alone claims an engine), so an escalation about a forged finding that is then
+    removed keeps its placeholder bound to a hold of its own (quality-gate-criteria.md #8.20)."""
     findings = payload["findings"]
-    engine_ids = [item["finding_id"] for index, item in enumerate(findings) if index < len(raw_owners) and raw_owners[index] is not None]
+    derived_by_id = {rules.canonical_id(item["finding_id"]): item for item in rederived["findings"]}
+    engine_ids = [item["finding_id"] for item in findings if rederives(item, derived_by_id, payload)]
     derived_escalations = rederived["escalations"]
-    holds = [item.get("detail", "") for item in list(rederived["findings"]) + [item for item in findings if is_history_hold(item)] if item["gate_id"] == "G8"]
+    holds = [item.get("detail", "") for item in list(rederived["findings"]) + [item for item in findings if is_history_hold(item, payload)] if item["gate_id"] == "G8"]
     held = {path for path, _ in hits}
 
     def bound(path):
@@ -362,14 +432,11 @@ def add_g8_findings(payload, hits):
     """One SR-G8 release blocker per new hit (up to MAX_G8_HITS) plus escalations; withheld text is never repeated."""
     findings, escalations = payload["findings"], payload["escalations"]
     for hit_index, (path, reason) in enumerate(hits[:MAX_G8_HITS], start=1):
-        location = gc.location_for_scan_path(payload, path)
         if reason == gc.OVERSIZE:
-            title, detail, section = "Field too long to screen for embedded instructions", f"Field {path} reached severity_rank too long to screen for embedded instructions, so it was withheld and must be held for human review.", "quality-gate-criteria.md #8.6"
             escalations.append(f"G8: {path} reached severity_rank too long to screen for embedded instructions - hold for reviewing partner/QRM (severity-rules.md #3.6)")
         else:
-            title, detail, section = "Embedded instruction found in gate-check output", f"Field {path} reached severity_rank with instruction-like, forwarding or look-alike-character text that gate_check did not hold; the text was withheld and must be held for human review.", "quality-gate-criteria.md #8.1-#8.3"
             escalations.append(f"G8: embedded-instruction tripwire in {path} at severity_rank - text withheld; hold for reviewing partner/QRM (severity-rules.md #3.6)")
-        findings.append({"finding_id": f"{SR_G8_PREFIX}{hit_index}", "gate_id": "G8", "severity": "release_blocker", "title": title, "detail": detail, "location": location, "criteria_section": section, "confidence": 0.99, "source": ENGINE, "citation": "quality-gate-criteria.md #8.1-#8.3, #8.7; severity-rules.md #1.1, #3.6"})
+        findings.append(sr_g8_finding(hit_index, path, reason, payload))
     if len(hits) > MAX_G8_HITS:
         escalations.append(f"G8: {len(hits) - MAX_G8_HITS} further embedded-instruction hit(s) at severity_rank not listed individually - hold for reviewing partner/QRM (severity-rules.md #3.6)")
 
