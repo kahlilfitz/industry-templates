@@ -3,7 +3,7 @@ import glob, hashlib, os, sys
 ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # The one place the vendored shared detector is pinned. On a byte-identical re-copy of a new steering_guard.py
 # release into every skill, update this constant and nothing else.
-STEERING_GUARD_SHA256="17aa0ba6b0728417f3e60a0c8a80845009a8aa94eaa6f9640db306e28b617073"
+STEERING_GUARD_SHA256="982086a1cd8d9bfdae794df561f9709065bfac02a2a8ded98dbc12a34eb53f28"
 STEERING_GUARD=os.path.join(ROOT,"skills","engagement-retrieve","scripts","steering_guard.py")
 def d(p):
     with open(p,"rb") as f: return hashlib.sha256(f.read()).hexdigest()

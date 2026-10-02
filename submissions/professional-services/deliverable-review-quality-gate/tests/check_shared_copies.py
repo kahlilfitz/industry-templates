@@ -18,7 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # The one pin for the vendored shared detector steering_guard.py. It is copied byte-for-byte and never edited here;
 # to take a new release, copy the file into every folder in STEERING_GUARD_COPIES and update this constant only.
-STEERING_GUARD_SHA256 = "17aa0ba6b0728417f3e60a0c8a80845009a8aa94eaa6f9640db306e28b617073"
+STEERING_GUARD_SHA256 = "982086a1cd8d9bfdae794df561f9709065bfac02a2a8ded98dbc12a34eb53f28"
 STEERING_GUARD_COPIES = ("skills/gate-check/scripts/steering_guard.py",)
 
 

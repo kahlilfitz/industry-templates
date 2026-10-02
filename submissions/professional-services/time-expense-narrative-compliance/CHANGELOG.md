@@ -46,6 +46,7 @@ Fix release after the v1.0.3 evaluation (`evaluate-time-expense-narrative-compli
 ### Shared steering_guard detector (replaces the phrase-list tripwire; 1.0.4, no version bump)
 - **What changed:** the phrase-list tripwire in `signal_policy` is removed: `VOCATIVE_RE`, `ADDRESSED_RE`, `TOOL_IMPERATIVE_RE`, `INSTRUCTION_PATTERNS`, `IMPERATIVE_PATTERNS`, `CONTACT_RE`, the confusable tables, `mixed_script`, `filename_words` and `aggregate`.
 - **Replacement:** `signal_policy.embedded_instruction(*texts)` keeps its interface but routes every text through the shared `steering_guard` 1.1.0. It is vendored byte-identically into all five skills' `scripts/`, and its SHA-256 is pinned once, in `STEERING_GUARD_SHA256` in `tests/check_shared_copies.py`.
+- Updated to `steering_guard` 1.1.1 (SHA-256 `982086A1…3F28`), byte-identical to `shared/steering-guard/`: adds wall-check and clearance claims, run-on and fused-word instructions, and policy-statement exemptions. `tests/steering-corpus.json` refreshed (499 attack, 542 benign lines). Existing tests pass unchanged; goldens are byte-identical. Operator held-out: 39/40 caught, 0/30 false positives on the earlier set; 56/68, 0/45 on a rotated set.
 - **Hooks:** plugin vocabulary goes in only through the hooks (`STEERING_HOOKS`):
   - verdict words *billable*, *compliant*, *no write down* and *approved for billing*;
   - rule nouns *OCG(s)*, *billing guidelines* and *phase code*;
