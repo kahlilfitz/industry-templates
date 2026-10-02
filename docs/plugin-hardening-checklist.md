@@ -124,6 +124,11 @@ How to read a report:
     the shared detector.
 
   A self-declared `source: engine:*` is not proof of origin.
+
+  Scope limit: B5 catches inconsistent or partial edits. It does not attempt to detect an
+  intermediate rewritten consistently in every field (for example a hold, its escalation and every
+  derived status all removed together). Anything able to do that could write the final output
+  directly, so engines cannot defend against it. Don't report it as a defect in QA.
   [Wave 1 pre-freeze QA, 2026-10-01: all three plugins]
   Test: hand-edit each intermediate file to (a) relabel a reject or blocker as clean, (b) change a
   summary total, (c) add instruction-like text to a nested field; each must hold or be refused.
