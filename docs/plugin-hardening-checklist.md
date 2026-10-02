@@ -167,6 +167,14 @@ How to read a report:
   Test: change one governed entry ID and leave its exception item alone; the report stage must
   refuse. `Morgan Lee` and `  morgan   lee  ` roll up as one person. Change only a hold's
   `source`; the stage must refuse.
+- [ ] **A23. Re-derive the whole document, not field by field.** Each downstream stage re-runs
+  the upstream deterministic derivation on the screened raw inputs and requires deep equality on
+  every engine-owned field and section, provenance included. Fields that are not engine-owned sit
+  on an explicit, justified allow-list, and a test fails if the contract gains a field that is
+  neither compared nor allow-listed. Per-field reconciliation kept leaving the next field open.
+  [Wave 1 pre-freeze QA: Mobilization round 14, T&E round 11]
+  Test: change any single engine-owned field, including a copied record, a proposal or a
+  provenance ledger entry; the next stage must refuse.
 
 ## B. Finding integrity (engines)
 
