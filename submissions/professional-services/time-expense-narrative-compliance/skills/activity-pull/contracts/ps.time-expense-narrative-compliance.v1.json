@@ -390,6 +390,8 @@
           "citations",
           "narrative",
           "activity_ids",
+          "excluded_activity_ids",
+          "cross_person_activity_ids",
           "submitted_phase_code",
           "submitted_task_code"
         ],
@@ -655,11 +657,11 @@
           },
           "excluded_activity_ids": {
             "$ref": "#/definitions/strings",
-            "description": "Links removed because the signal came from a disabled, unknown or unresolvable source (client-billing-guidelines.md #10.1)."
+            "description": "Links removed because the signal came from a disabled, unknown or unresolvable source (client-billing-guidelines.md #10.1). Always present once activity-pull has run (empty when none); every copy of an entry's link state is reconciled exactly at every later stage (client-billing-guidelines.md #13.4)."
           },
           "cross_person_activity_ids": {
             "$ref": "#/definitions/strings",
-            "description": "Links to an activity recorded for another timekeeper; never evidence, and the entry is held (client-billing-guidelines.md #12.2)."
+            "description": "Links to an activity recorded for another timekeeper; never evidence, and the entry is held (client-billing-guidelines.md #12.2). Always present once activity-pull has run (empty when none); every copy of an entry's link state is reconciled exactly at every later stage (client-billing-guidelines.md #13.4)."
           },
           "embedded_instruction": {
             "type": "boolean",

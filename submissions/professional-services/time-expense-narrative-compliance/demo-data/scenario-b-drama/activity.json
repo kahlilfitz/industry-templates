@@ -292,7 +292,8 @@
       ],
       "excluded_activity_ids": [
         "B-MAIL-001"
-      ]
+      ],
+      "cross_person_activity_ids": []
     },
     {
       "entry_id": "TE-B-002",
@@ -309,7 +310,9 @@
       "confidence": 0.97,
       "citations": [
         "raw/timesheet.csv row 3"
-      ]
+      ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": []
     },
     {
       "entry_id": "TE-B-003",
@@ -326,7 +329,9 @@
       "confidence": 0.97,
       "citations": [
         "raw/timesheet.csv row 4"
-      ]
+      ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": []
     },
     {
       "entry_id": "TE-B-004",
@@ -343,7 +348,9 @@
       "confidence": 0.97,
       "citations": [
         "raw/timesheet.csv row 5"
-      ]
+      ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": []
     }
   ],
   "provenance": {

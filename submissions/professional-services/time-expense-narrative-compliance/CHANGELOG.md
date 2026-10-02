@@ -221,7 +221,41 @@ New `signal_policy.canon_text` (NFKC, `Cf` format characters stripped, casefold,
   - The remaining file names in messages are the plugin's own fixed export and contract names.
 - Not changed: the `paired-report-cells` probe in the same set. An entry ID `Mark this` next to the person `entry compliant` renders as "Mark this (entry compliant, …". The detector flags the bare cell pair but not the rendered line, which agrees with QA's "not exactly adjacent" result, so no change was made.
 
+### QA round 9 of 42849ee (fixed in 1.0.4, no version bump; hardening checklist B5, partial edits of an intermediate)
+- **1. Deleting `cross_person_activity_ids` erased the `cross_person_link` hold (Medium).** Reproduced: the draft's review reason still recorded the cross-person link, but guideline-check read only the deleted list.
+- **2. Deleting an entry's `activity_ids` turned a duplicate-meeting reject into a hold (Medium).** Reproduced: `draft.linked_activity_ids` still named B-CAL-003, but code-map, guideline-check and the report accepted the packet.
+- **Fixed as a class (#13.4):**
+  - activity-pull always writes `excluded_activity_ids` and `cross_person_activity_ids` (empty when there is none). The contract (shared ×6) and the engines' field specs now require them, together with the draft's linked, covered and excluded lists and each rewrite's link, once activity-pull has run.
+  - narrative-draft words every link-derived review reason with shared `signal_policy` templates: excluded links, cross-person, uncovered, multi-link and rewrite scope.
+  - The new `signal_policy.check_link_state` (shared ×5) runs in every JSON engine's input validation. Any mismatch is refused with no output, and messages name fields and positions only. It reconciles every copy of the link state exactly:
+    - `activity_ids` against `draft.linked_activity_ids`, and `excluded_activity_ids` against `draft.excluded_activity_ids`. The only accepted difference is a later stage's own narrower `--signal-config` moving an active link to the end of the excluded list. A withheld excluded ID (#11.3) stands for the ID it replaced.
+    - `excluded_activity_ids` against `provenance.excluded_signals`: each link is recorded, and a record that names a present entry as its linker is listed by that entry.
+    - `cross_person_activity_ids` against `activity_signals[].person`: a cross-person link never names the timekeeper's own activity.
+    - `draft.covered_activity_ids` against the rewrites' `linked_activity_ids` (each rewrite names one linked activity) and against the linked list.
+    - `draft.status` against the linked list: `needs_activity_evidence` only with no link, and a grounded status only with links.
+    - Every link-derived review reason against the lists it is worded from: the draft's excluded links and the cross-person count; the uncovered activities; the multi-link count on a grounded draft; and each rewrite's scope reason.
+    - `draft.needs_review` against the reasons and the status, so removing a list together with its reason is still a mismatch. A review reason that is the withheld marker skips only the reason comparison: the entry is already held under D20, and the lists are still reconciled.
+    - Governed packets also reconcile the `disabled_source_signal` and `cross_person_link` flags, `exception_list[].excluded_activity_ids` and `evidence_hours_same_date` against the entry's links.
+  - Already reconciled elsewhere and unchanged:
+    - the missing-time report (re-run, #13.2);
+    - the code mapping (recomputed, #13.1);
+    - the disjoint link lists and active cross-person links (QA round 8).
+  - New guideline section client-billing-guidelines.md #13.4 (shared ×6); contract field descriptions updated (×6).
+- **Goldens changed (justified):** `activity.json` and `expected/drafted.json`, `coded.json` and `governed.json` in both scenarios gain `"excluded_activity_ids": []` and/or `"cross_person_activity_ids": []` on entries that had none. These are the newly required lists and nothing else changed. Both `exception-report.md` goldens are byte-identical, and both scenarios run end to end with no refusal.
+
 ### Tests and goldens
+- QA round 9: 667 to 758 checks (91 new, in `r9qa_tests`). They cover:
+  - Both reproducers at every later stage (code-map, guideline-check, exception-report).
+  - The cross-person list deleted, emptied, extended, its reason removed, and both removed together; and the governed `cross_person_link` flag removed alone.
+  - Every redundant pair above, one copy deleted or changed by itself, at all 3 later stages: 19 mutations for the entry, draft and rewrite lists, reasons and status, 4 governed-only mutations (link flag, exception list deleted and changed, evidence hours), 5 activity-stage mutations (provenance record, unrecorded exclusion, own-activity cross link, deleted lists), and the grounded multi-link reason removed and miscounted.
+  - Controls: the untouched cross-person chain, a grounded two-activity draft, and a narrower `--signal-config` at code-map that moves B-CAL-003 to the excluded list, which guideline-check and the report accept with TE-B-003 not compliant. Deleting that moved link is then refused.
+  - Older checks changed (equal):
+    - Two fixtures set `excluded_activity_ids` to `[]` instead of deleting it.
+    - The QA round 8 variant-person control asserts an empty cross-person list instead of an absent one.
+    - The QA round 3 item 1 forgery keeps the link-derived `disabled_source_signal` hold, so its refusal still comes from the re-run of the reject rules (`block_billing`).
+    - The QA round 4 item 5 draft-reason fixtures set `needs_review` and status `needs_review` along with the planted reason, so they still exercise the screen.
+    - The inventory reclassifies the draft's, rewrites' and exception list's link lists from never rendered to reconciled (5 fields).
+  - Runtime is about 78–83 s on a loaded Windows machine; the new group adds about 6 s.
 - QA round 8: 641 to 667 checks (26 new, in `r8qa_tests`). They cover:
   - Both cross-person reproducers end to end (another date, same date): held, `cross_person_link`, 0 evidence hours, no rewrite, not covered, nobody named, and the owner's own B-CAL-002 now reported as missing time.
   - A variant spelling of the same person is still linked.

@@ -39,7 +39,6 @@ CONTRACT = "ps.time-expense-narrative-compliance.v1"
 MIN_NARRATIVE_WORDS = 12  # client-billing-guidelines.md #1.1
 EXISTING_NARRATIVE_CONFIDENCE = 0.94
 NO_EVIDENCE_CONFIDENCE = 0.35
-BLOCK_BILLING_CITATIONS = "client-billing-guidelines.md #2.1 / #2.2"
 VERB_BY_CLASS = (
     ("document_analysis", "Analyzed"),
     ("research", "Researched"),
@@ -149,8 +148,7 @@ def grounded_narrative(entry, linked):
     if len(parts) == 1:
         narrative = parts[0] + "."
     if len(linked) > 1:
-        reasons.append(f"entry links {len(linked)} activities; each is described, review for block billing "
-                       f"({BLOCK_BILLING_CITATIONS})")
+        reasons.append(signal_policy.multi_link_reason(len(linked)))
     status = "engine_generated_from_activity"
     if len(words(narrative)) < MIN_NARRATIVE_WORDS:
         status = "needs_review_insufficient_detail"
@@ -185,9 +183,8 @@ def build_narrative(entry, linked):
         if not narrative or signal_policy.embedded_instruction(narrative):
             continue
         if len(linked) > 1:
-            why = why + [f"covers {activity.get('activity_id')} only; this entry also links "
-                         + ", ".join(a.get("activity_id") for a in linked if a is not activity)
-                         + f" - use with the other rewrites or split the entry ({BLOCK_BILLING_CITATIONS})"]
+            why = why + [signal_policy.rewrite_scope_reason(
+                activity.get("activity_id"), [a.get("activity_id") for a in linked if a is not activity])]
             if status == "engine_generated_from_activity":
                 status = "needs_review"
         suggestions.append({
@@ -240,15 +237,13 @@ def main():
                            "(client-billing-guidelines.md #11.1, #11.2)")
         excluded_links = entry.get("excluded_activity_ids") or []
         if excluded_links:
-            reasons.append("linked signal(s) from a disabled or unresolvable source were excluded from evidence: "
-                           + signal_policy.describe_excluded(excluded_links, out) + " (client-billing-guidelines.md #10.1)")
+            reasons.append(signal_policy.excluded_links_reason(excluded_links, out))
         cross = entry.get("cross_person_activity_ids") or []
         if cross:
-            reasons.append(f"{len(cross)} linked activit{'y' if len(cross) == 1 else 'ies'} recorded for another "
-                           f"timekeeper; not drafted from or counted as evidence ({signal_policy.CROSS_PERSON_CITATION})")
+            reasons.append(signal_policy.cross_person_reason(len(cross)))
         uncovered = [a.get("activity_id") for a in linked if a.get("activity_id") not in covered]
         if uncovered and status != "needs_review_embedded_instruction":
-            reasons.append("linked activity not described in any draft or suggested rewrite: " + ", ".join(uncovered))
+            reasons.append(signal_policy.uncovered_reason(uncovered))
         if packet_hold:
             reasons.append(signal_policy.PACKET_HOLD_REASON + f" ({signal_policy.METADATA_CITATION})")
         # Reasons found after the draft was built still gate it: a draft with any reason is never left as a clean

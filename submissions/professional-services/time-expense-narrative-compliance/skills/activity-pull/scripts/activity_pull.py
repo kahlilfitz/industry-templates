@@ -511,10 +511,10 @@ def main():
             "confidence": TIMESHEET_CONFIDENCE,
             "citations": [cite],
         }
-        if dropped:
-            entry["excluded_activity_ids"] = dropped
-        if cross:
-            entry["cross_person_activity_ids"] = cross
+        # #13.4: both link sets are always present once activity-pull has run (empty when there is none), so a later
+        # stage can tell a deleted list from an empty one and reconcile every copy of the links exactly.
+        entry["excluded_activity_ids"] = dropped
+        entry["cross_person_activity_ids"] = cross
         linked_signals = [s for s in signals if s["activity_id"] in kept_links]
         if signal_policy.embedded_instruction(signal_policy.entry_texts({"narrative": row["narrative"]}, linked_signals)):
             entry["embedded_instruction"] = True

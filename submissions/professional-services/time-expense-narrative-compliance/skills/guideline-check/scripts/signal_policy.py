@@ -1358,17 +1358,17 @@ SIGNAL_SPEC = (("activity_id", "id", True), ("person", "id", True), ("date", "da
                ("needs_review", "bool", False), ("review_reason", "text", False))
 ENTRY_SPEC = (("entry_id", "id", True), ("person", "id", True), ("date", "date", True),
               ("duration_hours", "hours", True), ("narrative", "text", False), ("notes", "text", False),
-              ("activity_ids", "strings", False), ("excluded_activity_ids", "strings", False),
-    ("cross_person_activity_ids", "strings", False),
+              ("activity_ids", "strings", True), ("excluded_activity_ids", "strings", True),
+              ("cross_person_activity_ids", "strings", True),
               ("submitted_phase_code", "text", False), ("submitted_task_code", "text", False),
               ("embedded_instruction", "bool", False), ("source", "str", False),
               ("confidence", "confidence", False), ("citations", "strings", False))
 DRAFT_SPEC = (("narrative", "str", True), ("status", DRAFT_STATUSES, True), ("needs_review", "bool", True),
               ("confidence", "confidence", True), ("citations", "strings", True), ("review_reasons", "strings", False),
-              ("linked_activity_ids", "strings", False), ("covered_activity_ids", "strings", False),
-              ("excluded_activity_ids", "strings", False))
+              ("linked_activity_ids", "strings", True), ("covered_activity_ids", "strings", True),
+              ("excluded_activity_ids", "strings", True))
 REWRITE_SPEC = (("narrative", "str", True), ("status", REWRITE_STATUSES, True), ("review_reasons", "strings", False),
-                ("linked_activity_ids", "strings", False), ("confidence", "confidence", False),
+                ("linked_activity_ids", "strings", True), ("confidence", "confidence", False),
                 ("citations", "strings", False))
 FLAG_SPEC = (("flag", "id", True), ("severity", SEVERITIES, True), ("detail", "str", True),
              ("confidence", "confidence", False), ("citations", "strings", False), ("source", "text", False))
@@ -1475,6 +1475,211 @@ def check_unique_ids(packet):
                                   f"({CROSS_PERSON_CITATION})")
 
 
+# Link state (#13.4). activity_pull resolves each entry's links once into three disjoint, required lists
+# (activity_ids, excluded_activity_ids, cross_person_activity_ids); narrative_draft copies them into the draft and words
+# its link reasons with these templates; guideline_check derives its link flags from them. check_link_state reconciles
+# every copy exactly at every later stage.
+LINK_STATE_CITATION = "client-billing-guidelines.md #13.4"
+LINK_BLOCK_CITATIONS = "client-billing-guidelines.md #2.1 / #2.2"
+EXCLUDED_LINKS_PREFIX = "linked signal(s) from a disabled or unresolvable source were excluded from evidence: "
+CROSS_PERSON_REASON_RE = re.compile(r"\d+ linked activit(?:y|ies) recorded for another timekeeper; ")
+UNCOVERED_PREFIX = "linked activity not described in any draft or suggested rewrite: "
+MULTI_LINK_RE = re.compile(r"entry links \d+ activities; ")
+REWRITE_SCOPE_PREFIX = "covers "
+GROUNDED_STATUSES = ("engine_generated_from_activity", "needs_review", "needs_review_insufficient_detail")
+
+
+def excluded_links_reason(links, packet):
+    return EXCLUDED_LINKS_PREFIX + describe_excluded(links, packet) + " (client-billing-guidelines.md #10.1)"
+
+
+def cross_person_reason(count):
+    return (f"{count} linked activit{'y' if count == 1 else 'ies'} recorded for another timekeeper; not drafted from "
+            f"or counted as evidence ({CROSS_PERSON_CITATION})")
+
+
+def uncovered_reason(ids):
+    return UNCOVERED_PREFIX + ", ".join(ids)
+
+
+def multi_link_reason(count):
+    return f"entry links {count} activities; each is described, review for block billing ({LINK_BLOCK_CITATIONS})"
+
+
+def rewrite_scope_reason(activity_id, others):
+    return (f"{REWRITE_SCOPE_PREFIX}{activity_id} only; this entry also links " + ", ".join(others)
+            + f" - use with the other rewrites or split the entry ({LINK_BLOCK_CITATIONS})")
+
+
+def _is_link_reason(text):
+    return isinstance(text, str) and (text.startswith((EXCLUDED_LINKS_PREFIX, UNCOVERED_PREFIX))
+                                      or bool(CROSS_PERSON_REASON_RE.match(text)) or bool(MULTI_LINK_RE.match(text)))
+
+
+def _link_keys(links):
+    return [WITHHELD_TEXT if a == WITHHELD_TEXT else _id_key(a) for a in links]
+
+
+def _same_reasons(got, want):
+    return sorted(got) == sorted(want)
+
+
+def _check_moved_links(where, active, excluded, linked, drafted_excluded):
+    """The only change a later stage makes to an entry's links: its narrower signal policy moves an active link to
+    excluded_activity_ids (filter_packet), appending it. So activity_ids is draft.linked_activity_ids minus the moved
+    links (in order), and excluded_activity_ids is draft.excluded_activity_ids followed by exactly the moved links. A
+    withheld excluded ID (#11.3) stands for the ID it replaced."""
+    a, x, dl, dx = (_link_keys(v) for v in (active, excluded, linked, drafted_excluded))
+    position = 0
+    moved = []
+    for key in dl:
+        if position < len(a) and a[position] == key:
+            position += 1
+        else:
+            moved.append(key)
+    if position != len(a):
+        raise SchemaError(f"invalid input: {where}.activity_ids does not match {where}.draft.linked_activity_ids; "
+                          f"link state is reconciled exactly at every stage ({LINK_STATE_CITATION})")
+    if len(x) < len(dx) or any(have != want and have != WITHHELD_TEXT for have, want in zip(x, dx)):
+        raise SchemaError(f"invalid input: {where}.excluded_activity_ids does not match "
+                          f"{where}.draft.excluded_activity_ids; link state is reconciled exactly at every stage "
+                          f"({LINK_STATE_CITATION})")
+    rest = x[len(dx):]
+    for key in moved:
+        if key in rest:
+            rest.remove(key)
+        elif WITHHELD_TEXT in rest:
+            rest.remove(WITHHELD_TEXT)
+        else:
+            rest.append(None)
+            break
+    if rest:
+        raise SchemaError(f"invalid input: {where}: the links in draft.linked_activity_ids but not in activity_ids are "
+                          "not exactly the links a later signal policy moved to excluded_activity_ids; link state is "
+                          f"reconciled exactly at every stage ({LINK_STATE_CITATION})")
+
+
+def _check_draft_links(where, entry, draft, packet):
+    """The draft's link lists and every link-derived review reason, against the entry's link state."""
+    dl, dx, covered = draft["linked_activity_ids"], draft["excluded_activity_ids"], draft["covered_activity_ids"]
+    _check_moved_links(where, entry["activity_ids"], entry["excluded_activity_ids"], dl, dx)
+    keys, cov = _link_keys(dl), _link_keys(covered)
+    if len(set(keys)) != len(keys) or len(set(cov)) != len(cov) or not set(cov) <= set(keys):
+        raise SchemaError(f"invalid input: {where}.draft.covered_activity_ids must list draft.linked_activity_ids, each "
+                          f"once ({LINK_STATE_CITATION})")
+    rewrites = draft.get("suggested_rewrites") or []
+    for n, rewrite in enumerate(rewrites):
+        if len(rewrite["linked_activity_ids"]) != 1 or _link_keys(rewrite["linked_activity_ids"])[0] not in keys:
+            raise SchemaError(f"invalid input: {where}.draft.suggested_rewrites[{n}].linked_activity_ids must name one "
+                              f"activity in draft.linked_activity_ids ({LINK_STATE_CITATION})")
+    status = draft["status"]
+    if rewrites:
+        if cov != [k for r in rewrites for k in _link_keys(r["linked_activity_ids"])]:
+            raise SchemaError(f"invalid input: {where}.draft.covered_activity_ids does not match the suggested rewrites' "
+                              f"linked_activity_ids ({LINK_STATE_CITATION})")
+    elif cov and sorted(cov, key=str) != sorted(keys, key=str):
+        raise SchemaError(f"invalid input: {where}.draft.covered_activity_ids must be empty or cover every linked "
+                          f"activity of a drafted narrative ({LINK_STATE_CITATION})")
+    if (status == "needs_activity_evidence" and dl) or (status in GROUNDED_STATUSES and not dl):
+        raise SchemaError(f"invalid input: {where}.draft.status {status} does not match draft.linked_activity_ids "
+                          f"({LINK_STATE_CITATION})")
+    reasons = draft.get("review_reasons") or []
+    # needs_review is derived from the reasons and the status (narrative_draft; guideline_check only adds a reason and
+    # sets it), so removing a link list together with its reason still leaves a mismatch here.
+    if draft["needs_review"] != (bool(reasons) or status not in ("engine_generated_from_activity",
+                                                                  "existing_timesheet_narrative")):
+        raise SchemaError(f"invalid input: {where}.draft.needs_review does not match its review reasons and status "
+                          f"({LINK_STATE_CITATION})")
+    if WITHHELD_TEXT in reasons:
+        return  # a withheld reason holds the entry (D20); the lists above are still reconciled
+    want = [excluded_links_reason(dx, packet)] if dx else []
+    if entry["cross_person_activity_ids"]:
+        want.append(cross_person_reason(len(entry["cross_person_activity_ids"])))
+    uncovered = [a for a, k in zip(dl, keys) if k not in set(cov)]
+    if uncovered and status != "needs_review_embedded_instruction":
+        want.append(uncovered_reason(uncovered))
+    multi = [r for r in reasons if isinstance(r, str) and MULTI_LINK_RE.match(r)]
+    if status in GROUNDED_STATUSES and len(dl) > 1:
+        want.append(multi_link_reason(len(dl)))
+    elif status == "needs_review_embedded_instruction" and multi == [multi_link_reason(len(dl))] and len(dl) > 1:
+        want.append(multi[0])  # drafted, then withheld for the entry's own text: the reason is kept
+    if not _same_reasons([r for r in reasons if _is_link_reason(r)], want):
+        raise SchemaError(f"invalid input: {where}.draft.review_reasons do not match the entry's link state; link "
+                          f"state is reconciled exactly at every stage ({LINK_STATE_CITATION})")
+    for n, rewrite in enumerate(rewrites):
+        got = [r for r in rewrite.get("review_reasons") or [] if isinstance(r, str) and r.startswith(REWRITE_SCOPE_PREFIX)]
+        if WITHHELD_TEXT in (rewrite.get("review_reasons") or []):
+            continue
+        one = rewrite["linked_activity_ids"][0]
+        want = ([rewrite_scope_reason(one, [a for a, k in zip(dl, keys) if k != _link_keys([one])[0]])]
+                if len(dl) > 1 else [])
+        if got != want:
+            raise SchemaError(f"invalid input: {where}.draft.suggested_rewrites[{n}].review_reasons do not match the "
+                              f"entry's links ({LINK_STATE_CITATION})")
+
+
+def check_link_state(packet, level):
+    """Every copy of an entry's link state agrees exactly (#13.4, B5): a partial edit that deletes or changes one
+    copy is refused with no output, never governed on the copy that was left. Messages name fields and positions only.
+
+    - every stage: excluded links are recorded in provenance.excluded_signals, and an exclusion record that names a
+      present entry as its linker is listed in that entry's excluded_activity_ids; a cross-person link never names
+      the timekeeper's own activity;
+    - drafted on: the draft's linked, excluded and covered lists, the rewrites' links, the draft status and every
+      link-derived review reason (excluded, cross-person, uncovered, multi-link, rewrite scope) and needs_review
+      against the entry;
+    - governed: the link flags (disabled_source_signal, cross_person_link), the exception list's excluded links and
+      evidence_hours_same_date against the entry's links."""
+    provenance = packet.get("provenance") or {}
+    records = provenance.get("excluded_signals") or []
+    recorded = {_id_key(r.get("activity_id")) for r in records if r.get("activity_id") != WITHHELD_TEXT}
+    signals = {_id_key(s.get("activity_id")): s for s in packet.get("activity_signals") or []}
+    exceptions = {_id_key(x.get("entry_id")): x for x in packet.get("exception_list") or []
+                  if isinstance(x.get("entry_id"), str) and x.get("entry_id") != WITHHELD_TEXT}
+    for i, entry in enumerate(packet.get("time_entries") or []):
+        where = f"time_entries[{i}]"
+        for j, link in enumerate(entry["excluded_activity_ids"]):
+            if link != WITHHELD_TEXT and _id_key(link) not in recorded:
+                raise SchemaError(f"invalid input: {where}.excluded_activity_ids[{j}] is not recorded in "
+                                  f"provenance.excluded_signals ({LINK_STATE_CITATION})")
+        entry_id = entry.get("entry_id")
+        if isinstance(entry_id, str) and entry_id != WITHHELD_TEXT:
+            listed = set(_link_keys(entry["excluded_activity_ids"]))
+            for n, record in enumerate(records):
+                reason = record.get("reason")
+                if (isinstance(reason, str) and reason.startswith(f"linked from {entry_id} ")
+                        and _link_keys([record.get("activity_id")])[0] not in listed):
+                    raise SchemaError(f"invalid input: provenance.excluded_signals[{n}] records a link from {where} "
+                                      f"that {where}.excluded_activity_ids does not list ({LINK_STATE_CITATION})")
+        person = entry.get("person")
+        for j, link in enumerate(entry["cross_person_activity_ids"]):
+            owner = (signals.get(_id_key(link)) or {}).get("person") if link != WITHHELD_TEXT else None
+            if (isinstance(owner, str) and isinstance(person, str) and not is_withheld(owner)
+                    and not is_withheld(person) and same_person(owner, person)):
+                raise SchemaError(f"invalid input: {where}.cross_person_activity_ids[{j}] names the timekeeper's own "
+                                  f"activity ({CROSS_PERSON_CITATION}, {LINK_STATE_CITATION})")
+        if level >= 1:
+            _check_draft_links(where, entry, entry["draft"], packet)
+        if level >= 3:
+            have = {f.get("flag") for f in entry["compliance"].get("flags") or []}
+            for flag, links in (("disabled_source_signal", entry["excluded_activity_ids"]),
+                                ("cross_person_link", entry["cross_person_activity_ids"])):
+                if (flag in have) != bool(links):
+                    raise SchemaError(f"invalid input: {where}.compliance flag {flag} does not match the entry's "
+                                      f"links ({LINK_STATE_CITATION})")
+            item = exceptions.get(_id_key(entry_id)) if isinstance(entry_id, str) else None
+            if item is not None and _link_keys(item.get("excluded_activity_ids") or []) != _link_keys(
+                    entry["excluded_activity_ids"]):
+                raise SchemaError(f"invalid input: exception_list excluded_activity_ids for {where} do not match "
+                                  f"{where}.excluded_activity_ids ({LINK_STATE_CITATION})")
+            linked = [signals.get(_id_key(a)) for a in entry["activity_ids"] if a != WITHHELD_TEXT]
+            hours = round(sum(s.get("duration_hours", 0) for s in linked
+                              if isinstance(s, dict) and s.get("date") == entry.get("date")), 2)
+            if entry["compliance"].get("evidence_hours_same_date", hours) != hours:
+                raise SchemaError(f"invalid input: {where}.compliance.evidence_hours_same_date does not match the "
+                                  f"entry's linked activity ({LINK_STATE_CITATION})")
+
+
 def validate_packet(packet, stage):
     """Validate every field the engines read, for a packet at `stage` (activity, drafted, coded, governed).
 
@@ -1541,6 +1746,8 @@ def validate_packet(packet, stage):
                 raise SchemaError(f"invalid input: '{key}' missing; {STAGE_HINT['compliance']}")
         check_list(packet["missing_time_report"], "missing_time_report", MISSING_SPEC)
         check_list(packet["exception_list"], "exception_list", EXCEPTION_SPEC)
+    check_link_state(packet, level)
+    if level >= 3:
         summary = check_fields(packet["prebill_summary"], "prebill_summary", SUMMARY_SPEC)
         for verdict, count in summary["verdict_counts"].items():
             check_enum(verdict, VERDICTS, "prebill_summary.verdict_counts key")

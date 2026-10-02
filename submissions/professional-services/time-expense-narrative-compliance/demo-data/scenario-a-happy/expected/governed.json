@@ -169,6 +169,8 @@
       "citations": [
         "raw/timesheet.csv row 2"
       ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": [],
       "draft": {
         "narrative": "Attended billing workflow discovery session with Orion product lead to confirm implementation requirements for the Billing Workflow Requirements Specification.",
         "status": "engine_generated_from_activity",
@@ -238,6 +240,8 @@
       "citations": [
         "raw/timesheet.csv row 3"
       ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": [],
       "draft": {
         "narrative": "Analyzed service catalog draft to identify billing workflow requirements for the Billing Workflow Requirements Specification.",
         "status": "engine_generated_from_activity",
@@ -307,6 +311,8 @@
       "citations": [
         "raw/timesheet.csv row 4"
       ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": [],
       "draft": {
         "narrative": "Drafted implementation decision log to summarize approved billing workflow assumptions for the Implementation Decision Record.",
         "status": "engine_generated_from_activity",

@@ -293,6 +293,7 @@
       "excluded_activity_ids": [
         "B-MAIL-001"
       ],
+      "cross_person_activity_ids": [],
       "draft": {
         "narrative": "Attention to various matters, including kickoff meeting, review and revise integration memo, follow up on security exceptions, and work on client implementation questions.",
         "status": "existing_timesheet_narrative",
@@ -423,6 +424,8 @@
       "citations": [
         "raw/timesheet.csv row 3"
       ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": [],
       "draft": {
         "narrative": "Attended billing controls kickoff meeting with client team to discuss implementation assumptions and next steps.",
         "status": "existing_timesheet_narrative",
@@ -493,6 +496,8 @@
       "citations": [
         "raw/timesheet.csv row 4"
       ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": [],
       "draft": {
         "narrative": "Attended billing controls kickoff meeting with client team to discuss implementation assumptions and next steps.",
         "status": "existing_timesheet_narrative",
@@ -576,6 +581,8 @@
       "citations": [
         "raw/timesheet.csv row 5"
       ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": [],
       "draft": {
         "narrative": "Coordinated internal staffing coverage for next week.",
         "status": "existing_timesheet_narrative",
