@@ -618,7 +618,8 @@
           }
         },
         "generated_at": {
-          "type": "string"
+          "type": "string",
+          "format": "date-time"
         },
         "sources": {
           "type": "array",

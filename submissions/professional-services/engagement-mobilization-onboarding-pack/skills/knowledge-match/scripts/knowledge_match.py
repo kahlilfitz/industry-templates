@@ -24,7 +24,7 @@ def adapt(p):
     for key in ("reusable_assets","lessons"):
         v=kr.get(key,[])
         if not isinstance(v,list) or any(not isinstance(r,dict) for r in v): raise InputError(f"closeout adapter requires knowledge_record.{key}[] of objects; fail closed")
-    W="upstream/closeout"
+    W="upstream/closeout"; check_timestamps(x,W)  # carried timestamps are format-checked (confidentiality-and-ethical-wall-rules.md #1.3)
     for i,r in enumerate(ra): check_asset(r,f"{W}.released_assets[{i}]",True)
     for i,r in enumerate(kr.get("reusable_assets",[])): check_asset(r,f"{W}.knowledge_record.reusable_assets[{i}]")
     for i,r in enumerate(kr.get("lessons",[])): check_lesson(r,f"{W}.knowledge_record.lessons[{i}]")
@@ -53,7 +53,7 @@ def main():
     # Both upstream documents are screened whole (every string, holds included) and redacted before use (#4.1, #4.3).
     s,sh=screen_upstream(s,"scope",ENGINE)
     raw=adapt(a.closeout); ce=copy.deepcopy(raw["engagement"])  # the closed engagement's identity, harvested from the UNMODIFIED closeout before screening redacts it (#3.3)
-    c,own_h=screen_upstream(raw,"upstream/closeout",ENGINE); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES and canon_id(x.get("asset_id")) and not is_withheld(x.get("asset_id"))}  # joined by canon_id (#1.3); a blank or withheld ID joins nothing (#4.3)
+    c,own_h=screen_upstream(raw,"upstream/closeout",ENGINE,raw=True); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES and canon_id(x.get("asset_id")) and not is_withheld(x.get("asset_id"))}  # joined by canon_id (#1.3); a blank or withheld ID joins nothing (#4.3)
     inc=[]; exc=[]; kr=c["knowledge_record"]
     for asset in kr.get("reusable_assets",[]):
         aid=asset.get("asset_id")

@@ -45,7 +45,7 @@ def items(line):
 def validate_staffing(st):
     need(isinstance(st,dict),f"staffing adapter expected a JSON object, got {type(st).__name__}; fail closed")
     if st.get("contract_version")!=STAFF: raise InputError(f"staffing adapter expected contract {STAFF} at upstream/staffing.contract_version (supplied value not repeated); fail closed")
-    W="upstream/staffing"
+    W="upstream/staffing"; check_timestamps(st,W)  # carried timestamps are format-checked (confidentiality-and-ethical-wall-rules.md #1.3)
     field(st,"governed_roles","objlist",W,required=True)
     eng=field(st,"engagement","obj",W,default={})
     for k in ("engagement_id","client_name"): field(eng,k,"str",W+".engagement",nullable=True)
@@ -109,7 +109,7 @@ def main():
         for n in gone: del acc[n]
     sow,letter=s1,l1; h3,pursuit=scan_lines(pursuit,"raw/pursuit-record.md")
     st_raw=copy.deepcopy(st)  # identities are harvested from the UNMODIFIED staffing input, before screening redacts them (#3.3)
-    st,sth=screen_upstream(st,"upstream/staffing",ENGINE)  # every upstream string screened and redacted before use (#4.1, #4.3)
+    st,sth=screen_upstream(st,"upstream/staffing",ENGINE,raw=True)  # every upstream string screened and redacted before use (#4.1, #4.3)
     # Other clients named in the wall register are screened out of the staffing upstream and every raw roster cell
     # before the roster is derived. The trusted own vocabulary is the SOW's own identity only: a roster person or a
     # staffing affiliate never makes another client trusted (#3.3).

@@ -19,6 +19,6 @@ Release candidates remain draft knowledge for practice review. Only an explicit 
 A lesson is matched only when `rewrite_required` is explicitly false; its drafting guidance is used, never source text.
 ## 3. Matching
 ### 3.1 Relevance is deterministic
-Relevance is computed from token overlap.
+Relevance is computed from token overlap between the engagement scope and an item's narrative only (title, description, tags and category). IDs, citations, scores, confidence and other metadata never contribute terms or numbers, so an asset ID built from this engagement's words does not make it relevant.
 ### 3.2 Sources travel with digest
 Every item carries source, confidence, provenance and citations.

@@ -2,10 +2,10 @@
 """Stdlib validator for the shipped pipeline contract (ps.engagement-mobilization-onboarding-pack.v1).
 
 It walks the contract JSON itself, so the schema is the only definition of shape: $ref ("#" or "#/$defs/<name>"),
-allOf, anyOf, type, const, enum, pattern, minimum, maximum, minItems, maxProperties, required, properties, prefixItems
-and items, through nested objects and arrays. The extension keyword x-uniqueKeys on an array of records names the keys that identify a
+allOf, anyOf, type, const, enum, pattern, format (date-time, date), minimum, maximum, minItems, maxProperties, required,
+properties, prefixItems and items, through nested objects and arrays. The extension keyword x-uniqueKeys on an array of records names the keys that identify a
 record: a repeat (unique_key, i.e. canon_id: NFKC, Cf stripped, case-folded, whitespace and -_. separators
-collapsed; blanks and withheld placeholders are not identifiers) is a violation, so no stage ever indexes records
+collapsed; blanks and the engine's exact withheld placeholders are not identifiers) is a violation, so no stage ever indexes records
 last-wins. canon_text / canon_person / canon_id / canon_header defined here are the plugin's one canonical comparison
 form (safety_text re-exports them). The stage schemas ($defs/stage_scope, stage_matched, stage_governed, stage_access)
 add what each point in the chain must carry, including the provenance engine prefixes. No coercion and no defaults: the
@@ -15,6 +15,7 @@ first violation raises ContractViolation, which every engine turns into a clean 
 (tests/check_shared_copies.py).
 """
 import json, math, os, re, unicodedata
+from datetime import datetime
 CONTRACT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "contracts", "ps.engagement-mobilization-onboarding-pack.v1.json")
 STAGES = ("scope", "matched", "governed", "access")
 class ContractViolation(ValueError): pass
@@ -35,6 +36,16 @@ def _type_ok(v, t):
     return isinstance(v, _JT[t])
 def _need(ok, msg):
     if not ok: raise ContractViolation(msg)
+# Carried timestamps are format-checked wherever the contract declares them, not only on the command line: date-time
+# is the engines' own form (ISO-8601 UTC, seconds, Z) and a real calendar instant; date is YYYY-MM-DD and a real day.
+_FORMATS = {"date-time": (re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"), "%Y-%m-%dT%H:%M:%SZ", "2026-10-01T00:00:00Z"),
+    "date": (re.compile(r"\d{4}-\d\d-\d\d"), "%Y-%m-%d", "2026-10-01")}
+def format_ok(v, fmt):
+    rx, f, _ = _FORMATS[fmt]
+    if not isinstance(v, str) or not rx.fullmatch(v): return False
+    try: datetime.strptime(v, f)
+    except ValueError: return False
+    return True
 # The one canonical comparison form for identities, IDs, enums and CSV header names, shared by the contract walker
 # and every engine (safety_text re-exports it). Comparisons use it; outputs keep the supplied value.
 def _strip_cf(s): return "".join(c for c in s if unicodedata.category(c) != "Cf")
@@ -51,10 +62,17 @@ def canon_id(v):
 def canon_header(v):
     """A CSV header name: canon_id joined with underscores (`ｃｌｉｅｎｔ＿ｎａｍｅ`, `Client Name` -> `client_name`)."""
     return canon_id(v).replace(" ", "_")
+# The engine's withheld placeholders, exactly as the engines write them (safety_text uses this tuple). Only these exact
+# strings are engine-withheld text; anything else shaped like them is supplied input (confidentiality-and-ethical-wall-rules.md #4.3).
+ENGINE_PLACEHOLDERS = ("[withheld - source text held for embedded-instruction review, see Escalations and holds]",
+    "[withheld - names another client or matter, see Escalations and holds]",
+    "[briefing topic withheld - it names another client or matter, Risk/Conflicts brief the joiner directly]",
+    "[withheld member name]")
 def unique_key(v):
-    """canon_id for duplicate detection; blanks and withheld placeholders are not identifiers (None)."""
+    """canon_id for duplicate detection; blanks and the exact engine placeholders are not identifiers (None). A
+    marker-shaped value the engine did not write is an identifier like any other."""
     t = canon_id(v)
-    return None if not t or t.startswith("[withheld") else t
+    return None if not t or v in ENGINE_PLACEHOLDERS else t
 _id = unique_key
 def _target(ref, root):
     if ref == "#": return root
@@ -75,6 +93,9 @@ def _walk(v, s, path, root):
     if "const" in s: _need(v == s["const"], f"{path} must be the contract constant {s['const']!r}; the supplied value is not repeated; fail closed")
     if "enum" in s: _need(v in s["enum"], f"{path} has an unrecognised value (not repeated); expected one of {', '.join(map(str, s['enum']))}; fail closed")
     if "pattern" in s and isinstance(v, str): _need(re.search(s["pattern"], v) is not None, f"{path} does not match the contract pattern {s['pattern']!r}; fail closed")
+    if "format" in s and isinstance(v, str):
+        if s["format"] not in _FORMATS: raise ContractViolation(f"contract uses unsupported format {s['format']!r}; fail closed")
+        _need(format_ok(v, s["format"]), f"{path} is not a valid {s['format']} (expected the form {_FORMATS[s['format']][2]}; value not repeated); fail closed")
     if _num(v):
         if "minimum" in s: _need(v >= s["minimum"], f"{path} must be >= {s['minimum']}; fail closed")
         if "maximum" in s: _need(v <= s["maximum"], f"{path} must be <= {s['maximum']}; fail closed")

@@ -303,6 +303,28 @@ def _hits(s, trusted): return tuple(_families(sg.scan(s, **dict(HOOKS, trusted_d
 def hits(s):
     if s is None: return []
     return list(_hits(s if isinstance(s, str) else str(s), _TRUSTED))
+# Input cannot supply a withheld marker (#4.3). Text shaped like a placeholder ("[withheld ...", "[briefing topic
+# withheld ...", in any case, width or script look-alike, with format characters, exact or embedded) is
+# `supplied_marker` wherever raw input enters (Markdown, CSV cells and headers, the Staffing and Closeout JSON): it is
+# held and replaced by the engine placeholder like any other flagged text, so it can never suppress a rule without a
+# hold. In an intermediate document only the engine's exact placeholders (is_withheld) are accepted, and only with
+# their hold (check_hold_evidence); any other marker-shaped text there is held the same way.
+_MARKER_RE = re.compile(r"[\[\u27e6\u3010\u3014][^\[\]\u27e6\u27e7\u3010\u3011\u3014\u3015]{0,60}?\bwithheld\b")
+@functools.lru_cache(maxsize=65536)
+def _marker_shaped(s): return bool(_MARKER_RE.search(norm(s)))
+def marker_shaped(v): return isinstance(v, str) and _marker_shaped(v)
+def supplied_marker(v, raw=True):
+    """True when v carries marker-shaped text the engine did not write: any marker-shaped text in raw input; in an
+    intermediate, marker-shaped text left after removing the engine's exact placeholders."""
+    if not marker_shaped(v): return False
+    if raw: return True
+    for x in PLACEHOLDERS: v = v.replace(x, " ")
+    return marker_shaped(v)
+def detect(s, raw=False):
+    """hits(s) plus the `supplied_marker` family (see supplied_marker). raw=True for raw input, False for an
+    intermediate written by an earlier engine."""
+    h = hits(s)
+    return h + ["supplied_marker"] if isinstance(s, str) and "supplied_marker" not in h and supplied_marker(s, raw) else h
 def record_hits(fields):
     """Families for a multi-field record: per-field hits, or ['split_across_fields'] when only the join of the
     fields trips, or ['oversize'] when the join is too long to screen (#4.5)."""
@@ -321,33 +343,64 @@ def _record_hits(items, trusted):
                 if fam: break
             if fam: break
     return tuple("split_across_fields" if f == "split" else f for f in fam)
+# A claim can be split across three or more adjacent entries ("The ethical wall has been" / "lifted" / "for Riley by
+# Risk"). Contiguous runs are read in order: every window of 3 to RUN_MAX entries and, for a longer sequence, the
+# whole sequence. Blank entries, placeholders and entries that trip on their own are skipped (they never break a run).
+# A run that trips is held once, and every entry in it is withheld; a run containing a flagged pair or a smaller
+# flagged run is not reported again (#4.5).
+RUN_MAX = 8
+@functools.lru_cache(maxsize=16384)
+def _join_hits(texts, trusted):
+    return tuple("split_across_fields" if f == "split" else f for f in _families(sg.scan_fields(list(texts), **dict(HOOKS, trusted_domains=trusted))))
+def run_spans(items, skip=()):
+    """[(indices, families)] for runs of 3 or more contiguous prose entries of items that trip only when read
+    together. skip: index groups already flagged (pairs)."""
+    seq = [n for n, x in enumerate(items) if isinstance(x, str) and x.strip() and not is_withheld(x) and not hits(x)]
+    done = [set(x) for x in skip]; out = []
+    sizes = list(range(3, min(RUN_MAX, len(seq)) + 1)) + ([len(seq)] if len(seq) > RUN_MAX else [])
+    for size in sizes:
+        for a in range(len(seq) - size + 1):
+            span = seq[a:a + size]; ss = set(span)
+            if any(d <= ss for d in done): continue
+            h = _join_hits(tuple(unlabel(items[k]) for k in span), _TRUSTED)
+            if h: out.append((span, list(h))); done.append(ss)
+    return out
+def run_label(span): return "+".join(f"[{k}]" for k in span)
 def hold(path, text, hit):
     d = hashlib.sha256(strip_cf(text or "").encode()).hexdigest()[:12]
     why = ",".join(hit) if isinstance(hit, (list, tuple)) else hit
     reason = OVERSIZE_REASON if "oversize" in (hit if isinstance(hit, (list, tuple)) else [hit]) else f"embedded_instruction:{why}"
     return {"hold_id": f"HOLD-{d}", "path": path, "reason": reason, "source": "engine:safety_text", "confidence": 0.99, "citation": "confidentiality-and-ethical-wall-rules.md #4.1-#4.5"}
-def scan(v, path="$", key=None):
+def scan(v, path="$", key=None, raw=False):
     """One hold per flagged string value (all matching families in one reason), one per record whose fields only trip
-    when joined, and one per pair of adjacent prose items in an array that only trips when joined (#4.5)."""
+    when joined, one per pair of adjacent prose items in an array that only trips when joined, and one per longer
+    contiguous run that only trips when joined (#4.5). raw=True for raw input (supplied markers, #4.3)."""
     out = []
     if isinstance(v, dict):
-        for k, x in v.items(): out += scan(x, f"{path}.{k}", k)
+        for k, x in v.items(): out += scan(x, f"{path}.{k}", k, raw)
         if not out:
             h = record_hits(free_text(v))
             if h: out.append(hold(f"{path} (fields joined)", json.dumps(free_text(v), sort_keys=True, ensure_ascii=False), h))
     elif isinstance(v, list):
-        for i, x in enumerate(v): out += scan(x, f"{path}[{i}]", key)
-        for i in list_pairs(v, key): out.append(hold(f"{path}[{i}]+[{i + 1}]", v[i] + "\n" + v[i + 1], pair_hits(v[i], v[i + 1])))
+        for i, x in enumerate(v): out += scan(x, f"{path}[{i}]", key, raw)
+        pairs = list_pairs(v, key)
+        for i in pairs: out.append(hold(f"{path}[{i}]+[{i + 1}]", v[i] + "\n" + v[i + 1], pair_hits(v[i], v[i + 1])))
+        for span, h in list_runs(v, key, pairs): out.append(hold(f"{path}{run_label(span)}", "\n".join(v[k] for k in span), h))
     elif isinstance(v, str):
-        h = hits(v)
+        h = detect(v, raw)
         if h: out.append(hold(path, v, h))
     return out
 PAIR_SKIP = {"matched_terms", "tags", "engines", "sources", "evidence_citations"}
+def joinable(key): return key is not None and prose_key(key) and key not in PAIR_SKIP and not str(key).endswith(("citation", "citations"))
 def list_pairs(v, key):
     """Indices i where the adjacent prose strings v[i], v[i + 1] trip the wire only when read together (#4.5). Lists of
     identifiers, enums, citations or tokens are not prose and are never joined."""
-    if key is None or not prose_key(key) or key in PAIR_SKIP or str(key).endswith(("citation", "citations")): return []
+    if not joinable(key): return []
     return [i for i in range(len(v) - 1) if isinstance(v[i], str) and isinstance(v[i + 1], str) and pair_hits(v[i], v[i + 1])]
+def list_runs(v, key, pairs=None):
+    """run_spans over a prose array (same eligibility as list_pairs); pairs already flagged are not re-reported."""
+    if not joinable(key): return []
+    return run_spans(v, [(i, i + 1) for i in (list_pairs(v, key) if pairs is None else pairs)])
 # A claim can be split across two labelled lines or two adjacent fields ("...the ethical wall has been" /
 # "Key dates: lifted for Taylor Reed"). Pairs are read without their field labels; when a pair trips the wire and
 # neither half does on its own, both halves are withheld (confidentiality-and-ethical-wall-rules.md #4.5).
@@ -379,15 +432,19 @@ def pair_hits(a, b):
         if h: return h if "oversize" in h else ["split_across_fields"]
     return []
 def scan_lines(text, path):
-    """Scan a free-text source line by line and pair by pair. Returns (holds, text with pair-flagged lines replaced
+    """Scan a free-text source line by line, pair by pair and run by run (#4.5); marker-shaped text is supplied
+    (#4.3). Returns (holds, text with pair-flagged lines replaced
     by their label and the neutral placeholder)."""
     lines = (text or "").splitlines(); out = []; bad = set()
     for n, line in enumerate(lines, 1):
-        h = hits(line)
+        h = detect(line, True)
         if h: out.append(hold(f"{path} line {n}", line, h))
+    pairs = []
     for n in range(len(lines) - 1):
         h = pair_hits(lines[n], lines[n + 1])
-        if h: out.append(hold(f"{path} lines {n + 1}-{n + 2}", lines[n] + "\n" + lines[n + 1], h)); bad |= {n, n + 1}
+        if h: out.append(hold(f"{path} lines {n + 1}-{n + 2}", lines[n] + "\n" + lines[n + 1], h)); bad |= {n, n + 1}; pairs.append((n, n + 1))
+    for span, h in run_spans(lines, pairs):
+        out.append(hold(f"{path} lines {span[0] + 1}-{span[-1] + 1}", "\n".join(lines[k] for k in span), h)); bad |= set(span)
     safe = [((LABEL_RE.match(l).group(0) if LABEL_RE.match(l) else "") + WITHHELD) if i in bad else l for i, l in enumerate(lines)]
     return out, "\n".join(safe) + ("\n" if (text or "").endswith("\n") else "")
 def scan_text(text, path): return scan_lines(text, path)[0]
@@ -409,21 +466,22 @@ def cell_labels(rows):
     return lab
 def scan_rows(rows, label):
     """One hold per flagged cell, plus pair holds for claims split across adjacent cells in a row or the same column
-    in adjacent rows. Every flagged cell (single, pair or record) is replaced in place by the placeholder so it never
+    in adjacent rows, and run holds for the same column down three or more adjacent rows. Marker-shaped text is
+    supplied (#4.3). Every flagged cell (single, pair or record) is replaced in place by the placeholder so it never
     travels into citations, briefings or checklists (#4.3, #4.5). In a ";"-separated list cell only the flagged items
     are replaced when an item trips on its own; otherwise the whole cell is. A header name that trips is held too."""
     out = []; rows = rows or []; bad = []; part = {}
     cols = list(getattr(rows, "columns", ()) or (rows[0].keys() if rows else ()))
     lab = cell_labels(rows); raws = getattr(rows, "raw_columns", ())
     for n, k in enumerate(cols, 1):
-        h = hits(k) or (hits(raws[n - 1]) if n <= len(raws) else [])  # the canonical and the written header (#4.3)
+        h = detect(k, True) or (detect(raws[n - 1], True) if n <= len(raws) else [])  # the canonical and the written header (#4.3)
         if h: out.append(hold(f"{label} header column {n}", k, h))
     for i, r in enumerate(rows, 2):
         for k, v in r.items():
-            h = hits(v)
+            h = detect(v, True)
             if not h: continue
             out.append(hold(f"{label} row {i}.{lab.get(k, 'column')}", v, h)); items = v.split(";") if isinstance(v, str) else []
-            flagged = [n for n, x in enumerate(items) if x.strip() and hits(x)] if len(items) > 1 else []
+            flagged = [n for n, x in enumerate(items) if x.strip() and detect(x, True)] if len(items) > 1 else []
             if flagged and not hits(";".join(x for n, x in enumerate(items) if n not in flagged)): part[(i - 2, k)] = ";".join(WITHHELD if n in flagged else x for n, x in enumerate(items))
             else: bad.append((i - 2, k))
     pairs = []
@@ -437,6 +495,11 @@ def scan_rows(rows, label):
         if h:
             where = f"{label} row {i + 2}.{lab.get(a, 'column')}+{lab.get(b, 'column')}" if i == j else f"{label} rows {i + 2}-{j + 2}.{lab.get(a, 'column')}"
             out.append(hold(where, rows[i][a] + "\n" + rows[j][b], h)); bad += [(i, a), (j, b)]
+    # The same column down three or more adjacent rows is a contiguous run (#4.5).
+    for k in [k for k in cols if prose_key(k)]:
+        col = [r.get(k) for r in rows]; done = [(i, j) for (i, a), (j, b) in pairs if i != j and a == b == k and pair_hits(rows[i][a], rows[j][b])]
+        for span, h in run_spans(col, done):
+            out.append(hold(f"{label} rows {span[0] + 2}-{span[-1] + 2}.{lab.get(k, 'column')}", "\n".join(col[i] for i in span), h)); bad += [(i, k) for i in span]
     # A row is one record: when only the join of all its cells trips, every cell is withheld and the row held (#4.5).
     hit_rows = {i for i, _ in bad} | {i for i, _ in part}
     for i, r in enumerate(rows):
@@ -448,18 +511,21 @@ def scan_rows(rows, label):
     for (i, k), v in part.items(): rows[i][k] = v
     for i, k in bad: rows[i][k] = WITHHELD
     return out
-def redact(v, key=None):
+def redact(v, key=None, raw=False):
     """Replace every flagged string with the neutral placeholder; flagged text never travels to any output (#4.3).
-    Adjacent array items that only trip when joined are both replaced (#4.5)."""
+    Adjacent array items, and every item of a longer contiguous run, that only trip when joined are replaced (#4.5).
+    raw=True for raw input (supplied markers, #4.3)."""
     if isinstance(v, dict):
-        r = {k: redact(x, k) for k, x in v.items()}; ft = free_text(r)
+        r = {k: redact(x, k, raw) for k, x in v.items()}; ft = free_text(r)
         if ft and record_hits(ft): r.update({k: WITHHELD for k in ft})
         return r
     if isinstance(v, list):
-        r = [redact(x, key) for x in v]
-        for i in list_pairs(v, key): r[i] = r[i + 1] = WITHHELD
+        r = [redact(x, key, raw) for x in v]; pairs = list_pairs(v, key)
+        for i in pairs: r[i] = r[i + 1] = WITHHELD
+        for span, _ in list_runs(v, key, pairs):
+            for k in span: r[k] = WITHHELD
         return r
-    if isinstance(v, str) and hits(v): return WITHHELD
+    if isinstance(v, str) and detect(v, raw): return WITHHELD
     return v
 
 # ---------------------------------------------------------------- other-client screen
@@ -518,7 +584,7 @@ def screen_keys(v, path, terms, engine, new):
         for k, x in v.items():
             ks = str(k); where = f"{path}.{WITHHELD_KEY}" if path else WITHHELD_KEY
             if ks not in contract_vocab()[0]:
-                h = hits(ks)
+                h = detect(ks, True)  # a member name is never an engine placeholder (#4.3)
                 if h: new.append(hold(where, ks, h)); continue
                 if names_client(ks, terms): new.append(other_hold(where, ks, engine)); continue
             out[k] = screen_keys(x, f"{path}.{k}" if path else k, terms, engine, new)
@@ -602,41 +668,43 @@ def engine_text(k, v):
     if k == "reason": return v in ENGINE_REASONS or any(r.fullmatch(v) for r in ENGINE_REASON_RES)
     if k == "citation": return bool(ENGINE_CITATION_RE.fullmatch(v))
     return False
-def _screen_value(v, path, k, terms, engine, new):
-    if isinstance(v, dict): return {kk: _screen_value(x, f"{path}.{kk}", kk, terms, engine, new) for kk, x in v.items()}
-    if isinstance(v, list): return [_screen_value(x, f"{path}[{i}]", k, terms, engine, new) for i, x in enumerate(v)]
-    if not isinstance(v, str) or v in (WITHHELD, OTHER_WITHHELD) or engine_text(k, v): return v
+def _screen_value(v, path, k, terms, engine, new, raw=False):
+    if isinstance(v, dict): return {kk: _screen_value(x, f"{path}.{kk}", kk, terms, engine, new, raw) for kk, x in v.items()}
+    if isinstance(v, list): return [_screen_value(x, f"{path}[{i}]", k, terms, engine, new, raw) for i, x in enumerate(v)]
+    if not isinstance(v, str) or (not raw and v in (WITHHELD, OTHER_WITHHELD)) or engine_text(k, v): return v
     d = hashlib.sha256(strip_cf(v).encode()).hexdigest()[:12]
     if names_client(v, terms): new.append(other_hold(path, v, engine)); return "HOLD-SCREENED-" + d if k == "hold_id" else OTHER_WITHHELD
-    f = hits(v)
+    f = detect(v, raw)
     if f: new.append(hold(path, v, f)); return "HOLD-SCREENED-" + d if k == "hold_id" else WITHHELD
     return v
-def screen_holds(holds, terms, engine, prefix="holds"):
+def screen_holds(holds, terms, engine, prefix="holds", raw=False):
     """Screen holds supplied by an upstream document (never this engine's own): every string at any depth (id, path,
     reason, citation, source and any other field) that names another client or carries steering text is replaced,
     never echoed, and itself held; a split across a hold's prose fields is held too. Text matching a known engine
     template (engine_text) is kept intact. Returns (screened holds, new holds) (#3.3, #4.3)."""
     out, new = [], []
     for n, h in enumerate(holds or []):
-        if not isinstance(h, dict): out.append(_screen_value(h, f"{prefix}[{n}]", "", terms, engine, new)); continue
-        before = len(new); h = {k: _screen_value(v, f"{prefix}[{n}].{k}", k, terms, engine, new) for k, v in h.items()}
+        if not isinstance(h, dict): out.append(_screen_value(h, f"{prefix}[{n}]", "", terms, engine, new, raw)); continue
+        before = len(new); h = {k: _screen_value(v, f"{prefix}[{n}].{k}", k, terms, engine, new, raw) for k, v in h.items()}
         ft = {k: v for k, v in free_text(h).items() if not engine_text(k, v)}
         if len(new) == before and len(ft) > 1:
             f = record_hits(ft)
             if f: new.append(hold(f"{prefix}[{n}] (fields joined)", json.dumps(ft, sort_keys=True, ensure_ascii=False), f)); h.update({k: WITHHELD for k in ft})
         out.append(h)
     return out, new
-def screen_upstream(doc, label, engine, terms=()):
+def screen_upstream(doc, label, engine, terms=(), raw=False):
     """Every string an engine receives in an upstream JSON document is screened before anything is derived from it:
     the body through scan() and redact() (every string at any depth, including run_metadata and provenance), the
     supplied holds through screen_holds(), and every JSON member name through screen_keys(). Flagged values are replaced by the placeholder and held at their path.
-    Returns (screened document, new holds); any new hold forces the caller's hold / on-hold status (#4.1, #4.3)."""
+    raw=True for a raw upstream input (the Staffing and Closeout JSON): there, even an exact placeholder is supplied
+    text and held (#4.3). Returns (screened document, new holds); any new hold forces the caller's hold / on-hold
+    status (#4.1, #4.3)."""
     if not isinstance(doc, dict): return doc, []
     kh = []; doc = screen_keys(doc, label, terms, engine, kh)  # member names first, so no hold path echoes one
     hk = isinstance(doc.get("holds"), list)
     body = {k: v for k, v in doc.items() if not (hk and k == "holds")}
-    new = scan(body, label); red = redact(body)
-    up, uh = screen_holds(doc["holds"], terms, engine, f"{label}.holds") if hk else ([], [])
+    new = scan(body, label, raw=raw); red = redact(body, raw=raw)
+    up, uh = screen_holds(doc["holds"], terms, engine, f"{label}.holds", raw) if hk else ([], [])
     return {k: (up if hk and k == "holds" else red[k]) for k in doc}, kh + new + uh
 def upstream_escalation(n): return f"{n} upstream field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)"
 def other_escalation(n): return f"{n} field(s) withheld because they name another client or matter; Risk/Conflicts review before the pack is shared (confidentiality-and-ethical-wall-rules.md #3.3)"
@@ -649,6 +717,37 @@ def other_escalation(n): return f"{n} field(s) withheld because they name anothe
 def check_contract(doc, where, stage=None):
     try: _cv.validate(doc, where, stage)
     except _cv.ContractViolation as e: raise InputError(str(e)) from None
+    check_timestamps(doc, where)
+# Carried timestamps are validated at every stage, not only --generated-at (#1.3): in every payload and intermediate,
+# any member named generated_at or *_at must be null or ISO-8601 (date and time, seconds, Z or an offset) and a real
+# instant; any member named date or *_date that holds a string must be YYYY-MM-DD (or such a timestamp) and a real day.
+# Errors name the path (member names outside the contract read "[member]") and never echo the value.
+_TS_RE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?(?:Z|[+-]\d\d:\d\d)")
+_DATE_RE = re.compile(r"\d{4}-\d\d-\d\d")
+def timestamp_ok(v):
+    if not isinstance(v, str) or not _TS_RE.fullmatch(v): return False
+    try: datetime.fromisoformat(v[:-1] + "+00:00" if v.endswith("Z") else v)
+    except ValueError: return False
+    return True
+def date_ok(v):
+    if timestamp_ok(v): return True
+    if not isinstance(v, str) or not _DATE_RE.fullmatch(v): return False
+    try: datetime.strptime(v, "%Y-%m-%d")
+    except ValueError: return False
+    return True
+def check_timestamps(doc, where):
+    stack = [(doc, where)]
+    while stack:
+        v, path = stack.pop()
+        if isinstance(v, dict):
+            for k, x in v.items():
+                ks = str(k); p = f"{path}.{ks if ks in contract_vocab()[0] else '[member]'}"
+                if ks == "generated_at" or ks.endswith("_at"):
+                    need(x is None or timestamp_ok(x), f"{p} is not a valid ISO-8601 timestamp (expected the form 2026-10-01T00:00:00Z; value not repeated); fail closed")
+                elif (ks == "date" or ks.endswith("_date")) and isinstance(x, str):
+                    need(date_ok(x), f"{p} is not a valid date (expected the form 2026-10-01; value not repeated); fail closed")
+                stack.append((x, p))
+        elif isinstance(v, list): stack.extend((x, f"{path}[{i}]") for i, x in enumerate(v))
 
 # ---------------------------------------------------------------- cumulative holds (#1.4)
 # Hold- and decision-bearing state is never taken from an intermediate file. Whatever an engine cannot re-derive from
@@ -711,15 +810,19 @@ TOPIC_WITHHELD = "[briefing topic withheld - it names another client or matter, 
 # Withheld text never decides anything (#4.3): a placeholder is not an identity, an ID, an enum or a keyword. Rules
 # compare and score only screened text with every placeholder removed, and a withheld value never matches another
 # withheld value (two different flagged names both read "[withheld ...]").
-PLACEHOLDERS = (WITHHELD, OTHER_WITHHELD, TOPIC_WITHHELD, WITHHELD_KEY)
+PLACEHOLDERS = _cv.ENGINE_PLACEHOLDERS
+assert PLACEHOLDERS == (WITHHELD, OTHER_WITHHELD, TOPIC_WITHHELD, WITHHELD_KEY)
 def is_withheld(v):
-    """True when v is or contains a withheld placeholder (in any case, as canon_text folds it)."""
-    return isinstance(v, str) and ("[withheld" in v.casefold() or any(x in v for x in PLACEHOLDERS))
+    """True when v is or contains one of the engine's exact placeholders: the one predicate every rule uses to skip
+    withheld text. Marker-shaped text the engine did not write is never withheld text: it is held as a supplied
+    marker when it enters (detect, #4.3)."""
+    return isinstance(v, str) and any(x in v for x in PLACEHOLDERS)
 def unwithheld(v):
-    """v with every placeholder removed (and the ";"-list items it leaves blank): the only text a rule may read."""
-    if not is_withheld(v): return v
+    """v with every placeholder, and any marker-shaped bracket text, removed (and the ";"-list items it leaves blank):
+    the only text a rule may read. Marker words never become an identity or a keyword (#4.3)."""
+    if not (is_withheld(v) or marker_shaped(v)): return v
     for x in PLACEHOLDERS: v = v.replace(x, " ")
-    v = re.sub(r"\[withheld[^\]]*\]", " ", v, flags=re.I)
+    v = re.sub(r"\[[^\[\]]*withheld[^\]]*\]?", " ", v, flags=re.I)
     return ";".join(x.strip() for x in v.split(";") if x.strip())
 def cap_runs(text):
     # A proper-noun run never spans a line break ([ \t], never \s): two lines are two runs (#3.3).
