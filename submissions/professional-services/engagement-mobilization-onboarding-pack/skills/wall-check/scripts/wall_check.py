@@ -133,7 +133,7 @@ def govern(p,register,inventory,raised=None):
     up,uh=screen_holds(up,terms,ENGINE,"matched.holds")
     if any(hold_is(h,"HOLD-OTHER-CLIENT-") for h in uh): esc.append(other_escalation(sum(hold_is(h,"HOLD-OTHER-CLIENT-") for h in uh)))
     if raised is not None: raised.extend(dedup_holds(holds+uh))  # the holds this derivation raised itself, before carried holds are merged (access_checklist reconciles each by content, #1.4)
-    holds=dedup_holds(up+holds+uh)
+    holds=merge_own_holds(up,holds+uh)  # an upstream hold with the key of one raised here is carried as this engine's own copy: re-derivable field for field (#1.4)
     if holds and status=="clear": status="hold"; reason="source holds require review before knowledge/access release"; cit="confidentiality-and-ethical-wall-rules.md #4.1"
     odd=[]
     for i,w in enumerate(ws or [],2):

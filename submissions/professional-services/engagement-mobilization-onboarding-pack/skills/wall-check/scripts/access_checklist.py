@@ -34,35 +34,43 @@ def check_governed(p):
     if not isinstance(p.get("wall_decision"),dict): raise InputError("governed input has no wall_decision object; run wall_check first; fail closed")
     check_contract(p,"governed","governed")  # whole stage schema, closed enums included (confidentiality-and-ethical-wall-rules.md #1.3)
     check_hold_evidence(p,"governed"); check_digest(p,"governed",p["wall_decision"]["status"])  # holds are cumulative (#1.4)
-def _hkey(h): return hold_content(h)  # every field of a hold, canonical: an edited hold is a missing hold (#1.3, #1.4)
-UNION=("held_workspace_ids","name_withheld_workspace_ids")  # most restrictive wins: the carried list may only add workspaces
+UNION=("held_workspace_ids","name_withheld_workspace_ids")  # merged canonically with late screening holds' re-derivation (most restrictive wins)
 ID_LISTS=("denied_workspace_ids","allowed_knowledge_ids","denied_knowledge_ids")
 MAY="may_not_access_discuss"
+DERIVED_SOURCES={canon_id("engine:wall_check"),canon_id("engine:access_checklist")}  # a hold claiming these is re-derived here, never trusted
+RAW_PATHS=(canon_text(REGISTER_LABEL),canon_text("raw/workspace-inventory.csv"))
+def claims_derivation(h):
+    """A carried hold that only this derivation can raise: one claiming wall_check (or this engine), other than a
+    screening hold on the document itself (document_screen_hold), or a shared safety_text hold on the raw wall register
+    or workspace inventory. The claim is read from the hold's own source and path, so the match is canonical and broad:
+    any spelling of the claim is held to the re-derivation (#1.3, #1.4)."""
+    src=canon_id(h.get("source")); path=canon_text(h.get("path"))
+    if src in DERIVED_SOURCES: return not document_screen_hold(h)
+    return src==canon_id("engine:safety_text") and path.startswith(RAW_PATHS)
 def rederive(p,register,inventory,new=()):
     """The wall decision, workspace decisions and digest gating are re-derived from the raw wall register and
     workspace inventory by re-running wall_check's derivation, never taken from the governed file. Every carried
-    field is reconciled with its re-derivation by content, item by item (IDs canonically, never by count): a governed
-    document whose decision state disagrees in any field or item, or that lacks or alters a hold the derivation
-    raises, is refused (#1.4). The holds this engine raised itself while screening the governed document (new) are
-    then merged and the decision re-derived once more, so a late screening hold gates knowledge and access exactly as
-    an upstream hold would (#1.4, #2.1). Returns the effective wall_decision (held and name-withheld workspace lists
-    are the canonical union, most restrictive wins)."""
+    field is reconciled with its re-derivation by content, item by item (IDs canonically, never by count), and no
+    reconciliation is filtered or keyed on a field the input controls (a hold's source, a briefing entry's type, a
+    status): a governed document whose decision state disagrees in any field or item, carries an entry or hold the
+    derivation does not produce, or lacks or alters a hold the derivation raises, is refused (#1.4). The holds this
+    engine raised itself while screening the governed document (new) are then merged and the decision re-derived once
+    more, so a late screening hold gates knowledge and access exactly as an upstream hold would (#1.4, #2.1). Returns
+    the effective wall_decision."""
     fresh=[]; r=govern(copy.deepcopy(p),register,inventory,fresh); W=p["wall_decision"]; R=r["wall_decision"]
     bad=[k for k in sorted(set(W)|set(R)) if k not in UNION+ID_LISTS+(MAY,) and W.get(k)!=R.get(k)]
-    bad+=[k for k in ID_LISTS if item_keys(W.get(k))!=item_keys(R.get(k))]
-    bad+=[k for k in UNION if not isinstance(W.get(k),list) or not set(item_keys(R.get(k)) or [])<=set(item_keys(W.get(k)))]
-    # Briefing entries: every re-derived entry is carried unchanged; a carried extra can only be an inventory workspace
-    # restriction (the inventory read now may differ) and is kept - most restrictive wins (#2.3).
-    wm=W.get(MAY) if isinstance(W.get(MAY),list) else None; extra=[x for x in wm or [] if x not in R[MAY]]
-    if wm is None or any(x not in wm for x in R[MAY]) or any(not isinstance(x,dict) or x.get("type")!="workspace" for x in extra): bad.append(MAY)
-    # Every hold the derivation raises must be carried unchanged. A carried hold with the same canonical key from the
-    # same engine but any other field different is an altered hold; one from another engine (an earlier stage raised
-    # the same key first, and wall_check kept that copy) reconciles by key (#1.3, #1.4).
-    carried=[h for h in p.get("holds",[]) if isinstance(h,dict)]; have={_hkey(h) for h in carried}; missing=[]
-    for f in fresh:
-        same=[h for h in carried if hold_key(h)==hold_key(f)]
-        if not same or (_hkey(f) not in have and any(canon_text(h.get("source"))==canon_text(f.get("source")) for h in same)): missing.append(f)
-    if missing: bad.append(f"{len(missing)} re-derived hold(s) missing or altered: "+", ".join(sorted({h.get('hold_id') if ENGINE_HOLD_ID_RE.fullmatch(str(h.get('hold_id'))) else 'supplied hold' for h in missing})))
+    bad+=[k for k in ID_LISTS+UNION if item_keys(W.get(k))!=item_keys(R.get(k))]  # every list item by item; a carried extra is refused too
+    # Briefing entries are exactly the re-derived ones, in order: an extra entry of any type is refused (#2.3).
+    if not isinstance(W.get(MAY),list) or W[MAY]!=R[MAY]: bad.append(MAY)
+    # Holds are matched by canonical key alone and every field must match, source included (wall_check carries its
+    # own copy of every hold it derives, merge_own_holds). A carried hold that claims this derivation but is not
+    # re-derived is an extra hold and refused (#1.3, #1.4).
+    carried=[h for h in p.get("holds",[]) if isinstance(h,dict)]; fk={hold_key(f) for f in fresh}
+    missing=[f for f in fresh if [hold_content(h) for h in carried if hold_key(h)==hold_key(f)]!=[hold_content(f)]]
+    extra=[h for h in carried if hold_key(h) not in fk and claims_derivation(h)]
+    def ids(hs): return ", ".join(sorted({h.get('hold_id') if ENGINE_HOLD_ID_RE.fullmatch(str(h.get('hold_id'))) else 'supplied hold' for h in hs}))
+    if missing: bad.append(f"{len(missing)} re-derived hold(s) missing or altered: "+ids(missing))
+    if extra: bad.append(f"{len(extra)} carried hold(s) claiming wall_check or access_checklist that the derivation does not raise: "+ids(extra))
     if r["knowledge_digest"]!=p["knowledge_digest"]: bad.append("knowledge_digest")
     need(not bad,f"governed decision state does not match the state re-derived from the wall register and workspace inventory ({', '.join(bad)}); the governed file was edited or is stale - re-run wall_check; fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
     for k in UNION: R[k]=canon_union(W.get(k),R[k])
@@ -70,7 +78,6 @@ def rederive(p,register,inventory,new=()):
         q=copy.deepcopy(p); q["holds"]=dedup_holds(list(q.get("holds",[]))+list(new)); R2=govern(q,register,inventory)["wall_decision"]
         for k in UNION: R2[k]=canon_union(R[k],R2[k])
         R=R2
-    R[MAY]=R[MAY]+[x for x in extra if x not in R[MAY]]
     return R
 def main():
     ap=ArgParser(); ap.add_argument("--governed",required=True); ap.add_argument("--wall-register",required=True); ap.add_argument("--workspace-inventory",required=True); ap.add_argument("--out",required=True); ap.add_argument("--pack-out",required=True); ap.add_argument("--generated-at",required=True); a=ap.parse_args(); ts=require_iso_z(a.generated_at)

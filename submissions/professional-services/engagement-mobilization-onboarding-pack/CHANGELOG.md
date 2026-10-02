@@ -231,6 +231,25 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
     - Briefing topics are grouped canonically before screening. When any spelling in a group trips a screen, the whole group is withheld.
   - Tests: `qa101s_checks` (10 checks), all 10 failing on the round 12 code. QA-C4's access fixture now makes its nested edit to the candidate and its digest copy alike, as `wall_check` writes them.
   - Confidentiality #1.3, #1.4 and #3.2 updated in all 6 copies. Goldens byte-identical; shared copies 40/40. Suite 346 → 356 checks.
+- **QA round 13: governed-document reconciliation is never filtered or keyed on a field the input controls (checklist A22).**
+  - *Forged workspace briefing entry accepted* (`access_checklist.rederive`).
+    - Before: a carried extra `may_not_access_discuss` entry with `type: workspace` was kept. A clear wall could therefore render "May not access/discuss workspace: Engagement SharePoint" while that workspace was requested.
+    - Now: the briefing entries must equal the re-derived list exactly and in order. Any extra entry, of any type, is refused, as is a repeated or reordered one.
+  - *Altered hold `source` escaped reconciliation* (`access_checklist.rederive`).
+    - Before: a mismatch counted only when the carried hold still claimed the expected source, so changing `source` to `engine:scope_digest` passed.
+    - Now: every re-derived hold is matched by canonical key alone and every field must match, source included. A missing or altered hold, or a second copy from another engine, is refused.
+  - *Extra holds* (new `claims_derivation`): a carried hold that claims `wall_check` or `access_checklist`, or a shared screening hold on the raw register or inventory, but is not re-derived is refused. The one exception is a screening hold on a field of the matched or governed document itself (`safety_text.document_screen_hold`): `wall_check` raises it once, when it replaces the text with a placeholder, so it can't be re-raised.
+  - *Legitimate cross-engine collision.* `scope_digest`, `knowledge_match` and `wall_check` all raise register identity holds, so the same canonical key can arrive from an earlier stage. New `safety_text.merge_own_holds` makes `wall_check.govern` carry its own copy, in the upstream copy's position, so the copy is re-derivable field for field. Order is unchanged, so the goldens are unaffected.
+  - *Class sweep: carried lists accepting unverified extras.* `held_workspace_ids` and `name_withheld_workspace_ids` were accepted as a canonical superset ("the carried list may only add workspaces"). They are now compared item by item, like the other ID lists.
+  - *Changed behaviour:* a missing inventory at `access_checklist` no longer keeps the carried workspace briefing. The governed file is stale for the inputs given and is refused; re-run `wall_check`.
+  - *Sweep result:* no other reconciliation is filtered on a supplied source, type or status. The `scope_digest` safety-escalation count reads only holds that engine raised itself, and `knowledge_match` does not reconcile carried holds.
+  - Tests: `qa101t_checks` (5 checks), all failing on the 4677056 engines.
+  - Existing tests updated to the stricter behaviour:
+    - The `qa101s` missing-inventory check now expects a refusal.
+    - QA-J3's widened held list (`ws_a.sp` added) is now refused as stale. A new check keeps the canonical-comparison intent: `ast_a.001` for `AST-A-001` still re-derives.
+    - QA-B7 and QA-C3's forged holds now claim `engine:knowledge_match`; QA-C3 also checks that a forged hold claiming `wall_check` is refused.
+    - QA-Q3 derives its governed document with the same missing inventory it gives `access_checklist`.
+  - Confidentiality #1.4 updated in all 6 copies. Goldens byte-identical; shared copies 40/40. Suite 356 → 362 checks.
 
 ## 1.0.0 - 2026-10-01
 

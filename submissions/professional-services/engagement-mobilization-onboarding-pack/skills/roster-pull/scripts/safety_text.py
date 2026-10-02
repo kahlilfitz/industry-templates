@@ -1216,6 +1216,21 @@ def dedup_holds(holds):
         key = hold_key(h)
         if key not in seen: seen.add(key); out.append(h)
     return out
+def merge_own_holds(carried, own):
+    """Carried holds merged with the holds an engine raised itself: a carried hold with the canonical key of one of
+    ours is replaced, in place, by our copy, then the rest of ours follow. The copy a document carries of any hold an
+    engine derives is therefore exactly that engine's, field for field (source included), so a later stage that
+    re-derives it reconciles by key alone and requires every field to match (#1.3, #1.4)."""
+    mine = {}
+    for h in own: mine.setdefault(hold_key(h), h)
+    return dedup_holds([mine.get(hold_key(h), h) for h in carried] + list(own))
+_DOC_PATH_RE = re.compile(r"(?:matched|governed)(?:[.\[ ]|$)")
+def document_screen_hold(h):
+    """True for a screening hold (instruction, other-client or briefing-topic kind) on a field of the matched or
+    governed document itself. wall_check raises these once, when it screens the document; the text is then replaced by
+    its placeholder, so a re-derivation cannot raise them again. Every other hold wall_check claims is re-derived from
+    the raw wall register and workspace inventory and must reconcile with that re-derivation (#1.4)."""
+    return isinstance(h, dict) and _hold_kind(h) is not None and isinstance(h.get("path"), str) and bool(_DOC_PATH_RE.match(h["path"]))
 def toks(*parts):
     stop = {"the", "and", "for", "with", "from", "into", "client", "engagement", "team", "work", "draft", "record"}
     return {x for p in parts for x in re.findall(r"[a-z0-9]+", norm(unwithheld(p) or "")) if len(x) > 2 and x not in stop}  # withheld text scores nothing (#4.3)
