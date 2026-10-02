@@ -160,9 +160,13 @@ How to read a report:
 - [ ] **A22. Reconcile by content, not count.** A stage that checks a carried derived list
   (exceptions, findings, holds, proposals) re-derives it and compares item by item, keys and IDs
   included; a matching length is not enough. Sets, group-bys and single-versus-multiple decisions
-  on names and IDs use the canonical form (A13). [Wave 1 pre-freeze QA round 10, T&E]
+  on names and IDs use the canonical form (A13). Items are matched on the canonical key alone and
+  every field, including `source`, `type` and `status`, must agree; never pick which carried items
+  to compare by a field the input can edit. A carried extra item is kept only if it re-derives
+  from screened input. [Wave 1 pre-freeze QA round 10, T&E; Mobilization round 13]
   Test: change one governed entry ID and leave its exception item alone; the report stage must
-  refuse. `Morgan Lee` and `  morgan   lee  ` roll up as one person.
+  refuse. `Morgan Lee` and `  morgan   lee  ` roll up as one person. Change only a hold's
+  `source`; the stage must refuse.
 
 ## B. Finding integrity (engines)
 
