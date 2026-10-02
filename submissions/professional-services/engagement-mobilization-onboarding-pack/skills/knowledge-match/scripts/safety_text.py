@@ -1,4 +1,4 @@
-import csv, functools, hashlib, json, re, unicodedata
+import csv, functools, hashlib, json, math, os, re, tempfile, unicodedata
 import contract_validate as _cv
 from datetime import datetime
 CONTRACT_VERSION = "ps.engagement-mobilization-onboarding-pack.v1"
@@ -10,22 +10,51 @@ def require_iso_z(v):
     try: datetime.strptime(v, "%Y-%m-%dT%H:%M:%SZ")
     except (TypeError, ValueError) as e: raise InputError("--generated-at must be ISO-8601 UTC like 2026-10-01T00:00:00Z") from e
     return v
+def _no_constant(c): raise InputError(f"non-finite number {c} is not valid JSON; fail closed")
+def _finite_float(s):
+    v = float(s)
+    if not math.isfinite(v): raise InputError(f"number {s[:24]} overflows to a non-finite value; fail closed")
+    return v
 def load_json(p):
+    """NaN, Infinity, -Infinity and overflowing literals (1e999) are rejected at parse time, never passed on (#1.3)."""
     try:
-        with open(p, encoding="utf-8-sig") as f: return json.load(f)  # a BOM never hides the first key (#1.3)
+        with open(p, encoding="utf-8-sig") as f: return json.load(f, parse_constant=_no_constant, parse_float=_finite_float)  # a BOM never hides the first key (#1.3)
+    except InputError as e: raise InputError(f"{e} ({p})") from e
     except FileNotFoundError as e: raise InputError(f"missing required JSON file: {p}") from e
     except (json.JSONDecodeError, UnicodeDecodeError) as e: raise InputError(f"malformed JSON in {p} (must be UTF-8 JSON): {e}") from e
     except OSError as e: raise InputError(f"cannot read JSON file {p}: {type(e).__name__}") from e
-def dump_json(p, o):
-    with open(p, "w", encoding="utf-8", newline="\n") as f: json.dump(o, f, indent=2, ensure_ascii=False); f.write("\n")
+_UMASK = os.umask(0o022); os.umask(_UMASK)
+def _encode(text, p):
+    try: return text.encode("utf-8")
+    except UnicodeEncodeError as e: raise InputError(f"output {os.path.basename(p)} contains text that is not valid Unicode (e.g. a lone surrogate from an input); nothing written; fail closed") from e
+def json_bytes(p, o):
+    try: t = json.dumps(o, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+    except ValueError as e: raise InputError(f"output {os.path.basename(p)} contains a non-finite number; nothing written; fail closed") from e
+    return _encode(t, p)
+def text_bytes(p, t): return _encode(t if t.endswith("\n") else t + "\n", p)
+def write_atomic(items):
+    """Write [(path, bytes)] outputs serialised in full beforehand: each goes to a temp file in its own folder and all
+    are moved into place with os.replace only after every temp file is written, so on any error no output path is
+    created or truncated and no temp file is left behind (#1.3)."""
+    tmps = []
+    try:
+        for p, b in items:
+            fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(p)), prefix="." + os.path.basename(p) + ".", suffix=".tmp"); tmps.append(tmp)
+            with os.fdopen(fd, "wb") as f: f.write(b)
+            os.chmod(tmp, 0o666 & ~_UMASK)
+        for (p, _), tmp in zip(items, tmps): os.replace(tmp, p)
+    except OSError as e: raise InputError(f"cannot write output ({type(e).__name__}); nothing written; fail closed") from e
+    finally:
+        for tmp in tmps:
+            if os.path.exists(tmp): os.remove(tmp)
+def dump_json(p, o): write_atomic([(p, json_bytes(p, o))])
 def read_text(p):
     try:
         with open(p, encoding="utf-8-sig") as f: return f.read()  # a BOM never hides the first "Engagement ID:" (#1.3)
     except FileNotFoundError as e: raise InputError(f"missing required file: {p}") from e
     except UnicodeDecodeError as e: raise InputError(f"file is not UTF-8 text: {p} ({e.reason} at byte {e.start})") from e
     except OSError as e: raise InputError(f"cannot read file {p}: {type(e).__name__}") from e
-def write_text(p, t):
-    with open(p, "w", encoding="utf-8", newline="\n") as f: f.write(t if t.endswith("\n") else t + "\n")
+def write_text(p, t): write_atomic([(p, text_bytes(p, t))])
 class Rows(list):
     """CSV rows with lower-cased, stripped header keys. `columns` lists the header; `malformed` lists data rows
     (1-based file row numbers) that carry more fields than the header."""
@@ -50,7 +79,7 @@ def missing_columns(rows, cols): return [c for c in cols if c not in rows.column
 # ---------------------------------------------------------------- type / enum validation (fail closed)
 def need(ok, msg):
     if not ok: raise InputError(msg)
-def is_num(x): return isinstance(x, (int, float)) and not isinstance(x, bool)
+def is_num(x): return isinstance(x, (int, float)) and not isinstance(x, bool) and (isinstance(x, int) or math.isfinite(x))  # NaN/inf never pass a range check
 _KINDS = {"obj": (dict, "an object"), "list": (list, "an array"), "str": (str, "a string"), "bool": (bool, "true or false")}
 def field(d, key, kind, where, required=False, nullable=False, default=None):
     """Type-check d[key]. Absent -> default (or InputError when required); present-but-null is an error unless

@@ -9,7 +9,7 @@ first violation raises ContractViolation, which every engine turns into a clean 
 (confidentiality-and-ethical-wall-rules.md #1.3). Byte-identical in every skill's scripts/ folder
 (tests/check_shared_copies.py).
 """
-import json, os, re
+import json, math, os, re
 CONTRACT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "contracts", "ps.engagement-mobilization-onboarding-pack.v1.json")
 STAGES = ("scope", "matched", "governed", "access")
 class ContractViolation(ValueError): pass
@@ -18,9 +18,10 @@ _CACHE = {}
 def load_contract(path=CONTRACT_FILE):
     if path not in _CACHE:
         try:
-            with open(path, encoding="utf-8-sig") as f: _CACHE[path] = json.load(f)
+            with open(path, encoding="utf-8-sig") as f: _CACHE[path] = json.load(f, parse_constant=_no_constant)
         except (OSError, ValueError) as e: raise ContractViolation(f"bundled contract schema unreadable ({path}); fail closed") from e
     return _CACHE[path]
+def _no_constant(c): raise ValueError(f"non-finite number {c}")
 def _num(v): return isinstance(v, (int, float)) and not isinstance(v, bool)
 def _type_ok(v, t):
     if t == "number": return _num(v)
@@ -34,6 +35,7 @@ def _target(ref, root):
     if ref.startswith("#/$defs/") and ref[8:] in root.get("$defs", {}): return root["$defs"][ref[8:]]
     raise ContractViolation(f"contract uses unsupported or unknown $ref {ref!r}; fail closed")
 def _walk(v, s, path, root):
+    if isinstance(v, float): _need(math.isfinite(v), f"{path} must be a finite number, got {v!r}; fail closed")  # NaN/inf never pass a range check
     if "$ref" in s: _walk(v, _target(s["$ref"], root), path, root)
     for sub in s.get("allOf", []): _walk(v, sub, path, root)
     if "type" in s:
