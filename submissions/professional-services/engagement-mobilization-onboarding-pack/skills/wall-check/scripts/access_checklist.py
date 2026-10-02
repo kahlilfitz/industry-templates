@@ -108,8 +108,8 @@ def main():
                 perm=NAMES[min(O[req],O[default],O[maxp])]; reason=f"requested {req} clamped to {perm} (workspace default {default}, role ceiling {maxp}); held for engagement manager review"; cit+="; role-access-matrix.md #2.3"
                 add_hold(ah,"HOLD-PERMISSION-CLAMPED",f"raw/workspace-inventory.csv row {n}.requested_permission",f"requested {req} is wider than min(workspace default {default}, role ceiling {maxp}); request clamped to {perm}","role-access-matrix.md #2.3")
                 if perm=="none": status="not_requested_exceeds_role"
-            name=r.get("name") or wid
-            if canon_id(wid) in hidden or hits(name) or is_withheld(name): name=wid or "(blank workspace_id)"
+            name=r.get("name") if (r.get("name") or "").strip() else wid
+            if not (name or "").strip() or canon_id(wid) in hidden or hits(name) or is_withheld(name): name=wid or "(blank workspace_id)"  # never rendered blank (#1.3)
             out.append({"workspace_id":wid,"workspace_name":name,"workspace_type":r["workspace_type"] if is_withheld(r.get("workspace_type")) else wt,"status":status,"requested_permission":perm,"reason":reason,"source":ENGINE,"confidence":.96,"citation":cit})
         return out,ah
     # Access-decision holds (missing or unusable inventory, role not in the matrix, and below an invalid row or a

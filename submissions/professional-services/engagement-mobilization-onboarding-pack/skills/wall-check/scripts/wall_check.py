@@ -57,10 +57,13 @@ def govern(p,register,inventory):
     # missing or repeated column still names the clients it lists (every copy of a repeated column counts), so the
     # names are withheld everywhere while the decision holds (#2.1, #3.3). They are harvested from the register AS
     # READ, before scan_rows rewrites a flagged cell: a restriction that trips the wire still names its client (#3.3).
-    terms=client_terms(other_names(rows,e,own),own) if rows is not None else []; scr=scan_rows(rows,REGISTER_LABEL) if rows is not None else []
+    terms=client_terms(other_names(rows,e,own),own) if rows is not None else []
+    idh=unreadable_identity_holds(rows,REGISTER_LABEL,ENGINE) if rows is not None else []  # a tripped identity cell naming no one usable holds (#3.3)
+    scr=(scan_rows(rows,REGISTER_LABEL) if rows is not None else [])+idh
     p,oh=screen_other(p,terms,ENGINE,"matched.")  # every text field, not only the briefing (#3.3)
     esc=p.setdefault("escalations",[])  # screen_other returns a new document: always rebind (#3.2)
     if oh: esc.append(other_escalation(len(oh)))
+    if idh: esc.append(other_escalation(len(idh)))
     scr+=oh; j=p.get("joiner") or {}; e=p.get("engagement") or {}
     if not canon_person(j.get("person")):
         status,reason,cit=hold_status("HOLD-NO-JOINER","scope.joiner","no joiner identified; wall status cannot be determined","#2.2"); holds+=scr
@@ -98,7 +101,7 @@ def govern(p,register,inventory):
                         holds.append({"hold_id":"HOLD-BRIEFING-TOPIC-"+hashlib.sha256(strip_cf(t).encode()).hexdigest()[:12],"path":f"raw/ethical-wall-register.csv row {i}.briefing_topics","reason":"briefing topic names another client, matter or identifying detail; withheld from the pack","source":ENGINE,"confidence":.97,"citation":"confidentiality-and-ethical-wall-rules.md #3.1,#3.2"}); continue
                     briefed.append(t)
             if screened: esc.append(f"{screened} wall briefing topic(s) withheld from the pack; Risk/Conflicts brief the joiner directly (confidentiality-and-ethical-wall-rules.md #3.2)")
-            may.append({"item":e.get("client_name") or e.get("matter_id"),"type":"client_or_matter","restriction":("may not access or discuss: "+"; ".join(dict.fromkeys(briefed))) if briefed else "restricted subject matter - confirm specifics with Risk/Conflicts before starting work","citation":f"{cit}; confidentiality-and-ethical-wall-rules.md #2.3,#3.1,#3.2"})
+            may.append({"item":next((x for x in (e.get("client_name"),e.get("matter_id")) if (x or "").strip()),"this client or matter"),"type":"client_or_matter","restriction":("may not access or discuss: "+"; ".join(dict.fromkeys(briefed))) if briefed else "restricted subject matter - confirm specifics with Risk/Conflicts before starting work","citation":f"{cit}; confidentiality-and-ethical-wall-rules.md #2.3,#3.1,#3.2"})
         elif unknown:
             status,reason,cit=hold_status("HOLD-UNKNOWN-WALL-STATUS","raw/ethical-wall-register.csv.status","unknown wall status value (not repeated); treated as hold","#2.2")
         elif not named_clear:
@@ -133,7 +136,7 @@ def govern(p,register,inventory):
         conf=client_confidential(w.get("data_classification")); dep=depends_on_knowledge(w.get("depends_on_knowledge"))  # blank/unknown fail closed (workspace-inventory-rules.md #2.3)
         if not cin(w.get("data_classification"),KNOWN_CLASSIFICATIONS) or canon_text(w.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES: odd.append(str(i))
         if status=="denied" and cin(wid,deniedw):
-            name=wid if cin(wid,withheld_names) else (w.get("name") or wid)
+            name=wid if cin(wid,withheld_names) or not (w.get("name") or "").strip() else w["name"]
             may.append({"item":name,"type":"workspace","restriction":"workspace restricted by ethical-wall register","citation":f"{w.get('citation') or 'raw/workspace-inventory.csv'}; confidentiality-and-ethical-wall-rules.md #2.3; workspace-inventory-rules.md #2.2"})
         elif status in {"denied","hold"} and (conf or dep) and not cin(wid,heldw): heldw.append(wid)
     if odd: esc.append(f"Workspace inventory row(s) {', '.join(odd)} have a blank or unrecognised data_classification/depends_on_knowledge; treated as client-confidential and knowledge-dependent (workspace-inventory-rules.md #2.3)")

@@ -61,16 +61,16 @@ def validate_staffing(st):
 def statuses(st):
     s={}; p=[]
     for r in st["governed_roles"]:
-        rt=r.get("role_title") or "role"
+        rt=r.get("role_title") if (r.get("role_title") or "").strip() else "role"
         for c in r.get("candidate_slate",[]):
-            if not c.get("candidate_name"): continue
+            if not (c.get("candidate_name") or "").strip(): continue
             el=c.get("eligibility") or {}; v=el.get("verdict")
             v=canon_text(v) if isinstance(v,str) else None
             if v not in VERDICTS: v="unrecognised"  # blank, null or unknown verdicts fail closed (#3.4)
             if is_withheld(c["candidate_name"]): continue  # a withheld name joins no roster row (confidentiality-and-ethical-wall-rules.md #4.3)
             s.setdefault(canon_person(c["candidate_name"]),[]).append({"role_title":rt,"verdict":v,"blocking_rule":el.get("blocking_rule"),"confidence":c.get("confidence",.9),"citation":el.get("citation") or c.get("citation") or "staffing"})
         for c in r.get("recommended_candidates",[]):
-            if c.get("candidate_name"): p.append({"candidate_name":c["candidate_name"],"role_title":rt,"fit_score":c.get("fit_score"),"assignment_status":"proposed_not_assigned","source":"adapter:staffing-slate","confidence":c.get("confidence",.9),"citation":c.get("citation") or "staffing recommended_candidates"})
+            if (c.get("candidate_name") or "").strip(): p.append({"candidate_name":c["candidate_name"],"role_title":rt,"fit_score":c.get("fit_score"),"assignment_status":"proposed_not_assigned","source":"adapter:staffing-slate","confidence":c.get("confidence",.9),"citation":c.get("citation") or "staffing recommended_candidates"})
     return s,p
 def verdict_for(entries,role):
     # Prefer the Scenario 02 verdict for the confirmed role; otherwise the most restrictive verdict across roles.
@@ -116,12 +116,17 @@ def main():
     own=engagement_words(fld(sow,"Client"),fld(sow,"Engagement ID"),fld(sow,"Matter ID"),fld(sow,"Title"))
     rterms=register_terms(os.path.join(a.raw_dir,"ethical-wall-register.csv"),{"client_name":fld(sow,"Client"),"matter_id":fld(sow,"Matter ID")},own)
     st,soh=screen_other(st,rterms,ENGINE,"upstream/staffing.")
-    rsh=scan_rows(rows,"raw/confirmed-roster.csv"); roh=screen_csv_other(rows,"raw/confirmed-roster.csv",rterms,ENGINE); soh=soh+roh
+    rsh=scan_rows(rows,"raw/confirmed-roster.csv"); roh=screen_csv_other(rows,"raw/confirmed-roster.csv",rterms,ENGINE)
+    # A register client_name/matter_id that trips the wire and names no usable identity holds anyway (#3.3).
+    soh=soh+roh+register_identity_holds(os.path.join(a.raw_dir,"ethical-wall-register.csv"),ENGINE)
     holds=h1+h2+h3+rsh+sth+soh
     smap,prop=statuses(st); roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]+([other_escalation(len(soh))] if soh else [])
     for i,r in enumerate(rows,2):
         name=(r.get("person") or "").strip()
         if not name: continue
+        # Every rendered display string is non-blank (contract $defs/roster_member): a named roster row without a role is
+        # malformed and refused, never rendered blank (confidentiality-and-ethical-wall-rules.md #1.3; role-access-matrix.md #1.1).
+        if not (r.get("role") or "").strip(): raise InputError(f"raw/confirmed-roster.csv row {i}.role is blank; every named roster row needs a role (role-access-matrix.md #1.1); fail closed")
         # One canonical person key (#1.3). A withheld roster name joins no Scenario 02 verdict and fails closed as
         # unrecognised: a placeholder is not an identity (confidentiality-and-ethical-wall-rules.md #4.3).
         if is_withheld(name): ss={"verdict":"unrecognised"}
@@ -129,7 +134,7 @@ def main():
         if ss.get("verdict") in INELIGIBLE:
             excl.append({"person":name,"role":r.get("role",""),"reason":f"{ss.get('verdict')} in Scenario 02 for {ss.get('role_title')}; independence/conflict details stay in the staffing record (need-to-know)","blocking_rule":ss.get("blocking_rule"),"source":"adapter:staffing-slate","confidence":ss.get("confidence",.95),"citation":ss.get("citation","role-access-matrix.md #3.2")}); continue
         if canon_text(r.get("assignment_status"))!="confirmed": unconfirmed.append(name); continue  # role-access-matrix.md #4.1
-        item={"person":name,"role":r.get("role",""),"responsibilities":lst(r.get("responsibilities","")),"point_of_contact":r.get("point_of_contact","Engagement manager"),"onboarding_status":r.get("onboarding_status",""),"assignment_status":"confirmed","source":"raw:confirmed-roster.csv","confidence":.97,"citation":r.get("citation") or "raw/confirmed-roster.csv"}
+        item={"person":name,"role":r.get("role",""),"responsibilities":lst(r.get("responsibilities","")),"point_of_contact":r.get("point_of_contact") if (r.get("point_of_contact") or "").strip() else "Engagement manager","onboarding_status":r.get("onboarding_status",""),"assignment_status":"confirmed","source":"raw:confirmed-roster.csv","confidence":.97,"citation":r.get("citation") or "raw/confirmed-roster.csv"}
         if ss.get("verdict")=="unrecognised":
             item["staffing_review"]={"verdict":"unrecognised","blocking_rule":None,"citation":"role-access-matrix.md #3.4"}
             holds.append({"hold_id":"HOLD-UNRECOGNISED-STAFFING-VERDICT","path":f"raw/confirmed-roster.csv row {i}.person" if is_withheld(name) else f"upstream/staffing candidate_slate[{name}].eligibility.verdict","reason":"blank, null or unrecognised Scenario 02 verdict for a confirmed roster member","source":ENGINE,"confidence":.99,"citation":"role-access-matrix.md #3.4"})
@@ -168,7 +173,8 @@ def main():
     # with the SOW; a value the SOW does not declare is unconfirmed and differs (#1.2, #1.3).
     own=engagement_words(sow_client,sow_eid,fld(sow,"Matter ID"),fld(sow,"Title"))
     other={k_:other_parts(reng.get(k_),unwithheld(mine),k_,own) for k_,mine in (("client_name",sow_client),("engagement_id",sow_eid))}
-    mism=[k_ for k_ in ("client_name","engagement_id") if other[k_]]
+    # A staffing identity that trips the wire and names no usable identity cannot be confirmed: a mismatch (#1.2, #3.3).
+    mism=[k_ for k_ in ("client_name","engagement_id") if other[k_] or identity_unreadable(reng.get(k_))]
     if mism:
         holds.append({"hold_id":"HOLD-STAFFING-ENGAGEMENT-MISMATCH","path":"upstream/staffing.engagement."+"/".join(mism),"reason":"staffing input names a different client or engagement than the SOW (name not repeated); staffing evidence not trusted","source":ENGINE,"confidence":.99,"citation":"confidentiality-and-ethical-wall-rules.md #3.3; role-access-matrix.md #3.1"})
         esc.append("Staffing input is for a different client or engagement than the SOW; staffing evidence held for the engagement manager (confidentiality-and-ethical-wall-rules.md #3.3)")

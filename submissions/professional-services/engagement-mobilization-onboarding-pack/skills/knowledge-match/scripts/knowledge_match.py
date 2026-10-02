@@ -40,6 +40,9 @@ def check_scope(s):
     if s.get("contract_version")!=CONTRACT_VERSION: raise InputError(f"expected contract {CONTRACT_VERSION} in scope input")
     field(s,"scope_summary","obj","scope",required=True); check_contract(s,"scope","scope")  # confidentiality-and-ethical-wall-rules.md #1.3
     check_hold_evidence(s,"scope")  # holds are cumulative: a placeholder, escalation or held status without its hold is refused (#1.4)
+def nb(*vs):
+    """The first non-blank string: a rendered display string is never blank (contract $defs/knowledge_item, #1.3)."""
+    return next((v for v in vs if isinstance(v,str) and v.strip()),None)
 def rel(scope,item):
     ss=scope["scope_summary"]
     over=sorted(toks(item.get("title") or "",item.get("description") or ""," ".join(item.get("tags") or []),item.get("category") or "") & toks((scope.get("joiner") or {}).get("role") or ""," ".join(ss.get("objectives",[]))," ".join(ss.get("in_scope",[]))," ".join(ss.get("deliverables",[]))))
@@ -59,14 +62,14 @@ def main():
         if perm is not None and perm!=PERM: exc.append({"asset_id":aid,"reason":"confidentiality_permission_not_internal_reuse","citation":"knowledge-reuse-rules.md #2.2"}); continue
         score,over=rel(s,asset)
         if score<.5: exc.append({"asset_id":aid,"reason":"below_relevance_floor","citation":"knowledge-reuse-rules.md #3.1"}); continue
-        inc.append({"knowledge_id":aid,"title":asset.get("title") or rels[canon_id(aid)].get("title") or f"Released knowledge asset {aid}","summary":asset.get("description") or "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.","relevance_score":score,"matched_terms":over,"clearance_state":rels[canon_id(aid)].get("clearance_state"),"confidentiality_permission":perm or "release_candidate_state","review_status":review_status(asset,rels[canon_id(aid)]),"source":"adapter:closeout-governed.knowledge_record","confidence":min(asset.get("confidence",.9),rels[canon_id(aid)].get("confidence",.9)),"citations":[asset.get("citation") or "knowledge_record.reusable_assets",rels[canon_id(aid)].get("citation") or "released_assets","knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"]})
+        inc.append({"knowledge_id":aid,"title":nb(asset.get("title"),rels[canon_id(aid)].get("title"),f"Released knowledge asset {aid}"),"summary":nb(asset.get("description"),"Released Closeout knowledge candidate; use the title and citation only until practice review confirms."),"relevance_score":score,"matched_terms":over,"clearance_state":rels[canon_id(aid)].get("clearance_state"),"confidentiality_permission":perm or "release_candidate_state","review_status":review_status(asset,rels[canon_id(aid)]),"source":"adapter:closeout-governed.knowledge_record","confidence":min(asset.get("confidence",.9),rels[canon_id(aid)].get("confidence",.9)),"citations":[nb(asset.get("citation"),"knowledge_record.reusable_assets"),nb(rels[canon_id(aid)].get("citation"),"released_assets"),"knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"]})
     for lesson in kr.get("lessons",[]):
         lp=lesson.get("confidentiality_permission")
         if not canon_id(lesson.get("cluster_id")) or is_withheld(lesson.get("cluster_id")): exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"no_lesson_id","citation":"knowledge-reuse-rules.md #1.4"}); continue  # every knowledge item carries its identity (contract $defs/knowledge_item)
         if lp is not None and lp!=PERM: exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"confidentiality_permission_not_internal_reuse","citation":"knowledge-reuse-rules.md #2.2"}); continue
         if lesson.get("rewrite_required") is not False: exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"rewrite_required_or_unknown","citation":"knowledge-reuse-rules.md #2.4"}); continue
         score,over=rel(s,{"title":lesson.get("category") or "","description":lesson.get("drafting_guidance") or "","tags":lesson.get("tags") or []})
-        if score>=.5: inc.append({"knowledge_id":lesson.get("cluster_id"),"title":f"Lesson: {lesson.get('category') or 'uncategorised'}","summary":lesson.get("drafting_guidance") or "Closeout lesson; use the title and citation only until practice review confirms.","relevance_score":score,"matched_terms":over,"clearance_state":"LESSON_FOR_INTERNAL_DRAFT","confidentiality_permission":lp or "closeout_governed_lesson","review_status":review_status({"review_required":lesson.get("review_candidate")}),"source":"adapter:closeout-governed.knowledge_record.lessons","confidence":lesson.get("confidence",.85),"citations":(lesson.get("evidence_citations") or [])+[lesson.get("citation") or "knowledge_record.lessons","knowledge-reuse-rules.md #2.2,#2.4,#3.2"]})
+        if score>=.5: inc.append({"knowledge_id":lesson.get("cluster_id"),"title":f"Lesson: {nb(lesson.get('category'),'uncategorised')}","summary":nb(lesson.get("drafting_guidance"),"Closeout lesson; use the title and citation only until practice review confirms."),"relevance_score":score,"matched_terms":over,"clearance_state":"LESSON_FOR_INTERNAL_DRAFT","confidentiality_permission":lp or "closeout_governed_lesson","review_status":review_status({"review_required":lesson.get("review_candidate")}),"source":"adapter:closeout-governed.knowledge_record.lessons","confidence":lesson.get("confidence",.85),"citations":[x for x in (lesson.get("evidence_citations") or []) if nb(x)]+[nb(lesson.get("citation"),"knowledge_record.lessons"),"knowledge-reuse-rules.md #2.2,#2.4,#3.2"]})
     inc=redact(inc)  # flagged Closeout text never travels (confidentiality-and-ethical-wall-rules.md #4.3)
     # The closed engagement is usually another client: its name and IDs never reach this pack (#3.3).
     # Its identity comes from the raw closeout (ce): a client_name that also trips the wire still names the client,
@@ -76,7 +79,11 @@ def main():
     # Every other client named in the wall register is screened out here too, not only at wall_check (#3.3).
     terms+=[t for t in register_terms(a.wall_register,mine,own_words(s)) if t[0] not in {x[0] for x in terms}]
     # Upstream scope holds are supplied content: screened for other-client names and steering text (#3.3, #4.3).
-    up,uh=screen_holds(s.get("holds",[]),terms,ENGINE,"scope.holds"); holds=dedup_holds(up+sh+own_h+uh)
+    # A structured identity (Closeout engagement, register client_name/matter_id) that trips the wire and names no
+    # usable identity holds anyway: the other-client screen cannot be confirmed (#3.3).
+    ih=[other_hold(f"upstream/closeout.engagement.{k_}",ce.get(k_),ENGINE) for k_ in ("client_name","engagement_id") if identity_unreadable(ce.get(k_))]+register_identity_holds(a.wall_register,ENGINE)
+    if ih: s.setdefault("escalations",[]).append(other_escalation(len(ih)))
+    up,uh=screen_holds(s.get("holds",[]),terms,ENGINE,"scope.holds"); holds=dedup_holds(up+sh+own_h+uh+ih)
     if sh or own_h: s.setdefault("escalations",[]).append(upstream_escalation(len(sh)+len(own_h)))
     if any(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh): s.setdefault("escalations",[]).append(other_escalation(sum(h["hold_id"].startswith("HOLD-OTHER-CLIENT-") for h in uh)))
     if terms:

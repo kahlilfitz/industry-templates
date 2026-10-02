@@ -95,43 +95,50 @@
         "objectives": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "in_scope": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "exclusions": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "deliverables": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "key_dates": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "systems": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "first_week_focus": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "source": {
@@ -161,10 +168,12 @@
         "type": "object",
         "properties": {
           "candidate_name": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           },
           "role_title": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           },
           "assignment_status": {
             "const": "proposed_not_assigned"
@@ -207,13 +216,16 @@
         "type": "object",
         "properties": {
           "person": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           },
           "role": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           },
           "blocking_rule": {
             "type": [
@@ -291,10 +303,12 @@
                 ]
               },
               "reason": {
-                "type": "string"
+                "type": "string",
+                "pattern": "\\S"
               },
               "citation": {
-                "type": "string"
+                "type": "string",
+                "pattern": "\\S"
               }
             },
             "required": [
@@ -346,7 +360,8 @@
         },
         "reason": {
           "type": "string",
-          "description": "Engine wording only; register free text is never copied."
+          "description": "Engine wording only; register free text is never copied.",
+          "pattern": "\\S"
         },
         "allowed_knowledge_ids": {
           "type": "array",
@@ -392,7 +407,8 @@
             "type": "object",
             "properties": {
               "item": {
-                "type": "string"
+                "type": "string",
+                "pattern": "\\S"
               },
               "type": {
                 "enum": [
@@ -401,10 +417,12 @@
                 ]
               },
               "restriction": {
-                "type": "string"
+                "type": "string",
+                "pattern": "\\S"
               },
               "citation": {
-                "type": "string"
+                "type": "string",
+                "pattern": "\\S"
               }
             },
             "required": [
@@ -425,7 +443,8 @@
         },
         "citation": {
           "type": "string",
-          "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
+          "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1).",
+          "pattern": "\\S"
         }
       }
     },
@@ -450,7 +469,8 @@
             "type": "string"
           },
           "workspace_name": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           },
           "status": {
             "enum": [
@@ -472,7 +492,8 @@
           },
           "reason": {
             "type": "string",
-            "description": "Engine wording; a clamped request names the requested, default and ceiling permissions (role-access-matrix.md #2.3)."
+            "description": "Engine wording; a clamped request names the requested, default and ceiling permissions (role-access-matrix.md #2.3).",
+            "pattern": "\\S"
           },
           "source": {
             "type": "string"
@@ -484,7 +505,8 @@
           },
           "citation": {
             "type": "string",
-            "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
+            "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1).",
+            "pattern": "\\S"
           },
           "workspace_type": {
             "type": "string"
@@ -513,12 +535,14 @@
           "description": "Why the pack is on hold; empty only when status is draft_internal_only (workspace-inventory-rules.md #3.3)."
         },
         "label": {
-          "type": "string"
+          "type": "string",
+          "pattern": "\\S"
         },
         "sections": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "source": {
@@ -547,15 +571,18 @@
         ],
         "properties": {
           "hold_id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           },
           "path": {
             "type": "string",
-            "description": "Source path of the held field."
+            "description": "Source path of the held field.",
+            "pattern": "\\S"
           },
           "reason": {
             "type": "string",
-            "description": "e.g. embedded_instruction:<family>[,<family>...] (pattern family names only; flagged text is never echoed), missing ethical-wall register, unknown wall status, briefing topic names another client, invalid workspace inventory row. Text naming another client or matter is withheld with reason 'text names another client or matter (name not repeated)'; permission clamps hold as HOLD-PERMISSION-CLAMPED."
+            "description": "e.g. embedded_instruction:<family>[,<family>...] (pattern family names only; flagged text is never echoed), missing ethical-wall register, unknown wall status, briefing topic names another client, invalid workspace inventory row. Text naming another client or matter is withheld with reason 'text names another client or matter (name not repeated)'; permission clamps hold as HOLD-PERMISSION-CLAMPED.",
+            "pattern": "\\S"
           },
           "source": {
             "type": "string",
@@ -568,7 +595,8 @@
           },
           "citation": {
             "type": "string",
-            "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1)."
+            "description": "Source row/section or reference rule (e.g. role-access-matrix.md #2.1).",
+            "pattern": "\\S"
           }
         }
       }
@@ -576,7 +604,8 @@
     "escalations": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "string",
+        "pattern": "\\S"
       }
     },
     "provenance": {
@@ -605,13 +634,15 @@
         "confidentiality_terms": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "ethical_wall_terms": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "source": {
@@ -634,19 +665,23 @@
       "type": "object",
       "properties": {
         "person": {
-          "type": "string"
+          "type": "string",
+          "pattern": "\\S"
         },
         "role": {
-          "type": "string"
+          "type": "string",
+          "pattern": "\\S"
         },
         "responsibilities": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "point_of_contact": {
-          "type": "string"
+          "type": "string",
+          "pattern": "\\S"
         },
         "onboarding_status": {
           "type": "string"
@@ -734,7 +769,8 @@
         "matched_terms": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "clearance_state": {
@@ -752,7 +788,8 @@
           ]
         },
         "source": {
-          "type": "string"
+          "type": "string",
+          "pattern": "\\S"
         },
         "confidence": {
           "type": "number",
@@ -763,7 +800,8 @@
           "type": "array",
           "description": "Source citations; every element is a string (a null citation is not a citation).",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         }
       },
