@@ -625,7 +625,7 @@ def evaluate(payload):
         legal = check["legal_or_release_control"] and LEGAL_MARK_DEFECT_BLOCKS
         status_value = check.get("status")
         if status_value == "fail":
-            add_finding(findings, finding_id, "G5", MUST_FIX if legal else ADVISORY, check.get("title", "Brand or formatting defect"), check.get("detail", "Brand check failed"), location, "quality-gate-criteria.md #5.1-#5.2", check.get("confidence", 0.9), check.get("citation", "quality-gate-criteria.md #5.1-#5.2"))
+            add_finding(findings, finding_id, "G5", MUST_FIX if legal else ADVISORY, check.get("title") or "Brand or formatting defect", check.get("detail") or "Brand check failed", location, "quality-gate-criteria.md #5.1-#5.2", check.get("confidence", 0.9), check.get("citation") or "quality-gate-criteria.md #5.1-#5.2")
         elif status_value not in BRAND_CHECK_STATUSES:
             severity = RELEASE_BLOCKER if legal else MUST_FIX
             add_finding(findings, finding_id, "G5", severity, "Brand or release-control check not verified", f"Brand check {check_id} has status {safe_token(status_value, 'blank/unrecognised') if status_value else 'blank/missing'}; only pass or fail are recognised, so the check is treated as not verified{' for a legal, confidentiality or release-control mark' if legal else ''}.", location, "quality-gate-criteria.md #5.2-#5.3", 0.95, "quality-gate-criteria.md #5.2-#5.3")
@@ -635,13 +635,13 @@ def evaluate(payload):
         license_known = item.get("license_status") == LICENSE_STATUS_KNOWN
         if LICENSED_ATTRIBUTION_REQUIRED and item["attribution_present"] is not True:
             severity = MUST_FIX if license_known else RELEASE_BLOCKER
-            add_finding(findings, claim_finding_id(findings, owners, f"GC-G6-{content_id}", ("licensed_content", index)), "G6", severity, "Licensed content lacks attribution", item.get("detail", "Third-party content requires attribution."), entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.2", item.get("confidence", 0.93), item.get("citation", "quality-gate-criteria.md #6.1-#6.2"))
+            add_finding(findings, claim_finding_id(findings, owners, f"GC-G6-{content_id}", ("licensed_content", index)), "G6", severity, "Licensed content lacks attribution", item.get("detail") or "Third-party content requires attribution.", entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.2", item.get("confidence", 0.93), item.get("citation") or "quality-gate-criteria.md #6.1-#6.2")
             if not license_known:
                 escalations.append(f"G6: unattributed licensed content {content_id} with license_status not known (unknown, blank or unrecognised) - release blocker; hold for reviewing partner/QRM (quality-gate-criteria.md #6.2-#6.3)")
     for index, prior in enumerate(prior_findings):
         if prior["claimed_closed"] is True and prior["document_fix_present"] is not True and PRIOR_FIX_MUST_LAND:
             prior_id = safe_token(prior["finding_id"], f"prior-finding-{index + 1}")
-            add_finding(findings, claim_finding_id(findings, owners, f"GC-G7-{prior_id}", ("prior_findings", index)), "G7", MUST_FIX, "Prior finding marked closed but fix is absent", prior.get("detail", "Tracker closure is not supported by the current document."), entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2", prior.get("confidence", 0.96), prior.get("citation", "quality-gate-criteria.md #7.1-#7.2"))
+            add_finding(findings, claim_finding_id(findings, owners, f"GC-G7-{prior_id}", ("prior_findings", index)), "G7", MUST_FIX, "Prior finding marked closed but fix is absent", prior.get("detail") or "Tracker closure is not supported by the current document.", entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2", prior.get("confidence", 0.96), prior.get("citation") or "quality-gate-criteria.md #7.1-#7.2")
     for index, assertion in enumerate(payload["assertions"]):
         if assertion["scope_aligned"] is not True:
             assertion_id = safe_token(assertion["assertion_id"], f"assertion-{index + 1}")
@@ -691,10 +691,7 @@ def main():
         generated_at = validate_generated_at(args.generated_at)
         payload = evaluate(load_json(args.mapped))
         findings, gate_results = payload["findings"], payload["gate_results"]
-        provenance = payload["provenance"]
-        if generated_at:
-            provenance["generated_at"] = generated_at
-        rules.record_engine(payload, f"gate_check/{ENGINE_VERSION}")
+        rules.record_engine(payload, f"gate_check/{ENGINE_VERSION}", generated_at)
         rules.write_json_atomic(args.out, payload)
         blockers = sum(1 for item in findings if item["severity"] == RELEASE_BLOCKER)
         must_fix = sum(1 for item in findings if item["severity"] == MUST_FIX)

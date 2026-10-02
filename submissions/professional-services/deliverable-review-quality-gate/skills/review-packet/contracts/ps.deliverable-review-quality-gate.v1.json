@@ -70,7 +70,18 @@
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
       }
     },
-    "criteria": { "type": ["object", "null"], "description": "Required by assertion_map (with criteria_sections). For gate_check, absent or null means the criteria register was not loaded and holds with the register-missing finding." },
+    "criteria": {
+      "type": ["object", "null"],
+      "description": "Required by assertion_map (with criteria_sections). For gate_check, absent or null means the criteria register was not loaded and holds with the register-missing finding. criteria_sections is a gated register, so it is deliberately not contract-required: absent or null holds under G1 instead of refusing the run (quality-gate-criteria.md #8.14).",
+      "required": [],
+      "properties": {
+        "criteria_set_id": { "type": "string" },
+        "criteria_sections": { "type": ["array", "null"], "items": { "type": "string", "minLength": 1 } },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "source": { "type": "string" },
+        "citation": { "type": "string" }
+      }
+    },
     "assertions": {
       "type": "array",
       "items": {
@@ -80,7 +91,7 @@
         "properties": {
           "assertion_id": { "type": "string", "minLength": 1 },
           "class": { "enum": ["factual", "quantified", "forward_looking", "recommendation"] },
-          "text": { "type": "string" },
+          "text": { "type": "string", "minLength": 1 },
           "location": { "$ref": "#/definitions/location" },
           "evidence_ids": { "type": "array", "items": { "type": "string" } },
           "hedging_present": { "type": "boolean" },
@@ -91,7 +102,7 @@
           "scope_aligned": { "type": "boolean" },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
           "source": { "type": "string", "pattern": "^(engine|skill|connector):[a-z0-9][a-z0-9._-]*$", "x-normalise": "provenance", "description": "Required provenance prefix engine:, skill: or connector: plus a slug (normally skill:deliverable-ingest). Absent, blank, free-text or self-declared sources are input errors." },
-          "citation": { "type": "string" }
+          "citation": { "type": "string", "minLength": 1 }
         }
       }
     },
@@ -129,22 +140,44 @@
         }
       }
     },
-    "assertion_mappings": { "type": "array", "items": { "type": "object" }, "description": "Required by gate-check (run assertion_map first). gate-check recomputes the mappings and AM- findings from assertions and evidence_set; any mapping or AM- finding that does not match recomputation is restored and raises a G8 spoof hold (quality-gate-criteria.md #8.4)." },
+    "assertion_mappings": {
+      "type": "array",
+      "description": "Required by gate-check (run assertion_map first). gate-check recomputes the mappings and AM- findings from assertions and evidence_set; any mapping or AM- finding that does not match recomputation is restored and raises a G8 spoof hold (quality-gate-criteria.md #8.4). Every field assertion_map emits is required, because gate-check and the review packet read or render them (quality-gate-criteria.md #8.14).",
+      "items": {
+        "type": "object",
+        "required": ["assertion_id", "class", "text", "location", "evidence_ids", "best_evidence_id", "support_status", "support_score", "rationale", "criteria_section", "confidence", "source", "citation"],
+        "properties": {
+          "assertion_id": { "type": "string", "minLength": 1 },
+          "class": { "enum": ["factual", "quantified", "forward_looking", "recommendation"] },
+          "text": { "type": "string", "minLength": 1 },
+          "location": { "$ref": "#/definitions/location" },
+          "evidence_ids": { "type": "array", "items": { "type": "string" } },
+          "best_evidence_id": { "type": ["string", "null"], "description": "Null when no linked evidence item is acceptable support." },
+          "support_status": { "enum": ["supported", "limited", "unsupported"] },
+          "support_score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "rationale": { "type": "string", "minLength": 1 },
+          "criteria_section": { "type": "string", "minLength": 1 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):[a-z0-9][a-z0-9._-]*$", "x-normalise": "provenance" },
+          "citation": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "gate_results": {
       "type": "array",
       "description": "Required by severity_rank: exactly one entry per gate G1-G8. severity_rank reconciles every entry against findings[] (status, highest_severity and finding_count) and refuses the input on any mismatch, so a gate reported blocked can never reach a lower verdict (severity-rules.md #3.5).",
       "items": {
         "type": "object",
-        "required": ["gate_id", "status", "highest_severity", "finding_count"],
+        "required": ["gate_id", "name", "status", "highest_severity", "finding_count", "confidence", "source", "citation"],
         "properties": {
           "gate_id": { "enum": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"] },
-          "name": { "type": "string" },
+          "name": { "type": "string", "minLength": 1 },
           "status": { "enum": ["blocked", "attention_required", "no_engine_findings"] },
           "highest_severity": { "enum": ["release_blocker", "must_fix", "advisory", "none"] },
           "finding_count": { "type": "integer", "minimum": 0 },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-          "source": { "type": "string" },
-          "citation": { "type": "string" }
+          "source": { "type": "string", "minLength": 1 },
+          "citation": { "type": "string", "minLength": 1 }
         }
       }
     },
@@ -153,35 +186,94 @@
       "description": "Required by severity_rank (gate_check always emits it, empty when nothing was found); absent or non-array is an input error.",
       "items": {
         "type": "object",
-        "required": ["finding_id", "gate_id", "severity", "location", "criteria_section", "confidence", "source", "citation"],
+        "required": ["finding_id", "gate_id", "severity", "title", "detail", "location", "criteria_section", "confidence", "source", "citation"],
         "properties": {
           "finding_id": { "type": "string", "minLength": 1, "description": "Prefixes GC- (gate_check), AM- (assertion_map) and SR- (severity_rank) are engine-owned. A GC- or SR- finding, or an AM- finding that does not exactly match gate-check's recomputation of assertion_map output, is ignored and raises a G8 spoof hold; the source tag is never trusted. A duplicate finding_id never lowers severity: severity_rank keeps one finding per ID at the highest severity and escalates the collapse (severity-rules.md #3.4)." },
           "gate_id": { "enum": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"] },
           "severity": { "enum": ["release_blocker", "must_fix", "advisory"] },
-          "title": { "type": "string" },
-          "detail": { "type": "string" },
+          "title": { "type": "string", "minLength": 1 },
+          "detail": { "type": "string", "minLength": 1 },
           "location": { "$ref": "#/definitions/location" },
-          "criteria_section": { "type": "string" },
+          "criteria_section": { "type": "string", "minLength": 1 },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
           "source": { "type": "string", "pattern": "^(engine|skill|connector):[a-z0-9][a-z0-9._-]*$", "x-normalise": "provenance" },
-          "citation": { "type": "string" }
+          "citation": { "type": "string", "minLength": 1 }
         }
       }
     },
-    "ranked_findings": { "type": "array", "items": { "type": "object" } },
-    "release_readiness": { "type": "object" },
-    "escalations": { "type": "array", "items": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object" }] }, "description": "Required by severity_rank; absent or non-array is an input error. Escalations without any finding give not_ready_for_release, never partner_review_required_no_engine_findings. With findings, the verdict follows the highest finding severity, each escalation still needs partner/QRM confirmation before release, and the summary states the escalation count (severity-rules.md #3.3)." },
-    "provenance": { "type": "object" }
+    "ranked_findings": {
+      "type": "array",
+      "description": "severity_rank output: every findings[] entry plus rank and ranking_basis. All fields are required because the review packet renders them.",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "gate_id", "severity", "title", "detail", "location", "criteria_section", "confidence", "source", "citation", "rank", "ranking_basis"],
+        "properties": {
+          "finding_id": { "type": "string", "minLength": 1 },
+          "gate_id": { "enum": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"] },
+          "severity": { "enum": ["release_blocker", "must_fix", "advisory"] },
+          "title": { "type": "string", "minLength": 1 },
+          "detail": { "type": "string", "minLength": 1 },
+          "location": { "$ref": "#/definitions/location" },
+          "criteria_section": { "type": "string", "minLength": 1 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):[a-z0-9][a-z0-9._-]*$", "x-normalise": "provenance" },
+          "citation": { "type": "string", "minLength": 1 },
+          "rank": { "type": "integer", "minimum": 1 },
+          "ranking_basis": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "release_readiness": {
+      "type": "object",
+      "description": "severity_rank output; every field is required because the review packet renders the status and summary.",
+      "required": ["status", "release_blockers", "must_fix", "advisories", "summary", "confidence", "source", "citation"],
+      "properties": {
+        "status": { "enum": ["not_ready_for_release", "partner_review_required_must_fix", "partner_review_required_advisories_only", "partner_review_required_no_engine_findings"] },
+        "release_blockers": { "type": "integer", "minimum": 0 },
+        "must_fix": { "type": "integer", "minimum": 0 },
+        "advisories": { "type": "integer", "minimum": 0 },
+        "summary": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "citation": { "type": "string", "minLength": 1 }
+      }
+    },
+    "escalations": {
+      "type": "array",
+      "description": "Required by severity_rank; absent or non-array is an input error. Escalations without any finding give not_ready_for_release, never partner_review_required_no_engine_findings. With findings, the verdict follows the highest finding severity, each escalation still needs partner/QRM confirmation before release, and the summary states the escalation count (severity-rules.md #3.3). An escalation is a non-blank string or an object with a gate_id and a non-blank note, which is what the review packet renders.",
+      "items": {
+        "oneOf": [
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "object",
+            "required": ["gate_id", "note"],
+            "properties": {
+              "gate_id": { "enum": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"] },
+              "note": { "type": "string", "minLength": 1 }
+            }
+          }
+        ]
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Optional on the review input; every engine output carries it. Each engine appends its tag to engines and stamps generated_at (from --generated-at, else the value already present, else the current UTC time), so the review packet never renders a missing value. When supplied, both members are required.",
+      "required": ["engines", "generated_at"],
+      "properties": {
+        "engines": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "generated_at": { "type": "string", "minLength": 1 }
+      }
+    }
   },
   "definitions": {
     "location": {
       "type": "object",
-      "required": ["section", "page", "paragraph"],
+      "required": ["section", "page", "paragraph", "label"],
       "properties": {
-        "section": { "type": "string" },
+        "section": { "type": "string", "minLength": 1 },
         "page": { "type": ["integer", "null"], "minimum": 1, "description": "Physical page number, counted from 1; 0 and negative numbers are input errors. Null only for register-level findings with no page (for example a register that was not supplied). Printed labels such as roman numerals go in label; any other type is an input error." },
         "paragraph": { "type": ["integer", "null"], "minimum": 1, "description": "Paragraph number on the page, counted from 1; 0 and negative numbers are input errors. Null only for register-level findings." },
-        "label": { "type": "string" }
+        "label": { "type": "string", "minLength": 1, "description": "Required and non-blank: the review packet renders it, and for a register-level finding (null page) it is the only locator." }
       }
     }
   }

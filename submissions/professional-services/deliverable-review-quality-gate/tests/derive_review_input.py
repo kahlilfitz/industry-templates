@@ -52,7 +52,9 @@ import assertion_rules as rules  # noqa: E402  (the engines' strict loader and c
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 CRITERIA_FLOOR = ["quality-gate-criteria.md #1-#8", "severity-rules.md #1-#4"]
 PAGE_MARKER = re.compile(r"^\[Page (\d{1,9})\]$")
-SECTION_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?\s+")
+# Line-oriented patterns use [ \t] and [^\r\n], never \s, so a blank labelled field can never swallow the next line.
+SECTION_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?[ \t]+")
+CRITERIA_SET_ID = re.compile(r"^Criteria set ID:[ \t]*([^\r\n]*?)[ \t]*$", re.MULTILINE)
 LOCATION = re.compile(r"^(?P<section>.+?), page (?P<page>\d{1,9}), paragraph (?P<paragraph>\d{1,9}), (?P<label>.+)$")
 CONF = r"\d{1,3}(?:\.\d{1,9})?"
 EVIDENCE = re.compile(r"^- (?P<id>EV-[\w-]+): (?P<title>.+?)\. (?P<desc>.*?) ?Type: (?P<type>\w+)\. Source: (?P<source>[\w ]+)\. Confidence: (?P<conf>" + CONF + r")\.$")
@@ -282,12 +284,12 @@ def derive(scenario_dir):
     if cover.get("Client aliases"):
         deliverable["client_aliases"] = [item.strip() for item in cover["Client aliases"].split(";")]
     extract = read_text(os.path.join(raw, "qrm-gate-criteria-extract.md"))
-    set_id = re.search(r"^Criteria set ID: (.+)$", extract, re.MULTILINE)
+    set_id = CRITERIA_SET_ID.search(extract)
     evidence, evidence_lines = parse_evidence(read_text(os.path.join(raw, "supporting-evidence-index.md")))
     return {
         "contract_version": CONTRACT_VERSION, "engagement_id": cover.get("Engagement", MISSING), "scenario_id": scenario,
         "deliverable": deliverable,
-        "criteria": {"criteria_set_id": set_id.group(1).strip() if set_id else MISSING, "criteria_sections": CRITERIA_FLOOR,
+        "criteria": {"criteria_set_id": set_id.group(1) if set_id and set_id.group(1) else MISSING, "criteria_sections": CRITERIA_FLOOR,
                      "source": "skill:criteria-retrieve", "citation": f"demo-data/{scenario}/raw/qrm-gate-criteria-extract.md"},
         "evidence_set": evidence,
         "prior_findings": parse_prior(read_text(os.path.join(raw, "prior-review-findings.md"))),

@@ -85,10 +85,7 @@ def main():
             if finding and escalation not in escalations:
                 escalations.append(escalation)
         payload["assertion_mappings"], payload["findings"], payload["escalations"] = mappings, findings, escalations
-        provenance = payload.setdefault("provenance", {})
-        if generated_at and isinstance(provenance, dict):
-            provenance["generated_at"] = generated_at
-        rules.record_engine(payload, f"assertion_map/{ENGINE_VERSION}")
+        rules.record_engine(payload, f"assertion_map/{ENGINE_VERSION}", generated_at)
         rules.write_json_atomic(args.out, payload)
         unsupported = sum(1 for item in mappings if item["support_status"] == "unsupported")
         limited = sum(1 for item in mappings if item["support_status"] == "limited")

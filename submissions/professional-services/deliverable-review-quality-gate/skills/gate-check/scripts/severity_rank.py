@@ -331,10 +331,7 @@ def main():
             summary += f" {count} escalation{' needs' if count == 1 else 's need'} partner/QRM confirmation before release."
         payload["ranked_findings"] = ranked
         payload["release_readiness"] = {"status": status, "release_blockers": blockers, "must_fix": must_fix, "advisories": advisories, "summary": summary, "confidence": 0.96, "source": ENGINE, "citation": "severity-rules.md #3.1-#3.3; severity-rules.md #4.1-#4.2"}
-        provenance = payload.setdefault("provenance", {})
-        if generated_at and isinstance(provenance, dict):
-            provenance["generated_at"] = generated_at
-        rules.record_engine(payload, f"severity_rank/{ENGINE_VERSION}")
+        rules.record_engine(payload, f"severity_rank/{ENGINE_VERSION}", generated_at)
         rules.write_json_atomic(args.out, payload)
         print(f"severity_rank: status={status}, ranked_findings={len(ranked)} -> {os.path.basename(args.out)}")
         return 0

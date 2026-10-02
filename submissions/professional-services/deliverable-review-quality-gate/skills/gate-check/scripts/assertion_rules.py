@@ -16,6 +16,7 @@ import math
 import os
 import re
 import tempfile
+from datetime import datetime, timezone
 
 import steering_guard as sg  # vendored shared detector; never edit (tests/check_shared_copies.py pins its SHA-256)
 
@@ -332,8 +333,10 @@ def unique_entries(entries):
     return kept
 
 
-def record_engine(payload, tag):
-    """Append the engine/version tag to provenance.engines unless this engine was the last to run (idempotent re-run)."""
+def record_engine(payload, tag, generated_at=None):
+    """Append the engine/version tag to provenance.engines unless this engine was the last to run (idempotent re-run),
+    and stamp generated_at: the --generated-at value, else the value already present, else the current UTC time. The
+    review packet renders both, so no engine output ever lacks them (quality-gate-criteria.md #8.14)."""
     provenance = payload.setdefault("provenance", {})
     if not isinstance(provenance, dict):
         raise InputError("provenance must be an object when present")
@@ -342,6 +345,10 @@ def record_engine(payload, tag):
         raise InputError("provenance.engines must be an array when present")
     if engines[-1:] != [tag]:
         engines.append(tag)
+    if generated_at:
+        provenance["generated_at"] = generated_at
+    elif not (isinstance(provenance.get("generated_at"), str) and provenance["generated_at"].strip()):
+        provenance["generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return provenance
 
 

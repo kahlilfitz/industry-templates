@@ -303,6 +303,37 @@ The structural patterns described at the top of this entry are replaced, not sup
   - both demos byte-identical.
 - No old test changed. Goldens: byte-identical.
 
+### Class sweeps from Mobilization round 9 (contract required fields; single-line regexes; harvest before withholding)
+
+- Every contract object now has a `required` array covering what later stages render or rely on (checklist A15; new quality-gate-criteria.md #8.14). Before, `assertion_mappings[]`, `ranked_findings[]`, `release_readiness`, `provenance`, `criteria` and escalation objects were bare objects, and finding `title`/`detail`, gate `name`/`citation` and location `label` were optional. A later stage could therefore accept an item that the review packet renders as "None". Now:
+  - `findings[]` require `title` and `detail`; `gate_results[]` require `name`, `confidence`, `source` and `citation`;
+  - `assertion_mappings[]` declare and require every field assertion_map emits (`best_evidence_id` may be null);
+  - `ranked_findings[]` require the finding fields plus `rank` (≥1) and `ranking_basis`;
+  - `release_readiness` requires its status (closed enum), counts (≥0), `summary`, `confidence`, `source` and `citation`;
+  - escalation objects require `gate_id` and a non-blank `note`; `provenance`, when supplied, requires `engines` (strings) and `generated_at`;
+  - every `location` requires a non-blank `label`, which is the only locator for a register-level finding;
+  - display fields (titles, details, citations, criteria sections, summaries, assertion text, labels) are non-blank strings, and null or blank is an input error at every stage;
+  - `criteria` declares its fields with an empty `required`, because `criteria_sections` is a gated register (absent or null holds under G1). The other registers stay optional for the same reason.
+- Engines now guarantee these fields on output:
+  - `record_engine` stamps `provenance.generated_at` (from `--generated-at`, else the input value, else the current UTC time);
+  - gate_check falls back to its default title, detail or citation when a brand-check, licensed-content or prior-finding entry gives a blank one (it used to fall back only when absent).
+  - Every golden already met the stricter contract, so goldens are byte-identical.
+- Line-oriented regexes (sweep 2). `tests/derive_review_input.py` now uses `[ \t]` in `SECTION_NUMBER`. `Criteria set ID:` is parsed with `[ \t]*([^\r\n]*?)`, and a blank value is missing, never the next line. The cover parser already split on lines; tests now pin a blank `Client:` field. The remaining `\s` uses (gate_check's whitespace collapse and recipient phrase matching on normalised text, and the ID separator fold) work on free text deliberately and do not parse labels. `steering_guard.py` is vendored and was not edited.
+- Harvest before withholding (A16). No change needed:
+  - `withhold_untrusted` already screens every field, assertion record and adjacent array pair on the unmodified payload before it replaces anything;
+  - gate_check validates the contract and reads engine ownership from the raw copy;
+  - client names and aliases are read after withholding on purpose, because they only grant trust: a withheld name confirms no recipient as client-only (#8.13).
+  - New tests pin both.
+- Tests: 797 checks (were 757), 40 new in `round9_sweep_tests`. They cover:
+  - the contract-structure walk;
+  - 19 refusals across the three engines (missing, null or blank display fields, label, `best_evidence_id`, escalation objects, provenance, and `ranked_findings`/`release_readiness` on a re-run);
+  - `generated_at` stamping;
+  - blank register defaults and a re-run;
+  - the regex and blank-label cases;
+  - harvest and withholding;
+  - both demos byte-identical.
+- One old test changed, and it is stricter: the QR5 provenance-subtree case appended an object to `provenance.engines`, which is now an input error. It now appends the attack as a string entry and still checks that the entry is screened and withheld; the new refusal test covers the object form.
+
 ## 1.0.3 - 2026-10-01
 
 Fixes every FAIL, WEAK and should-fix item in the Cowork 1.0.2 evaluation (42/50, Blocked).
