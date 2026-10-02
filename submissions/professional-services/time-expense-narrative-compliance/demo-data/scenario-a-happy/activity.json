@@ -235,6 +235,17 @@
     ],
     "out_of_scope_rows": [],
     "excluded_signals": [],
+    "engagement_identity": {
+      "engagement_id": "ENG-SYN-042",
+      "client_name": "Orion Advisory Cooperative",
+      "matter_name": "Billing Controls Implementation",
+      "engagement_manager": "Dana Whitfield",
+      "recorded_by": "engine:activity_pull",
+      "citations": [
+        "raw/engagement-letter-extract.md #engagement",
+        "client-billing-guidelines.md #13.3"
+      ]
+    },
     "timekeeper_scope": {
       "mode": "self",
       "requester": "Alex Rivera",

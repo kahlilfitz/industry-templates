@@ -26,6 +26,10 @@ malformed confirmation is an input error. The role is never inferred from free t
 Free text is data (#11.1): a signal or entry whose text trips the shared embedded-instruction
 tripwire is marked embedded_instruction / needs_review so no later step drafts from it.
 A requested period with no rows for the requester produces a period_check warning.
+
+Engagement identity (#13.3): only rows whose engagement_id is the engagement letter's are read, and the
+letter's engagement_id, client, matter and engagement manager are recorded once in
+provenance.engagement_identity. Every later engine refuses a packet whose header differs from it.
 """
 import argparse
 import csv
@@ -418,10 +422,9 @@ def main():
             dropped.append(activity_id)
             hint = next((k for ns, k in ID_NAMESPACE if ns in activity_id), None)
             if hint and not enabled.get(hint):
-                reason = (f"linked from {row['entry_id']} ({cite}); the ID belongs to the '{hint}' source, which is disabled "
-                          "in config/signal-sources.json, so that source was not read and the link is not evidence")
+                reason = signal_policy.pull_disabled_reason(row["entry_id"], cite, hint)
             else:
-                reason = f"linked from {row['entry_id']} ({cite}) but not found in any enabled, engagement-scoped export"
+                reason = signal_policy.pull_missing_reason(row["entry_id"], cite)
             if activity_id not in {e["activity_id"] for e in excluded}:
                 excluded.append({"activity_id": activity_id, "source": None, "policy_key": hint, "reason": reason,
                                  "excluded_by": ENGINE, "citations": [cite, POLICY_CITATION]})
@@ -483,6 +486,12 @@ def main():
             "skipped_sources": skipped_sources,
             "out_of_scope_rows": out_of_scope,
             "excluded_signals": excluded,
+            # #13.3: the engagement identity is fixed here, from the engagement letter; every later engine
+            # refuses a packet whose engagement header differs from it.
+            "engagement_identity": signal_policy.engagement_identity(
+                {"engagement_id": eng_id, "client_name": engagement["client_name"],
+                 "matter_name": engagement["matter_name"], "engagement_manager": engagement.get("engagement_manager")},
+                ["raw/engagement-letter-extract.md #engagement"]),
             "timekeeper_scope": timekeeper_scope,
             "period_check": period_check(period, dates_available, dates_in_period),
         },

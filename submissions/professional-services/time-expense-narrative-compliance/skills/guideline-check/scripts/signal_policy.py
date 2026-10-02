@@ -25,6 +25,11 @@
    instruction split across fields is caught. An 'oversize' result is never a pass: the item is
    held with OVERSIZE_REASON. Signal citations are screened with the rest of the signal, and
    safe_citations() keeps flagged citation text out of every output.
+5. Contract and engagement identity (client-billing-guidelines.md #13.3). validate_packet() walks the
+   whole packet against the shipped contract JSON (contract_check.py) and refuses a packet whose engagement
+   header differs from provenance.engagement_identity, which activity_pull records once from the
+   engagement letter. filter_packet() drops signals and time entries whose source scope or engagement_id
+   names another engagement; they are recorded in provenance and never rendered.
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
@@ -38,12 +43,17 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import contract_check  # noqa: E402  (shared contract walker, identical copies next to each engine)
 import steering_guard  # noqa: E402  (shared detector, vendored byte-identically next to each engine)
 
 POLICY_CITATION = "client-billing-guidelines.md #10.1"
 INJECTION_CITATION = "client-billing-guidelines.md #11.1"
 WITHHOLD_CITATION = "client-billing-guidelines.md #11.2"
 SCOPE_CITATION = "client-billing-guidelines.md #12.1"
+ENGAGEMENT_CITATION = "client-billing-guidelines.md #13.3"
+IDENTITY_KEYS = ("engagement_id", "client_name", "matter_name", "engagement_manager")
+OTHER_ENGAGEMENT_REASON = "source or engagement scope names another engagement; excluded and never rendered"
+OTHER_ENGAGEMENT_ENTRY_REASON = "engagement scope names another engagement; excluded and never rendered"
 SIGNAL_POLICY_VERSION = "signal_policy/1.0.4"
 TEAM_VIEW_PREFIX = "engagement-manager:"
 TEAM_VIEW_TOKEN_RE = re.compile(r"engagement-manager:[A-Za-z0-9._-]+")
@@ -72,12 +82,89 @@ class PolicyError(ValueError):
 
 
 def source_key(source):
-    """Map a connector source string to its policy key; None means unknown (never allowed)."""
-    source = source or ""
-    for prefix, key in SOURCE_KEYS:
-        if source.startswith(prefix):
+    """Map a connector source string to its policy key; None means unknown (never allowed).
+
+    The connector name must match exactly ("connector:m365-calendar"), optionally followed by an
+    engagement scope (":ENG-..."); a look-alike name such as "connector:m365-calendar-x" is unknown."""
+    source = source if isinstance(source, str) else ""
+    for name, key in SOURCE_KEYS:
+        if source == name or source.startswith(name + ":"):
             return key
     return None
+
+
+def engagement_scopes(record):
+    """The engagement scopes a signal or time entry declares: the third ':'-separated segment of its
+    source ("connector:m365-calendar:ENG-SYN-042") and its engagement_id field, when present."""
+    scopes = []
+    source = record.get("source")
+    if isinstance(source, str) and source.count(":") >= 2:
+        scopes.append(source.split(":", 2)[2])
+    if "engagement_id" in record:
+        scopes.append(record.get("engagement_id"))
+    return scopes
+
+
+def other_engagement(record, engagement_id):
+    """True when the record's source scope or engagement_id names a different engagement (#13.3)."""
+    return any(scope != engagement_id for scope in engagement_scopes(record))
+
+
+def engagement_identity(engagement, citations):
+    """provenance.engagement_identity as activity_pull records it from the engagement letter (#13.3)."""
+    return dict({k: engagement.get(k) for k in IDENTITY_KEYS}, recorded_by="engine:activity_pull",
+                citations=list(citations) + [ENGAGEMENT_CITATION])
+
+
+def other_engagement_ids(packet):
+    """Activity IDs excluded because they belong to another engagement (never rendered, #13.3)."""
+    return {e.get("activity_id") for e in (packet.get("provenance") or {}).get("excluded_signals", [])
+            if isinstance(e, dict) and e.get("reason") == OTHER_ENGAGEMENT_REASON}
+
+
+def describe_excluded(links, packet):
+    """Excluded link IDs for a reason or flag detail: other engagements' IDs are counted, never named."""
+    other = other_engagement_ids(packet)
+    shown = [a for a in links if a not in other]
+    hidden = len(links) - len(shown)
+    return ", ".join(shown) + (f"{'; ' if shown else ''}{hidden} from another engagement (not shown, "
+                               f"{ENGAGEMENT_CITATION})" if hidden else "")
+
+
+# Exclusion wording (#10.1). activity_pull and filter_packet write exactly these texts, and exception_report
+# prints an exclusion only when its reason and citations equal one of them (exclusion_texts, #13.2).
+
+def disabled_source_reason(key):
+    return f"source '{key}' is disabled in the signal policy" if key else "unknown or unapproved signal source"
+
+
+def unlinked_reason(entry_id):
+    return f"linked from {entry_id} but not present in any enabled source"
+
+
+def pull_disabled_reason(entry_id, cite, key):
+    return (f"linked from {entry_id} ({cite}); the ID belongs to the '{key}' source, which is disabled "
+            "in config/signal-sources.json, so that source was not read and the link is not evidence")
+
+
+def pull_missing_reason(entry_id, cite):
+    return f"linked from {entry_id} ({cite}) but not found in any enabled, engagement-scoped export"
+
+
+def exclusion_texts(record, packet):
+    """Every (reason, citations) the engines can write for this exclusion record, rebuilt from the packet."""
+    key = record.get("policy_key")
+    out = [(OTHER_ENGAGEMENT_REASON, [ENGAGEMENT_CITATION]), (disabled_source_reason(key), [POLICY_CITATION])]
+    for entry in packet.get("time_entries", []):
+        if record.get("activity_id") not in (entry.get("excluded_activity_ids") or []):
+            continue
+        out.append((unlinked_reason(entry.get("entry_id")), [POLICY_CITATION]))
+        cites = entry.get("citations") or []
+        if cites:
+            if key:
+                out.append((pull_disabled_reason(entry.get("entry_id"), cites[0], key), [cites[0], POLICY_CITATION]))
+            out.append((pull_missing_reason(entry.get("entry_id"), cites[0]), [cites[0], POLICY_CITATION]))
+    return out
 
 
 def find_plugin_config(start_dir):
@@ -149,24 +236,34 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
     """
     enabled, used = effective_sources(packet, config_path, script_dir)
     provenance = packet.setdefault("provenance", {})
+    engagement_id = (packet.get("engagement") or {}).get("engagement_id")
+    # #13.3: another engagement's time entries are dropped first and recorded without their text.
+    entries = packet.get("time_entries", [])
+    foreign = [e for e in entries if other_engagement(e, engagement_id)]
+    if foreign:
+        packet["time_entries"] = [e for e in entries if not other_engagement(e, engagement_id)]
+        recorded = provenance.setdefault("excluded_entries", [])
+        known = {e.get("entry_id") for e in recorded}
+        recorded += [{"entry_id": e.get("entry_id"), "reason": OTHER_ENGAGEMENT_ENTRY_REASON, "excluded_by": engine,
+                      "citations": [ENGAGEMENT_CITATION]} for e in foreign if e.get("entry_id") not in known]
     excluded = list(provenance.get("excluded_signals", []))
     seen = {e.get("activity_id") for e in excluded}
     kept = []
     for signal in packet.get("activity_signals", []):
         key = source_key(signal.get("source"))
-        if key is not None and enabled.get(key) is True:
+        foreign = other_engagement(signal, engagement_id)
+        if key is not None and enabled.get(key) is True and not foreign:
             kept.append(signal)
             continue
         if signal.get("activity_id") not in seen:
-            reason = (f"source '{key}' is disabled in the signal policy" if key
-                      else "unknown or unapproved signal source")
             excluded.append({
                 "activity_id": signal.get("activity_id"),
-                "source": signal.get("source"),
+                # Another engagement's source label is not kept either: nothing of it is rendered (#13.3).
+                "source": None if foreign else signal.get("source"),
                 "policy_key": key,
-                "reason": reason,
+                "reason": OTHER_ENGAGEMENT_REASON if foreign else disabled_source_reason(key),
                 "excluded_by": engine,
-                "citations": [POLICY_CITATION],
+                "citations": [ENGAGEMENT_CITATION] if foreign else [POLICY_CITATION],
             })
             seen.add(signal.get("activity_id"))
     packet["activity_signals"] = kept
@@ -185,7 +282,7 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
                     "activity_id": activity_id,
                     "source": None,
                     "policy_key": None,
-                    "reason": f"linked from {entry.get('entry_id')} but not present in any enabled source",
+                    "reason": unlinked_reason(entry.get("entry_id")),
                     "excluded_by": engine,
                     "citations": [POLICY_CITATION],
                 })
@@ -392,15 +489,26 @@ def _joined(values):
     return "\n".join(i for i in items if i.strip())
 
 
+# Every free-text field of a signal or entry that an engine can copy into a draft, a flag detail or the report.
+# tests/run_tests.py inventory_tests asserts every contract string field is in one of these, closed, re-derived
+# or reconciled, or never rendered (#13.2).
+SIGNAL_TEXT_KEYS = ("subject", "purpose", "deliverable", "file_name", "organizer", "activity_class", "meeting_id",
+                    "source", "review_reason", "engagement_id", "activity_id", "person", "attendees", "citations")
+SIGNAL_LIST_KEYS = ("attendees", "citations")
+ENTRY_TEXT_KEYS = ("narrative", "notes", "source", "engagement_id", "entry_id", "person", "submitted_phase_code",
+                   "submitted_task_code", "activity_ids", "excluded_activity_ids", "citations")
+DRAFT_TEXT_KEYS = ("review_reasons", "citations")
+REWRITE_TEXT_KEYS = ("narrative", "review_reasons", "citations")
+
+
 def signal_texts(signal):
     """One multi-field record holding every free-text field of an activity signal that can reach a
     draft, a table or a report, citations included (file names are read as words by
     steering_guard.normalize)."""
     if not isinstance(signal, dict):
         return {}
-    record = {k: signal.get(k) for k in ("subject", "purpose", "deliverable", "file_name", "organizer",
-                                          "activity_class", "meeting_id")}
-    for key in ("attendees", "citations"):
+    record = {k: signal.get(k) for k in SIGNAL_TEXT_KEYS if k not in SIGNAL_LIST_KEYS}
+    for key in SIGNAL_LIST_KEYS:
         values = signal.get(key)
         if isinstance(values, list):
             record[key] = _joined(values)
@@ -445,12 +553,31 @@ def entry_texts(entry, linked=()):
             if isinstance(signal, dict):
                 for key in ("subject", "purpose", "deliverable"):
                     record[f"linked{n}_{key}"] = signal.get(key)
-    citations = entry.get("citations")
-    if isinstance(citations, list):
-        record["citations"] = _joined(citations)
-    elif citations is not None:
-        record["citations"] = json.dumps(citations, default=str)  # wrong type: scan everything it holds
+    for key in ENTRY_TEXT_KEYS[2:]:
+        value = entry.get(key)
+        if isinstance(value, list):
+            record[key] = _joined(value)
+        elif value is not None:
+            record[key] = value if isinstance(value, str) else json.dumps(value, default=str)
     return record
+
+
+def _list_text(values):
+    return _joined(values) if isinstance(values, list) else (None if values is None else json.dumps(values, default=str))
+
+
+def draft_records(draft):
+    """The draft's other free text as multi-field records (#11.1): its review reasons and citations, then
+    each suggested rewrite (narrative, review reasons, citations). The main draft narrative is screened
+    with the entry by guideline_check."""
+    if not isinstance(draft, dict):
+        return []
+    records = [{k: _list_text(draft.get(k)) for k in DRAFT_TEXT_KEYS}]
+    for rewrite in draft.get("suggested_rewrites") or []:
+        if isinstance(rewrite, dict):
+            records.append({k: (rewrite.get(k) if k == "narrative" else _list_text(rewrite.get(k)))
+                            for k in REWRITE_TEXT_KEYS})
+    return records
 
 
 def redact(text):
@@ -482,6 +609,21 @@ JSON_TYPES = {bool: "boolean", str: "string", int: "number", float: "number", di
 
 class SchemaError(PolicyError):
     """A field has the wrong JSON type or an unrecognised enum value (fail closed; never coerced)."""
+
+
+class IdentityError(SchemaError):
+    """The engagement header differs from the identity activity_pull recorded (#13.3)."""
+
+
+def check_engagement_identity(packet):
+    """Refuse a packet whose engagement header differs from provenance.engagement_identity (#13.3)."""
+    identity = packet["provenance"]["engagement_identity"]
+    header = packet["engagement"]
+    for key in IDENTITY_KEYS:
+        if header.get(key) != identity.get(key):
+            raise IdentityError(f"invalid input: engagement.{key} does not match provenance.engagement_identity, which "
+                                f"activity_pull recorded from the engagement letter ({ENGAGEMENT_CITATION}); no output "
+                                "was written - re-run the chain from activity_pull")
 
 
 def _type(value):
@@ -707,6 +849,11 @@ def validate_packet(packet, stage):
             if SEVERITY_RANK[compliance["verdict"]] != worst:
                 raise SchemaError(f"invalid input: {where}.compliance.verdict does not match the most severe of its "
                                   "flags; re-run guideline_check.py (fail closed)")
+    try:
+        contract_check.validate_packet(packet, os.path.dirname(os.path.abspath(__file__)))
+    except contract_check.ContractError as exc:
+        raise SchemaError(str(exc)) from exc
+    check_engagement_identity(packet)
     if level >= 3:
         for key in ("missing_time_report", "exception_list", "prebill_summary"):
             if key not in packet:

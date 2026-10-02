@@ -18,7 +18,12 @@ or flags are less severe than the rules', missing-time items that differ from th
 totals, verdict counts or missing-time hours that contradict the line items are refused: no packet
 is written, and the user is told to re-run guideline_check.py. A reject never renders as compliant.
 Summary figures are derived from the line items, excluded signal IDs from provenance.excluded_signals, and
-every printed flag detail and citation from the re-run (a supplied detail is never printed).
+every printed flag detail and citation from the re-run (a supplied detail is never printed). An exclusion
+reason is printed only when it is the signal policy's own wording for that record.
+
+Engagement identity (#13.3): the governed header must equal provenance.engagement_identity, which
+activity_pull recorded from the engagement letter, or the data is refused. Signals and time entries scoped
+to another engagement are counted, never named or quoted.
 """
 import argparse
 import datetime
@@ -122,6 +127,11 @@ def main():
         eng = {k: signal_policy.WITHHELD_TEXT for k in HEADER_KEYS}
     period = data.get("period") or {}
     figures = billing_rules.summary_figures(data["time_entries"], data["missing_time_report"])
+    other_ids = signal_policy.other_engagement_ids(data)
+    other_entries = len(data.get("provenance", {}).get("excluded_entries", []))
+    other_note = (f"{len(other_ids)} activity signal(s) and {other_entries} time entr(ies) scoped to another engagement "
+                  f"were excluded and are not shown ({signal_policy.ENGAGEMENT_CITATION})"
+                  if other_ids or other_entries else "")
     data_dates = sorted({d for d in [e.get("date") for e in data["time_entries"]]
                          + [s.get("date") for s in data.get("activity_signals", [])] if isinstance(d, str) and d})
     actual = (data_dates[0], data_dates[-1]) if data_dates else (None, None)
@@ -179,7 +189,11 @@ def main():
         f"- Entries: {figures['total_entries']} ({figures['total_hours']} h)",
         "- Verdicts: " + ", ".join(f"{cell(k)} {cell(v)}" for k, v in sorted(figures["verdict_counts"].items())),
         f"- Missing time: {figures['missing_time_hours']} h across {len(data['missing_time_report'])} activity signal(s)",
-        f"- Excluded by signal policy: {cells(billing_rules.excluded_ids(data)) or 'none'}",
+        f"- Excluded by signal policy: {cells([x for x in billing_rules.excluded_ids(data) if x not in other_ids]) or 'none'}",
+    ]
+    if other_note:
+        lines.append(f"- Other engagements: {other_note}")
+    lines += [
         "",
     ]
     sections = (("hold_for_review", "Held for review"),
@@ -214,11 +228,14 @@ def main():
     else:
         lines.append("None.")
     lines += ["", "## Privacy exclusions", ""]
-    excluded = data.get("provenance", {}).get("excluded_signals", [])
-    if excluded:
-        for x in excluded:
-            lines.append(f"- {cell(x.get('activity_id'))}: {cell(x.get('reason'))} [{cells(x.get('citations', []))}]")
-    else:
+    excluded = [x for x in data.get("provenance", {}).get("excluded_signals", [])
+                if x.get("activity_id") not in other_ids]
+    # reconcile_governed has already matched every reason and citation to the engines' own wording (#13.2).
+    for x in excluded:
+        lines.append(f"- {cell(x.get('activity_id'))}: {cell(x.get('reason'))} [{cells(x.get('citations', []))}]")
+    if other_note:
+        lines.append(f"- {other_note}.")
+    if not excluded and not other_note:
         lines.append("- None. Only enabled sources were used.")
     compliant = by_verdict.get("compliant", [])
     lines += ["", "## Compliant drafts", ""]

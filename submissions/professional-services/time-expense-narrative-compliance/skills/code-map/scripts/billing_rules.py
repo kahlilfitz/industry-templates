@@ -254,6 +254,21 @@ def withhold_draft(draft, hits):
                                     + [signal_policy.INJECTION_CITATION, signal_policy.WITHHOLD_CITATION]))
 
 
+def withhold_texts(item):
+    """#11.2 for review reasons and citations. When the reasons trip, each reason that trips is replaced by the
+    withheld marker (every reason when only their join trips); citations keep only safe ones, and only plain
+    source-row or reference citations when the reasons and citations trip together."""
+    reasons = [r for r in item.get("review_reasons") or [] if isinstance(r, str)]
+    if reasons and signal_policy.embedded_instruction(signal_policy.draft_records({"review_reasons": reasons})[0]):
+        single = [signal_policy.embedded_instruction(r) for r in reasons]
+        if not any(single):
+            single = [True] * len(reasons)
+        item["review_reasons"] = [signal_policy.WITHHELD_TEXT if bad else r for r, bad in zip(reasons, single)]
+    flagged = signal_policy.embedded_instruction(signal_policy.draft_records(
+        {"review_reasons": reasons, "citations": item.get("citations")})[0])
+    item["citations"] = signal_policy.safe_citations(item.get("citations") or [], flagged)[0]
+
+
 def missing_time_item(activity):
     """One #8.1 missing-time item; flagged text is withheld (#11.2)."""
     hits = signal_policy.screen(signal_policy.signal_texts(activity))
@@ -324,7 +339,7 @@ def govern(out):
         if excluded_links:
             add_flag(flags, "disabled_source_signal", "hold_for_review",
                      f"linked signal(s) from a disabled or unresolvable source were excluded and not counted as evidence: "
-                     f"{', '.join(excluded_links)}", [signal_policy.POLICY_CITATION], 0.99)
+                     f"{signal_policy.describe_excluded(excluded_links, out)}", [signal_policy.POLICY_CITATION], 0.99)
 
         wc = word_count(narrative)
         if wc < MIN_NARRATIVE_WORDS:
@@ -371,23 +386,31 @@ def govern(out):
                              ["client-billing-guidelines.md #3.2", "client-billing-guidelines.md #3.3"], 0.93)
 
         rewrites = [r for r in draft.get("suggested_rewrites") or [] if isinstance(r, dict)]
-        rewrite_texts = [r.get("narrative") for r in rewrites]
+        # The draft's review reasons, citations and every rewrite are free text too (#11.1).
+        records = signal_policy.draft_records(draft)
+        record_hits = [signal_policy.screen(r) for r in records]
         # Any upstream marker or any field (or field aggregate) that trips holds the entry; never compliant.
-        hits = signal_policy.screen(narrative, signal_policy.entry_texts(entry, linked), *rewrite_texts,
+        hits = signal_policy.screen(narrative, signal_policy.entry_texts(entry, linked),
                                     *[signal_policy.signal_texts(a) for a in linked]) + draft_hits
+        hits += [h for found in record_hits for h in found]
+        reasons = list(draft.get("review_reasons") or []) + [x for r in rewrites for x in r.get("review_reasons") or []]
         marked = (draft_withheld or entry.get("embedded_instruction") is True
                   or any(a.get("embedded_instruction") is True for a in linked)
-                  or any(r.get("status") == "withheld_embedded_instruction" for r in rewrites))
+                  or any(r.get("status") == "withheld_embedded_instruction" for r in rewrites)
+                  or signal_policy.WITHHELD_TEXT in reasons)
         if marked or hits:
             add_flag(flags, "embedded_instruction", "hold_for_review",
                      signal_policy.hold_reason(hits, EMBEDDED_DEFAULT) + "; treated as data and not followed",
                      [signal_policy.INJECTION_CITATION], 0.95)
+        if record_hits and record_hits[0]:
+            withhold_texts(draft)
         if draft_hits:
             withhold_draft(draft, draft_hits)
-        for rewrite in rewrites:
-            if signal_policy.embedded_instruction(rewrite.get("narrative")):
+        for rewrite, found in zip(rewrites, record_hits[1:]):
+            if found:
                 rewrite["narrative"] = signal_policy.WITHHELD_TEXT
                 rewrite["status"] = "withheld_embedded_instruction"
+                withhold_texts(rewrite)
                 rewrite["citations"] = sorted(set(rewrite.get("citations", []) + [signal_policy.WITHHOLD_CITATION]))
 
         if mapping_rejected:
@@ -564,7 +587,8 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown"):
     - Summary: totals, hours, verdict counts, missing-time hours, the exception count, the period and the
       excluded signal IDs must match the line items, the packet period and provenance.excluded_signals.
     - Exclusions: provenance.excluded_signals must cover every entry's excluded links, list no signal still
-      present, and be unchanged when the signal policy is re-applied.
+      present, be unchanged when the signal policy is re-applied, and carry only the engines' own reason and
+      citation wording (signal_policy.exclusion_texts); provenance.excluded_entries only the #13.3 citation.
     Messages name fields, positions, verdicts and the re-run's flag names only; never supplied text.
     """
     rerun = deepcopy(packet)
@@ -614,4 +638,12 @@ def reconcile_governed(packet, script_dir=None, engine="engine:unknown"):
     for i, entry in enumerate(supplied):
         if set(entry.get("excluded_activity_ids") or []) - set(ids):
             problems.append(f"time_entries[{i}].excluded_activity_ids are not recorded in provenance.excluded_signals")
+    # Exclusion reasons and citations are printed only when they are the engines' own wording (#13.2).
+    provenance = packet.get("provenance") or {}
+    for i, record in enumerate(provenance.get("excluded_signals", [])):
+        if (record.get("reason"), record.get("citations")) not in signal_policy.exclusion_texts(record, packet):
+            problems.append(f"provenance.excluded_signals[{i}] reason or citations are not the signal policy's wording")
+    for i, record in enumerate(provenance.get("excluded_entries", [])):
+        if record.get("citations") != [signal_policy.ENGAGEMENT_CITATION]:
+            problems.append(f"provenance.excluded_entries[{i}] citations are not the engagement-identity rule's")
     return problems, rerun

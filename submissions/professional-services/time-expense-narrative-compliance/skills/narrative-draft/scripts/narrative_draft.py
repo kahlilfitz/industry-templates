@@ -247,7 +247,7 @@ def main():
         excluded_links = entry.get("excluded_activity_ids") or []
         if excluded_links:
             reasons.append("linked signal(s) from a disabled or unresolvable source were excluded from evidence: "
-                           + ", ".join(excluded_links) + " (client-billing-guidelines.md #10.1)")
+                           + signal_policy.describe_excluded(excluded_links, out) + " (client-billing-guidelines.md #10.1)")
         uncovered = [a.get("activity_id") for a in linked if a.get("activity_id") not in covered]
         if uncovered and status != "needs_review_embedded_instruction":
             reasons.append("linked activity not described in any draft or suggested rewrite: " + ", ".join(uncovered))

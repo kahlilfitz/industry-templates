@@ -6,6 +6,7 @@ Sources of truth (edit these, then copy into every skill):
   references/*.md                                         -> skills/*/references/
   skills/activity-pull/scripts/signal_policy.py           -> every skills/*/scripts/signal_policy.py
   skills/activity-pull/scripts/steering_guard.py          -> every skills/*/scripts/steering_guard.py
+  skills/activity-pull/scripts/contract_check.py          -> every skills/*/scripts/contract_check.py
   skills/guideline-check/scripts/billing_rules.py         -> skills/{code-map,exception-report}/scripts/
 
 steering_guard.py is vendored byte-identically from the shared detector and never edited here. Its
@@ -41,6 +42,8 @@ def main():
     pairs += [(policy, os.path.join(s, "scripts", "signal_policy.py")) for s in skills if s != os.path.dirname(os.path.dirname(policy))]
     pairs += [(STEERING_GUARD, os.path.join(s, "scripts", "steering_guard.py"))
               for s in skills if s != os.path.dirname(os.path.dirname(STEERING_GUARD))]
+    walker = os.path.join(ROOT, "skills", "activity-pull", "scripts", "contract_check.py")
+    pairs += [(walker, os.path.join(s, "scripts", "contract_check.py")) for s in skills if s != os.path.dirname(os.path.dirname(walker))]
     pairs += [(BILLING_RULES, os.path.join(ROOT, "skills", s, "scripts", "billing_rules.py")) for s in BILLING_RULES_COPIES]
     drift = 0
     if not os.path.exists(STEERING_GUARD) or digest(STEERING_GUARD) != STEERING_GUARD_SHA256:
