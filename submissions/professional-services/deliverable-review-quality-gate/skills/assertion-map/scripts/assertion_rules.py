@@ -10,11 +10,13 @@ Type rule: a field of the wrong JSON type is a clean InputError; values are neve
 Contract rule: every engine calls validate_contract at entry, which checks the whole payload against the
 skill's own copy of contracts/ps.deliverable-review-quality-gate.v1.json (required fields, JSON types, closed
 enums, ranges and provenance prefixes). A violation is an InputError raised before any output is written."""
+import argparse
 import functools
 import json
 import math
 import os
 import re
+import sys
 import tempfile
 from datetime import datetime, timezone
 
@@ -376,39 +378,48 @@ def record_engine(payload, tag, generated_at=None):
     return provenance
 
 
-def load_json_file(path):
+def os_reason(exc):
+    """An OS error without its file name: the exception type and the OS reason text only. str(exc) repeats the path,
+    and a file name is untrusted input (quality-gate-criteria.md #8.9)."""
+    reason = getattr(exc, "strerror", None)
+    return f"{type(exc).__name__}: {reason}" if isinstance(reason, str) and reason else type(exc).__name__
+
+
+def load_json_file(path, label="input JSON"):
     """Load engine input. Strict JSON only: NaN/Infinity constants, numbers that overflow to infinity, integers outside
     +/-MAX_JSON_INTEGER, lone surrogates, duplicate member names and over-deep nesting are input errors, so no engine
-    ever processes or writes a value that is not valid JSON."""
+    ever processes or writes a value that is not valid JSON. Errors name the input by the fixed, trusted `label`
+    (for example "review input"), never by its path or file name (#8.9)."""
     try:
         with open(path, encoding="utf-8") as handle:
             payload = json.load(handle, parse_constant=_reject_constant, parse_int=_parse_int, parse_float=_parse_float,
                                 object_pairs_hook=_object_pairs)
     except OSError as exc:
-        raise InputError(f"could not read input JSON: {exc}") from exc
+        raise InputError(f"could not read the {label} ({os_reason(exc)})") from None
     except UnicodeDecodeError as exc:
-        raise InputError(f"input JSON is not valid UTF-8: {exc}") from exc
+        raise InputError(f"the {label} is not valid UTF-8 (first bad byte at offset {exc.start})") from None
     except json.JSONDecodeError as exc:
-        raise InputError(f"invalid JSON input: {exc}") from exc
+        raise InputError(f"the {label} is not valid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})") from None
     except RecursionError as exc:
-        raise InputError("input JSON is nested too deeply to process safely") from exc
+        raise InputError(f"the {label} is nested too deeply to process safely") from exc
     check_depth(payload)
     _check_loaded(payload)
     return payload
 
 
-def write_json_atomic(path, payload):
+def write_json_atomic(path, payload, label="output"):
     """Serialise the whole output first, then write it to a temporary file beside the target and os.replace it into
-    place. On any error the output path is neither created nor truncated."""
+    place. On any error the output path is neither created nor truncated. Errors name the output by the fixed `label`,
+    never by its path or file name (#8.9)."""
     try:
         data = (json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
     except ValueError as exc:  # includes UnicodeEncodeError and non-finite numbers
-        raise InputError(f"output could not be serialised as valid JSON, so nothing was written: {exc}") from exc
+        raise InputError(f"the {label} could not be serialised as valid JSON ({type(exc).__name__}), so nothing was written") from None
     target = os.path.abspath(path)
     try:
         handle, temp = tempfile.mkstemp(dir=os.path.dirname(target), prefix=f".{os.path.basename(target)}.", suffix=".tmp")
     except OSError as exc:
-        raise InputError(f"could not write output {path}: {exc}") from exc
+        raise InputError(f"could not write the {label} ({os_reason(exc)})") from None
     try:
         with os.fdopen(handle, "wb") as stream:
             stream.write(data)
@@ -421,8 +432,23 @@ def write_json_atomic(path, payload):
         except OSError:
             pass
         if isinstance(exc, OSError):
-            raise InputError(f"could not write output {path}: {exc}") from exc
+            raise InputError(f"could not write the {label} ({os_reason(exc)})") from None
         raise
+
+
+class EngineArgumentParser(argparse.ArgumentParser):
+    """argparse that never repeats a command-line value, such as a file name, in an error (#8.9). Only argparse's own
+    content-free messages (a missing required flag, a flag with no value) pass; anything else, such as an unrecognised
+    argument or an ambiguous abbreviation, is reported without the text that was typed. `prog` is the engine's fixed
+    script name, never sys.argv[0]."""
+
+    SAFE_ERROR = re.compile(r"the following arguments are required: --[a-z-]+(?:, --[a-z-]+)*|argument --[a-z-]+: expected one argument")
+
+    def error(self, message):
+        if not self.SAFE_ERROR.fullmatch(message):
+            message = "unrecognised or malformed command-line arguments (the values are not repeated; see --help)"
+        self.print_usage(sys.stderr)
+        self.exit(2, f"{self.prog}: error: {message}\n")
 
 
 def is_integer(value):
@@ -545,6 +571,36 @@ def evidence_for(evidence_by_id, evidence_id):
     return evidence_by_id.get(canonical_id(evidence_id)) if isinstance(evidence_id, str) else None
 
 
+SUBJECT_FIELDS = ("engagement_id", "deliverable_id")
+
+
+def review_subject(payload):
+    """The subject every linked record must share: the review's engagement_id and deliverable.deliverable_id, as given
+    (quality-gate-criteria.md #8.15)."""
+    payload = payload if isinstance(payload, dict) else {}
+    deliverable = payload.get("deliverable") if isinstance(payload.get("deliverable"), dict) else {}
+    return {"engagement_id": payload.get("engagement_id"), "deliverable_id": deliverable.get("deliverable_id")}
+
+
+def foreign_subject(record, subject):
+    """The subject fields (engagement_id, deliverable_id) on which a linked record names another engagement or
+    deliverable than the review (#8.15); [] when it shares the subject. An absent or null field names no subject, so the
+    record is the review's own. Values are compared by canonical_id (#8.11). A value that is withheld on either side
+    cannot be verified, and every copy of one flagged text carries the same marker, so a withheld value never matches:
+    it counts as foreign and holds (#8.13)."""
+    if not isinstance(record, dict) or not isinstance(subject, dict):
+        return []
+    fields = []
+    for key in SUBJECT_FIELDS:
+        value, own = record.get(key), subject.get(key)
+        if value is None:
+            continue
+        if (not isinstance(value, str) or not isinstance(own, str) or contains_withheld(value) or contains_withheld(own)
+                or canonical_id(value) != canonical_id(own)):
+            fields.append(key)
+    return fields
+
+
 _CONTRACT_SCHEMA = []
 _JSON_TYPES = {
     "object": lambda v: isinstance(v, dict), "array": lambda v: isinstance(v, list), "string": lambda v: isinstance(v, str),
@@ -558,8 +614,10 @@ def contract_schema():
         try:
             with open(CONTRACT_PATH, encoding="utf-8") as handle:
                 _CONTRACT_SCHEMA.append(json.load(handle))
-        except (OSError, ValueError) as exc:
-            raise InputError(f"contract schema could not be loaded from the skill's contracts folder: {exc}") from exc
+        except OSError as exc:
+            raise InputError(f"contract schema could not be loaded from the skill's contracts folder ({os_reason(exc)})") from None
+        except ValueError as exc:
+            raise InputError(f"contract schema in the skill's contracts folder is not valid JSON ({type(exc).__name__})") from None
     return _CONTRACT_SCHEMA[0]
 
 
@@ -733,10 +791,22 @@ def withheld_references(assertion, evidence_by_id):
     return [eid for eid in assertion.get("evidence_ids") or [] if is_withheld_reference(evidence_by_id, eid)]
 
 
-def linked_evidence(assertion, evidence_by_id):
-    """The evidence items an assertion's references resolve to; a withheld reference never links (#8.13) and makes
-    the declared support unverifiable (classify)."""
-    found = (evidence_for(evidence_by_id, eid) for eid in assertion.get("evidence_ids") or [] if not is_withheld_reference(evidence_by_id, eid))
+def is_foreign_reference(evidence_by_id, evidence_id, subject):
+    """True when an evidence_ids entry resolves to an evidence item that names another engagement or deliverable (#8.15)."""
+    if is_withheld_reference(evidence_by_id, evidence_id):
+        return False
+    return bool(foreign_subject(evidence_for(evidence_by_id, evidence_id), subject))
+
+
+def foreign_references(assertion, evidence_by_id, subject):
+    return [eid for eid in assertion.get("evidence_ids") or [] if is_foreign_reference(evidence_by_id, eid, subject)]
+
+
+def linked_evidence(assertion, evidence_by_id, subject=None):
+    """The evidence items an assertion's references resolve to. A withheld reference never links (#8.13), and neither
+    does evidence of another engagement or deliverable (#8.15); either makes the declared support unverifiable (classify)."""
+    found = (evidence_for(evidence_by_id, eid) for eid in assertion.get("evidence_ids") or []
+             if not is_withheld_reference(evidence_by_id, eid) and not is_foreign_reference(evidence_by_id, eid, subject))
     return [item for item in found if item is not None]
 
 
@@ -782,11 +852,14 @@ def best_evidence(assertion, linked_items):
     return max(linked_items, key=lambda item: (acceptable_support(assertion, item), recognised_provenance(item), evidence_relevance(assertion, item), item.get("confidence", 0.0)))
 
 
-def linked_evidence_citation(assertion, evidence_by_id):
+def linked_evidence_citation(assertion, evidence_by_id, subject=None):
     citations = []
     for evidence_id in assertion.get("evidence_ids") or []:
         if is_withheld_reference(evidence_by_id, evidence_id):
             citations.append("withheld linked evidence reference (not used)")
+            continue
+        if is_foreign_reference(evidence_by_id, evidence_id, subject):
+            citations.append("linked evidence of another engagement or deliverable (not used)")
             continue
         evidence = evidence_for(evidence_by_id, evidence_id)
         citations.append(evidence.get("citation", f"evidence {evidence_id}") if evidence else f"missing linked evidence {evidence_id}")
@@ -812,8 +885,21 @@ def is_definitive_conclusion(assertion):
     )
 
 
-def classify(assertion, evidence, missing_ids=(), withheld_ids=()):
+FOREIGN_SUPPORT_SECTION = "quality-gate-criteria.md #1.1; quality-gate-criteria.md #8.15"
+
+
+def foreign_rationale(foreign_ids):
+    return (f"{len(foreign_ids)} linked evidence item(s) name another engagement or deliverable (engagement_id or "
+            "deliverable_id differs from this review's, or cannot be verified), so they are not used and the declared "
+            "support cannot be verified; hold for reviewing partner/QRM")
+
+
+def classify(assertion, evidence, missing_ids=(), withheld_ids=(), foreign_ids=()):
     klass = assertion.get("class")
+    if foreign_ids:
+        # Evidence of another engagement or deliverable is never a basis for this review (quality-gate-criteria.md #8.15).
+        confidence = 0.0 if evidence is None else min(float(assertion.get("confidence", 0.0)), float(evidence.get("confidence", 0.0)))
+        return "unsupported", confidence, foreign_rationale(foreign_ids), FOREIGN_SUPPORT_SECTION
     if evidence is None:
         if not assertion.get("evidence_ids"):
             return "unsupported", 0.0, "No evidence IDs were linked to the assertion", "quality-gate-criteria.md #1.1"
@@ -869,23 +955,25 @@ def classify(assertion, evidence, missing_ids=(), withheld_ids=()):
     return "unsupported", 0.0, f"Unknown assertion class {klass}", "severity-rules.md #2.1"
 
 
-def map_assertion(assertion, evidence_by_id):
-    """Return (mapping, AM finding or None, escalation or None) exactly as assertion_map emits them."""
-    evidence = best_evidence(assertion, linked_evidence(assertion, evidence_by_id))
+def map_assertion(assertion, evidence_by_id, subject=None):
+    """Return (mapping, AM finding or None, escalation or None) exactly as assertion_map emits them. `subject` is
+    review_subject(payload): linked evidence of another engagement or deliverable is not used and holds (#8.15)."""
+    evidence = best_evidence(assertion, linked_evidence(assertion, evidence_by_id, subject))
     withheld_ids = withheld_references(assertion, evidence_by_id)
+    foreign_ids = foreign_references(assertion, evidence_by_id, subject)
     missing_ids = [eid for eid in assertion.get("evidence_ids") or [] if evidence_for(evidence_by_id, eid) is None and eid not in withheld_ids]
-    status, support_score, rationale, criteria_section = classify(assertion, evidence, missing_ids, withheld_ids)
+    status, support_score, rationale, criteria_section = classify(assertion, evidence, missing_ids, withheld_ids, foreign_ids)
     mapping = {
         "assertion_id": assertion["assertion_id"], "class": assertion["class"], "text": assertion["text"],
         "location": assertion["location"], "evidence_ids": assertion.get("evidence_ids") or [],
         "best_evidence_id": evidence.get("evidence_id") if evidence else None, "support_status": status,
         "support_score": round(support_score, 2), "rationale": rationale, "criteria_section": criteria_section,
         "confidence": round(support_score, 2), "source": AM_ENGINE,
-        "citation": f"{assertion['citation']}; {linked_evidence_citation(assertion, evidence_by_id)}; {criteria_section}"
+        "citation": f"{assertion['citation']}; {linked_evidence_citation(assertion, evidence_by_id, subject)}; {criteria_section}"
     }
     if status not in {"unsupported", "limited"}:
         return mapping, None, None
-    severity = "release_blocker" if (
+    severity = "release_blocker" if foreign_ids or (
         status == "unsupported"
         and (assertion["class"] == "quantified" or is_definitive_conclusion(assertion))
     ) else "must_fix" if status == "unsupported" else "advisory"

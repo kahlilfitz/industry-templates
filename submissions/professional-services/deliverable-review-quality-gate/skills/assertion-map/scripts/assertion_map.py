@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """assertion_map - deterministic assertion-to-evidence support engine."""
-import argparse
 import os
 import sys
 
@@ -16,7 +15,7 @@ InputError = rules.InputError
 
 
 def load_json(path):
-    return rules.load_json_file(path)
+    return rules.load_json_file(path, "review input")
 
 
 validate_generated_at = rules.validate_generated_at
@@ -48,7 +47,7 @@ def require_contract(payload):
             raise InputError(f"{key} must be an array")
 
 def main():
-    parser = argparse.ArgumentParser(description="Map assertions to evidence support deterministically.")
+    parser = rules.EngineArgumentParser(prog="assertion_map.py", description="Map assertions to evidence support deterministically.")
     parser.add_argument("--input", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--generated-at", default=None)
@@ -68,7 +67,7 @@ def main():
         escalations = list(payload.get("escalations", []))
         mappings = []
         for assertion in payload["assertions"]:
-            mapping, finding, escalation = rules.map_assertion(assertion, evidence_by_id)
+            mapping, finding, escalation = rules.map_assertion(assertion, evidence_by_id, rules.review_subject(payload))
             mappings.append(mapping)
             # Appended once: re-running assertion_map on its own output reproduces it instead of duplicating findings.
             if finding and finding not in findings:
@@ -77,10 +76,10 @@ def main():
                 escalations.append(escalation)
         payload["assertion_mappings"], payload["findings"], payload["escalations"] = mappings, findings, escalations
         rules.record_engine(payload, f"assertion_map/{ENGINE_VERSION}", generated_at)
-        rules.write_json_atomic(args.out, payload)
+        rules.write_json_atomic(args.out, payload, "mapped output")
         unsupported = sum(1 for item in mappings if item["support_status"] == "unsupported")
         limited = sum(1 for item in mappings if item["support_status"] == "limited")
-        print(f"assertion_map: {len(mappings)} assertion(s), {unsupported} unsupported, {limited} limited -> {os.path.basename(args.out)}")
+        print(f"assertion_map: {len(mappings)} assertion(s), {unsupported} unsupported, {limited} limited -> mapped output written")
         return 0
     except InputError as exc:
         print(f"assertion_map input error: {exc}", file=sys.stderr)

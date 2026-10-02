@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """severity_rank - deterministic finding ranking and review-status verdict."""
-import argparse
 import copy
-import os
 import re
 import sys
 
@@ -34,7 +32,7 @@ HISTORY_HOLD_ID = re.compile(r"^(?:GC|SR)-G8-(?:engine-id-spoof|embedded-instruc
 InputError = rules.InputError
 
 def load_json(path):
-    return rules.load_json_file(path)
+    return rules.load_json_file(path, "gate-check input")
 
 validate_generated_at = rules.validate_generated_at
 
@@ -257,7 +255,7 @@ def add_g8_findings(payload, hits):
         escalations.append(f"G8: {len(hits) - MAX_G8_HITS} further embedded-instruction hit(s) at severity_rank not listed individually - hold for reviewing partner/QRM (severity-rules.md #3.6)")
 
 def main():
-    parser = argparse.ArgumentParser(description="Rank gate findings and compute release-readiness status.")
+    parser = rules.EngineArgumentParser(prog="severity_rank.py", description="Rank gate findings and compute release-readiness status.")
     parser.add_argument("--gates", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--generated-at", default=None)
@@ -324,8 +322,8 @@ def main():
         payload["ranked_findings"] = ranked
         payload["release_readiness"] = {"status": status, "release_blockers": blockers, "must_fix": must_fix, "advisories": advisories, "summary": summary, "confidence": 0.96, "source": ENGINE, "citation": "severity-rules.md #3.1-#3.3; severity-rules.md #4.1-#4.2"}
         rules.record_engine(payload, f"severity_rank/{ENGINE_VERSION}", generated_at)
-        rules.write_json_atomic(args.out, payload)
-        print(f"severity_rank: status={status}, ranked_findings={len(ranked)} -> {os.path.basename(args.out)}")
+        rules.write_json_atomic(args.out, payload, "ranked output")
+        print(f"severity_rank: status={status}, ranked_findings={len(ranked)} -> ranked output written")
         return 0
     except InputError as exc:
         print(f"severity_rank input error: {exc}", file=sys.stderr)

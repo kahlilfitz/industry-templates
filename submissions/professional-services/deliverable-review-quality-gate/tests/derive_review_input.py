@@ -558,7 +558,7 @@ def check_scenario(scenario_dir):
     error, is reported as one content-free problem (its type, never its message), so no traceback or untrusted text
     reaches the output (quality-gate-criteria.md #8.9)."""
     try:
-        payload = rules.load_json_file(os.path.join(scenario_dir, "review-input.json"))
+        payload = rules.load_json_file(os.path.join(scenario_dir, "review-input.json"), "review input")
     except rules.InputError as exc:
         return [f"review input is malformed: {exc}"]
     if not isinstance(payload, dict):
@@ -571,13 +571,23 @@ def check_scenario(scenario_dir):
         return [f"could not compare the scenario ({type(exc).__name__}; details withheld because they may quote untrusted text)"]
 
 
+SHIPPED_SCENARIOS = ("scenario-a-happy", "scenario-b-drama")
+
+
+def scenario_label(scenario_dir, position):
+    """A fixed, trusted label for a scenario in the report: a shipped demo's own name, otherwise its position on the
+    command line. A directory or file name is untrusted input and is never repeated (quality-gate-criteria.md #8.9)."""
+    name = os.path.basename(os.path.normpath(scenario_dir))
+    return next((shipped for shipped in SHIPPED_SCENARIOS if shipped == name), f"scenario {position}")
+
+
 def main(argv):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     scenarios = argv or [os.path.join(root, "demo-data", name) for name in sorted(os.listdir(os.path.join(root, "demo-data")))]
     failed = False
-    for scenario_dir in scenarios:
+    for position, scenario_dir in enumerate(scenarios, start=1):
         problems = check_scenario(scenario_dir)
-        print(f"{os.path.basename(os.path.normpath(scenario_dir))}: {'derives from its raw pack' if not problems else f'{len(problems)} difference(s)'}")
+        print(f"{scenario_label(scenario_dir, position)}: {'derives from its raw pack' if not problems else f'{len(problems)} difference(s)'}")
         for problem in problems:
             print("  - " + problem)
         failed = failed or bool(problems)

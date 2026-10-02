@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """gate_check - deterministic quality-gate compliance engine."""
-import argparse
 import copy
 import os
 import re
@@ -77,7 +76,7 @@ instruction_hits = rules.instruction_hits
 InputError = rules.InputError
 
 def load_json(path):
-    return rules.load_json_file(path)
+    return rules.load_json_file(path, "mapped input")
 
 validate_generated_at = rules.validate_generated_at
 
@@ -142,9 +141,10 @@ def expected_assertion_outputs(payload, evidence_set):
     if evidence_set is None:
         return None
     evidence_by_id = rules.evidence_index(evidence_set)
+    subject = rules.review_subject(payload)
     mappings, findings, escalations = [], {}, []
     for assertion in payload["assertions"]:
-        mapping, finding, escalation = rules.map_assertion(assertion, evidence_by_id)
+        mapping, finding, escalation = rules.map_assertion(assertion, evidence_by_id, subject)
         mappings.append(mapping)
         if finding:
             findings[finding["finding_id"]] = finding
@@ -417,8 +417,10 @@ def find_prior_location(payload, *terms):
     """The location of the first prior finding whose readable text names every term; withheld text is not read (#8.13)."""
     priors = payload.get("prior_findings")
     folded_terms = tuple(rules.canonical_name(term) for term in terms)
+    subject = rules.review_subject(payload)
     for prior in priors if isinstance(priors, list) else []:
-        if not isinstance(prior, dict) or not isinstance(prior.get("location"), dict):
+        # A prior finding of another engagement or deliverable is never a basis, not even for a location (#8.15).
+        if not isinstance(prior, dict) or not isinstance(prior.get("location"), dict) or rules.foreign_subject(prior, subject):
             continue
         location = prior["location"]
         values = (prior.get("finding_id", ""), prior.get("detail", ""), prior.get("citation", ""), location.get("section", ""), location.get("label", ""))
@@ -501,6 +503,17 @@ def check_client_data_value(deliverable, findings, escalations):
     add_finding(findings, "GC-G4-client-data", "G4", severity, title, detail, unplaced("Client-data handling register", "client_data_handling"), "quality-gate-criteria.md #4.2-#4.3", 0.95, "quality-gate-criteria.md #4.2-#4.3")
     shown = value if value in {"attention", "breach", "unknown"} else "blank/unrecognised"
     escalations.append(f"G4: client_data_handling is {shown}, not ok - {severity}; hold for reviewing partner/QRM (quality-gate-criteria.md #4.2-#4.3)")
+
+def foreign_entry_hold(findings, escalations, item, subject, finding_id, gate_id, kind, entry_id, location, section):
+    """Hold a register entry that names another engagement or deliverable instead of judging it (#8.15): it is never a
+    basis for its gate, so a pass, an attribution or a closure it records counts for nothing. Returns True when held."""
+    fields = rules.foreign_subject(item, subject)
+    if not fields:
+        return False
+    named = " and ".join(fields)
+    add_finding(findings, finding_id, gate_id, RELEASE_BLOCKER, f"{kind} belongs to another engagement or deliverable", f"{kind} {entry_id} gives a {named} that differs from this review's (or cannot be verified), so it is not used as a basis for this gate; the reviewing partner/QRM must confirm or remove it before release.", location, f"{section}; quality-gate-criteria.md #8.15", 0.97, f"{section}; quality-gate-criteria.md #8.15; severity-rules.md #1.1")
+    escalations.append(f"{gate_id}: {kind.lower()} {entry_id} names another engagement or deliverable ({named}) - release blocker; hold for reviewing partner/QRM (quality-gate-criteria.md #8.15)")
+    return True
 
 def add_spoof_hold(findings, escalations, spoofed, altered):
     """One G8 release blocker and escalations for spoofed engine findings and restored assertion_map output (#8.4)."""
@@ -610,10 +623,13 @@ def evaluate(payload):
     if CONFIDENTIALITY_MARK_REQUIRED and rules.canonical_id(deliverable.get("confidentiality_marking") or "") != "client confidential":
         add_finding(findings, "GC-G4-confidentiality", "G4", RELEASE_BLOCKER, "Missing client-confidential marking", "Required client-confidential marking is absent from cover/footer.", loc("Cover", 1, 1, "Confidentiality mark"), "quality-gate-criteria.md #4.1", 0.97, "quality-gate-criteria.md #4.1; severity-rules.md #1.1")
     check_client_data_value(deliverable, findings, escalations)
+    subject = rules.review_subject(payload)
     for index, check in enumerate(brand_checks):
         check_id = safe_token(check["check_id"], f"brand-check-{index + 1}")
         finding_id = claim_finding_id(findings, owners, f"GC-G5-{check_id}", ("brand_checks", index))
         location = entry_location(check, "Brand-check register", f"Brand check {check_id}")
+        if foreign_entry_hold(findings, escalations, check, subject, finding_id, "G5", "Brand check", check_id, location, "quality-gate-criteria.md #5.1-#5.3"):
+            continue
         legal = check["legal_or_release_control"] and LEGAL_MARK_DEFECT_BLOCKS
         status_value = check.get("status")
         if status_value == "fail":
@@ -625,12 +641,19 @@ def evaluate(payload):
     for index, item in enumerate(licensed_content):
         content_id = safe_token(item["content_id"], f"licensed-content-{index + 1}")
         license_known = item.get("license_status") == LICENSE_STATUS_KNOWN
+        if rules.foreign_subject(item, subject):
+            foreign_entry_hold(findings, escalations, item, subject, claim_finding_id(findings, owners, f"GC-G6-{content_id}", ("licensed_content", index)), "G6", "Licensed-content entry", content_id, entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.3")
+            continue
         if LICENSED_ATTRIBUTION_REQUIRED and item["attribution_present"] is not True:
             severity = MUST_FIX if license_known else RELEASE_BLOCKER
             add_finding(findings, claim_finding_id(findings, owners, f"GC-G6-{content_id}", ("licensed_content", index)), "G6", severity, "Licensed content lacks attribution", item.get("detail") or "Third-party content requires attribution.", entry_location(item, "Licensed-content register", f"Licensed content {content_id}"), "quality-gate-criteria.md #6.1-#6.2", item.get("confidence", 0.93), item.get("citation") or "quality-gate-criteria.md #6.1-#6.2")
             if not license_known:
                 escalations.append(f"G6: unattributed licensed content {content_id} with license_status not known (unknown, blank or unrecognised) - release blocker; hold for reviewing partner/QRM (quality-gate-criteria.md #6.2-#6.3)")
     for index, prior in enumerate(prior_findings):
+        if rules.foreign_subject(prior, subject):
+            prior_id = safe_token(prior["finding_id"], f"prior-finding-{index + 1}")
+            foreign_entry_hold(findings, escalations, prior, subject, claim_finding_id(findings, owners, f"GC-G7-{prior_id}", ("prior_findings", index)), "G7", "Prior finding", prior_id, entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2")
+            continue
         if prior["claimed_closed"] is True and prior["document_fix_present"] is not True and PRIOR_FIX_MUST_LAND:
             prior_id = safe_token(prior["finding_id"], f"prior-finding-{index + 1}")
             add_finding(findings, claim_finding_id(findings, owners, f"GC-G7-{prior_id}", ("prior_findings", index)), "G7", MUST_FIX, "Prior finding marked closed but fix is absent", prior.get("detail") or "Tracker closure is not supported by the current document.", entry_location(prior, "Prior findings register", f"Prior finding {prior_id}"), "quality-gate-criteria.md #7.1-#7.2", prior.get("confidence", 0.96), prior.get("citation") or "quality-gate-criteria.md #7.1-#7.2")
@@ -674,7 +697,7 @@ def evaluate(payload):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Apply quality-gate compliance checks deterministically.")
+    parser = rules.EngineArgumentParser(prog="gate_check.py", description="Apply quality-gate compliance checks deterministically.")
     parser.add_argument("--mapped", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--generated-at", default=None)
@@ -684,11 +707,11 @@ def main():
         payload = evaluate(load_json(args.mapped))
         findings, gate_results = payload["findings"], payload["gate_results"]
         rules.record_engine(payload, f"gate_check/{ENGINE_VERSION}", generated_at)
-        rules.write_json_atomic(args.out, payload)
+        rules.write_json_atomic(args.out, payload, "gate-check output")
         blockers = sum(1 for item in findings if item["severity"] == RELEASE_BLOCKER)
         must_fix = sum(1 for item in findings if item["severity"] == MUST_FIX)
         advisory = sum(1 for item in findings if item["severity"] == ADVISORY)
-        print(f"gate_check: {len(gate_results)} gate(s), blockers={blockers}, must_fix={must_fix}, advisory={advisory} -> {os.path.basename(args.out)}")
+        print(f"gate_check: {len(gate_results)} gate(s), blockers={blockers}, must_fix={must_fix}, advisory={advisory} -> gate-check output written")
         return 0
     except InputError as exc:
         print(f"gate_check input error: {exc}", file=sys.stderr)

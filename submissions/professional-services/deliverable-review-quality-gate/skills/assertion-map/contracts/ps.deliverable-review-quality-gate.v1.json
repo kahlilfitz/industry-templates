@@ -35,6 +35,8 @@
             "required": ["check_id", "legal_or_release_control"],
             "properties": {
               "check_id": { "type": "string", "minLength": 1 },
+              "engagement_id": { "type": ["string", "null"], "minLength": 1, "description": "Optional subject: the engagement this record belongs to. When present it must equal the review's engagement_id in canonical form (quality-gate-criteria.md #8.11); a different or withheld value holds as a release blocker and the record is never used as evidence, a match or a basis for a decision (quality-gate-criteria.md #8.15). Absent or null means the record is the review's own." },
+              "deliverable_id": { "type": ["string", "null"], "minLength": 1, "description": "Optional subject: the deliverable this record belongs to. When present it must equal deliverable.deliverable_id in canonical form (quality-gate-criteria.md #8.11); a different or withheld value holds as a release blocker and the record is never used as evidence, a match or a basis for a decision (quality-gate-criteria.md #8.15). Absent or null means the record is the review's own." },
               "status": { "enum": ["pass", "fail"], "x-unrecognised": "hold", "description": "Only pass and fail are recognised. Absent, null, blank or any other string means not verified: a G5 release blocker when legal_or_release_control is true, otherwise a must-fix, always escalated (quality-gate-criteria.md #5.3). A non-string is an input error." },
               "legal_or_release_control": { "type": "boolean", "description": "Required JSON true/false; text, numbers or null are input errors." },
               "title": { "type": "string" },
@@ -54,6 +56,8 @@
             "required": ["content_id", "attribution_present"],
             "properties": {
               "content_id": { "type": "string", "minLength": 1 },
+              "engagement_id": { "type": ["string", "null"], "minLength": 1, "description": "Optional subject: the engagement this record belongs to. When present it must equal the review's engagement_id in canonical form (quality-gate-criteria.md #8.11); a different or withheld value holds as a release blocker and the record is never used as evidence, a match or a basis for a decision (quality-gate-criteria.md #8.15). Absent or null means the record is the review's own." },
+              "deliverable_id": { "type": ["string", "null"], "minLength": 1, "description": "Optional subject: the deliverable this record belongs to. When present it must equal deliverable.deliverable_id in canonical form (quality-gate-criteria.md #8.11); a different or withheld value holds as a release blocker and the record is never used as evidence, a match or a basis for a decision (quality-gate-criteria.md #8.15). Absent or null means the record is the review's own." },
               "attribution_present": { "type": "boolean", "description": "Required JSON true/false; text, numbers or null are input errors." },
               "license_status": { "enum": ["known", "unknown"], "x-unrecognised": "hold", "description": "Closed enum. Absent, null, blank or any other string is treated as unknown, so unattributed content is a G6 release blocker with an escalation (quality-gate-criteria.md #6.3). A non-string is an input error." },
               "title": { "type": "string" },
@@ -114,6 +118,8 @@
         "required": ["evidence_id"],
         "properties": {
           "evidence_id": { "type": "string", "minLength": 1 },
+          "engagement_id": { "type": ["string", "null"], "minLength": 1, "description": "Optional subject: the engagement this record belongs to. When present it must equal the review's engagement_id in canonical form (quality-gate-criteria.md #8.11); a different or withheld value holds as a release blocker and the record is never used as evidence, a match or a basis for a decision (quality-gate-criteria.md #8.15). Absent or null means the record is the review's own." },
+          "deliverable_id": { "type": ["string", "null"], "minLength": 1, "description": "Optional subject: the deliverable this record belongs to. When present it must equal deliverable.deliverable_id in canonical form (quality-gate-criteria.md #8.11); a different or withheld value holds as a release blocker and the record is never used as evidence, a match or a basis for a decision (quality-gate-criteria.md #8.15). Absent or null means the record is the review's own." },
           "type": { "enum": ["analysis_model", "financial_model", "system_export", "signed_client_data", "licensed_content_register", "internal_benchmark", "statement_of_work", "disclaimer_extract", "interview_summary", "workshop_note", "stakeholder_verbal"], "x-unrecognised": "hold", "description": "Closed list. Each assertion class accepts only an allowlist of types as support (quality-gate-criteria.md #1.1-#1.4): quantified claims accept analysis_model, financial_model, system_export and signed_client_data; factual claims accept analysis_model, financial_model, system_export, signed_client_data, licensed_content_register, internal_benchmark, statement_of_work and disclaimer_extract; forward-looking claims accept every type except stakeholder_verbal; recommendations accept every type except stakeholder_verbal, disclaimer_extract and licensed_content_register. An absent, blank or unrecognised type never supports any claim." },
           "title": { "type": "string" },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
@@ -130,6 +136,8 @@
         "required": ["finding_id", "claimed_closed", "document_fix_present"],
         "properties": {
           "finding_id": { "type": "string", "minLength": 1 },
+          "engagement_id": { "type": ["string", "null"], "minLength": 1, "description": "Optional subject: the engagement this record belongs to. When present it must equal the review's engagement_id in canonical form (quality-gate-criteria.md #8.11); a different or withheld value holds as a release blocker and the record is never used as evidence, a match or a basis for a decision (quality-gate-criteria.md #8.15). Absent or null means the record is the review's own." },
+          "deliverable_id": { "type": ["string", "null"], "minLength": 1, "description": "Optional subject: the deliverable this record belongs to. When present it must equal deliverable.deliverable_id in canonical form (quality-gate-criteria.md #8.11); a different or withheld value holds as a release blocker and the record is never used as evidence, a match or a basis for a decision (quality-gate-criteria.md #8.15). Absent or null means the record is the review's own." },
           "claimed_closed": { "type": "boolean", "description": "Required JSON true/false; text, numbers or null are input errors (quality-gate-criteria.md #7.3)." },
           "document_fix_present": { "type": "boolean", "description": "Required JSON true/false; text, numbers or null are input errors (quality-gate-criteria.md #7.3)." },
           "detail": { "type": "string" },
