@@ -130,6 +130,13 @@ How to read a report:
   description or narrative, never from IDs or metadata. [Wave 1 pre-freeze QA round 9]
   Test: `generated_at: "not-a-timestamp"`; evidence `EV-X30` describing 3 items cannot support a
   sample of 30.
+- [ ] **A18. Linked records share a subject.** When one record is resolved through another's ID
+  (an entry's activity link, a finding's evidence, a roster member's workspace), the owner or
+  subject (person, engagement) must match in canonical form before the linked record can serve as
+  evidence or decide anything; a mismatch holds. Error messages never echo input file names or
+  paths. [Wave 1 pre-freeze QA round 8]
+  Test: a team-view entry linked to another timekeeper's signal; a malformed input file whose name
+  is an instruction.
 
 ## B. Finding integrity (engines)
 
