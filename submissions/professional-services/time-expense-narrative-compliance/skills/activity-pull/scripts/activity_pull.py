@@ -21,7 +21,10 @@ are returned. Colleagues' rows (--person <other> or --all-timekeepers) are relea
 engagement-manager team view: the --requester must be the engagement_manager recorded in
 raw/engagement-letter-extract.md AND --team-view-confirmation must be exactly
 "engagement-manager:<engagement_id>". Otherwise colleague rows are withheld (fail closed); a
-malformed confirmation is an input error. The role is never inferred from free text.
+malformed confirmation is an input error. The role is never inferred from free text. Every later
+engine re-reads the same raw exports (--raw-dir, by default raw/ next to the activity packet) with
+the same parsers (signal_policy.read_engagement / read_raw_csv) and honours a recorded team view
+only when they confirm it; people: null then covers only the timekeepers the raw exports name.
 
 Free text is data (#11.1): a signal or entry whose text trips the shared embedded-instruction
 tripwire is marked embedded_instruction / needs_review so no later step drafts from it.
@@ -32,7 +35,6 @@ letter's engagement_id, client, matter and engagement manager are recorded once 
 provenance.engagement_identity. Every later engine refuses a packet whose header differs from it.
 """
 import argparse
-import csv
 import datetime
 import json
 import os
@@ -76,35 +78,8 @@ def generated_at(override):
 
 
 def read_csv(path, required):
-    try:
-        with open(path, encoding="utf-8", newline="") as fh:
-            reader = csv.DictReader(fh)
-            header = reader.fieldnames or []
-            # Column names compare in canonical form (signal_policy.canon_id: NFKC, format characters, case and
-            # - _ . separators folded). A repeated column - including a fullwidth or differently cased copy -
-            # would let one cell overwrite or shadow the other, so it is malformed.
-            names = [signal_policy.canon_id(h) for h in header]
-            if len(set(names)) != len(names):
-                raise InputError(f"{os.path.basename(path)} repeats a column name in its header row (duplicate "
-                                 "columns are malformed, never overwritten)")
-            rows = list(reader)
-    except (OSError, UnicodeError, csv.Error) as exc:
-        raise InputError(f"cannot read {os.path.basename(path)}: {signal_policy.error_text(exc)}") from exc
-    # Each column is read under the declared name it canonically matches; other columns keep their own name.
-    declared = {signal_policy.canon_id(c): c for c in required}
-    rename = {h: declared.get(n, h) for h, n in zip(header, names)}
-    # The header row is checked even when there are no data rows: a header-only file with the right columns is an
-    # explicitly empty register; an empty file or a wrong header is malformed.
-    missing = [c for c in required if c not in rename.values()]
-    if missing:
-        raise InputError(f"{os.path.basename(path)} is missing column(s): {', '.join(missing)}")
-    rows = [{rename.get(k, k): v for k, v in row.items()} for row in rows]
-    for idx, row in enumerate(rows, start=2):
-        # csv.DictReader stores surplus cells under None and fills short rows with None: never guess, and never
-        # drop a surplus cell unread - the row is refused.
-        if None in row or any(row.get(c) is None for c in required):
-            raise InputError(f"{os.path.basename(path)} row {idx} does not have one cell per header column")
-    return rows
+    """One raw CSV export, read strictly by the parser the team-view check shares (signal_policy.read_raw_csv)."""
+    return signal_policy.read_raw_csv(path, required, InputError)
 
 
 DECIMAL_RE = re.compile(r"\d+(?:\.\d+)?")
@@ -156,41 +131,9 @@ def unique(index, key, cite, what, value=None):
     index[key] = value if value is not None else cite
 
 
-ENGAGEMENT_FIELDS = ("engagement_id", "client_name", "matter_name", "billing_guidelines_id", "engagement_manager")
-# One labelled field per line. The text is split with str.splitlines() (every line boundary, including U+2028, \x85
-# and \x0b-\x0c), and the value can never cross a line, so a blank field can't take the next line as its value.
-# Labels compare in canonical form (A11, A13): "- Engagement-ID:" is engagement_id, so a variant spelling can neither
-# be ignored next to the declared label nor shadow it - it is the same field given twice.
-ENGAGEMENT_LABEL_RE = re.compile(r"- ([^:\r\n]{1,60}):([^\r\n]*)")
-ENGAGEMENT_LABELS = {signal_policy.canon_id(f): f for f in ENGAGEMENT_FIELDS}
-
-
 def read_engagement(path):
-    try:
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
-    except (OSError, UnicodeError) as exc:
-        raise InputError(f"cannot read engagement-letter-extract.md: {signal_policy.error_text(exc)}") from exc
-    found = [(ENGAGEMENT_LABELS[signal_policy.canon_id(m.group(1))], m.group(2).strip())
-             for m in map(ENGAGEMENT_LABEL_RE.fullmatch, text.splitlines())
-             if m and signal_policy.canon_id(m.group(1)) in ENGAGEMENT_LABELS]
-    repeated = sorted({k for k, _ in found if [n for n, _ in found].count(k) > 1})
-    if repeated:
-        raise InputError(f"engagement-letter-extract.md gives {', '.join(repeated)} more than once (a repeated field "
-                         "is malformed, never overwritten)")
-    blank = sorted(k for k, v in found if not v)
-    if blank:
-        raise InputError(f"engagement-letter-extract.md gives an empty {', '.join(blank)} (a labelled field needs a "
-                         "value on its own line; omit an optional field rather than leave it blank)")
-    fields = dict(found)
-    missing = [k for k in ("engagement_id", "client_name", "matter_name") if k not in fields]
-    if missing:
-        raise InputError(f"engagement-letter-extract.md is missing: {', '.join(missing)}")
-    # A21: the engagement ID is the key every row is scoped by; one that folds to nothing would match blank rows.
-    if not signal_policy.canon_id(fields["engagement_id"]):
-        raise InputError("engagement-letter-extract.md gives a blank engagement_id (only separators or format "
-                         "characters); a blank key never matches")
-    return fields
+    """The engagement letter, read by the parser every later engine re-reads it with (signal_policy.read_engagement)."""
+    return signal_policy.read_engagement(path, InputError)
 
 
 def hours_between(start, end, cite="calendar row"):
@@ -324,9 +267,9 @@ def main():
                 config["sources"][key] = {"enabled": value}
         engagement = read_engagement(os.path.join(args.raw_dir, "engagement-letter-extract.md"))
         workplan_rows = read_csv(os.path.join(args.raw_dir, "engagement-workplan.csv"),
-                                 ("workplan_id", "engagement_id", "item_type", "match_key", "activity_class", "deliverable", "purpose"))
+                                 signal_policy.RAW_EXPORTS["workplan"][1])
         timesheet_rows = read_csv(os.path.join(args.raw_dir, "timesheet.csv"),
-                                  ("entry_id", "date", "person", "hours", "narrative", "activity_ids", "phase_code", "task_code"))
+                                  signal_policy.RAW_EXPORTS["timesheet"][1])
         people, timekeeper_scope = resolve_scope(args, engagement)
         cli_date(args.period_start, "--period-start")
         cli_date(args.period_end, "--period-end")
@@ -375,9 +318,9 @@ def main():
         read_keys.add(key)
         try:
             if key == "calendar":
-                rows = read_csv(path, ("activity_id", "event_id", "date", "start", "end", "person", "subject", "organizer", "attendees", "engagement_id"))
+                rows = read_csv(path, signal_policy.RAW_EXPORTS["calendar"][1])
             else:
-                rows = read_csv(path, ("activity_id", "date", "person", "file_name", "activity_type", "duration_hours", "engagement_id"))
+                rows = read_csv(path, signal_policy.RAW_EXPORTS["document_activity"][1])
         except InputError as exc:
             sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
         for idx, row in enumerate(rows, start=2):
@@ -590,10 +533,10 @@ def main():
         signal_policy.refuse_supplied_markers(packet, exact_ok=False)  # D20: raw input never carries a marker
     except signal_policy.SchemaError as exc:
         sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
-    signal_policy.filter_packet(packet, config_path=args.signal_config, script_dir=script_dir, engine=ENGINE)
     try:
+        signal_policy.filter_packet(packet, config_path=args.signal_config, script_dir=script_dir, engine=ENGINE)
         signal_policy.validate_packet(packet, "activity")  # never emit a packet the next engine would reject
-    except signal_policy.SchemaError as exc:
+    except signal_policy.PolicyError as exc:  # SchemaError included; a missing contract is one (no traceback)
         sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
     try:
         signal_policy.write_output(args.out, signal_policy.dump_json(packet))

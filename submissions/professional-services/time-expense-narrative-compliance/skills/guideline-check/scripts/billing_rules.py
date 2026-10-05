@@ -348,6 +348,23 @@ def missing_time_item(activity):
     return item
 
 
+SPLIT_MISSING_REASON = ("activity text flagged as embedded_instruction when read with the neighbouring missing-time "
+                        "items (text split across items that are listed side by side)")
+
+
+def withhold_missing_runs(items):
+    """#11.1 / #11.2 across items: missing-time subjects are listed side by side, so an instruction split across
+    neighbouring items is screened joined (the detector's run screen) and each item in a tripping run is withheld
+    and held like a flagged one."""
+    texts = [None if item.get("embedded_instruction") else item.get("subject") for item in items]
+    for i in sorted(signal_policy._tripping_seq(texts)):
+        item = items[i]
+        item["subject"] = signal_policy.WITHHELD_TEXT
+        item["embedded_instruction"] = True
+        item["finding"] += "; " + SPLIT_MISSING_REASON + "; withheld"
+        item["citations"] += [signal_policy.INJECTION_CITATION, signal_policy.WITHHOLD_CITATION]
+
+
 def govern(out):
     """Apply the guideline rules to a coded packet in place (after scope and signal policy are enforced).
 
@@ -468,6 +485,7 @@ def govern(out):
         reasons = list(draft.get("review_reasons") or []) + [x for r in rewrites for x in r.get("review_reasons") or []]
         marked = (any_withheld or entry.get("embedded_instruction") is True
                   or any(a.get("embedded_instruction") is True for a in linked)
+                  or bool(signal_policy.split_activities(linked))
                   or any(r.get("status") == "withheld_embedded_instruction" for r in rewrites)
                   or signal_policy.WITHHELD_TEXT in reasons)
         if marked or hits or packet_hold:
@@ -571,6 +589,7 @@ def govern(out):
     missing_time = [missing_time_item(a) for a in signals
                     if signal_policy._id_key(a["activity_id"]) not in used_activity_ids
                     and a.get("billable_signal") and a.get("duration_hours", 0) >= MISSING_TIME_MIN_HOURS]
+    withhold_missing_runs(missing_time)
     exception_list = exception_items(out["time_entries"], missing_time)
 
     out["missing_time_report"] = missing_time

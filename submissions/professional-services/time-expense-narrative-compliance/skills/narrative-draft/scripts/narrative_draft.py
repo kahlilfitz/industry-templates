@@ -9,7 +9,9 @@ draft and refuse one that differs (client-billing-guidelines.md #13.5).
 v1.0.4 rules:
 - Signals from disabled or unknown sources are dropped first (signal_policy.py,
   client-billing-guidelines.md #10.1); an entry that linked one is marked needs_review.
-- Rows outside the recorded timekeeper scope are withheld before drafting (#12.1).
+- Rows outside the recorded timekeeper scope are withheld before drafting (#12.1). A recorded team view is
+  honoured only when the raw engagement letter and exports (--raw-dir, default raw/ next to --activity)
+  confirm it, and covers only the timekeepers those exports name; otherwise the packet is refused.
 - Every free-text field of a linked signal (subject, deliverable, purpose, attendees, organizer,
   file name, citations) and of the entry (narrative, notes, citations) passes the shared
   embedded-instruction tripwire first (#11.1). Flagged text is never copied into a narrative, a suggested rewrite or the draft's
@@ -56,13 +58,16 @@ def generated_at(override):
     return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def load_packet(path):
+def load_packet(path, raw_dir=None):
+    signal_policy.reset_scope_source()
     payload = signal_policy.read_json(path, InputError, "activity input")
     if not isinstance(payload, dict):
         raise InputError("input is not a JSON object")
     if payload.get("contract_version") != CONTRACT:
         raise InputError(f"expected a {CONTRACT} object (contract_version must be the contract constant)")
     signal_policy.validate_packet(payload, "activity")
+    # #12.1: a recorded team view is honoured only when the raw exports re-derive it (never from the packet alone).
+    signal_policy.verify_scope_source(payload, signal_policy.raw_dir_for(path, raw_dir), InputError)
     return payload
 
 
@@ -70,13 +75,14 @@ def main():
     ap = argparse.ArgumentParser(description="Draft deterministic narrative candidates from activity signals.")
     ap.add_argument("--activity", required=True, help="Input contract JSON from activity-pull")
     ap.add_argument("--out", required=True, help="Output drafted contract JSON")
+    ap.add_argument("--raw-dir", help=signal_policy.RAW_DIR_HELP)
     ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     ap.add_argument("--generated-at", help="Fixed ISO-8601 UTC timestamp for reproducible golden files")
     args = ap.parse_args()
 
     try:
         stamp = generated_at(args.generated_at)
-        out = deepcopy(load_packet(args.activity))
+        out = deepcopy(load_packet(args.activity, args.raw_dir))
         # The whole derivation is shared (signal_policy.draft_stage: scope, signal policy, every draft, provenance), so
         # every later stage re-runs exactly this on the activity packet and refuses a carried copy that differs (#13.8).
         signal_policy.draft_stage(out, stamp, config_path=args.signal_config,

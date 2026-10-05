@@ -8,7 +8,8 @@ section. The model reports these flags; it never decides, suppresses or downgrad
 v1.0.4 rules (billing_rules.govern):
 - Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1); an
   entry that linked one gets a hold_for_review flag and the signal never counts as evidence.
-- Rows outside the recorded timekeeper scope are withheld before any check (#12.1).
+- Rows outside the recorded timekeeper scope are withheld before any check (#12.1). A recorded team view
+  must be confirmed by the raw engagement letter and exports (--raw-dir) or the packet is refused.
 - #13.1 every entry's code mapping is recomputed from the code-map rules; a supplied code_mapping
   that disagrees (a forged recommendation, cleared flags) is discarded, the recomputed mapping and
   its flags are used, and the entry gets a code_mapping_mismatch hold.
@@ -76,6 +77,7 @@ def main():
     ap.add_argument("--activity", required=True, help="The activity packet the coded packet was derived from (activity_pull's output); "
                     "the coded packet must equal its re-derivation from it (client-billing-guidelines.md #13.8)")
     ap.add_argument("--out", required=True, help="Output governed contract JSON")
+    ap.add_argument("--raw-dir", help=signal_policy.RAW_DIR_HELP)
     ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     ap.add_argument("--generated-at", help="Fixed ISO-8601 UTC timestamp for reproducible golden files")
     args = ap.parse_args()
@@ -84,7 +86,7 @@ def main():
         stamp = generated_at(args.generated_at)
         script_dir = os.path.dirname(os.path.abspath(__file__))
         coded = load_packet(args.coded)
-        activity = signal_policy.load_activity_root(args.activity, InputError)
+        activity = signal_policy.load_activity_root(args.activity, InputError, raw_dir=args.raw_dir)
         # #13.8: the whole coded packet must equal narrative-draft and code-map re-run on the activity packet.
         out = deepcopy(billing_rules.check_rederived(coded, activity, "coded", script_dir))
         rejected = billing_rules.govern_stage(out, stamp, config_path=args.signal_config, script_dir=script_dir,

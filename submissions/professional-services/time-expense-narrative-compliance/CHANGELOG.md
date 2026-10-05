@@ -383,7 +383,48 @@ All five classes reproduced before the fix. New guidelines are client-billing-gu
   - `shared/steering-guard` is not edited.
 - **Docs.** Guideline #13.8 is added and #13.1 updated, in every shipped copy. The README, the code-map, guideline-check and exception-report SKILL.md files, and both demo READMEs carry the new `--activity` argument.
 
+### QA round 12 on 1.0.4 (fixed in 1.0.4, no version bump; hardening checklist A15, A19, A23, B5, D21)
+- **TENC-QA12-01 (reproduced, blocking): a self-declared team view exposed another timekeeper's data.**
+  - The reproducer: scenario A's activity packet, with both engagement-manager fields set to "Alex Rivera", `provenance.timekeeper_scope` replaced by a confirmed team view for Alex with `people: null`, and scenario B's `B-CAL-001` signal (Morgan Lee) appended. All four downstream engines exited 0, and the report printed "| B-CAL-001 | Morgan Lee | ...".
+  - Cause: `team_view_valid()` accepted the engagement-manager role and the confirmation from fields of the same packet, and `enforce_timekeeper_scope()` let every person through when `people` was null.
+- **Fix: a team view is re-derived from the raw exports at every engine (#12.1).**
+  - New `signal_policy.verify_scope_source`, called by `load_activity_root` in every engine. When a packet records an engagement-manager team view, it reads `raw/engagement-letter-extract.md` and the raw exports. They come from `--raw-dir`, which narrative-draft, code-map, guideline-check and exception-report now accept; it defaults to `raw/` next to `--activity`.
+  - The letter must give exactly (no case or spacing folding) the packet's engagement ID and engagement manager.
+  - The timekeepers the view may cover are those named for the engagement by `raw/timesheet.csv` and by the enabled activity exports.
+  - A missing or unreadable letter or export, or a letter that does not confirm the view, is refused with no output. The message names no path or value.
+  - `team_view_valid()` is False until that check has passed for the running engine (fail closed). A self-scoped packet never reads raw data and never inherits another packet's verified view.
+  - `enforce_timekeeper_scope()` allows only raw-named timekeepers: `people: null` means "every timekeeper the raw exports name", never everyone, and a listed person the exports do not name is withheld. A row whose person is the withheld marker is allowed only while some raw-named timekeeper is shown nowhere by name.
+  - `activity_pull.py` now uses the same raw readers (`signal_policy.read_raw_csv`, `read_engagement`), so the first stage and the re-check read the raw exports identically.
+  - exception-report now runs its strict scope check after the whole-document re-derivation, so an out-of-scope row in an edited packet is refused with the #13.8 or #12.1 message, and never rendered.
+- **Sweep: every authority, role, scope, confirmation and trusted-source decision.**
+  - The engagement-manager role and the team-view confirmation were the only decisions taken from packet fields. Both are now re-derived from the raw letter, as above.
+  - Every other decision was already re-derived (#13.3 identity, #13.7 sources, #13.8 whole document) or is a run parameter. The run parameters are the self-scope requester (`--requester`) and the signal policy, which can only narrow.
+- **TENC-QA12-02 (reproduced, blocking): the shipped tests crashed on a cp1252 stdout.**
+  - Cause: `tests/run_tests.py` escaped only the detail of a result line, so a label with a non-cp1252 character raised `UnicodeEncodeError` when PYTHONIOENCODING was unset and stdout was piped.
+  - Fix: every line is printed through `ascii_line()`, which backslash-escapes the whole line, from a new `print_results()`. `tests/check_shared_copies.py` prints through the same kind of helper (`say()`). Check semantics are unchanged.
+- **Sweep: split instruction text.**
+  - An instruction split across two activities linked to one entry. Those activities are joined into one drafted narrative, or into one entry's suggested rewrites (S1). New `signal_policy.split_activities()` screens each entry's linked activities as a run. A hit withholds the draft and the rewrites and holds the entry with a split reason; the joined narrative is also screened before it is kept.
+  - An instruction split across missing-time subjects listed together (S2). New `billing_rules.withhold_missing_runs()` screens the subjects as a run and withholds every subject in a run that trips.
+  - The rendered exception report. New `exception_report.screen_rendered()` screens each table column across rows, each row's cells together, and runs of bullet lines, both whole and part by part (the fixed ID, person, date and hours do not dilute a split). A hit replaces the cells with the withheld marker and adds a hold notice. The whole report is then screened, and a report that still trips is refused with no output.
+  - Ordinary prose split across neighbouring records is unchanged: all 10 goldens pass.
+- **Sweep: a missing or unreadable source never disables screening.**
+  - A missing raw letter or export under a team view is refused (above).
+  - A missing contract folder used to stop the engines with a traceback. It now gives one clean "reinstall the skill" message with no output.
+  - A missing `steering_guard.py` detector did the same, and now gives the same clean refusal.
+  - A missing `config/signal-sources.json` falls back to the documented narrow default policy, as before. That default only narrows the sources.
+- **Sweep: exact whole-document comparison (A23).** The #13.8 comparison is canonical JSON with exact strings, so an edited hold, finding source, path, reason or citation never compares equal. The new team-view check compares the engagement ID and manager exactly. Each engine validates the activity packet against the contract before it re-derives anything. Nothing else changed.
+- **Docs.** Guideline #11.1 now covers split runs and the rendered report, and #12.1 covers the raw re-derivation, in every shipped copy. The identical `Timekeeper scope` guardrail in all five SKILL.md files now names the raw re-check and `--raw-dir`. Exception-report step 5 describes the rendered check, and the engine docstrings are updated.
+- **Tests.** 1001 checks (were 957). The new `qa12_tests` group runs the QA12-01 reproducer end to end at every engine, with and without raw exports: each is refused, with no output and no other timekeeper named. It also covers:
+  - six raw-letter and export failure cases, plus case-only differences in the engagement manager or ID;
+  - `people: null` and listed-person scope, the withheld-marker rule, and a self-scoped packet;
+  - a missing contract or detector at two engines;
+  - S1 and S2 splits, report columns, rows and bullet lines;
+  - the cp1252 and ASCII printing of both test scripts.
+
+  Benign controls: the genuine scenario-B team view (raw data next to the packet, or via `--raw-dir`) drafts the golden byte for byte; ordinary split prose, missing-time subjects, bullets and both golden reports pass unchanged. The test harness passes `--raw-dir` from each intermediate's recorded lineage. One existing strict-scope test now accepts the #13.8 or #12.1 refusal, and a new in-process check confirms that the strict scope check alone gives #12.1. Goldens are byte-identical.
+
 ### Tests and goldens
+- QA round 12: 957 to 1001 checks (`qa12_tests`, 43 checks, plus one in-process strict-scope check; see the QA round 12 section). Goldens are byte-identical.
 - QA round 11: 906 to 957 checks. `qa11_tests` adds 47 checks, and the retargeted tests below add 4 more (net):
   - the round-11 reproducer (`provenance.excluded_entries` deleted, renamed or extended, its writer or citations changed, the section removed, an unrelated steering reason) at all three downstream stages, each refused with no output and nothing echoed, plus an unchanged-golden control;
   - the allow-list: only `provenance.generated_at` is excluded, with a one-line justification, and it is a contract path; in the end-to-end walk, changing it to another valid timestamp is the only single-field edit that passes;

@@ -62,6 +62,12 @@ MODULES = {name: load_engine(name) for name in ENGINES}
 DOWNSTREAM_INPUT = {"code_map": "--drafted", "guideline_check": "--coded", "exception_report": "--governed"}
 NO_ACTIVITY = "<no --activity>"
 LINEAGE = {}
+# #12.1: every engine after activity_pull re-derives a recorded team view from the raw exports (--raw-dir, default raw/
+# next to --activity). run() supplies the raw folder activity_pull read for that activity packet (RAW_LINEAGE), else
+# the raw folder of the packet's demo scenario. NO_RAW as an argument suppresses that.
+RAW_READERS = ("narrative_draft", "code_map", "guideline_check", "exception_report")
+NO_RAW = "<no --raw-dir>"
+RAW_LINEAGE = {}
 
 
 def _key(path):
@@ -101,7 +107,37 @@ def activity_for(path):
                                                                            "activity.json")
 
 
+def raw_for(activity_path):
+    """The raw/ folder an activity packet was pulled from (see RAW_LINEAGE), else its demo scenario's, else None."""
+    if _key(activity_path) in RAW_LINEAGE:
+        return RAW_LINEAGE[_key(activity_path)]
+    value = _content(activity_path)
+    if value is not None and _content_key(value) in RAW_LINEAGE:
+        return RAW_LINEAGE[_content_key(value)]
+    try:
+        scenario = value["provenance"]["demo_scenario"]
+    except Exception:
+        scenario = None
+    raw = os.path.join(ROOT, "demo-data", scenario, "raw") if isinstance(scenario, str) else None
+    if raw and os.path.isdir(raw):
+        return raw
+    # A packet whose demo_scenario was edited: the scenario whose golden activity signals it carries.
+    signals = value.get("activity_signals") if isinstance(value, dict) else None
+    for name in SCENARIOS:
+        if signals and signals == _golden(name, "activity.json").get("activity_signals"):
+            return os.path.join(ROOT, "demo-data", name, "raw")
+    return None
+
+
 def _with_activity(name, argv):
+    if NO_RAW in argv:
+        argv = [a for a in argv if a != NO_RAW]
+    elif name in RAW_READERS and "--raw-dir" not in argv:
+        activity = _arg(argv, "--activity") or (_arg(argv, DOWNSTREAM_INPUT[name]) and NO_ACTIVITY not in argv
+                                               and activity_for(_arg(argv, DOWNSTREAM_INPUT[name])))
+        raw = raw_for(activity) if activity else None
+        if raw:
+            argv = argv + ["--raw-dir", raw]
     if NO_ACTIVITY in argv:
         return [a for a in argv if a != NO_ACTIVITY]
     flag = DOWNSTREAM_INPUT.get(name)
@@ -114,6 +150,11 @@ def _record_lineage(name, argv):
     out = _arg(argv, "--out")
     if not out:
         return
+    if name == "activity_pull" and _arg(argv, "--raw-dir"):
+        RAW_LINEAGE[_key(out)] = _arg(argv, "--raw-dir")
+        value = _content(out)
+        if value is not None:
+            RAW_LINEAGE[_content_key(value)] = _arg(argv, "--raw-dir")
     root = out if name == "activity_pull" else _arg(argv, "--activity")
     if root and name != "exception_report":
         LINEAGE[_key(out)] = root
@@ -145,6 +186,12 @@ def run(name, *argv):
 
 def check(label, condition, detail=""):
     RESULTS.append((label, bool(condition), detail))
+
+
+def ascii_line(text):
+    """The whole printed line backslash-escaped to ASCII, so a label or detail with any character prints on a cp1252
+    or ASCII stdout (PYTHONIOENCODING unset, output piped) without a UnicodeEncodeError (TENC-QA12-02)."""
+    return str(text).encode("ascii", "backslashreplace").decode("ascii")
 
 
 def chain(raw_dir, who, workdir):
@@ -827,7 +874,18 @@ def hardening_tests(tmp):
                                                 "team_view": None, "withheld": None,
                                                  "citations": ["client-billing-guidelines.md #12.1"]}
     code, msg, _ = report_for(tmp, "strict", strict)
-    check("exception_report refuses governed data holding other timekeepers' rows", code == 1 and "#12.1" in msg, msg)
+    # The whole-document comparison (#13.8) runs first and already refuses it; the strict scope check (#12.1) after it
+    # still refuses the same rows on its own.
+    check("exception_report refuses governed data holding other timekeepers' rows", code == 1 and
+          ("#12.1" in msg or "#13.8" in msg), msg)
+    try:
+        MODULES["exception_report"].signal_policy.reset_scope_source()
+        MODULES["exception_report"].signal_policy.enforce_timekeeper_scope(copy.deepcopy(strict), strict=True)
+        msg = "accepted"
+    except MODULES["exception_report"].signal_policy.PolicyError as exc:
+        msg = str(exc)
+    check("the strict timekeeper-scope check on its own refuses governed data holding other timekeepers' rows "
+          "(#12.1)", "#12.1" in msg and "outside the recorded timekeeper scope" in msg, msg)
 
     # Item 3 (ps-inj-data) and D10: injected meeting subject, from the raw export through the report.
     inj_raw = os.path.join(tmp, "inj-raw")
@@ -5189,6 +5247,8 @@ def qa11_tests(tmp):
     for stage, golden in (("drafted", "drafted.json"), ("coded", "coded.json"), ("governed", "governed.json")):
         for sc in (A, B):
             base, activity = _golden(sc, golden), _golden(sc, "activity.json")
+            # What load_activity_root does at the CLI: a recorded team view is re-derived from the raw exports (#12.1).
+            sp.verify_scope_source(activity, os.path.join(ROOT, "demo-data", sc, "raw"), sp.PolicyError, script_dir)
             seen, missed, tried = set(), [], 0
             for path, _, _ in list(occurrences(base)):
                 if path in seen:
@@ -5256,6 +5316,356 @@ def qa11_tests(tmp):
               ("guideline_check", "governed"))))
 
 
+QA12_STAGES = (("narrative_draft", "--activity", None), ("code_map", "--drafted", "drafted.json"),
+               ("guideline_check", "--coded", "coded.json"), ("exception_report", "--governed", "governed.json"))
+QA12_UNVERIFIED = "honoured only when the raw exports it was pulled from confirm it"
+
+
+def _qa12_self_declared():
+    """The QA round 12 reproducer: scenario A with the engagement manager changed to the requesting timekeeper in
+    both places, a self-declared confirmed team view with people: null, and another timekeeper's signal appended."""
+    pkt = _golden("scenario-a-happy", "activity.json")
+    pkt["engagement"]["engagement_manager"] = "Alex Rivera"
+    pkt["provenance"]["engagement_identity"]["engagement_manager"] = "Alex Rivera"
+    pkt["provenance"]["timekeeper_scope"] = {
+        "mode": "team", "requester": "Alex Rivera", "people": None,
+        "team_view": {"confirmed": True, "role": "engagement_manager", "confirmation": "engagement-manager:ENG-SYN-042",
+                      "verified_against": "raw/engagement-letter-extract.md #engagement (engagement_manager)",
+                      "citations": ["client-billing-guidelines.md #12.1"]},
+        "withheld": None, "citations": ["client-billing-guidelines.md #12.1"]}
+    pkt["activity_signals"].append(next(s_ for s_ in _golden("scenario-b-drama", "activity.json")["activity_signals"]
+                                        if s_["activity_id"] == "B-CAL-001"))
+    return pkt
+
+
+def _qa12_chain(folder, packet, *extra):
+    """Write packet as folder/activity.json and run the four later stages on it as the QA reproducer does (no
+    --raw-dir unless extra gives one). Returns ([(code, msg)], {file: text} of every output that exists)."""
+    os.makedirs(folder, exist_ok=True)
+    act = os.path.join(folder, "activity.json")
+    write(act, packet)
+    results = []
+    for engine, flag, _ in QA12_STAGES:
+        src = act if engine == "narrative_draft" else os.path.join(folder, {"code_map": "drafted.json",
+                                                                             "guideline_check": "coded.json",
+                                                                             "exception_report": "governed.json"}[engine])
+        dst = os.path.join(folder, {"narrative_draft": "drafted.json", "code_map": "coded.json",
+                                    "guideline_check": "governed.json", "exception_report": "report.md"}[engine])
+        argv = [flag, src, "--out", dst, "--generated-at", FIXED_TS]
+        if engine != "narrative_draft":
+            argv += ["--activity", act]
+        results.append(run(engine, *argv, *(extra or (NO_RAW,))))
+    outputs = {f: read_text(os.path.join(folder, f)) for f in ("drafted.json", "coded.json", "governed.json", "report.md")
+               if os.path.exists(os.path.join(folder, f))}
+    return results, outputs
+
+
+def _qa12_csv(raw, filename, edit):
+    path = os.path.join(raw, filename)
+    with open(path, encoding="utf-8", newline="") as fh:
+        rows = list(csv.reader(fh))
+    rows = edit(rows)
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        csv.writer(fh, lineterminator="\n").writerows(rows)
+
+
+def _qa12_split_raw(tmp, name, first, second, narrative="", link_both=True, drop_entries=(3,)):
+    """Scenario A raw with the two document file names set to first / second; TE-A-002 links both documents when
+    link_both (TE-A-003 dropped), or TE-A-002 and TE-A-003 are dropped so both documents are missing time."""
+    raw = raw_copy(tmp, name, "scenario-a-happy")
+    def docs(rows):
+        col = rows[0].index("file_name")
+        rows[1][col], rows[2][col] = first, second
+        return rows
+    _qa12_csv(raw, "document-activity-log.csv", docs)
+    def sheet(rows):
+        if link_both:
+            rows[2][rows[0].index("activity_ids")] = "A-DOC-001;A-DOC-002"
+            rows[2][rows[0].index("narrative")] = narrative
+        return [r for i, r in enumerate(rows) if i not in drop_entries]
+    _qa12_csv(raw, "timesheet.csv", sheet)
+    return raw
+
+
+def qa12_tests(tmp):
+    """QA round 12 on 1.0.4: a team view is re-derived from the raw exports, never taken from the packet
+    (TENC-QA12-01); text split across signals, missing-time items or rendered lines is screened joined; a missing
+    contract or detector refuses cleanly; every printed test line is safe on a cp1252 or ASCII stdout (TENC-QA12-02)."""
+    import subprocess
+    sp = MODULES["narrative_draft"].signal_policy
+    script_dir = os.path.dirname(os.path.join(ROOT, ENGINES["narrative_draft"]))
+    raw_a = os.path.join(ROOT, "demo-data", "scenario-a-happy", "raw")
+    raw_b = os.path.join(ROOT, "demo-data", "scenario-b-drama", "raw")
+
+    # --- TENC-QA12-01: the reproducer end to end ------------------------------------------------------------------
+    forged = _qa12_self_declared()
+    for label, folder, raw, extra in (
+            ("no raw exports anywhere", "qa12-repro-noraw", None, ()),
+            ("scenario A's raw/ next to the packet (letter names Dana Whitfield)", "qa12-repro-raw", raw_a, ()),
+            ("scenario A's raw/ given as --raw-dir", "qa12-repro-rawdir", None, ("--raw-dir", raw_a)),
+            ("scenario B's raw/ (Morgan Lee's own exports) given as --raw-dir", "qa12-repro-rawb", None,
+             ("--raw-dir", raw_b))):
+        folder = os.path.join(tmp, folder)
+        if raw:
+            shutil.copytree(raw, os.path.join(folder, "raw"))
+        results, outputs = _qa12_chain(folder, forged, *extra)
+        first = results[0]
+        check(f"qa12-01 reproducer ({label}): narrative_draft refuses the self-declared team view (exit 1, no output, "
+              "#12.1), every later stage writes nothing, and Morgan Lee and B-CAL-001 reach no output or message",
+              first[0] == 1 and QA12_UNVERIFIED in first[1] and "#12.1" in first[1] and not outputs
+              and all(code == 1 for code, _ in results)
+              and not any("Morgan" in m or "B-CAL-001" in m for _, m in results), (results, sorted(outputs)))
+    # Each later stage refuses the same activity packet on its own, even with a valid upstream golden as input.
+    write(os.path.join(tmp, "qa12-forged-activity.json"), forged)
+    for engine, flag, golden in QA12_STAGES[1:]:
+        dst = os.path.join(tmp, f"qa12-forged-{engine}.out")
+        code, msg = run(engine, flag, os.path.join(ROOT, "demo-data", "scenario-a-happy", "expected", golden),
+                        "--activity", os.path.join(tmp, "qa12-forged-activity.json"), "--raw-dir", raw_a,
+                        "--out", dst, "--generated-at", FIXED_TS)
+        check(f"qa12-01 {engine} re-derives the team view from the raw exports and refuses the self-declared one "
+              "(exit 1, no output)", code == 1 and QA12_UNVERIFIED in msg and not os.path.exists(dst), msg[:200])
+
+    # The genuine engagement manager's packet (the letter confirms Dana Whitfield) carrying a timekeeper the raw
+    # exports do not name: people: null covers only the raw-named timekeepers, so Morgan Lee is withheld everywhere.
+    dana = _golden("scenario-a-happy", "activity.json")
+    dana["provenance"]["timekeeper_scope"] = _golden("scenario-b-drama", "activity.json")["provenance"]["timekeeper_scope"]
+    dana["activity_signals"].append(copy.deepcopy(forged["activity_signals"][-1]))
+    folder = os.path.join(tmp, "qa12-dana")
+    shutil.copytree(raw_a, os.path.join(folder, "raw"))
+    results, outputs = _qa12_chain(folder, dana)
+    drafted = json.loads(outputs.get("drafted.json", "{}"))
+    by_engines = ((drafted.get("provenance") or {}).get("timekeeper_scope") or {}).get("withheld_by_engines") or []
+    check("qa12-01 people: null is never everyone: a confirmed team view covers only the timekeepers the raw exports "
+          "name; another timekeeper's signal is withheld at every stage and named in no output",
+          [c for c, _ in results] == [0, 0, 0, 0] and len(outputs) == 4
+          and not any("Morgan" in t or "B-CAL-001" in t for t in outputs.values())
+          and [w["reason"] for w in by_engines] == [sp.TEAM_SCOPE_WITHHELD], (results, by_engines))
+    listed = copy.deepcopy(dana)
+    listed["provenance"]["timekeeper_scope"]["people"] = ["Alex Rivera", "Dana Whitfield", "Morgan Lee"]
+    results, outputs = _qa12_chain(os.path.join(tmp, "qa12-listed"), listed, "--raw-dir", raw_a)
+    check("qa12-01 a listed person the raw exports do not name is withheld like any other timekeeper",
+          [c for c, _ in results] == [0, 0, 0, 0] and "Morgan" not in outputs.get("report.md", "Morgan")
+          and "B-CAL-001" not in outputs.get("governed.json", "B-CAL-001"), results)
+
+    # Each raw confirmation the team view needs, and the exact comparison (A23).
+    gold_b = _golden("scenario-b-drama", "activity.json")
+    def letter_edit(old, new):
+        def edit(raw):
+            path = os.path.join(raw, "engagement-letter-extract.md")
+            text = read_text(path)
+            assert old in text
+            with open(path, "w", encoding="utf-8", newline="") as fh:
+                fh.write(text.replace(old, new))
+        return edit
+    cases = (
+        ("the letter names another engagement manager", letter_edit("engagement_manager: Dana Whitfield",
+                                                                    "engagement_manager: Riley Chen"), gold_b),
+        ("the letter gives another engagement ID", letter_edit("engagement_id: ENG-SYN-042", "engagement_id: ENG-SYN-043"),
+         gold_b),
+        ("the letter names no engagement manager", letter_edit("- engagement_manager: Dana Whitfield\n", ""), gold_b),
+        ("the engagement letter is missing", lambda raw: os.remove(os.path.join(raw, "engagement-letter-extract.md")),
+         gold_b),
+        ("raw/timesheet.csv is missing", lambda raw: os.remove(os.path.join(raw, "timesheet.csv")), gold_b),
+        ("an enabled export (calendar) is missing", lambda raw: os.remove(os.path.join(raw, "calendar-export.csv")),
+         gold_b),
+        ("the packet's manager differs from the letter only in case (compared exactly)", None,
+         relabel(copy.deepcopy(gold_b), engagement_manager="dana whitfield")),
+        ("the packet's engagement ID differs from the letter only in case (compared exactly)", None,
+         relabel(copy.deepcopy(gold_b), engagement_id="eng-syn-042")))
+    for n, (label, edit, pkt) in enumerate(cases):
+        raw = raw_copy(tmp, f"qa12-letter-{n}")
+        if edit:
+            edit(raw)
+        if label.startswith("the packet's engagement ID"):
+            pkt["provenance"]["timekeeper_scope"]["team_view"]["confirmation"] = "engagement-manager:eng-syn-042"
+        dst = os.path.join(tmp, f"qa12-letter-{n}.out")
+        src = os.path.join(tmp, f"qa12-letter-{n}.json")
+        write(src, pkt)
+        code, msg = run("narrative_draft", "--activity", src, "--raw-dir", raw, "--out", dst, "--generated-at", FIXED_TS)
+        check(f"qa12-01 team view not confirmed by the raw exports ({label}): refused, no output, no path or value "
+              "echoed", code == 1 and QA12_UNVERIFIED in msg and not os.path.exists(dst) and tmp not in msg
+              and "Riley" not in msg, msg[:240])
+
+    # In process: nothing is honoured before (or after a reset of) the raw check, and a withheld name stands for a
+    # raw-named timekeeper only while one is unaccounted for.
+    sp.reset_scope_source()
+    check("qa12-01 team_view_valid() is False for a complete, confirmed team-view record until the raw exports have "
+          "confirmed it", not sp.team_view_valid(_golden("scenario-b-drama", "activity.json")))
+    pkt = copy.deepcopy(dana)
+    pkt["activity_signals"][-1]["person"] = sp.WITHHELD_TEXT
+    sp.verify_scope_source(pkt, raw_a, sp.PolicyError, script_dir)
+    dropped = sp.enforce_timekeeper_scope(pkt)
+    check("qa12-01 a row whose person is the withheld marker is withheld when every raw-named timekeeper is shown by "
+          "name (a marker is never a way to carry another timekeeper's rows)",
+          dropped == 1 and all(s_["activity_id"] != "B-CAL-001" for s_ in pkt["activity_signals"]), dropped)
+    pkt = _golden("scenario-a-happy", "activity.json")
+    sp.verify_scope_source(dana, raw_a, sp.PolicyError, script_dir)
+    check("qa12-01 a self-scoped packet needs no raw exports and never inherits another packet's verified team view",
+          sp.verify_scope_source(pkt, os.path.join(tmp, "qa12-no-such-raw"), sp.PolicyError, script_dir) is False
+          and not sp.team_view_valid(dana))
+    sp.reset_scope_source()
+
+    # Benign controls: the genuine scenario-B team view, with raw/ next to the packet and with --raw-dir.
+    gold_drafted = read_text(os.path.join(ROOT, "demo-data", "scenario-b-drama", "expected", "drafted.json"))
+    folder = os.path.join(tmp, "qa12-genuine")
+    shutil.copytree(raw_b, os.path.join(folder, "raw"))
+    write(os.path.join(folder, "activity.json"), _golden("scenario-b-drama", "activity.json"))
+    for label, extra in (("raw/ next to the activity packet", (NO_RAW,)), ("--raw-dir", ("--raw-dir", raw_b))):
+        dst = os.path.join(folder, f"drafted-{len(RESULTS)}.json")
+        code, msg = run("narrative_draft", "--activity", os.path.join(folder, "activity.json"), "--out", dst,
+                        "--generated-at", FIXED_TS, *extra)
+        check(f"qa12-01 control: the genuine engagement-manager team view ({label}) is confirmed by the raw exports "
+              "and drafts the golden byte for byte", code == 0 and read_text(dst) == gold_drafted, msg)
+    golden_report = read_text(os.path.join(ROOT, "demo-data", "scenario-b-drama", "expected", "exception-report.md"))
+    check("qa12-01 control: the scenario-B golden report still names every timekeeper the raw exports name",
+          all(p in golden_report for p in ("Morgan Lee", "Priya Shah", "Jordan Kim")))
+
+    # --- A missing contract or detector refuses cleanly (no traceback, no output) -----------------------------------
+    for missing in ("contracts", "steering_guard.py"):
+        copy_root = os.path.join(tmp, f"qa12-missing-{missing}")
+        shutil.copytree(os.path.join(ROOT, "skills"), os.path.join(copy_root, "skills"),
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(os.path.join(ROOT, "config"), os.path.join(copy_root, "config"))
+        for dirpath, dirs, files in os.walk(copy_root):
+            for d in [d for d in dirs if d == missing]:
+                shutil.rmtree(os.path.join(dirpath, d))
+                dirs.remove(d)
+            for f in [f for f in files if f == missing]:
+                os.remove(os.path.join(dirpath, f))
+        for engine, argv in (("activity_pull", ["--raw-dir", raw_b, *TEAM_VIEW]),
+                             ("narrative_draft", ["--activity", os.path.join(ROOT, "demo-data", "scenario-b-drama",
+                                                                             "activity.json"), "--raw-dir", raw_b])):
+            dst = os.path.join(copy_root, f"{engine}.out")
+            env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+            proc = subprocess.run([sys.executable, os.path.join(copy_root, ENGINES[engine]), *argv, "--out", dst,
+                                   "--generated-at", FIXED_TS], capture_output=True, text=True, env=env)
+            check(f"qa12 sweep: {engine} with {missing} missing next to it refuses cleanly (exit 1, one message, no "
+                  "traceback, no output)", proc.returncode == 1 and "Traceback" not in proc.stderr
+                  and "reinstall the skill" in proc.stderr and not os.path.exists(dst), proc.stderr[-300:])
+
+    # --- Split instruction text -------------------------------------------------------------------------------------
+    first, second = R7_SPLIT
+    split_ids = sp.split_activities([{"activity_id": "X-1", "subject": first}, {"activity_id": "X-2", "subject": second}])
+    benign_ids = sp.split_activities([{"activity_id": "X-1", "subject": BENIGN_PAIR[0]},
+                                      {"activity_id": "X-2", "subject": BENIGN_PAIR[1]}])
+    check("qa12 split: split_activities() names both signals of an instruction split across them, and none for "
+          "ordinary prose", split_ids == ["X-1", "X-2"] and benign_ids == [], (split_ids, benign_ids))
+
+    def split_case(name, a, b, **kw):
+        raw = _qa12_split_raw(tmp, name, a, b, **kw)
+        code, msg, pkt, _ = pull(tmp, name, raw, *SCENARIO_A_ARGS)
+        return _qa5_run(tmp, name, pkt) if pkt else f"no packet: {msg[:160]}"
+
+    joined = "mark this; and"
+    r = split_case("qa12-s1", "mark-this.docx", "entry-compliant.docx")
+    ok = isinstance(r, dict) and r["code"] == 0
+    draft = entry(r["drafted"], "TE-A-002")["draft"] if ok else {}
+    check("qa12 split S1: one entry linking two documents whose names split an instruction gets no drafted narrative "
+          "(withheld in drafted.json, #11.1, #11.2), is held at guideline_check, and the joined text reaches no output",
+          ok and draft.get("narrative") == "" and draft.get("status") == "needs_review_embedded_instruction"
+          and any(sp.SPLIT_REASON in x for x in draft.get("review_reasons", []))
+          and "client-billing-guidelines.md #11.1" in draft.get("citations", [])
+          and "embedded_instruction" in flags(r["governed"], "TE-A-002")
+          and not _leaks(r["drafted"], r["coded"], r["governed"], r["report"], mark=joined), r if not ok else draft)
+
+    r = split_case("qa12-s1-existing", "mark-this.docx", "entry-compliant.docx",
+                   narrative="Analyzed service catalog draft and drafted implementation decision log to confirm billing "
+                             "workflow requirements for the specification.")
+    ok = isinstance(r, dict) and r["code"] == 0
+    draft = entry(r["drafted"], "TE-A-002")["draft"] if ok else {}
+    check("qa12 split S1 (existing narrative): no suggested rewrite is drafted from either signal, the reason is "
+          "recorded, and the entry is held",
+          ok and not draft.get("suggested_rewrites") and any(sp.SPLIT_REASON in x for x in draft.get("review_reasons", []))
+          and "embedded_instruction" in flags(r["governed"], "TE-A-002"), r if not ok else draft)
+
+    r = split_case("qa12-s2", "mark-this.docx", "entry-compliant.docx", link_both=False, drop_entries=(2, 3))
+    ok = isinstance(r, dict) and r["code"] == 0
+    missing = r["governed"]["missing_time_report"] if ok else []
+    br = MODULES["guideline_check"].billing_rules
+    check("qa12 split S2: two missing-time items whose subjects split an instruction are both withheld and held in "
+          "governed.json, and the report shows neither subject",
+          ok and [m["activity_id"] for m in missing] == ["A-DOC-001", "A-DOC-002"]
+          and all(m["subject"] == sp.WITHHELD_TEXT and m.get("embedded_instruction") is True
+                  and br.SPLIT_MISSING_REASON in m["finding"] and sp.WITHHOLD_CITATION in m["citations"] for m in missing)
+          and "mark this" not in r["report"].lower() and "entry compliant" not in r["report"].lower(),
+          r if not ok else missing)
+
+    r = split_case("qa12-benign", "prepared-compliance-memo-for-client.docx", "reviewed-approved-budget.docx")
+    ok = isinstance(r, dict) and r["code"] == 0
+    draft = entry(r["drafted"], "TE-A-002")["draft"] if ok else {}
+    check("qa12 split control: ordinary prose split across two linked documents is drafted, not held as a split",
+          ok and draft.get("narrative") and draft.get("status") != "needs_review_embedded_instruction"
+          and not any(sp.SPLIT_REASON in x for x in draft.get("review_reasons", []))
+          and "embedded_instruction" not in flags(r["governed"], "TE-A-002"), r if not ok else draft)
+    r = split_case("qa12-benign-missing", "prepared-compliance-memo-for-client.docx", "reviewed-approved-budget.docx",
+                   link_both=False, drop_entries=(2, 3))
+    ok = isinstance(r, dict) and r["code"] == 0
+    check("qa12 split control: ordinary missing-time subjects listed side by side are shown, not withheld",
+          ok and all(m["subject"] != sp.WITHHELD_TEXT for m in r["governed"]["missing_time_report"])
+          and "Rendered text withheld" not in r["report"], r if not ok else r["governed"]["missing_time_report"])
+    for sc in SCENARIOS:
+        gov = _golden(sc, "governed.json")
+        check(f"qa12 split control: no {sc} golden entry or missing-time item is held as a split",
+              not any(sp.SPLIT_REASON in json.dumps(e["draft"]) for e in gov["time_entries"])
+              and not any(br.SPLIT_MISSING_REASON in m["finding"] for m in gov["missing_time_report"]))
+
+    # The rendered report: table columns, rows and bullet runs, as printed.
+    er = MODULES["exception_report"]
+    table = ["| Activity | Person | Date | Hours | Subject | Citations |", "|---|---|---|---|---|---|",
+             f"| A-1 | Alex Rivera | 2026-09-15 | 1.4 | {first} | raw/x.csv row 2 |",
+             f"| A-2 | Alex Rivera | 2026-09-16 | 0.8 | {second} | raw/x.csv row 3 |"]
+    out, n = er.screen_rendered(table)
+    check("qa12 report: the same column of neighbouring table rows is screened joined; both cells are withheld and "
+          "the rest of the row is kept", n == 2 and out[:2] == table[:2]
+          and all(line.count(sp.WITHHELD_TEXT) == 1 and "Alex Rivera" in line for line in out[2:]), out)
+    row = table[:2] + [f"| A-1 | {first} | 2026-09-15 | 1.4 | {second} | raw/x.csv row 2 |"]
+    out, n = er.screen_rendered(row)
+    check("qa12 report: cells of one table row are screened together", n == 2 and first not in out[2], out)
+    bullets = [f"- TE-A-001 (Alex Rivera, 2026-09-14, 1.2 h): {first}", f"- TE-A-002 (Alex Rivera, 2026-09-15, 1.4 h): {second}"]
+    out, n = er.screen_rendered(bullets)
+    check("qa12 report: neighbouring bullet lines are screened part by part (the fixed ID, person, date and hours do "
+          "not dilute a split); both bullets are withheld", n == 2 and out == ["- " + sp.WITHHELD_TEXT] * 2, out)
+    benign = [f"- TE-A-001 (Alex Rivera, 2026-09-14, 1.2 h): {BENIGN_PAIR[0]}",
+              f"- TE-A-002 (Alex Rivera, 2026-09-15, 1.4 h): {BENIGN_PAIR[1]}"]
+    check("qa12 report control: ordinary neighbouring bullets and both golden reports pass the rendered check unchanged",
+          er.screen_rendered(benign) == (benign, 0)
+          and all(er.screen_rendered(read_text(os.path.join(ROOT, "demo-data", sc, "expected",
+                                                            "exception-report.md")).split("\n"))[1] == 0
+                  for sc in SCENARIOS))
+
+    # --- TENC-QA12-02: every printed line is safe on a cp1252 or ASCII stdout -------------------------------------
+    for encoding in ("cp1252", "ascii"):
+        raw_bytes = io.BytesIO()
+        stream = io.TextIOWrapper(raw_bytes, encoding=encoding, errors="strict", newline="\n")
+        try:
+            code = print_results([("label \u2192 \u4e2d \u2028 \U0001f600 caf\u00e9", False, "detail \u2603"),
+                                  ("plain label", True, "")], stream)
+            stream.flush()
+            text, err = raw_bytes.getvalue().decode("ascii"), ""
+        except (UnicodeError, ValueError) as exc:
+            code, text, err = None, "", repr(exc)
+        check(f"qa12-02 print_results() writes a label and detail with non-{encoding} characters to a strict "
+              f"{encoding} stdout without an error; every line backslash-escaped, the summary line last",
+              code == 1 and not err and "\\u2192" in text and "\\u2603" in text and "caf\\xe9" in text
+              and text.rstrip("\n").split("\n")[-1] == "1/2 checks passed", err or text)
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONIOENCODING", "PYTHONUTF8")}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    proc = subprocess.run([sys.executable, os.path.join(ROOT, "tests", "check_shared_copies.py")], capture_output=True,
+                          env=env)
+    check("qa12-02 check_shared_copies.py runs with PYTHONIOENCODING unset and stdout piped, printing ASCII only",
+          proc.returncode == 0 and all(b < 128 for b in proc.stdout) and b"shared copies identical" in proc.stdout,
+          proc.stdout[-200:] + proc.stderr[-200:])
+    unsafe = []
+    for name in sorted(os.listdir(os.path.join(ROOT, "tests"))):
+        if name.endswith(".py"):
+            for lineno, line in enumerate(read_text(os.path.join(ROOT, "tests", name)).splitlines(), 1):
+                code_part = line.split("#", 1)[0]
+                if re.search(r"\bprint[(]", code_part) and not re.search(r"print[(](ascii_line|str\(text\)\.encode)",
+                                                                         code_part):
+                    unsafe.append(f"{name}:{lineno}")
+    check("qa12-02 every print call in tests/*.py prints an ASCII-escaped line", not unsafe, unsafe)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         golden_tests(tmp)
@@ -5283,11 +5693,19 @@ def main():
         r10qa_tests(tmp)
         r13_tests(tmp)
         qa11_tests(tmp)
-    failed = [r for r in RESULTS if not r[1]]
-    for label, ok, detail in RESULTS:
-        detail = str(detail).encode("ascii", "backslashreplace").decode("ascii") if detail else ""
-        print(("PASS " if ok else "FAIL ") + label + (f"  ({detail})" if detail and not ok else ""))
-    print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
+        qa12_tests(tmp)
+    return print_results(RESULTS)
+
+
+def print_results(results, out=None):
+    """Print every check and the summary line, each line ASCII-escaped (ascii_line); 1 when any check failed."""
+    out = out or sys.stdout
+    failed = [r for r in results if not r[1]]
+    for label, ok, detail in results:
+        detail = str(detail) if detail else ""
+        print(ascii_line(("PASS " if ok else "FAIL ") + str(label) + (f"  ({detail})" if detail and not ok else "")),
+              file=out)
+    print(ascii_line(f"\n{len(results) - len(failed)}/{len(results)} checks passed"), file=out)
     return 1 if failed else 0
 
 

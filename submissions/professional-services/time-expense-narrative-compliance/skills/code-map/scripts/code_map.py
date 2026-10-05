@@ -8,7 +8,8 @@ an entry whose supplied code_mapping disagrees (client-billing-guidelines.md #13
 
 v1.0.4 rules:
 - Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1), and rows
-  outside the recorded timekeeper scope are withheld (#12.1).
+  outside the recorded timekeeper scope are withheld (#12.1). A recorded team view must be confirmed
+  by the raw engagement letter and exports (--raw-dir) or the packet is refused.
 - Activity-class text that trips the embedded-instruction tripwire is never echoed in a flag (#11.2).
 - Linked signals whose activity classes point to more than one task code are CONFLICTING:
   they map to UNMAPPED at 0.40 and are held for review (task-phase-codes.md #5.3). The engine
@@ -61,6 +62,7 @@ def main():
     ap.add_argument("--activity", required=True, help="The activity packet the drafted packet was drafted from (activity_pull's output); "
                     "the drafted packet must equal its re-derivation from it (client-billing-guidelines.md #13.8)")
     ap.add_argument("--out", required=True, help="Output coded contract JSON")
+    ap.add_argument("--raw-dir", help=signal_policy.RAW_DIR_HELP)
     ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     ap.add_argument("--generated-at", help="Fixed ISO-8601 UTC timestamp for reproducible golden files")
     args = ap.parse_args()
@@ -69,7 +71,7 @@ def main():
         stamp = generated_at(args.generated_at)
         script_dir = os.path.dirname(os.path.abspath(__file__))
         drafted = load_packet(args.drafted)
-        activity = signal_policy.load_activity_root(args.activity, InputError)
+        activity = signal_policy.load_activity_root(args.activity, InputError, raw_dir=args.raw_dir)
         # #13.8: the whole drafted packet must equal narrative-draft re-run on the activity packet.
         out = deepcopy(billing_rules.check_rederived(drafted, activity, "drafted", script_dir))
         billing_rules.code_stage(out, stamp, config_path=args.signal_config, script_dir=script_dir,

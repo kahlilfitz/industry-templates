@@ -11,6 +11,9 @@ v1.0.4: governed data that holds rows outside the recorded timekeeper scope is r
 flag detail, exclusion reason, engagement names) passes the shared embedded-instruction
 tripwire; flagged text is replaced by a withheld marker and never printed (#11.2). The engagement
 header fields are screened together as one record, so an instruction split across them is withheld.
+A recorded team view must be confirmed by the raw engagement letter and exports (--raw-dir, default raw/
+next to --activity) or the data is refused. Before writing, the rendered report is screened by table
+column, by row and by run of bullet lines (a hit adds a hold notice), then as a whole (a hit is refused).
 
 Governed data is never taken on trust (client-billing-guidelines.md #13.8): before rendering, the
 engine re-runs narrative-draft, code-map and guideline-check on the activity packet (--activity) and
@@ -29,6 +32,7 @@ to another engagement are counted, never named or quoted.
 import argparse
 import datetime
 import os
+import re
 import sys
 from copy import deepcopy
 
@@ -79,6 +83,69 @@ def cells(values):
     return ", ".join(cell(v) for v in (values if isinstance(values, list) else [values]))
 
 
+CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
+BULLET_SPLIT_RE = re.compile(r": |, | \(|\)|\[|\]|<br>")
+RENDERED_HOLD = ("- **Rendered text withheld:** {n} table cell(s) or line(s) read as an instruction only together with "
+                 "the neighbouring rows, cells or lines they are printed with; withheld and never followed - check the "
+                 "source records (client-billing-guidelines.md #11.1, #11.2)")
+
+
+def _row_cells(line):
+    """A Markdown table row's cells (cell() escapes every | inside data, so only unescaped | separate cells)."""
+    return [c.strip() for c in CELL_SPLIT_RE.split(line)[1:-1]]
+
+
+def screen_rendered(lines):
+    """#11.1 / #11.2 on the report as printed: every cell is screened alone by cell(), but text split across cells or
+    lines that end up side by side is screened joined here - each table column (the same cell of neighbouring rows),
+    each table row, each run of bullet lines (whole, and part by part) - and every cell or bullet in a run that trips
+    is withheld. Returns (lines, number withheld). Header and separator rows are the engine's own and are not data."""
+    out = list(lines)
+    withheld = 0
+    n = 0
+    while n < len(out):
+        if out[n].startswith("| ") and n + 1 < len(out) and out[n + 1].startswith("|---"):
+            start = n + 2
+            end = start
+            while end < len(out) and out[end].startswith("|"):
+                end += 1
+            rows = [_row_cells(line) for line in out[start:end]]
+            bad = set()
+            for col in range(max((len(r) for r in rows), default=0)):
+                column = [r[col] if col < len(r) else None for r in rows]
+                bad |= {(i, col) for i in signal_policy._tripping_seq(column)}
+            for i, row in enumerate(rows):
+                bad |= {(i, int(k)) for k in signal_policy._tripping_fields({str(c): t for c, t in enumerate(row) if t})}
+            for i, col in bad:
+                if rows[i][col] != signal_policy.WITHHELD_TEXT:
+                    rows[i][col] = signal_policy.WITHHELD_TEXT
+                    withheld += 1
+            if bad:
+                out[start:end] = ["| " + " | ".join(r) + " |" for r in rows]
+            n = end
+        elif out[n].startswith("- "):
+            end = n
+            while end < len(out) and out[end].startswith("- "):
+                end += 1
+            items = [line[2:] for line in out[n:end]]
+            bad = set(signal_policy._tripping_seq(items))
+            # A bullet's fixed wording (ID, person, date, hours) would dilute text split across two bullets, so the
+            # parts in the same position - counted from the start and from the end - are screened like a column.
+            parts = [[p.strip() for p in BULLET_SPLIT_RE.split(item) if p.strip()] for item in items]
+            width = max((len(p) for p in parts), default=0)
+            for k in range(width):
+                bad.update(signal_policy._tripping_seq([p[k] if k < len(p) else None for p in parts]))
+                bad.update(signal_policy._tripping_seq([p[-1 - k] if k < len(p) else None for p in parts]))
+            for i in sorted(bad):
+                if items[i] != signal_policy.WITHHELD_TEXT:
+                    out[n + i] = "- " + signal_policy.WITHHELD_TEXT
+                    withheld += 1
+            n = end
+        else:
+            n += 1
+    return out, withheld
+
+
 def flag_lines(flags):
     return "<br>".join(f"`{cell(f.get('flag'))}` ({cell(f.get('severity'))}): {cell(f.get('detail'))} [{cells(f.get('citations', []))}]"
                        for f in flags if isinstance(f, dict))
@@ -90,6 +157,7 @@ def main():
     ap.add_argument("--activity", required=True, help="The activity packet the governed packet was derived from (activity_pull's output); "
                     "the governed packet must equal its re-derivation from it (client-billing-guidelines.md #13.8)")
     ap.add_argument("--out", required=True, help="Output Markdown draft")
+    ap.add_argument("--raw-dir", help=signal_policy.RAW_DIR_HELP)
     ap.add_argument("--requested-start", help="Period the user asked about (YYYY-MM-DD)")
     ap.add_argument("--requested-end", help="Period the user asked about (YYYY-MM-DD)")
     ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
@@ -103,12 +171,13 @@ def main():
         if args.requested_start and args.requested_end and args.requested_start > args.requested_end:
             raise InputError("--requested-start is after --requested-end")
         data = deepcopy(load_governed(args.governed))
-        signal_policy.enforce_timekeeper_scope(data, engine=ENGINE, strict=True)
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        activity = signal_policy.load_activity_root(args.activity, InputError)
+        # A team view the activity packet records is honoured only once the raw exports confirm it (#12.1).
+        activity = signal_policy.load_activity_root(args.activity, InputError, raw_dir=args.raw_dir)
         # #13.8: the whole governed packet, provenance included, must equal narrative-draft, code-map and
         # guideline-check re-run on the activity packet before anything is reconciled or rendered.
         billing_rules.check_rederived(data, activity, "governed", script_dir)
+        signal_policy.enforce_timekeeper_scope(data, engine=ENGINE, strict=True)
         # The report's effective signal policy is applied inside the re-run, before anything is compared or
         # rendered, so filtering, govern() and rendering all use the same configuration.
         problems, rerun = billing_rules.reconcile_governed(data, script_dir=script_dir, engine=ENGINE,
@@ -270,7 +339,15 @@ def main():
         "shows the recipients and content, and waits for your explicit confirmation. It is never sent to the client.",
         "",
     ]
+    lines, withheld = screen_rendered(lines)
+    if withheld:
+        lines.insert(5, RENDERED_HOLD.format(n=withheld))  # after the title, header and "Prepared for" lines
     text = "\n".join(lines)
+    # The whole report, as written, is screened last: one that still trips (or is too long to screen) is not written.
+    if signal_policy.screen(text):
+        sys.exit("exception_report: the rendered packet reads as an instruction (or is too long to screen) as a whole "
+                 "after its tripping cells and lines were withheld; no packet was written - check the source records "
+                 "(client-billing-guidelines.md #11.1, #11.2)")
     try:
         signal_policy.write_output(args.out, text)  # encodes first, then temp file + os.replace
     except (OSError, UnicodeError) as exc:

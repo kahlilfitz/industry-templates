@@ -26,6 +26,11 @@ BILLING_RULES = os.path.join(ROOT, "skills", "guideline-check", "scripts", "bill
 BILLING_RULES_COPIES = ("code-map", "exception-report")  # every other engine that runs the shared rules
 
 
+def say(text):
+    """Print one line backslash-escaped to ASCII, so a path with any character prints on a cp1252 or ASCII stdout."""
+    print(str(text).encode("ascii", "backslashreplace").decode("ascii"))
+
+
 def digest(path):
     with open(path, "rb") as fh:
         return hashlib.sha256(fh.read()).hexdigest()
@@ -47,17 +52,17 @@ def main():
     pairs += [(BILLING_RULES, os.path.join(ROOT, "skills", s, "scripts", "billing_rules.py")) for s in BILLING_RULES_COPIES]
     drift = 0
     if not os.path.exists(STEERING_GUARD) or digest(STEERING_GUARD) != STEERING_GUARD_SHA256:
-        print(f"PIN     {os.path.relpath(STEERING_GUARD, ROOT)} does not match STEERING_GUARD_SHA256")
+        say(f"PIN     {os.path.relpath(STEERING_GUARD, ROOT)} does not match STEERING_GUARD_SHA256")
         drift += 1
     for src, copy in pairs:
         rel = os.path.relpath(copy, ROOT)
         if not os.path.exists(copy):
-            print(f"MISSING {rel}")
+            say(f"MISSING {rel}")
             drift += 1
         elif digest(src) != digest(copy):
-            print(f"DRIFT   {rel}")
+            say(f"DRIFT   {rel}")
             drift += 1
-    print(f"{len(pairs) - drift}/{len(pairs)} shared copies identical to their source")
+    say(f"{len(pairs) - drift}/{len(pairs)} shared copies identical to their source")
     return 1 if drift else 0
 
 

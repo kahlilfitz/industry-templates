@@ -12,7 +12,9 @@
 2. Timekeeper scope (client-billing-guidelines.md #12.1). A packet holds only the requesting
    timekeeper's rows unless it carries a valid engagement-manager team view: the requester is
    the engagement manager recorded in the engagement letter AND the explicit confirmation
-   token "engagement-manager:<engagement_id>" was supplied. Role is never inferred from text.
+   token "engagement-manager:<engagement_id>" was supplied. Role is never inferred from text, and a
+   team view is never taken from the packet that records it: every engine re-reads the raw exports
+   (verify_scope_source) and covers only the timekeepers they name - people: null is never everyone.
 3. Strict input validation. validate_packet() checks every field an engine reads: wrong JSON types
    (a "true" string for a boolean, {} or 123 in a list of strings, null where a value is required)
    and unrecognised enum values raise SchemaError - nothing is coerced through truthiness, and a
@@ -60,6 +62,7 @@
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
 """
+import csv
 import datetime
 import functools
 import hashlib
@@ -72,8 +75,14 @@ import tempfile
 import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import contract_check  # noqa: E402  (shared contract walker, identical copies next to each engine)
-import steering_guard  # noqa: E402  (shared detector, vendored byte-identically next to each engine)
+try:
+    import contract_check  # noqa: E402  (shared contract walker, identical copies next to each engine)
+    import steering_guard  # noqa: E402  (shared detector, vendored byte-identically next to each engine)
+except ImportError:
+    # Without the detector no free text can be screened, so nothing is read or written (fail closed, #11.1).
+    sys.exit(f"{os.path.splitext(os.path.basename(sys.argv[0] or 'engine'))[0]}: the shared contract walker or "
+             "embedded-instruction detector (contract_check.py, steering_guard.py) is missing next to the engine or "
+             "cannot be loaded; reinstall the skill - no output was written")
 
 POLICY_CITATION = "client-billing-guidelines.md #10.1"
 INJECTION_CITATION = "client-billing-guidelines.md #11.1"
@@ -485,8 +494,111 @@ def team_view_token(engagement_id):
     return TEAM_VIEW_PREFIX + str(engagement_id or "")
 
 
-def team_view_valid(packet):
-    """True only for a structurally valid engagement-manager team view recorded by activity_pull."""
+# --- Raw scope source (client-billing-guidelines.md #12.1, hardening checklist A15, A19) ---------------------------
+# A team view is an authority claim, so no engine takes it from the packet that records it. activity_pull grants it
+# from the engagement letter; every later engine re-reads the same raw exports (--raw-dir, by default the raw/ folder
+# next to the activity packet) and honours the recorded view only when the letter gives the same engagement ID and
+# engagement manager. people: null then means the timekeepers the engagement's raw exports name, never everyone, and a
+# listed person is allowed only when the raw exports name them. A missing or unreadable raw export is a refusal.
+
+ENGAGEMENT_FILE = "engagement-letter-extract.md"
+RAW_LETTER = "raw/" + ENGAGEMENT_FILE
+ENGAGEMENT_FIELDS = ("engagement_id", "client_name", "matter_name", "billing_guidelines_id", "engagement_manager")
+# One labelled field per line. The text is split with str.splitlines() (every line boundary, including U+2028, \x85
+# and \x0b-\x0c), and the value can never cross a line, so a blank field can't take the next line as its value.
+# Labels compare in canonical form (A11, A13): "- Engagement-ID:" is engagement_id, so a variant spelling can neither
+# be ignored next to the declared label nor shadow it - it is the same field given twice.
+ENGAGEMENT_LABEL_RE = re.compile(r"- ([^:\r\n]{1,60}):([^\r\n]*)")
+ENGAGEMENT_LABELS = {canon_id(f): f for f in ENGAGEMENT_FIELDS}
+RAW_EXPORTS = {
+    "timesheet": ("timesheet.csv", ("entry_id", "date", "person", "hours", "narrative", "activity_ids", "phase_code",
+                                    "task_code")),
+    "workplan": ("engagement-workplan.csv", ("workplan_id", "engagement_id", "item_type", "match_key", "activity_class",
+                                             "deliverable", "purpose")),
+    "calendar": ("calendar-export.csv", ("activity_id", "event_id", "date", "start", "end", "person", "subject",
+                                         "organizer", "attendees", "engagement_id")),
+    "document_activity": ("document-activity-log.csv", ("activity_id", "date", "person", "file_name", "activity_type",
+                                                        "duration_hours", "engagement_id")),
+}
+TEAM_VIEW_UNVERIFIED = ("the activity packet records an engagement-manager team view, which is honoured only when the "
+                        f"raw exports it was pulled from confirm it ({RAW_LETTER} and the timekeepers the raw exports "
+                        f"name, {SCOPE_CITATION}); pass --raw-dir with that raw/ folder")
+TEAM_SCOPE_WITHHELD = ("rows for timekeepers the engagement's raw exports do not name withheld: a team view covers only "
+                       "the timekeepers in raw/timesheet.csv and the enabled activity exports (people: null never means "
+                       "everyone)")
+SELF_SCOPE_WITHHELD = "rows for other timekeepers withheld: no valid engagement-manager team view"
+_RAW_SCOPE = {}  # the team view the running engine re-derived from the raw exports; empty = none (fail closed)
+RAW_DIR_HELP = ("The raw/ folder the activity packet was pulled from (default: raw/ next to --activity). Read only when "
+                "the packet records an engagement-manager team view, which is honoured only when the engagement letter "
+                "and exports there confirm it (client-billing-guidelines.md #12.1)")
+
+
+def read_raw_csv(path, required, error=PolicyError):
+    """Read one raw CSV export strictly (activity_pull and the team-view check share it). Errors name the file, never
+    its folder or a value."""
+    try:
+        with open(path, encoding="utf-8", newline="") as fh:
+            reader = csv.DictReader(fh)
+            header = reader.fieldnames or []
+            # Column names compare in canonical form (canon_id: NFKC, format characters, case and - _ . separators
+            # folded). A repeated column - including a fullwidth or differently cased copy - would let one cell
+            # overwrite or shadow the other, so it is malformed.
+            names = [canon_id(h) for h in header]
+            if len(set(names)) != len(names):
+                raise error(f"{os.path.basename(path)} repeats a column name in its header row (duplicate "
+                            "columns are malformed, never overwritten)")
+            rows = list(reader)
+    except (OSError, UnicodeError, csv.Error) as exc:
+        raise error(f"cannot read {os.path.basename(path)}: {error_text(exc)}") from exc
+    # Each column is read under the declared name it canonically matches; other columns keep their own name.
+    declared = {canon_id(c): c for c in required}
+    rename = {h: declared.get(n, h) for h, n in zip(header, names)}
+    # The header row is checked even when there are no data rows: a header-only file with the right columns is an
+    # explicitly empty register; an empty file or a wrong header is malformed.
+    missing = [c for c in required if c not in rename.values()]
+    if missing:
+        raise error(f"{os.path.basename(path)} is missing column(s): {', '.join(missing)}")
+    rows = [{rename.get(k, k): v for k, v in row.items()} for row in rows]
+    for idx, row in enumerate(rows, start=2):
+        # csv.DictReader stores surplus cells under None and fills short rows with None: never guess, and never
+        # drop a surplus cell unread - the row is refused.
+        if None in row or any(row.get(c) is None for c in required):
+            raise error(f"{os.path.basename(path)} row {idx} does not have one cell per header column")
+    return rows
+
+
+def read_engagement(path, error=PolicyError):
+    """The engagement letter's labelled fields (activity_pull and the team-view check share it)."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except (OSError, UnicodeError) as exc:
+        raise error(f"cannot read {ENGAGEMENT_FILE}: {error_text(exc)}") from exc
+    found = [(ENGAGEMENT_LABELS[canon_id(m.group(1))], m.group(2).strip())
+             for m in map(ENGAGEMENT_LABEL_RE.fullmatch, text.splitlines())
+             if m and canon_id(m.group(1)) in ENGAGEMENT_LABELS]
+    repeated = sorted({k for k, _ in found if [n for n, _ in found].count(k) > 1})
+    if repeated:
+        raise error(f"{ENGAGEMENT_FILE} gives {', '.join(repeated)} more than once (a repeated field "
+                    "is malformed, never overwritten)")
+    blank = sorted(k for k, v in found if not v)
+    if blank:
+        raise error(f"{ENGAGEMENT_FILE} gives an empty {', '.join(blank)} (a labelled field needs a "
+                    "value on its own line; omit an optional field rather than leave it blank)")
+    fields = dict(found)
+    missing = [k for k in ("engagement_id", "client_name", "matter_name") if k not in fields]
+    if missing:
+        raise error(f"{ENGAGEMENT_FILE} is missing: {', '.join(missing)}")
+    # A21: the engagement ID is the key every row is scoped by; one that folds to nothing would match blank rows.
+    if not canon_id(fields["engagement_id"]):
+        raise error(f"{ENGAGEMENT_FILE} gives a blank engagement_id (only separators or format "
+                    "characters); a blank key never matches")
+    return fields
+
+
+def _claims_team_view(packet):
+    """The packet's own team-view record is complete and self-consistent. A claim only: team_view_valid() also
+    needs the raw exports to confirm it (verify_scope_source)."""
     scope = (packet.get("provenance") or {}).get("timekeeper_scope")
     engagement = packet.get("engagement") if isinstance(packet.get("engagement"), dict) else {}
     if not isinstance(scope, dict) or scope.get("mode") != "team":
@@ -499,10 +611,67 @@ def team_view_valid(packet):
             and same_person(scope.get("requester"), engagement.get("engagement_manager")))
 
 
+def reset_scope_source():
+    _RAW_SCOPE.clear()
+
+
+def raw_dir_for(activity_path, raw_dir=None):
+    """The raw/ folder a team view is re-derived from: --raw-dir, else raw/ next to the activity packet."""
+    return raw_dir if raw_dir else os.path.join(os.path.dirname(os.path.abspath(activity_path)), "raw")
+
+
+def verify_scope_source(packet, raw_dir, error=PolicyError, script_dir=None):
+    """Re-derive a recorded engagement-manager team view from the raw exports before any engine honours it (#12.1,
+    A15, A19). A packet that records no team view needs nothing here (its rows are the requester's only). A team view
+    is honoured only when the engagement letter in raw_dir gives exactly the packet's engagement ID and engagement
+    manager (so the requester, already required to be the packet's manager, is the letter's manager and the
+    confirmation token is the letter's engagement's); the timekeepers it may cover are those the raw timesheet and the
+    enabled activity exports name for the engagement. A missing or unreadable export, or a letter that differs, is
+    refused: error(...) names no path or value. Returns True when a team view was verified."""
+    reset_scope_source()
+    if not _claims_team_view(packet):
+        return False
+    try:
+        letter = read_engagement(os.path.join(raw_dir, ENGAGEMENT_FILE), error)
+        engagement = packet["engagement"]
+        manager = letter.get("engagement_manager")
+        if not manager or engagement.get("engagement_id") != letter["engagement_id"] \
+                or engagement.get("engagement_manager") != manager:
+            raise error(f"the engagement ID or engagement manager recorded in the activity packet differs from "
+                        f"{RAW_LETTER}")
+        # #10.1: a disabled source is never opened, so it names no timekeeper (the packet policy can only narrow).
+        enabled, _ = effective_sources(packet, script_dir=script_dir or os.path.dirname(os.path.abspath(__file__)))
+        engagement_key = canon_id(letter["engagement_id"])
+        people = set()
+        for key in ("timesheet", "calendar", "document_activity"):
+            if key != "timesheet" and not enabled.get(key):
+                continue
+            name, columns = RAW_EXPORTS[key]
+            for row in read_raw_csv(os.path.join(raw_dir, name), columns, error):
+                if key == "timesheet" or canon_id(row["engagement_id"]) == engagement_key:
+                    people.add(person_key(row["person"]))
+    except (ValueError, OSError) as exc:  # error(...) is a ValueError
+        raise error(f"invalid input: {TEAM_VIEW_UNVERIFIED} - no output was written ({error_text(exc)})") from exc
+    people.discard("")
+    _RAW_SCOPE.update(engagement_id=letter["engagement_id"], engagement_manager=manager, people=frozenset(people))
+    return True
+
+
+def team_view_valid(packet):
+    """True only for an engagement-manager team view recorded by activity_pull AND re-derived from the raw exports by
+    the running engine (verify_scope_source); the packet's own record is never enough."""
+    if not _claims_team_view(packet) or not _RAW_SCOPE:
+        return False
+    engagement = packet["engagement"]
+    return (engagement.get("engagement_id") == _RAW_SCOPE["engagement_id"]
+            and engagement.get("engagement_manager") == _RAW_SCOPE["engagement_manager"])
+
+
 def enforce_timekeeper_scope(packet, engine="engine:unknown", strict=False):
     """Keep only rows the recorded timekeeper scope allows; return the number of rows withheld.
 
-    - valid engagement-manager team view: every timekeeper (or the listed people) is allowed;
+    - team view re-derived from the raw exports (team_view_valid): the timekeepers the raw exports name (people:
+      null), or the listed people the raw exports name - never everyone;
     - otherwise only provenance.timekeeper_scope.requester's rows are allowed;
     - no recorded requester (and no valid team view): PolicyError, whatever the packet holds (fail closed).
     strict=True (used on governed output) raises instead of silently dropping rows.
@@ -510,13 +679,21 @@ def enforce_timekeeper_scope(packet, engine="engine:unknown", strict=False):
     provenance = packet.setdefault("provenance", {})
     scope = provenance.get("timekeeper_scope")
     keys = ("activity_signals", "time_entries", "missing_time_report")
+    reason = SELF_SCOPE_WITHHELD
     if team_view_valid(packet):
         listed = scope.get("people")
-        if listed is None:
-            return 0
-        if not isinstance(listed, list):
+        if listed is not None and not isinstance(listed, list):
             raise PolicyError("timekeeper_scope.people must be a list or null")
-        allowed = {person_key(n) for n in listed} - {""}
+        named = _RAW_SCOPE["people"]
+        allowed = set(named) if listed is None else {person_key(n) for n in listed} & named
+        # A withheld name (#11.3) stands for a timekeeper the raw exports name only while some raw-named timekeeper
+        # appears nowhere in the packet under their own name; it is never a way to carry anyone else's rows.
+        withheld_key = person_key(WITHHELD_TEXT)
+        shown = {person_key(n) for n in (listed or []) if isinstance(n, str)}
+        shown |= {person_key(r.get("person")) for k in keys for r in (packet.get(k) or []) if isinstance(r, dict)}
+        if (listed is None or withheld_key in {person_key(n) for n in listed}) and named - shown:
+            allowed.add(withheld_key)
+        reason = TEAM_SCOPE_WITHHELD
     else:
         requester = scope.get("requester") if isinstance(scope, dict) else None
         if not person_key(requester):
@@ -541,7 +718,7 @@ def enforce_timekeeper_scope(packet, engine="engine:unknown", strict=False):
         scope.setdefault("withheld_by_engines", []).append({
             "engine": engine,
             "rows_withheld": withheld,
-            "reason": "rows for other timekeepers withheld: no valid engagement-manager team view",
+            "reason": reason,
             "citations": [SCOPE_CITATION],
         })
     return withheld
@@ -852,7 +1029,10 @@ ENGINE_LABELS = frozenset({"engine:activity_pull", "engine:narrative_draft", "en
 
 
 def _contract_root():
-    return contract_check.load_contract(contract_check.contract_path(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        return contract_check.load_contract(contract_check.contract_path(os.path.dirname(os.path.abspath(__file__))))
+    except contract_check.ContractError as exc:  # a missing or unreadable contract is a refusal, never a traceback
+        raise SchemaError(f"{exc} - no output was written") from exc
 
 
 def _role(path):
@@ -2155,6 +2335,32 @@ def flagged_activities(linked):
     return ids, hits
 
 
+SPLIT_PROSE_KEYS = ("subject", "purpose", "deliverable", "file_name")
+SPLIT_REASON = ("linked activity text flagged as embedded_instruction when the linked activities are read together "
+                "(text split across signals one draft would join)")
+
+
+def split_activities(linked):
+    """IDs of linked activities whose prose trips only when read with the other linked activities' prose, in the
+    order a draft joins them (client meeting first): an instruction split across signals that one narrative or one
+    entry's rewrites would put side by side (#11.1). Activities that trip on their own are flagged_activities()'."""
+    if len(linked) < 2:
+        return []
+    ordered = sorted(linked, key=lambda a: 0 if class_in(a.get("activity_class"), ("client_meeting",)) else 1)
+    texts, owners = [], []
+    for activity in ordered:
+        for key in SPLIT_PROSE_KEYS:
+            value = activity.get(key)
+            if isinstance(value, str) and value.strip():
+                texts.append(value)
+                owners.append(activity.get("activity_id"))
+    bad = _tripping_seq(texts)
+    tripped = {owners[i] for i in bad}
+    if len(tripped) < 2:
+        return []  # inside one activity: that activity's own record screen decides it
+    return [a.get("activity_id") for a in ordered if a.get("activity_id") in tripped]
+
+
 def clause(entry, activity):
     """One grounded clause for one activity. Returns (text without final period, reasons)."""
     person = entry.get("person")
@@ -2189,8 +2395,10 @@ def grounded_narrative(entry, linked):
         return ("", "needs_activity_evidence", NO_EVIDENCE_CONFIDENCE,
                 ["no cited activity signal from an enabled source is linked; nothing to draft from"], [])
     flagged, hits = flagged_activities(linked)
-    if flagged:
-        why = hold_reason(hits, "linked activity text flagged as embedded_instruction")
+    split = [] if flagged else split_activities(linked)
+    if flagged or split:
+        why = hold_reason(hits, "linked activity text flagged as embedded_instruction") if flagged else SPLIT_REASON
+        flagged = flagged or split
         return ("", "needs_review_embedded_instruction", NO_EVIDENCE_CONFIDENCE,
                 [f"{why} ({', '.join(flagged)}); "
                  "treated as data and withheld - no narrative drafted from it (client-billing-guidelines.md #11.1, #11.2)"],
@@ -2204,6 +2412,12 @@ def grounded_narrative(entry, linked):
     narrative = "; ".join(parts[:-1]) + ("; and " if len(parts) > 1 else "") + parts[-1] + "."
     if len(parts) == 1:
         narrative = parts[0] + "."
+    found = screen(narrative)
+    if found:  # the joined narrative itself trips: withheld like its sources (#11.1, #11.2)
+        return ("", "needs_review_embedded_instruction", NO_EVIDENCE_CONFIDENCE,
+                [f"{hold_reason(found, 'drafted narrative flagged as embedded_instruction')} "
+                 f"({', '.join(a.get('activity_id') for a in ordered)}); treated as data and withheld - no narrative "
+                 "drafted from it (client-billing-guidelines.md #11.1, #11.2)"], [])
     if len(linked) > 1:
         reasons.append(multi_link_reason(len(linked)))
     status = "engine_generated_from_activity"
@@ -2233,7 +2447,14 @@ def build_narrative(entry, linked):
                        "draft and left in the source entry only as evidence for guideline-check, never obeyed "
                        "(client-billing-guidelines.md #11.1, #11.2)")
     suggestions = []
+    # One entry's rewrites sit side by side: activities whose text trips only together get no rewrite (#11.1).
+    split = split_activities(linked)
+    if split:
+        reasons.append(f"{SPLIT_REASON} ({', '.join(split)}); treated as data and withheld - no rewrite drafted "
+                       "from it (client-billing-guidelines.md #11.1, #11.2)")
     for activity in linked:
+        if activity.get("activity_id") in split:
+            continue
         narrative, status, confidence, why, covered = grounded_narrative(entry, [activity])
         if status == "needs_review_embedded_instruction":
             reasons.extend(why)
@@ -2483,9 +2704,11 @@ def stage_policy(carried, stage, writer):
     return {k: {"enabled": False} for k in sorted(disabled)} or None
 
 
-def load_activity_root(path, error):
+def load_activity_root(path, error, raw_dir=None, script_dir=None):
     """The activity packet a later stage re-derives from (#13.8): activity_pull's output, read strictly and validated
-    in full like any input. A packet a later engine has written is not an activity packet."""
+    in full like any input. A packet a later engine has written is not an activity packet. A team view it records is
+    re-derived from the raw exports (raw_dir, else raw/ next to it) before any stage honours it (#12.1)."""
+    reset_scope_source()
     payload = read_json(path, error, "activity input")
     if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT_VERSION:
         raise error(f"expected a {CONTRACT_VERSION} object as the activity input (contract_version must be the "
@@ -2496,6 +2719,7 @@ def load_activity_root(path, error):
             or any(isinstance(e, dict) and any(k in e for k in RECORD_DERIVED) for e in payload["time_entries"]):
         raise SchemaError("invalid input: --activity must be the activity packet activity_pull wrote, before any later "
                           f"stage ({REDERIVE_CITATION}) - no output was written")
+    verify_scope_source(payload, raw_dir_for(path, raw_dir), error, script_dir)
     return payload
 
 
