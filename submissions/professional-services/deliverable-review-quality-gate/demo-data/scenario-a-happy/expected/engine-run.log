@@ -1,0 +1,3 @@
+assertion_map: 4 assertion(s), 0 unsupported, 0 limited -> mapped output written
+gate_check: 8 gate(s), blockers=0, must_fix=0, advisory=1 -> gate-check output written
+severity_rank: status=partner_review_required_advisories_only, ranked_findings=1 -> ranked output written

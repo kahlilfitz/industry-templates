@@ -1,6 +1,8 @@
 node_modules/
 .DS_Store
 *.log
+# Golden engine logs are test fixtures, not build output.
+!submissions/**/expected/*.log
 .env
 .env.production
 
