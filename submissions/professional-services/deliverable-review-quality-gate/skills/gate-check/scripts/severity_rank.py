@@ -504,11 +504,12 @@ def rank_stage(payload, generated_at=None):
         count = len(escalations)
         summary += f" {count} escalation{' needs' if count == 1 else 's need'} partner/QRM confirmation before release."
     payload["ranked_findings"] = ranked
-    # The packet renders this order as it stands: text that still reads as an instruction across two rows, or two fields
-    # of one row, is refused here and therefore at --verify, so it can never be rendered (quality-gate-criteria.md #8.22).
-    if rules.rendered_hits(payload, ranked):
-        raise InputError("the ranked findings, assertion mappings or escalations would render instruction-like text across adjacent fields that no stage withheld; re-run assertion_map, gate_check and severity_rank on the review input (quality-gate-criteria.md #8.22)")
     payload["release_readiness"] = {"status": status, "release_blockers": blockers, "must_fix": must_fix, "advisories": advisories, "summary": summary, "confidence": 0.96, "source": ENGINE, "citation": "severity-rules.md #3.1-#3.3; severity-rules.md #4.1-#4.2"}
+    # The packet renders this document as it stands: text that still reads as an instruction across two rows, or two
+    # values of one row (IDs, locations and citations included), is refused here and therefore at --verify, so it can
+    # never be rendered (quality-gate-criteria.md #8.22).
+    if rules.rendered_hits(payload, ranked):
+        raise InputError("the ranked findings, gate checklist, assertion mappings, escalations or other rendered lines would render instruction-like text across adjacent values that no stage withheld; re-run assertion_map, gate_check and severity_rank on the review input (quality-gate-criteria.md #8.22)")
     rules.record_engine(payload, LEDGER_TAG, generated_at, prior=(rules.AM_LEDGER_TAG, gc.LEDGER_TAG))
     return payload, status, ranked
 

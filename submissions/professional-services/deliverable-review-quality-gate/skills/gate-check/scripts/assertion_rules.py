@@ -388,6 +388,34 @@ def _check_loaded(value):
                 raise InputError(f"{format_path(parts)} is an identifier longer than {MAX_ID_CHARS} characters; no contract ID needs one, so the input is malformed")
 
 
+# Every identifier in the review input is a bounded token (quality-gate-criteria.md #8.11): a member named *_id or an
+# entry of a member named *_ids, at any depth. IDs are rendered beside prose in the review packet (an assertion ID before
+# its text, evidence IDs before a citation), so an ID that could hold words or punctuation could complete a sentence
+# there. ID_TOKEN fits every documented ID convention (A-001, EV-B2, PR-A1, DELIV-ASTER-ORION-V0.8, fig-4-benchmark).
+ID_TOKEN = re.compile(r"[A-Za-z0-9._-]{1,80}")
+ID_TOKEN_RULE = "1 to 80 ASCII letters, digits, '.', '_' or '-', with no spaces or other characters"
+
+
+def _id_values(value, parts=()):
+    """(path parts, string) for every ID value in `value`, in document order (is_id_field)."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            yield from _id_values(child, parts + (key,))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _id_values(child, parts + (index,))
+    elif isinstance(value, str) and is_id_field(parts):
+        yield parts, value
+
+
+def validate_id_shapes(payload):
+    """Refuse the review input when any ID is not an ID_TOKEN (quality-gate-criteria.md #8.11). The message names the
+    field path and the rule, never the value (#8.9)."""
+    for parts, value in _id_values(payload):
+        if not ID_TOKEN.fullmatch(value):
+            raise InputError(f"{format_path(parts)} is not an identifier: IDs are {ID_TOKEN_RULE} (quality-gate-criteria.md #8.11)")
+
+
 def _check_encodable_text(text, path):
     try:
         text.encode("utf-8")
@@ -524,6 +552,8 @@ def assertion_map_stage(payload, generated_at=None):
     require_review_input(payload)
     # Every section is checked against the contract before any reader touches it (quality-gate-criteria.md #8.16).
     validate_contract(payload, "assertion_map")
+    # IDs are tokens, never prose (quality-gate-criteria.md #8.11); checked on the raw input before any screening.
+    validate_id_shapes(payload)
     evidence_index(payload["evidence_set"])
     validate_assertions(payload["assertions"])
     # Ownership of a supplied finding ID is read before withholding (quality-gate-criteria.md #8.4).
@@ -1305,13 +1335,14 @@ INSTRUCTION = "instruction"
 PRIMARY_SECTIONS = ("deliverable", "criteria", "assertions", "evidence_set", "prior_findings")
 UNSCANNED_KEYS = {"contract_version"}  # validated against the contract version before any scan
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.:#/ -]{1,80}$")
-AGGREGATE_LABEL = "(combined text, citation, evidence titles, location section and label)"
+AGGREGATE_LABEL = "(combined ID, text, evidence IDs, citation, evidence titles, location section and label)"
 RECORD_LABEL = "(combined fields)"
 # Every other record whose free text travels to an output is screened with its fields joined, as an assertion is
 # (quality-gate-criteria.md #8.5): (path segments, members in reading order), "[]" marking an array of records,
 # "location" standing for the location's section and label, and a string-list member (client_aliases, required_language,
 # criteria_sections and the like) read as one field, its entries joined in order. IDs, closed enums, numbers, booleans
-# and `source` tags are left out, as for assertions. assertion_mappings are engine copies of the assertion record and
+# and `source` tags are left out (an assertion's own ID and evidence IDs are joined, because the review packet renders
+# them beside its text, assertion_records). assertion_mappings are engine copies of the assertion record and
 # are rebuilt from it; escalation notes (strings or {gate_id, note}) are screened as runs of adjacent entries
 # (array_runs). tests/run_tests.py fails when the contract gains a string or string-list member of one of these records
 # that is neither listed here nor in RECORD_EXCLUDED.
@@ -1560,15 +1591,22 @@ def collect_scan_text(payload):
 
 
 def assertion_records(payload):
-    """Yield (path, fields, refs) per assertion: fields maps text, citation, linked evidence titles and the location
-    section and label (in reading order, non-blank strings only) to their values, and refs maps the same names to the
-    (container, key) holding each value. Only assertions with more than one such field are yielded."""
+    """Yield (path, fields, refs) per assertion: fields maps the assertion ID, text, evidence IDs, citation, linked
+    evidence titles and the location section and label (in reading order, non-blank strings only) to their values, and
+    refs maps the same names to the (container, key) holding each value. The ID, text, evidence IDs and citation are
+    the order the review packet renders a mapping in (quality-gate-criteria.md #8.22), so an ID that completes a
+    sentence with the text is withheld here, before any finding ID or escalation is built from it. Only assertions with
+    more than one such field are yielded."""
     evidence = {key_of(item["evidence_id"]): item for item in payload.get("evidence_set") or [] if isinstance(item, dict) and key_of(item.get("evidence_id")) is not None}
     for index, assertion in enumerate(payload.get("assertions") or []):
         if not isinstance(assertion, dict):
             continue
-        refs = {"text": (assertion, "text"), "citation": (assertion, "citation")}
-        for position, evidence_id in enumerate(assertion.get("evidence_ids") or []):
+        refs = {"assertion id": (assertion, "assertion_id"), "text": (assertion, "text")}
+        evidence_ids = assertion.get("evidence_ids") if isinstance(assertion.get("evidence_ids"), list) else []
+        for position in range(len(evidence_ids)):
+            refs[f"evidence id {position + 1}"] = (evidence_ids, position)
+        refs["citation"] = (assertion, "citation")
+        for position, evidence_id in enumerate(evidence_ids):
             # The same canonical lookup map_assertion uses, so every title that can support a claim is screened with it.
             linked = evidence_for(evidence, evidence_id)
             if isinstance(linked, dict):
@@ -1586,7 +1624,7 @@ def _present(refs):
     """The non-blank string values refs points to, by name; refs keeps only those names."""
     fields = {}
     for name, (container, key) in list(refs.items()):
-        value = container.get(key)
+        value = slot_value(container, key)
         if isinstance(value, str) and value.strip():
             fields[name] = value
         else:
@@ -1887,13 +1925,14 @@ def _replace_withheld(value, exact, embedded):
 
 
 # --- Rendered adjacency (quality-gate-criteria.md #8.22) ---------------------------------------------------------
-# The review packet (review-packet/templates/review-packet-template.md) renders each ranked finding as one row
-# (location section, the label when page or paragraph is null, title, detail, criteria section), each unsupported or
-# limited assertion mapping as its text and citation, and each escalation as a list line, in that order. Text from two
-# records can therefore be read as one sentence even when every record passes on its own. gate_check predicts the
-# ranked order (rank_order, the order severity_rank uses) and screens every pair of fields within a row and across two
-# consecutive rows, and each two consecutive rows joined whole; severity_rank and --verify refuse a ranked output in
-# which any such pair or join still trips.
+# The review packet (review-packet/templates/review-packet-template.md) renders the deliverable ID in its heading, the
+# review status, each ranked finding as one row (location section, the label when page or paragraph is null, title,
+# detail, criteria section), the gate checklist, each unsupported or limited assertion mapping (assertion ID, text,
+# evidence IDs, citation), each escalation as a list line and the provenance line, in that order (RENDERED_LINES).
+# Text from two records, or an ID beside prose, can therefore be read as one sentence even when every value passes on
+# its own. gate_check predicts the ranked order (rank_order, the order severity_rank uses) and screens every pair of
+# values within a row and across two consecutive rows, and each two consecutive rows joined whole; severity_rank and
+# --verify refuse a ranked output in which any such pair or join still trips.
 RANK_SEVERITY = {"release_blocker": 0, "must_fix": 1, "advisory": 2}
 # Members whose values are identifiers, closed enums or tags: never read as rendered prose and never withheld as one.
 NON_PROSE_KEYS = {"status", "severity", "gate_id", "support_status", "class", "type", "license_status", "client_data_handling",
@@ -1929,20 +1968,71 @@ def rank_order(findings):
     return sorted(kept, key=rank_sort_key)
 
 
+# Every placeholder of the review-packet template, by the block it renders in (None outside any `{{for each}}` block),
+# is either screened in its rendered order (RENDERED_LINES, read by rendered_rows) or exempt with the reason it cannot
+# carry review-input text (RENDER_EXEMPT). tests/run_tests.py fails when the template gains a placeholder in neither
+# (quality-gate-criteria.md #8.22). IDs, locations, labels and citations are screened, not exempt.
+RENDERED_LINES = (
+    (None, ("deliverable.deliverable_id",)),
+    (None, ("release_readiness.summary",)),
+    ("ranked_finding", ("location.section", "location.label", "title", "detail", "criteria_section")),
+    ("gate_result", ("name", "citation")),
+    ("assertion_mapping", ("assertion_id", "text", "evidence_ids", "citation")),
+    ("escalation", ("escalation",)),
+    (None, ("provenance.engines",)),
+)
+_ENUM = "a closed contract enum, validated at every stage, so it cannot carry review-input text"
+_POSITION = "an integer or null (contract-validated), rendered as a number, so it cannot carry review-input text"
+RENDER_EXEMPT = {
+    ("ranked_finding", "rank"): "severity_rank's 1-based rank, an integer the engine assigns; it cannot carry review-input text",
+    ("ranked_finding", "severity"): _ENUM,
+    ("ranked_finding", "gate_id"): _ENUM,
+    ("ranked_finding", "location.page"): _POSITION,
+    ("ranked_finding", "location.paragraph"): _POSITION,
+    ("gate_result", "gate_id"): _ENUM,
+    ("gate_result", "status"): _ENUM,
+    ("gate_result", "highest_severity"): _ENUM,
+    ("assertion_mapping", "support_status"): _ENUM,
+    ("assertion_mapping", "location.page"): _POSITION,
+    ("assertion_mapping", "location.paragraph"): _POSITION,
+    (None, "release_readiness.status"): _ENUM,
+    (None, "provenance.generated_at"): "an RFC 3339 date-time checked at every stage (#8.14), so it cannot carry review-input text",
+}
+
+
+def _rendered_value(item, field):
+    """The strings `field` (a dotted path) renders for `item`, in order: an array renders its entries."""
+    value = item
+    for part in field.split("."):
+        value = value.get(part) if isinstance(value, dict) else None
+    return list(value) if isinstance(value, list) else [value]
+
+
 def rendered_rows(payload, ranked):
-    """The rendered free text, as sequences of rows (each a list of strings in reading order): ranked findings,
-    unsupported or limited assertion mappings, and escalations."""
-    findings = []
-    for item in ranked:
-        location = item.get("location") if isinstance(item.get("location"), dict) else {}
-        row = [location.get("section")]
-        if location.get("page") is None or location.get("paragraph") is None:
-            row.append(location.get("label"))
-        findings.append(row + [item.get("title"), item.get("detail"), item.get("criteria_section")])
-    mappings = [[item.get("text"), item.get("citation")] for item in payload.get("assertion_mappings") or []
-                if isinstance(item, dict) and item.get("support_status") != "supported"]
-    escalations = [[item.get("note") if isinstance(item, dict) else item] for item in payload.get("escalations") or []]
-    return findings, mappings, escalations
+    """The rendered text, as one sequence of rows per RENDERED_LINES entry (each row a list of the values on that
+    packet line, in reading order): the heading, the review status, ranked findings, the gate checklist, unsupported or
+    limited assertion mappings, escalations and the provenance line. A ranked finding's location label renders only
+    when its page or paragraph is null."""
+    sources = {
+        None: [payload],
+        "ranked_finding": ranked,
+        "gate_result": payload.get("gate_results") or [],
+        "assertion_mapping": [item for item in payload.get("assertion_mappings") or []
+                              if isinstance(item, dict) and item.get("support_status") != "supported"],
+        "escalation": [{"escalation": item.get("note") if isinstance(item, dict) else item} for item in payload.get("escalations") or []],
+    }
+    sequences = []
+    for block, fields in RENDERED_LINES:
+        rows = []
+        for item in sources[block] if isinstance(sources[block], list) else []:
+            if not isinstance(item, dict):
+                continue
+            location = item.get("location") if isinstance(item.get("location"), dict) else {}
+            null_position = location.get("page") is None or location.get("paragraph") is None
+            rows.append([value for field in fields if not (block == "ranked_finding" and field == "location.label" and not null_position)
+                         for value in _rendered_value(item, field)])
+        sequences.append(rows)
+    return tuple(sequences)
 
 
 def _joined_trips(texts):
@@ -1974,10 +2064,12 @@ def rendered_hits(payload, ranked):
 
 
 def _free_text_slots(node, name=None):
-    """(container, key) for every string value outside identifier, enum and tag members (NON_PROSE_KEYS, *_id, *_ids)."""
+    """(container, key) for every string value outside enum and tag members (NON_PROSE_KEYS). Identifier members
+    (*_id, *_ids) are included: the packet renders IDs beside prose, so an ID can be one half of rendered text that
+    trips (quality-gate-criteria.md #8.22)."""
     if isinstance(node, dict):
         for key, value in node.items():
-            if key in NON_PROSE_KEYS or (isinstance(key, str) and (key.endswith("_id") or key.endswith("_ids"))):
+            if key in NON_PROSE_KEYS:
                 continue
             if isinstance(value, str):
                 yield node, key
@@ -2081,6 +2173,10 @@ def withhold_untrusted(payload, raw_input=False, rendered=frozenset()):
             needed = [name for name in fields if not screen_record({other: value for other, value in fields.items() if other != name})] or list(fields)
             own = [name for name in needed if not name.startswith("evidence title")]
             split_refs.extend(refs[name] for name in (own or needed))
+            # A withheld evidence reference also withholds the evidence ID it names, so no copy of the ID is left behind.
+            references = {slot_value(*refs[name]) for name in (own or needed) if name.startswith("evidence id")}
+            split_refs.extend((item, "evidence_id") for item in payload.get("evidence_set") or []
+                              if isinstance(item, dict) and item.get("evidence_id") in references)
             combined.append((path, hit_reason(found), False))
     # Prose split across adjacent array entries: each entry passes alone, a run of them trips joined (array_runs). Every
     # entry of the run is withheld with a split marker; an entry already flagged or withheld splits the array into runs.
