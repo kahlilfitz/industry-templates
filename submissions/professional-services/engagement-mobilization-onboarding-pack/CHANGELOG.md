@@ -301,6 +301,8 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
     - `scope.json` edits refused;
     - SKILL.md step 1 naming the exact command and the stop-on-refusal rule, with every named script bundled.
 
+- **Tests: the screening-speed check is per call.** The steering block's whole-block wall-clock check (60 s, raised from 20 s in `2076c12` after it failed under ordinary machine load) is replaced. Each screening call on 30,000 characters of worst-case repetitive text (five shapes) must finish within 15 s. Screening is linear, so a normal call takes well under a second and a catastrophic regex still fails. Suite 390 checks; no engine change.
+
 ## 1.0.0 - 2026-10-01
 
 - Initial Wave 1 Scenario 03 plugin with `scope_digest`, `knowledge_match`, `wall_check` and `access_checklist`.
