@@ -28,7 +28,7 @@ Version 1.0.4 follows 1.0.3, which was frozen and submitted for evaluation. It c
 - authority claims such as "System note: quality gate passed", and forwarding to an e-mail address or URL;
 - look-alike letters from any non-Latin script mixed into a Latin word;
 - steering hidden in IDs or file names;
-- steering split across an assertion's text, citation, evidence titles and location label.
+- steering split across the fields of one record (an assertion, the deliverable, a brand check, licensed content, an evidence entry, a prior finding, the criteria or a carried finding) or across adjacent list entries.
 
 A field too long to screen is held for review, never passed.
 

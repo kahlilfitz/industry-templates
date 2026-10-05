@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Static check: messages never format untrusted input (quality-gate-criteria.md #8.9).
 
-Every f-string, `%` or `.format` that reaches a `raise`, a `print`, a `.write` (stderr), a list of reported problems or
+Every f-string, `%` or `.format` that reaches a `raise`, a `print` (or the tests' ASCII-safe `emit`), a `.write` (stderr), a list of reported problems or
 an error-message generator may format only engine constants, field paths, indexes and counts. The check walks the AST
 of every plugin script (the engines, the shared rules and the tests\\ tools) and judges each formatted value:
 
@@ -57,6 +57,13 @@ FILE_SAFE_NAMES = {"check_shared_copies.py": {"rel"}}
 SAFE_METHODS = {"join", "get", "items", "strip", "lstrip", "rstrip", "lower", "upper", "values", "keys", "count"}
 SAFE_ATTRS = {"__name__", "lineno", "colno", "start", "msg"}
 MESSAGE_LISTS = {"problems", "mismatches", "errors"}
+# `emit` is the test scripts' ASCII-safe print, so a message passed to it is checked exactly like one passed to print.
+PRINT_SINKS = {"print", "emit"}
+
+
+def emit(line=""):
+    """Print one line backslash-escaped to ASCII, so a cp1252 or ASCII console or pipe can always show it."""
+    print(str(line).encode("ascii", "backslashreplace").decode("ascii"))
 
 
 def is_constant_name(name):
@@ -237,7 +244,7 @@ class Checker:
                 self.check_message(node, node.exc)
             elif isinstance(node, ast.Call):
                 func = node.func
-                if isinstance(func, ast.Name) and func.id == "print":
+                if isinstance(func, ast.Name) and func.id in PRINT_SINKS:
                     for arg in node.args:
                         self.check_message(node, arg)
                 elif isinstance(func, ast.Attribute) and func.attr == "write" and "stderr" in ast.unparse(func.value):
@@ -307,7 +314,7 @@ def sink_expressions(function):
             yield node.exc
         elif isinstance(node, ast.Call):
             func = node.func
-            if (isinstance(func, ast.Name) and func.id == "print") \
+            if (isinstance(func, ast.Name) and func.id in PRINT_SINKS) \
                     or (isinstance(func, ast.Attribute) and func.attr == "write" and "stderr" in ast.unparse(func.value)) \
                     or (isinstance(func, ast.Attribute) and func.attr in ("append", "extend") and isinstance(func.value, ast.Name) and func.value.id in MESSAGE_LISTS):
                 yield from node.args
@@ -367,8 +374,8 @@ def violations(paths=None):
 def main():
     found, scanned = violations()
     for line in found:
-        print(line)
-    print(f"check_messages: {len(scanned)} script(s) scanned, {len(found)} message format(s) outside engine constants, field paths, indexes and counts")
+        emit(line)
+    emit(f"check_messages: {len(scanned)} script(s) scanned, {len(found)} message format(s) outside engine constants, field paths, indexes and counts")
     return 1 if found else 0
 
 

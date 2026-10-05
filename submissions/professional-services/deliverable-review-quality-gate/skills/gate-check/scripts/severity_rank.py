@@ -82,10 +82,8 @@ def validate_finding(index, item):
 
 def sort_key(item):
     # Findings without a page or paragraph (register- or field-level) rank after page-located findings
-    # of the same severity and confidence.
-    location = item.get("location") or {}
-    page, paragraph = location.get("page"), location.get("paragraph")
-    return (SEVERITY_ORDER[item["severity"]], -float(item.get("confidence", 0.0)), 9999 if page is None else page, 9999 if paragraph is None else paragraph, item.get("finding_id", ""))
+    # of the same severity and confidence. Shared with gate_check, which screens the order the packet renders (#8.22).
+    return rules.rank_sort_key(item)
 
 def collapse_duplicates(findings):
     """Keep one finding per finding_id at the highest severity (first occurrence on a tie), so a duplicate is never
@@ -152,7 +150,7 @@ def rederive_gate_findings(payload):
     mapped["escalations"] = []
     hit_paths = []
     try:
-        evaluated = gc.evaluate(mapped, hit_sink=hit_paths)
+        evaluated = gc.evaluate(mapped, hit_sink=hit_paths, rendered_check=False)
     except InputError as exc:
         raise InputError(f"gate_check re-derivation failed on the carried mapped input ({exc}); re-run gate_check") from exc
     derived = evaluated["findings"]
@@ -506,6 +504,10 @@ def rank_stage(payload, generated_at=None):
         count = len(escalations)
         summary += f" {count} escalation{' needs' if count == 1 else 's need'} partner/QRM confirmation before release."
     payload["ranked_findings"] = ranked
+    # The packet renders this order as it stands: text that still reads as an instruction across two rows, or two fields
+    # of one row, is refused here and therefore at --verify, so it can never be rendered (quality-gate-criteria.md #8.22).
+    if rules.rendered_hits(payload, ranked):
+        raise InputError("the ranked findings, assertion mappings or escalations would render instruction-like text across adjacent fields that no stage withheld; re-run assertion_map, gate_check and severity_rank on the review input (quality-gate-criteria.md #8.22)")
     payload["release_readiness"] = {"status": status, "release_blockers": blockers, "must_fix": must_fix, "advisories": advisories, "summary": summary, "confidence": 0.96, "source": ENGINE, "citation": "severity-rules.md #3.1-#3.3; severity-rules.md #4.1-#4.2"}
     rules.record_engine(payload, LEDGER_TAG, generated_at, prior=(rules.AM_LEDGER_TAG, gc.LEDGER_TAG))
     return payload, status, ranked

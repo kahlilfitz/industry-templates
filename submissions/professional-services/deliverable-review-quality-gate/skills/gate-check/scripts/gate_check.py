@@ -582,10 +582,36 @@ def add_spoof_hold(findings, escalations, spoofed, altered):
     if altered:
         escalations.append(f"G8: assertion_map output for {', '.join(altered)} was missing or altered upstream and was restored from recomputation - hold for reviewing partner/QRM (quality-gate-criteria.md #8.4)")
 
-def evaluate(payload, hit_sink=None):
+def evaluate(payload, hit_sink=None, rendered_check=True):
     """Apply every gate to a mapped payload (assertion_map output) and return it with findings, escalations and
     gate_results set. No file I/O and no provenance stamp; severity_rank calls it to re-derive the engine findings
-    from the mapped input that gate-checked.json carries (severity-rules.md #3.7)."""
+    from the mapped input that gate-checked.json carries (severity-rules.md #3.7).
+
+    With rendered_check, the result is screened as the review packet renders it (rules.rendered_hits on the ranked
+    order): when fields of two rows, or two fields of one row, trip only together, the input text behind them is
+    withheld with split markers and the gates are evaluated again from the original input, until nothing composes
+    (quality-gate-criteria.md #8.22). Each round withholds at least one more value, so it ends. severity_rank's
+    re-derivation of a carried gate run turns it off: the withheld text arrives there as markers, which hold the same way."""
+    original = copy.deepcopy(payload) if rendered_check else None
+    rendered = frozenset()
+    while True:
+        sink = []
+        result = evaluate_once(payload, sink, rendered)
+        if not rendered_check:
+            break
+        found = rules.rendered_sources(original, rules.rendered_hits(result, rules.rank_order(result["findings"])))
+        if found <= rendered:
+            break
+        rendered = rendered | found
+        payload.clear()
+        payload.update(copy.deepcopy(original))
+    if hit_sink is not None:
+        hit_sink.extend(sink)
+    return result
+
+
+def evaluate_once(payload, hit_sink=None, rendered=frozenset()):
+    """One evaluation of every gate (evaluate), with the `rendered` input values also withheld."""
     require_contract(payload)
     raw = copy.deepcopy(payload)
     # Every section and nested record is checked against the contract before any reader touches it, so a wrongly typed
@@ -593,7 +619,7 @@ def evaluate(payload, hit_sink=None):
     rules.validate_contract(raw, "gate_check")
     # Withhold flagged text before any computation, so every derived field, finding and output carries the numbered
     # marker instead of the text (quality-gate-criteria.md #8.7). The contract is still checked on the raw input.
-    rules.withhold_untrusted(payload)
+    rules.withhold_untrusted(payload, rendered=rendered)
     # Hits are also taken before any upstream engine output is restored from recomputation, so a flagged field inside
     # a restored entry (for example a member name added to assertion_mappings[]) is still reported, not just dropped.
     screened_hits = instruction_hits(payload) if EMBEDDED_INSTRUCTION_HOLD else []

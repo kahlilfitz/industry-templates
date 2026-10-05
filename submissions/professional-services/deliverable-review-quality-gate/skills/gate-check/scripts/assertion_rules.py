@@ -1305,7 +1305,36 @@ INSTRUCTION = "instruction"
 PRIMARY_SECTIONS = ("deliverable", "criteria", "assertions", "evidence_set", "prior_findings")
 UNSCANNED_KEYS = {"contract_version"}  # validated against the contract version before any scan
 SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.:#/ -]{1,80}$")
-AGGREGATE_LABEL = "(combined text, citation, evidence titles and location label)"
+AGGREGATE_LABEL = "(combined text, citation, evidence titles, location section and label)"
+RECORD_LABEL = "(combined fields)"
+# Every other record whose free text travels to an output is screened with its fields joined, as an assertion is
+# (quality-gate-criteria.md #8.5): (path segments, members in reading order), "[]" marking an array of records,
+# "location" standing for the location's section and label, and a string-list member (client_aliases, required_language,
+# criteria_sections and the like) read as one field, its entries joined in order. IDs, closed enums, numbers, booleans
+# and `source` tags are left out, as for assertions. assertion_mappings are engine copies of the assertion record and
+# are rebuilt from it; escalation notes (strings or {gate_id, note}) are screened as runs of adjacent entries
+# (array_runs). tests/run_tests.py fails when the contract gains a string or string-list member of one of these records
+# that is neither listed here nor in RECORD_EXCLUDED.
+RECORD_MEMBERS = (
+    (("deliverable",), ("title", "version", "type", "client_name", "client_aliases", "intended_recipients",
+                        "confidentiality_marking", "present_disclaimer_types", "required_language", "present_language",
+                        "citation")),
+    (("deliverable", "brand_checks", "[]"), ("title", "detail", "location", "citation")),
+    (("deliverable", "licensed_content", "[]"), ("title", "detail", "location", "citation")),
+    (("criteria",), ("criteria_sections", "citation")),
+    (("evidence_set", "[]"), ("title", "citation")),
+    (("prior_findings", "[]"), ("detail", "location", "citation")),
+    (("findings", "[]"), ("title", "detail", "location", "criteria_section", "citation")),
+    (("ranked_findings", "[]"), ("title", "detail", "location", "criteria_section", "citation", "ranking_basis")),
+    (("gate_results", "[]"), ("name", "citation")),
+    (("release_readiness",), ("summary", "citation")),
+)
+# String members of those records that are not joined, with the reason: identifiers and provenance tags are screened
+# on their own and read as labels, never as prose.
+RECORD_EXCLUDED = {
+    "deliverable_id": "identifier", "engagement_id": "identifier", "check_id": "identifier", "content_id": "identifier",
+    "evidence_id": "identifier", "finding_id": "identifier", "criteria_set_id": "identifier", "source": "provenance tag",
+}
 # Withheld markers (quality-gate-criteria.md #8.7). Numbered per distinct withheld text, so two different withheld
 # identifiers never collide and every copy of one text carries the same marker at every stage.
 WITHHELD_WORDING = {
@@ -1343,7 +1372,7 @@ def screen_text(value):
     return list(_screen_cached(value)) if isinstance(value, str) else []
 
 
-@functools.lru_cache(maxsize=4096)
+@functools.lru_cache(maxsize=16384)
 def _screen_fields_cached(items):
     return tuple(sg.scan_fields(dict(items), **STEERING_HOOKS))
 
@@ -1352,6 +1381,22 @@ def screen_fields(fields):
     """steering_guard hits for a multi-field record; a 'split' hit means only the joined fields trip (cached: every
     stage re-screens the same assertions)."""
     return list(_screen_fields_cached(tuple(fields.items())))
+
+
+def screen_record(fields):
+    """screen_fields for a record, all fields joined in reading order and, when that does not trip and there are more
+    than two fields, each pair of fields joined too, so a note split across two fields with another field between them
+    is still caught (quality-gate-criteria.md #8.5). Returns the first hits found."""
+    found = screen_fields(fields)
+    if found or len(fields) < 3:
+        return found
+    items = list(fields.items())
+    for first in range(len(items)):
+        for second in range(first + 1, len(items)):
+            found = screen_fields(dict((items[first], items[second])))
+            if found:
+                return found
+    return []
 
 
 def hit_reason(found):
@@ -1420,16 +1465,31 @@ def scan_sections(payload):
 
 
 ARRAY_WINDOW = 8
+ESCALATIONS_PATH = "$.escalations"
 
 
-def _entries(items, first, last):
-    """(fields, refs) for items[first..last]: fields maps 'entry N' to the text, refs to the (container, index)."""
+def run_slots(list_path, items):
+    """(container, key) per array entry, as array_runs reads it: the entry itself, except that a {gate_id, note}
+    escalation is read as its note, so a note split across adjacent escalations of either form is one text."""
+    if list_path == ESCALATIONS_PATH:
+        return [(item, "note") if isinstance(item, dict) else (items, index) for index, item in enumerate(items)]
+    return [(items, index) for index in range(len(items))]
+
+
+def slot_value(container, key):
+    """The value a (container, key) slot holds, or None when the object has no such member."""
+    return container.get(key) if isinstance(container, dict) else container[key]
+
+
+def _entries(slots, first, last):
+    """(fields, refs) for slots[first..last]: fields maps 'entry N' to the text, refs to the (container, key)."""
     names = [f"entry {index}" for index in range(first, last + 1)]
-    return dict(zip(names, items[first:last + 1])), dict(zip(names, ((items, index) for index in range(first, last + 1))))
+    chosen = slots[first:last + 1]
+    return dict(zip(names, (slot_value(container, key) for container, key in chosen))), dict(zip(names, chosen))
 
 
-def _run_trips(items, first, last):
-    return screen_fields(_entries(items, first, last)[0])
+def _run_trips(slots, first, last):
+    return screen_fields(_entries(slots, first, last)[0])
 
 
 def array_runs(payload, breaks):
@@ -1437,36 +1497,39 @@ def array_runs(payload, breaks):
     prose split across any number of entries is screened as one text (quality-gate-criteria.md #8.5).
 
     Entries for which breaks(value) is true (non-strings, blanks, and text already flagged or withheld) split an array
-    into runs. Each run is screened in sliding windows of up to ARRAY_WINDOW entries, and, when it is longer than that,
-    joined whole, so the cost stays linear in the array. A tripping window is narrowed to the entries the note needs
-    (dropping an end entry stops the hit); a whole-run hit that no window shows withholds the whole run."""
+    into runs; an escalation object is read as its note (run_slots). Each run is screened in sliding windows of up to
+    ARRAY_WINDOW entries, and, when it is longer than that, joined whole, so the cost stays linear in the array. A
+    tripping window is narrowed to the entries the note needs (dropping an end entry stops the hit); a whole-run hit
+    that no window shows withholds the whole run."""
     for _, path, child, derived in top_level_sections(payload):
         for list_path, items in iter_arrays(child, path):
+            slots = run_slots(list_path, items)
+            values = [slot_value(container, key) for container, key in slots]
             start = 0
-            while start < len(items):
-                if breaks(items[start]):
+            while start < len(values):
+                if breaks(values[start]):
                     start += 1
                     continue
                 end = start
-                while end + 1 < len(items) and not breaks(items[end + 1]):
+                while end + 1 < len(values) and not breaks(values[end + 1]):
                     end += 1
-                yield from _run_hits(list_path, items, start, end, derived)
+                yield from _run_hits(list_path, slots, start, end, derived)
                 start = end + 1
 
 
-def _run_hits(list_path, items, start, end, derived):
+def _run_hits(list_path, slots, start, end, derived):
     if end == start:
         return
     first, flagged = start, False
     while first < end:
         last = min(first + ARRAY_WINDOW - 1, end)
-        if _run_trips(items, first, last):
+        if _run_trips(slots, first, last):
             low, high = first, last
-            while high - low > 1 and _run_trips(items, low + 1, high):
+            while high - low > 1 and _run_trips(slots, low + 1, high):
                 low += 1
-            while high - low > 1 and _run_trips(items, low, high - 1):
+            while high - low > 1 and _run_trips(slots, low, high - 1):
                 high -= 1
-            fields, refs = _entries(items, low, high)
+            fields, refs = _entries(slots, low, high)
             flagged = True
             yield f"{list_path}[{low}]+[{high}]{PAIR_SUFFIX}", fields, refs, derived, screen_fields(fields)
             first = high + 1
@@ -1475,7 +1538,7 @@ def _run_hits(list_path, items, start, end, derived):
             break
         first += 1
     if not flagged and end - start + 1 > ARRAY_WINDOW:
-        fields, refs = _entries(items, start, end)
+        fields, refs = _entries(slots, start, end)
         found = screen_fields(fields)
         if found:
             yield f"{list_path}[{start}]+[{end}]{PAIR_SUFFIX}", fields, refs, derived, found
@@ -1498,7 +1561,7 @@ def collect_scan_text(payload):
 
 def assertion_records(payload):
     """Yield (path, fields, refs) per assertion: fields maps text, citation, linked evidence titles and the location
-    label (in reading order, non-blank strings only) to their values, and refs maps the same names to the
+    section and label (in reading order, non-blank strings only) to their values, and refs maps the same names to the
     (container, key) holding each value. Only assertions with more than one such field are yielded."""
     evidence = {key_of(item["evidence_id"]): item for item in payload.get("evidence_set") or [] if isinstance(item, dict) and key_of(item.get("evidence_id")) is not None}
     for index, assertion in enumerate(payload.get("assertions") or []):
@@ -1512,16 +1575,75 @@ def assertion_records(payload):
                 refs[f"evidence title {position + 1}"] = (linked, "title")
         location = assertion.get("location")
         if isinstance(location, dict):
+            refs["location section"] = (location, "section")
             refs["location label"] = (location, "label")
-        fields = {}
-        for name, (container, key) in list(refs.items()):
-            value = container.get(key)
-            if isinstance(value, str) and value.strip():
-                fields[name] = value
-            else:
-                del refs[name]
+        fields = _present(refs)
         if len(fields) > 1:
             yield f"$.assertions[{index}] {AGGREGATE_LABEL}", fields, refs
+
+
+def _present(refs):
+    """The non-blank string values refs points to, by name; refs keeps only those names."""
+    fields = {}
+    for name, (container, key) in list(refs.items()):
+        value = container.get(key)
+        if isinstance(value, str) and value.strip():
+            fields[name] = value
+        else:
+            del refs[name]
+    return fields
+
+
+def _records_at(value, segments, path):
+    """Yield (path, record) for each object RECORD_MEMBERS' path segments reach from value."""
+    if not segments:
+        if isinstance(value, dict):
+            yield path, value
+        return
+    head, rest = segments[0], segments[1:]
+    if head == "[]":
+        for index, item in enumerate(value if isinstance(value, list) else []):
+            yield from _records_at(item, rest, f"{path}[{index}]")
+    elif isinstance(value, dict):
+        yield from _records_at(value.get(head), rest, f"{path}.{head}")
+
+
+def record_refs(record, members, base):
+    """refs for a record's joined members in reading order: name -> [(container, key, path)], location as section and
+    label, a string-list member as one name holding each entry's slot."""
+    refs = {}
+    for member in members:
+        value = record.get(member)
+        if member == "location":
+            if isinstance(value, dict):
+                refs["location section"] = [(value, "section", f"{base}.location.section")]
+                refs["location label"] = [(value, "label", f"{base}.location.label")]
+        elif isinstance(value, list):
+            refs[member.replace("_", " ")] = [(value, index, f"{base}.{member}[{index}]") for index in range(len(value))]
+        else:
+            refs[member.replace("_", " ")] = [(record, member, f"{base}.{member}")]
+    return refs
+
+
+def record_fields(refs, keep):
+    """(fields, kept) for a record: fields maps each name to its non-blank string text that keep(value) accepts (a list
+    member's accepted entries joined with ' ; ' in order), kept maps the same names to the slots that text came from."""
+    fields, kept = {}, {}
+    for name, slots in refs.items():
+        chosen = [(slot, slot_value(slot[0], slot[1])) for slot in slots]
+        chosen = [(slot, value) for slot, value in chosen if isinstance(value, str) and value.strip() and keep(value)]
+        if chosen:
+            fields[name] = " ; ".join(value for _, value in chosen)
+            kept[name] = [slot for slot, _ in chosen]
+    return fields, kept
+
+
+def other_records(payload):
+    """Yield (path, refs, derived) for every record other than an assertion (RECORD_MEMBERS), primary sections first, so
+    steering split across a record's fields that no single field contains is caught (quality-gate-criteria.md #8.5)."""
+    for segments, members in RECORD_MEMBERS:
+        for base, record in _records_at(payload, segments, "$"):
+            yield f"{base} {RECORD_LABEL}", record_refs(record, members, base), segments[0] not in PRIMARY_SECTIONS
 
 
 def assertion_fields(payload):
@@ -1534,19 +1656,22 @@ def assertion_fields(payload):
 
 def instruction_hits(payload):
     """(path, reason) for every untrusted string or member name that trips the detector or carries a withheld marker,
-    then for each assertion whose fields trip only when joined, then for each run of adjacent array entries that trip
-    only when joined (so one note is never counted twice).
+    then for each primary record (other_records), each assertion and each derived record whose fields trip only when
+    joined, then for each run of adjacent array entries that trip only when joined (so one note is never counted twice).
 
-    Text withheld at an earlier stage stays a hit: a primary instruction/oversize marker is a field hit, a split marker
-    on any of an assertion's fields is that assertion's combined hit, a run of split-marked array entries is one hit,
+    Text withheld at an earlier stage stays a hit: a primary instruction/oversize marker is a field hit, split markers
+    across a record's fields are that record's combined hit, a split marker on any of an assertion's fields is that
+    assertion's combined hit (unless a record already counted it), a run of split-marked array entries is one hit,
     any other split marker is a hit of its own, and a derived string that is exactly a marker (and not a copy of a
     primary string) is a hit. A derived string that merely contains a marker or embeds tripped primary text is the same
     note and is not counted again (quality-gate-criteria.md #8.1-#8.7)."""
     hits, tripped, pending_split = [], set(), []
     emitted = exact_markers(payload)
+    # A split marker in a derived record's member or an escalation note is counted with its record or run below.
+    grouped = {path for _, refs, derived in other_records(payload) if derived for slots in refs.values() for _, _, path in slots}
     for path, text, derived in collect_scan_text(payload):
         kind = withheld_kind(text)
-        if kind == SPLIT and (not derived or path.endswith("]")):
+        if kind == SPLIT and (not derived or path.endswith("]") or path in grouped or is_escalation_note(path)):
             pending_split.append((path, text))
             continue
         if kind:
@@ -1567,20 +1692,74 @@ def instruction_hits(payload):
         if not derived:
             tripped.add(text)
     covered = set()
+    # Primary records first: a split marker on an evidence title may be its evidence record's note, not the assertion's.
+    record_hits, held = _record_hits(payload, tripped, covered, derived=False)
+    hits.extend(record_hits)
     for path, fields in assertion_fields(payload):
         if tripped.intersection(fields.values()):
             continue
         splits = [value for value in fields.values() if withheld_kind(value) == SPLIT]
         if splits:
+            if not set(splits) <= held:
+                hits.append((path, INSTRUCTION))
             covered.update(splits)
-            hits.append((path, INSTRUCTION))
             continue
-        found = screen_fields(fields)
+        found = screen_record(fields)
         if found:
             hits.append((path, hit_reason(found)))
-    hits.extend(_array_hits(payload, tripped, covered))
+    record_hits, derived_held = _record_hits(payload, tripped, covered, derived=True)
+    hits.extend(record_hits)
+    hits.extend(_array_hits(payload, tripped, covered, held | derived_held))
     hits.extend((path, INSTRUCTION) for path, text in pending_split if text not in covered)
     return hits
+
+
+def is_escalation_note(path):
+    return path.startswith(ESCALATIONS_PATH + "[") and path.endswith("].note")
+
+
+def unflagged(tripped):
+    """keep() for record_fields at a later stage: text not withheld, not flagged on its own and not embedding flagged
+    primary text, exactly what withhold_untrusted leaves for joined screening."""
+    return lambda value: not (contains_withheld(value) or value in tripped or screen_text(value) or any(source in value for source in tripped))
+
+
+def record_values(refs):
+    """Every value a record's refs point to (list members entry by entry)."""
+    return [slot_value(container, key) for slots in refs.values() for container, key, _ in slots]
+
+
+def _record_hits(payload, tripped, covered, derived):
+    """(hits, held) for the primary (derived=False) or derived records (other_records): one hit per record whose split
+    markers not already counted sit in more than one of its fields (a record withheld whole), or whose remaining fields
+    trip only when joined; held is every split marker those records carry. A record that also holds text flagged on its
+    own is that note's hold and is not counted again, as withhold_untrusted decides. A single field's split marker is a
+    run's or another note's and is counted there, and a copy of fields another record already counted (an engine
+    finding built from a register entry) is not counted again."""
+    hits, held = [], set()
+    keep = unflagged(tripped)
+
+    def flagged_alone(value):
+        return isinstance(value, str) and bool(value.strip()) and withheld_kind(value) != SPLIT and not keep(value)
+
+    for path, refs, is_derived in other_records(payload):
+        if is_derived != derived:
+            continue
+        values = {name: [slot_value(container, key) for container, key, _ in slots] for name, slots in refs.items()}
+        splits = {name: {value for value in entries if withheld_kind(value) == SPLIT} for name, entries in values.items()}
+        if sum(1 for found in splits.values() if found - covered) > 1:
+            marked = set().union(*splits.values())
+            covered.update(marked)
+            held.update(marked)
+            if not any(flagged_alone(value) for value in record_values(refs)):
+                hits.append((path, INSTRUCTION))
+            continue
+        fields, _ = record_fields(refs, keep)
+        if len(fields) > 1:
+            found = screen_record(fields)
+            if found:
+                hits.append((path, hit_reason(found)))
+    return hits, held
 
 
 # Top-level sections every stage rebuilds from recomputation (assertion_mappings, gate_results) or regenerates
@@ -1598,9 +1777,19 @@ def placeholder_paths(payload, engine_finding, engine_escalation):
     def collect(value, path):
         paths.extend(found for found, text in iter_strings(value, path) if contains_withheld(text))
 
+    members = dict(RECORD_MEMBERS)[("findings", "[]")]
     for index, item in enumerate(payload.get("findings") or []):
         if not engine_finding(index, item):
-            collect(item, f"$.findings[{index}]")
+            # A record's split marker is bound by the hold on the record (other_records), which is where the note is, or,
+            # when the record also holds text flagged on its own, by that field's hold (withhold_untrusted).
+            base = f"$.findings[{index}]"
+            refs = record_refs(item, members, base) if isinstance(item, dict) else {}
+            slots = [(path, slot_value(container, key)) for entries in refs.values() for container, key, path in entries]
+            split = {path for path, value in slots if withheld_kind(value) == SPLIT}
+            alone = [path for path, value in slots if contains_withheld(value) and withheld_kind(value) != SPLIT]
+            for found, text in iter_strings(item, base):
+                if contains_withheld(text):
+                    paths.append((alone[0] if alone else f"{base} {RECORD_LABEL}") if found in split else found)
     for index, entry in enumerate(payload.get("escalations") or []):
         if not engine_escalation(entry):
             collect(entry, f"$.escalations[{index}]")
@@ -1620,20 +1809,26 @@ def unbound_placeholder_hits(paths, holds):
     return hits
 
 
-def _array_hits(payload, tripped, covered):
-    """Hits for runs of split-marked adjacent array entries, then for adjacent unmarked entries that trip only joined."""
+def _array_hits(payload, tripped, covered, held=frozenset()):
+    """Hits for runs of split-marked adjacent array entries (escalation notes included, run_slots) that no record hold
+    (`held`) already counts, then for adjacent unmarked entries that trip only joined."""
     hits = []
     for _, path, child, _ in top_level_sections(payload):
         for list_path, items in iter_arrays(child, path):
+            values = [slot_value(container, key) for container, key in run_slots(list_path, items)]
+
+            def run_marked(position):
+                return withheld_kind(values[position]) == SPLIT and values[position] not in held
+
             index = 0
-            while index < len(items):
-                if withheld_kind(items[index]) != SPLIT:
+            while index < len(values):
+                if not run_marked(index):
                     index += 1
                     continue
                 last = index
-                while last + 1 < len(items) and withheld_kind(items[last + 1]) == SPLIT:
+                while last + 1 < len(values) and run_marked(last + 1):
                     last += 1
-                covered.update(items[index:last + 1])
+                covered.update(values[index:last + 1])
                 hits.append((f"{list_path}[{index}]+[{last}]{PAIR_SUFFIX}" if last > index else f"{list_path}[{index}]", INSTRUCTION))
                 index = last + 1
     used = set()
@@ -1691,7 +1886,127 @@ def _replace_withheld(value, exact, embedded):
     return _replace_text(value, exact, embedded) if isinstance(value, str) else value
 
 
-def withhold_untrusted(payload, raw_input=False):
+# --- Rendered adjacency (quality-gate-criteria.md #8.22) ---------------------------------------------------------
+# The review packet (review-packet/templates/review-packet-template.md) renders each ranked finding as one row
+# (location section, the label when page or paragraph is null, title, detail, criteria section), each unsupported or
+# limited assertion mapping as its text and citation, and each escalation as a list line, in that order. Text from two
+# records can therefore be read as one sentence even when every record passes on its own. gate_check predicts the
+# ranked order (rank_order, the order severity_rank uses) and screens every pair of fields within a row and across two
+# consecutive rows, and each two consecutive rows joined whole; severity_rank and --verify refuse a ranked output in
+# which any such pair or join still trips.
+RANK_SEVERITY = {"release_blocker": 0, "must_fix": 1, "advisory": 2}
+# Members whose values are identifiers, closed enums or tags: never read as rendered prose and never withheld as one.
+NON_PROSE_KEYS = {"status", "severity", "gate_id", "support_status", "class", "type", "license_status", "client_data_handling",
+                  "required_disclaimer_type", "source", "contract_version", "generated_at", "engines", "best_evidence_id"}
+MIN_RENDERED_SOURCE = 4  # shorter input values are not traced into composed engine text
+
+
+def rank_sort_key(item):
+    """severity_rank's ranking (severity-rules.md #3.2): severity, then higher confidence, then page and paragraph
+    (register- or field-level findings without them last), then finding ID. Values the ranking cannot order sort last."""
+    location = item.get("location") if isinstance(item.get("location"), dict) else {}
+    page, paragraph = location.get("page"), location.get("paragraph")
+    confidence = item.get("confidence", 0.0)
+    return (RANK_SEVERITY.get(item.get("severity"), len(RANK_SEVERITY)), -float(confidence) if is_number(confidence) else 0.0,
+            page if is_integer(page) else 9999, paragraph if is_integer(paragraph) else 9999,
+            item.get("finding_id") if isinstance(item.get("finding_id"), str) else "")
+
+
+def rank_order(findings):
+    """The findings in the order severity_rank ranks them: one per canonical finding ID at the highest severity (first
+    on a tie), then sorted by rank_sort_key."""
+    kept, positions = [], {}
+    for item in findings:
+        if not isinstance(item, dict):
+            continue
+        key = canonical_id(item.get("finding_id")) if isinstance(item.get("finding_id"), str) else None
+        if key is None or key not in positions:
+            if key is not None:
+                positions[key] = len(kept)
+            kept.append(item)
+        elif RANK_SEVERITY.get(item.get("severity"), 9) < RANK_SEVERITY.get(kept[positions[key]].get("severity"), 9):
+            kept[positions[key]] = item
+    return sorted(kept, key=rank_sort_key)
+
+
+def rendered_rows(payload, ranked):
+    """The rendered free text, as sequences of rows (each a list of strings in reading order): ranked findings,
+    unsupported or limited assertion mappings, and escalations."""
+    findings = []
+    for item in ranked:
+        location = item.get("location") if isinstance(item.get("location"), dict) else {}
+        row = [location.get("section")]
+        if location.get("page") is None or location.get("paragraph") is None:
+            row.append(location.get("label"))
+        findings.append(row + [item.get("title"), item.get("detail"), item.get("criteria_section")])
+    mappings = [[item.get("text"), item.get("citation")] for item in payload.get("assertion_mappings") or []
+                if isinstance(item, dict) and item.get("support_status") != "supported"]
+    escalations = [[item.get("note") if isinstance(item, dict) else item] for item in payload.get("escalations") or []]
+    return findings, mappings, escalations
+
+
+def _joined_trips(texts):
+    return bool(screen_text(" ".join(texts)))
+
+
+def rendered_hits(payload, ranked):
+    """Groups of rendered strings that trip the detector only when read together (quality-gate-criteria.md #8.22): each
+    pair of fields within a row and across two consecutive rows, in reading order, and each row or pair of consecutive
+    rows joined whole when no pair in it trips. Text already withheld or tripping on its own is left out (it holds
+    already). Returns a list of tuples of strings, in rendering order."""
+    def usable(value):
+        return isinstance(value, str) and value.strip() and not contains_withheld(value) and not screen_text(value)
+
+    groups = []
+    for sequence in rendered_rows(payload, ranked):
+        rows = [list(dict.fromkeys(value for value in row if usable(value))) for row in sequence]
+        for index, row in enumerate(rows):
+            scopes = [(row, [(a, b) for position, a in enumerate(row) for b in row[position + 1:]])]
+            if index + 1 < len(rows):
+                following = rows[index + 1]
+                scopes.append((row + [value for value in following if value not in row], [(a, b) for a in row for b in following if a != b]))
+            for joined, pairs in scopes:
+                found = [pair for pair in pairs if _joined_trips(pair)]
+                if not found and len(joined) > 1 and _joined_trips(joined):
+                    found = [tuple(joined)]
+                groups.extend(tuple(group) for group in found if tuple(group) not in groups)
+    return groups
+
+
+def _free_text_slots(node, name=None):
+    """(container, key) for every string value outside identifier, enum and tag members (NON_PROSE_KEYS, *_id, *_ids)."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in NON_PROSE_KEYS or (isinstance(key, str) and (key.endswith("_id") or key.endswith("_ids"))):
+                continue
+            if isinstance(value, str):
+                yield node, key
+            else:
+                yield from _free_text_slots(value, key)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            if isinstance(value, str):
+                yield node, index
+            else:
+                yield from _free_text_slots(value, name)
+
+
+def rendered_sources(payload, groups):
+    """The free-text values of `payload` behind rendered strings that trip together: a rendered string that is itself a
+    value, else every value of at least MIN_RENDERED_SOURCE characters it contains (engine text that embeds input,
+    such as a recipient name inside a finding detail). Engine-only text has no source and is never withheld."""
+    values = {container[key] for container, key in _free_text_slots(payload) if not contains_withheld(container[key])}
+    sources = set()
+    for group in groups:
+        for text in group:
+            if text in values:
+                sources.add(text)
+            else:
+                sources.update(value for value in values if len(value.strip()) >= MIN_RENDERED_SOURCE and value in text)
+    return sources
+
+
+def withhold_untrusted(payload, raw_input=False, rendered=frozenset()):
     """Screen the whole payload and replace every string that trips the detector with a numbered withheld marker,
     everywhere that text appears, so no stage, output or review packet repeats it (quality-gate-criteria.md #8.7).
 
@@ -1703,6 +2018,10 @@ def withhold_untrusted(payload, raw_input=False):
       new marker and is a G8 hit, so input can never supply a marker that sets text aside without a hold;
     - when only an assertion's joined fields trip, each of those fields gets a split marker wherever it appears exactly;
     - when only a run of adjacent array entries trips joined (array_runs), every entry of the run gets a split marker;
+    - when only another record's joined fields trip (other_records, screen_record), every field of the record that is
+      not already flagged or claimed (every entry of a list member) gets a split marker wherever it appears exactly;
+    - every free-text value in `rendered` (gate_check's rendered_sources, quality-gate-criteria.md #8.22) gets a split
+      marker wherever it appears exactly;
     - member names are screened like values, and a flagged name is replaced by its marker in place (order kept).
     Engine markers already present are left alone and are not new hits. The payload is updated in place. Returns
     (path, reason, derived) for each newly withheld hit, in the order instruction_hits reports them."""
@@ -1753,13 +2072,13 @@ def withhold_untrusted(payload, raw_input=False):
         values = list(fields.values())
         if tripped.intersection(values) or any(is_withheld(value) for value in values):
             continue
-        found = screen_fields(fields)
+        found = screen_record(fields)
         if found:
             # Mark the fields the note needs (removing one stops the hit), or every field when none is needed alone;
             # evidence titles are shared between assertions, so they are marked only when the note needs no field of
             # the assertion's own. No field trips alone, so identical text elsewhere in the primary sections is not
             # this note and is left as it is.
-            needed = [name for name in fields if not screen_fields({other: value for other, value in fields.items() if other != name})] or list(fields)
+            needed = [name for name in fields if not screen_record({other: value for other, value in fields.items() if other != name})] or list(fields)
             own = [name for name in needed if not name.startswith("evidence title")]
             split_refs.extend(refs[name] for name in (own or needed))
             combined.append((path, hit_reason(found), False))
@@ -1768,9 +2087,33 @@ def withhold_untrusted(payload, raw_input=False):
     def breaks(value):
         return not (isinstance(value, str) and value.strip()) or value in markers or contains_withheld(value) or any(source in value for source in embedded)
 
+    run_hits = []
     for path, fields, refs, is_derived, found in array_runs(payload, breaks):
         split_refs.extend(refs.values())
-        combined.append((path, hit_reason(found), is_derived))
+        run_hits.append((path, hit_reason(found), is_derived))
+    # Every other record (other_records) is screened with its fields joined the same way (screen_record). Text already
+    # flagged or withheld, and fields an assertion's note or a run of entries already claimed, are that note and are
+    # left out. The remaining fields are the record's own, so a record that trips joined has every one of them (every
+    # entry of a list member) withheld with a split marker, wherever each appears.
+    claimed = {(id(container), key) for container, key in split_refs}
+    record_hits = []
+    for path, refs, is_derived in other_records(payload):
+        unclaimed = {name: [slot for slot in slots if (id(slot[0]), slot[1]) not in claimed] for name, slots in refs.items()}
+        fields, kept = record_fields(unclaimed, lambda value: not breaks(value))
+        if len(fields) < 2:
+            continue
+        found = screen_record(fields)
+        if found:
+            slots = [(container, key) for entries in kept.values() for container, key, _ in entries]
+            split_refs.extend(slots)
+            claimed.update((id(container), key) for container, key in slots)
+            # A record already holding text flagged on its own is that note's hold: the rest is withheld with it.
+            if not any(isinstance(value, str) and value.strip() and breaks(value) for value in record_values(refs)):
+                record_hits.append((path, hit_reason(found), is_derived))
+    combined = [hit for hit in record_hits if not hit[2]] + combined + [hit for hit in record_hits if hit[2]] + run_hits
+    # Text the review packet would render beside other text so that they trip together (#8.22).
+    if rendered:
+        split_refs.extend((container, key) for container, key in _free_text_slots(payload) if container[key] in rendered)
     split_exact = {}
     for container, key in split_refs:
         value = container[key]

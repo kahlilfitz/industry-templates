@@ -97,6 +97,11 @@ class PackError(ValueError):
     """A raw pack that cannot be parsed. Messages name a line or position, never the pack's text."""
 
 
+def emit(line=""):
+    """Print one line backslash-escaped to ASCII, so a cp1252 or ASCII console or pipe can always show it."""
+    print(str(line).encode("ascii", "backslashreplace").decode("ascii"))
+
+
 def record_match(pattern, line, kind, where):
     """Parse one line of a known register section. A record-shaped line (a list item, or one carrying a field label of
     that register) that the pattern does not match raises PackError naming only its position; prose lines return None."""
@@ -601,9 +606,9 @@ def main(argv):
     failed = False
     for position, scenario_dir in enumerate(scenarios, start=1):
         problems = check_scenario(scenario_dir)
-        print(f"{scenario_label(scenario_dir, position)}: {'derives from its raw pack' if not problems else f'{len(problems)} difference(s)'}")
+        emit(f"{scenario_label(scenario_dir, position)}: {'derives from its raw pack' if not problems else f'{len(problems)} difference(s)'}")
         for problem in problems:
-            print("  - " + problem)
+            emit("  - " + problem)
         failed = failed or bool(problems)
     return 1 if failed else 0
 

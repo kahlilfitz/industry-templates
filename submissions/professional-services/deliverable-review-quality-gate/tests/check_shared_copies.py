@@ -22,6 +22,11 @@ STEERING_GUARD_SHA256 = "825d0550190150e78fd3a66fc3b8c8b6e5f4867e6620e47ed7381b0
 STEERING_GUARD_COPIES = ("skills/assertion-map/scripts/steering_guard.py", "skills/gate-check/scripts/steering_guard.py")
 
 
+def emit(line=""):
+    """Print one line backslash-escaped to ASCII, so a cp1252 or ASCII console or pipe can always show it."""
+    print(str(line).encode("ascii", "backslashreplace").decode("ascii"))
+
+
 def steering_guard_copies():
     """Every vendored copy: the registered ones plus any other skills/*/scripts/steering_guard.py."""
     found = {os.path.relpath(path, ROOT).replace(os.sep, "/") for path in glob.glob(os.path.join(ROOT, "skills", "*", "scripts", "steering_guard.py"))}
@@ -47,22 +52,22 @@ def main():
     for src, copy in pairs:
         rel = os.path.relpath(copy, ROOT)
         if not os.path.exists(copy):
-            print(f"MISSING {rel}")
+            emit(f"MISSING {rel}")
             drift += 1
         elif digest(src) != digest(copy):
-            print(f"DRIFT   {rel}")
+            emit(f"DRIFT   {rel}")
             drift += 1
     vendored = steering_guard_copies()
     for rel in vendored:
         path = os.path.join(ROOT, *rel.split("/"))
         if not os.path.exists(path):
-            print(f"MISSING {rel}")
+            emit(f"MISSING {rel}")
             drift += 1
         elif digest(path) != STEERING_GUARD_SHA256:
-            print(f"DRIFT   {rel} (does not match STEERING_GUARD_SHA256)")
+            emit(f"DRIFT   {rel} (does not match STEERING_GUARD_SHA256)")
             drift += 1
     total = len(pairs) + len(vendored)
-    print(f"{total - drift}/{total} shared copies identical to their source")
+    emit(f"{total - drift}/{total} shared copies identical to their source")
     return 1 if drift else 0
 
 
