@@ -8,6 +8,13 @@ archiving evidence, writing deployment docs or trackers, promoting a distributab
 status), read [docs/operator-runbook.md](docs/operator-runbook.md) and apply
 [docs/plugin-hardening-checklist.md](docs/plugin-hardening-checklist.md) before every freeze.
 
+## Skills in sub-agents
+
+QA review, fix and test sub-agents in this repository do not invoke skills unless their prompt
+names one; they work from the prompt and the repository. A Cowork plugin-engineering skill (such as
+`cowork-plugin-engineer`) applies only to Cowork packaging, manifest, OAuth and ZIP-validation
+work, never to engine correctness reviews or fixes.
+
 ## Shared modules (`shared\`)
 
 `shared\<module>\` is the source of truth for code vendored into several plugins, such as the

@@ -605,8 +605,9 @@ Recommended sub-agent settings in `~/.copilot/settings.json` (or set interactive
 Useful skills:
 
 - Word, Excel and PowerPoint file skills for deployment docs, trackers and decks.
-- A Cowork plugin-engineering skill and an agent red-team skill, such as those in the public
-  `microsoft/cat-agent-skills` gallery.
+- A Cowork plugin-engineering skill, such as the one in the public `microsoft/cat-agent-skills`
+  gallery, for packaging, manifest, OAuth and ZIP-validation work only. Do not use it, or any
+  other skill, in QA review or fix agents (see [Pre-freeze QA review](#pre-freeze-qa-review)).
 - Plugin-evaluation and skill-quality evaluators from your organisation's internal agent-skills
   marketplace, for a cheap pre-check before spending a Cowork run.
 
@@ -633,9 +634,12 @@ reproduces nothing.
    data fields", "reworded variants", "inputs that should hold but pass", "confirmed defects". Do
    not use words such as "adversarial", "attack", "injection", "bypass" or "jailbreak" in the
    prompt.
-5. Send the confirmed findings to the fix agent as new commits (no version bump before the first
+5. **No skills.** Add "Do not invoke skills; work from this prompt and the repository." to every
+   review and fix prompt. In Wave 1, reviewers loaded a plugin-packaging skill by reflex in 22
+   reviews; it never contributed a finding and only added context.
+6. Send the confirmed findings to the fix agent as new commits (no version bump before the first
    freeze of that version), then run another round on the new commits.
-6. Separately, score the plugin's detector call sites against the
+7. Separately, score the plugin's detector call sites against the
    [held-out set](#held-out-scoring). The review agent must not see that set.
 
 Prompt skeleton:
