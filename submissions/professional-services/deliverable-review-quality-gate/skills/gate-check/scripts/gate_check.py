@@ -13,6 +13,7 @@ import steering_guard as sg  # noqa: E402  vendored shared detector; never edit 
 
 ENGINE = "engine:gate_check"
 ENGINE_VERSION = "1.0.4"
+LEDGER_TAG = f"gate_check/{ENGINE_VERSION}"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY = True  # quality-gate-criteria.md #2.2
 DISCLAIMER_TYPES = {"general_advice", "reliance_restriction"}  # quality-gate-criteria.md #2.4: anything else holds
@@ -753,17 +754,53 @@ def evaluate(payload, hit_sink=None):
     return payload
 
 
+def gate_stage(mapped, generated_at=None):
+    """gate_check's whole derivation on a mapped document, in place: evaluate, then record this engine after
+    assertion_map in the ledger. severity_rank runs it to re-derive gate-checked.json (#8.21)."""
+    payload = evaluate(mapped)
+    rules.record_engine(payload, LEDGER_TAG, generated_at, prior=(rules.AM_LEDGER_TAG,))
+    return payload
+
+
+def rederive_mapped(review_input, stamp):
+    """assertion_map's output re-derived from the review input with the carried run stamp (#8.21)."""
+    return rules.assertion_map_stage(copy.deepcopy(review_input), stamp)[0]
+
+
+def mapped_candidates(derived, stamp):
+    """What gate_check accepts as --mapped: assertion_map's re-derived output, else (computed only when needed)
+    gate_check's own output on it, so a re-run on gate-checked.json reproduces it."""
+    yield derived
+    try:
+        yield gate_stage(copy.deepcopy(derived), stamp)
+    except InputError:
+        return
+
+
+def authenticate(carried, input_path):
+    """The mapped input must be exactly what assertion_map derives from the review input, every engine-owned field and
+    the ledger included (or gate_check's own output, for an idempotent re-run): an edited deliverable identity,
+    escalation, finding or provenance entry is refused, never carried (quality-gate-criteria.md #8.21)."""
+    review_input = rules.load_json_file(input_path, "review input")
+    stamp = rules.carried_stamp(carried)
+    rules.require_rederived(carried, mapped_candidates(rederive_mapped(review_input, stamp), stamp), "gate_check")
+
+
 def main():
     parser = rules.EngineArgumentParser(prog="gate_check.py", description="Apply quality-gate compliance checks deterministically.")
     parser.add_argument("--mapped", required=True)
+    parser.add_argument("--input", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--generated-at", default=None)
     args = parser.parse_args()
     try:
         generated_at = validate_generated_at(args.generated_at)
-        payload = evaluate(load_json(args.mapped))
+        carried = load_json(args.mapped)
+        original = copy.deepcopy(carried)
+        payload = evaluate(carried)
+        authenticate(original, args.input)
         findings, gate_results = payload["findings"], payload["gate_results"]
-        rules.record_engine(payload, f"gate_check/{ENGINE_VERSION}", generated_at)
+        rules.record_engine(payload, LEDGER_TAG, generated_at, prior=(rules.AM_LEDGER_TAG,))
         rules.write_json_atomic(args.out, payload, "gate-check output")
         blockers = sum(1 for item in findings if item["severity"] == RELEASE_BLOCKER)
         must_fix = sum(1 for item in findings if item["severity"] == MUST_FIX)

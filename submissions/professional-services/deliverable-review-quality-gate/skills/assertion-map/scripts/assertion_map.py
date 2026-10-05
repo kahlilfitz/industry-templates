@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """assertion_map - deterministic assertion-to-evidence support engine."""
-import copy
 import os
 import sys
 
@@ -10,8 +9,8 @@ if SCRIPT_DIR not in sys.path:
 import assertion_rules as rules  # noqa: E402  shared byte-identical with gate-check (tests/check_shared_copies.py)
 
 ENGINE = rules.AM_ENGINE
-ENGINE_VERSION = "1.0.4"
-CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
+ENGINE_VERSION = rules.AM_ENGINE_VERSION
+CONTRACT_VERSION = rules.CONTRACT_VERSION
 InputError = rules.InputError
 
 
@@ -23,29 +22,8 @@ validate_generated_at = rules.validate_generated_at
 
 
 def require_contract(payload):
-    if not isinstance(payload, dict):
-        raise InputError("input must be a JSON object")
-    if payload.get("contract_version") != CONTRACT_VERSION:
-        raise InputError(f"expected contract {CONTRACT_VERSION}, got {rules.describe(payload.get('contract_version'))}")
-    for key in ("deliverable", "criteria"):
-        if not isinstance(payload.get(key), dict):
-            raise InputError(f"missing required object: {key}")
-    for key in ("assertions", "evidence_set"):
-        if key not in payload:
-            raise InputError(f"missing required array: {key}")
-        if not isinstance(payload[key], list):
-            raise InputError(f"{key} must be an array")
-    criteria_sections = payload["criteria"].get("criteria_sections")
-    if criteria_sections is None:
-        raise InputError("missing required criteria list: criteria.criteria_sections")
-    if not isinstance(criteria_sections, list):
-        raise InputError("criteria.criteria_sections must be an array")
-    for index, section in enumerate(criteria_sections):
-        if not isinstance(section, str) or not section.strip():
-            raise InputError(f"criteria.criteria_sections[{index}] must be a non-blank string, got {rules.describe(section)}")
-    for key in ("findings", "escalations"):
-        if key in payload and not isinstance(payload[key], list):
-            raise InputError(f"{key} must be an array")
+    rules.require_review_input(payload)
+
 
 def main():
     parser = rules.EngineArgumentParser(prog="assertion_map.py", description="Map assertions to evidence support deterministically.")
@@ -56,34 +34,7 @@ def main():
     try:
         generated_at = validate_generated_at(args.generated_at)
         payload = load_json(args.input)
-        require_contract(payload)
-        # Every section is checked against the contract before any reader touches it (quality-gate-criteria.md #8.16).
-        rules.validate_contract(payload, "assertion_map")
-        rules.evidence_index(payload["evidence_set"])
-        rules.validate_assertions(payload["assertions"])
-        # Ownership of a supplied finding ID is read before withholding (quality-gate-criteria.md #8.4).
-        raw_findings = copy.deepcopy(payload.get("findings", []))
-        # Flagged text is withheld before mapping, so no mapping, finding or later stage repeats it
-        # (quality-gate-criteria.md #8.7); gate_check raises the G8 hold for every marker.
-        rules.withhold_untrusted(payload, raw_input=True)
-        evidence_by_id = rules.evidence_index(payload["evidence_set"])
-        escalations = list(payload.get("escalations", []))
-        mappings, recomputed = [], []
-        for assertion in payload["assertions"]:
-            mapping, finding, escalation = rules.map_assertion(assertion, evidence_by_id, rules.review_subject(payload))
-            mappings.append(mapping)
-            if finding:
-                recomputed.append(finding)
-                # Appended once: re-running assertion_map on its own output reproduces it.
-                if escalation not in escalations:
-                    escalations.append(escalation)
-        # A supplied finding colliding with a recomputed one (canonical ID) is replaced by the genuine finding and held
-        # as a spoof under G8, never duplicated (quality-gate-criteria.md #8.4).
-        findings, spoofed = rules.merge_recomputed_findings(list(payload.get("findings", [])), raw_findings, recomputed)
-        if spoofed and rules.AM_SPOOF_ESCALATION not in escalations:
-            escalations.append(rules.AM_SPOOF_ESCALATION)
-        payload["assertion_mappings"], payload["findings"], payload["escalations"] = mappings, findings, escalations
-        rules.record_engine(payload, f"assertion_map/{ENGINE_VERSION}", generated_at)
+        payload, mappings = rules.assertion_map_stage(payload, generated_at)
         rules.write_json_atomic(args.out, payload, "mapped output")
         unsupported = sum(1 for item in mappings if item["support_status"] == "unsupported")
         limited = sum(1 for item in mappings if item["support_status"] == "limited")

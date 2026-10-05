@@ -11,6 +11,7 @@ import gate_check as gc
 
 ENGINE = "engine:severity_rank"
 ENGINE_VERSION = "1.0.4"
+LEDGER_TAG = f"severity_rank/{ENGINE_VERSION}"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 SEVERITY_ORDER = {"release_blocker": 0, "must_fix": 1, "advisory": 2}  # severity-rules.md #1.1-#1.3
 CONFIDENCE_FLOOR = 0.72  # severity-rules.md #2.1
@@ -19,6 +20,7 @@ STATUS_WITH_BLOCKER = "not_ready_for_release"  # severity-rules.md #3.3
 STATUS_WITH_MUST_FIX = "partner_review_required_must_fix"  # severity-rules.md #3.3
 STATUS_WITH_ADVISORIES = "partner_review_required_advisories_only"  # severity-rules.md #3.3
 STATUS_CLEAN = "partner_review_required_no_engine_findings"  # severity-rules.md #3.3
+STATUSES = (STATUS_WITH_BLOCKER, STATUS_WITH_MUST_FIX, STATUS_WITH_ADVISORIES, STATUS_CLEAN)
 
 GATE_IDS = tuple(gc.GATES)
 MAX_G8_HITS = gc.MAX_G8_HITS
@@ -440,78 +442,152 @@ def add_g8_findings(payload, hits):
     if len(hits) > MAX_G8_HITS:
         escalations.append(f"G8: {len(hits) - MAX_G8_HITS} further embedded-instruction hit(s) at severity_rank not listed individually - hold for reviewing partner/QRM (severity-rules.md #3.6)")
 
+def rank_stage(payload, generated_at=None):
+    """severity_rank's whole derivation on a gate-checked document, in place, with no file I/O: validate, reconcile
+    with gate_check re-derivation, screen, rank, set release_readiness and record this engine after assertion_map and
+    gate_check. main runs it on --gates, and --verify runs it again on the review input's re-derived chain (#8.21).
+    Returns (payload, status, ranked)."""
+    require_contract(payload)
+    # Every section is checked against the contract before any reader touches it (quality-gate-criteria.md #8.16).
+    rules.validate_contract(payload, "severity_rank")
+    for index, item in enumerate(payload["findings"]):
+        validate_finding(index, item)
+    reconcile_gate_results(payload["findings"], payload["gate_results"])
+    rederived = rederive_gate_findings(payload)
+    derived = rederived["findings"]
+    # Ownership is read before screening can withhold an ID (quality-gate-criteria.md #8.4, #8.11).
+    raw_owners = [engine_owner(item) for item in payload["findings"]]
+    # Screen first, so instruction text planted in a forged finding still raises its own G8 hold before removal.
+    g8_hits = screen_embedded_instructions(payload, rederived, raw_owners)
+    if g8_hits:
+        add_g8_findings(payload, g8_hits)
+    forged = remove_forged_engine_findings(payload, derived, raw_owners)
+    if forged:
+        add_spoof_hold(payload, forged)
+    findings, duplicates = collapse_duplicates(payload["findings"])
+    payload["findings"] = findings
+    refresh_gate_results(payload)
+    escalations = payload["escalations"]
+    for key, count in duplicates.items():
+        kept = next(item for item in findings if rules.canonical_id(item["finding_id"]) == key)
+        escalations.append(f"{kept['finding_id']}: {count} findings shared this finding_id; one was kept at the highest severity ({kept['severity']}) - reviewing partner/QRM to confirm (severity-rules.md #3.4)")
+    for item in findings:
+        if float(item.get("confidence", 1.0)) < CONFIDENCE_FLOOR:
+            escalations.append(f"{item['finding_id']}: confidence {item.get('confidence')} below {CONFIDENCE_FLOOR} - human confirmation required (severity-rules.md #2.1)")
+    # Escalations already carried in the input are not repeated, so a re-run on severity_rank's own output reproduces it.
+    escalations[:] = rules.unique_entries(escalations)
+    ranked = []
+    for index, item in enumerate(sorted(findings, key=sort_key), start=1):
+        ranked_item = dict(item)
+        ranked_item["rank"] = index
+        ranked_item["ranking_basis"] = "severity, confidence, page, paragraph (severity-rules.md #3.2)"
+        ranked.append(ranked_item)
+    blockers = sum(1 for item in findings if item["severity"] == "release_blocker")
+    must_fix = sum(1 for item in findings if item["severity"] == "must_fix")
+    advisories = sum(1 for item in findings if item["severity"] == "advisory")
+    if blockers:
+        status = STATUS_WITH_BLOCKER
+        summary = f"{blockers} release blocker(s) require reviewing-partner/QRM judgement before any client issue. Blockers cannot be auto-downgraded."
+    elif must_fix:
+        status = STATUS_WITH_MUST_FIX
+        summary = f"{must_fix} must-fix item(s) remain before partner/QRM judgement."
+    elif advisories:
+        status = STATUS_WITH_ADVISORIES
+        summary = "Only advisory items remain; partner/QRM judgement still required."
+    elif escalations:
+        # An escalation is a hold even without a finding: it can never end in the no-findings verdict.
+        status = STATUS_WITH_BLOCKER
+        summary = f"No engine findings, but {len(escalations)} escalation(s) hold release for reviewing-partner/QRM judgement before any client issue."
+    else:
+        status = STATUS_CLEAN
+        summary = "No engine findings; partner/QRM judgement still required."
+    if escalations and (blockers or must_fix or advisories):
+        # The verdict follows the highest finding severity; the summary must still surface every escalation.
+        count = len(escalations)
+        summary += f" {count} escalation{' needs' if count == 1 else 's need'} partner/QRM confirmation before release."
+    payload["ranked_findings"] = ranked
+    payload["release_readiness"] = {"status": status, "release_blockers": blockers, "must_fix": must_fix, "advisories": advisories, "summary": summary, "confidence": 0.96, "source": ENGINE, "citation": "severity-rules.md #3.1-#3.3; severity-rules.md #4.1-#4.2"}
+    rules.record_engine(payload, LEDGER_TAG, generated_at, prior=(rules.AM_LEDGER_TAG, gc.LEDGER_TAG))
+    return payload, status, ranked
+
+
+def rederive_gated(review_input, stamp):
+    """gate-checked.json re-derived from the review input with the carried run stamp: assertion_map, then gate_check."""
+    return gc.gate_stage(gc.rederive_mapped(review_input, stamp), stamp)
+
+
+def gated_candidates(review_input, stamp):
+    """What severity_rank accepts as --gates: gate_check's re-derived output, else (computed only when needed)
+    severity_rank's own output on it, so a re-run on severity-ranked.json reproduces it."""
+    gated = rederive_gated(review_input, stamp)
+    yield gated
+    try:
+        yield rank_stage(copy.deepcopy(gated), stamp)[0]
+    except InputError:
+        return
+
+
+def authenticate(carried, input_path):
+    """The gate-checked input must be exactly what assertion_map and gate_check derive from the review input, every
+    engine-owned field and the ledger included (or severity_rank's own output, for an idempotent re-run): a deleted
+    escalation, edited deliverable identity or provenance entry is refused, never ranked (quality-gate-criteria.md #8.21)."""
+    review_input = rules.load_json_file(input_path, "review input")
+    rules.require_rederived(carried, gated_candidates(review_input, rules.carried_stamp(carried)), "severity_rank")
+
+
+def verify(ranked_path, input_path):
+    """The pre-render check (review-packet SKILL.md): re-derive severity-ranked.json from the review input through every
+    engine and refuse any difference outside NOT_ENGINE_OWNED, so the packet never renders a supplied ranked list,
+    verdict, finding, escalation or ledger that the engines did not produce (quality-gate-criteria.md #8.21)."""
+    carried = rules.load_json_file(ranked_path, "ranked output")
+    if not isinstance(carried, dict):
+        raise InputError("the ranked output must be a JSON object")
+    stamp = rules.carried_stamp(carried)
+    if stamp is None:
+        raise InputError("provenance.generated_at must be an RFC 3339 date-time with a time zone (quality-gate-criteria.md #8.14)")
+    review_input = rules.load_json_file(input_path, "review input")
+    derived, status, ranked = rank_stage(rederive_gated(review_input, stamp), stamp)
+    rules.require_rederived(carried, iter((derived,)), "verify")
+    return status, ranked
+
+
 def main():
     parser = rules.EngineArgumentParser(prog="severity_rank.py", description="Rank gate findings and compute release-readiness status.")
-    parser.add_argument("--gates", required=True)
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--gates", default=None)
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--out", default=None)
     parser.add_argument("--generated-at", default=None)
+    parser.add_argument("--verify", default=None, help="check a ranked output against the review input before rendering; writes nothing")
     args = parser.parse_args()
+    if args.verify is not None:
+        for flag, value in (("--gates", args.gates), ("--out", args.out), ("--generated-at", args.generated_at)):
+            if value is not None:
+                parser.error(f"argument {flag}: not allowed with argument --verify")
+        try:
+            status, ranked = verify(args.verify, args.input)
+        except InputError as exc:
+            print(f"severity_rank verify refused: {exc}. Do not render the review packet.", file=sys.stderr)
+            return 1
+        except RecursionError:
+            print("severity_rank verify refused: input is nested too deeply to process safely. Do not render the review packet.", file=sys.stderr)
+            return 1
+        except (KeyError, TypeError, AttributeError, ValueError, IndexError) as exc:
+            print(f"severity_rank verify refused: malformed input ({type(exc).__name__}; details withheld because they may quote untrusted text). Do not render the review packet.", file=sys.stderr)
+            return 1
+        # Printed from the verdict constants, so the line can only ever show an engine verdict.
+        print(f"severity_rank verify: ranked output matches its re-derivation from the review input (status={STATUSES[STATUSES.index(status)]}, ranked_findings={len(ranked)}) - render from it")
+        return 0
+    missing = [flag for flag, value in (("--gates", args.gates), ("--out", args.out)) if value is None]
+    if missing:
+        parser.error(f"the following arguments are required: {', '.join(missing)}")
     try:
         generated_at = validate_generated_at(args.generated_at)
-        payload = load_json(args.gates)
-        require_contract(payload)
-        # Every section is checked against the contract before any reader touches it (quality-gate-criteria.md #8.16).
-        rules.validate_contract(payload, "severity_rank")
-        for index, item in enumerate(payload["findings"]):
-            validate_finding(index, item)
-        reconcile_gate_results(payload["findings"], payload["gate_results"])
-        rederived = rederive_gate_findings(payload)
-        derived = rederived["findings"]
-        # Ownership is read before screening can withhold an ID (quality-gate-criteria.md #8.4, #8.11).
-        raw_owners = [engine_owner(item) for item in payload["findings"]]
-        # Screen first, so instruction text planted in a forged finding still raises its own G8 hold before removal.
-        g8_hits = screen_embedded_instructions(payload, rederived, raw_owners)
-        if g8_hits:
-            add_g8_findings(payload, g8_hits)
-        forged = remove_forged_engine_findings(payload, derived, raw_owners)
-        if forged:
-            add_spoof_hold(payload, forged)
-        findings, duplicates = collapse_duplicates(payload["findings"])
-        payload["findings"] = findings
-        refresh_gate_results(payload)
-        escalations = payload["escalations"]
-        for key, count in duplicates.items():
-            kept = next(item for item in findings if rules.canonical_id(item["finding_id"]) == key)
-            escalations.append(f"{kept['finding_id']}: {count} findings shared this finding_id; one was kept at the highest severity ({kept['severity']}) - reviewing partner/QRM to confirm (severity-rules.md #3.4)")
-        for item in findings:
-            if float(item.get("confidence", 1.0)) < CONFIDENCE_FLOOR:
-                escalations.append(f"{item['finding_id']}: confidence {item.get('confidence')} below {CONFIDENCE_FLOOR} - human confirmation required (severity-rules.md #2.1)")
-        # Escalations already carried in the input are not repeated, so a re-run on severity_rank's own output reproduces it.
-        escalations[:] = rules.unique_entries(escalations)
-        ranked = []
-        for index, item in enumerate(sorted(findings, key=sort_key), start=1):
-            ranked_item = dict(item)
-            ranked_item["rank"] = index
-            ranked_item["ranking_basis"] = "severity, confidence, page, paragraph (severity-rules.md #3.2)"
-            ranked.append(ranked_item)
-        blockers = sum(1 for item in findings if item["severity"] == "release_blocker")
-        must_fix = sum(1 for item in findings if item["severity"] == "must_fix")
-        advisories = sum(1 for item in findings if item["severity"] == "advisory")
-        if blockers:
-            status = STATUS_WITH_BLOCKER
-            summary = f"{blockers} release blocker(s) require reviewing-partner/QRM judgement before any client issue. Blockers cannot be auto-downgraded."
-        elif must_fix:
-            status = STATUS_WITH_MUST_FIX
-            summary = f"{must_fix} must-fix item(s) remain before partner/QRM judgement."
-        elif advisories:
-            status = STATUS_WITH_ADVISORIES
-            summary = "Only advisory items remain; partner/QRM judgement still required."
-        elif escalations:
-            # An escalation is a hold even without a finding: it can never end in the no-findings verdict.
-            status = STATUS_WITH_BLOCKER
-            summary = f"No engine findings, but {len(escalations)} escalation(s) hold release for reviewing-partner/QRM judgement before any client issue."
-        else:
-            status = STATUS_CLEAN
-            summary = "No engine findings; partner/QRM judgement still required."
-        if escalations and (blockers or must_fix or advisories):
-            # The verdict follows the highest finding severity; the summary must still surface every escalation.
-            count = len(escalations)
-            summary += f" {count} escalation{' needs' if count == 1 else 's need'} partner/QRM confirmation before release."
-        payload["ranked_findings"] = ranked
-        payload["release_readiness"] = {"status": status, "release_blockers": blockers, "must_fix": must_fix, "advisories": advisories, "summary": summary, "confidence": 0.96, "source": ENGINE, "citation": "severity-rules.md #3.1-#3.3; severity-rules.md #4.1-#4.2"}
-        rules.record_engine(payload, f"severity_rank/{ENGINE_VERSION}", generated_at)
+        carried = load_json(args.gates)
+        original = copy.deepcopy(carried)
+        payload, status, ranked = rank_stage(carried, generated_at)
+        authenticate(original, args.input)
         rules.write_json_atomic(args.out, payload, "ranked output")
-        print(f"severity_rank: status={status}, ranked_findings={len(ranked)} -> ranked output written")
+        print(f"severity_rank: status={STATUSES[STATUSES.index(status)]}, ranked_findings={len(ranked)} -> ranked output written")
         return 0
     except InputError as exc:
         print(f"severity_rank input error: {exc}", file=sys.stderr)

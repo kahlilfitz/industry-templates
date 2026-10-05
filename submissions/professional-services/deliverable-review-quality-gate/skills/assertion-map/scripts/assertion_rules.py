@@ -11,6 +11,7 @@ Contract rule: every engine calls validate_contract at entry, which checks the w
 skill's own copy of contracts/ps.deliverable-review-quality-gate.v1.json (required fields, JSON types, closed
 enums, ranges and provenance prefixes). A violation is an InputError raised before any output is written."""
 import argparse
+import copy
 import functools
 import json
 import math
@@ -23,6 +24,11 @@ from datetime import datetime, timezone
 import steering_guard as sg  # vendored shared detector; never edit (tests/check_shared_copies.py pins its SHA-256)
 
 AM_ENGINE = "engine:assertion_map"
+AM_ENGINE_VERSION = "1.0.4"
+AM_LEDGER_TAG = f"assertion_map/{AM_ENGINE_VERSION}"
+CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
+# The engines in run order; provenance.engines names them as `<engine>/<version>` (record_engine).
+ENGINE_NAMES = ("assertion_map", "gate_check", "severity_rank")
 CONTRACT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "contracts", "ps.deliverable-review-quality-gate.v1.json")
 # Top-level sections each engine needs beyond the contract's own required list (contract descriptions say which).
 STAGE_REQUIRED = {
@@ -425,16 +431,37 @@ def validate_generated_at(value):
     return value
 
 
-def record_engine(payload, tag, generated_at=None):
+def engine_ledger_name(entry):
+    """The engine (ENGINE_NAMES) a provenance.engines entry names, compared in canonical form (canonical_id), else
+    None: `gate_check/1.0.4`, `Gate-Check/9.9` and `gate check` all name gate_check, so a renamed or re-versioned
+    engine entry is still recognised as engine-owned (quality-gate-criteria.md #8.21)."""
+    if not isinstance(entry, str):
+        return None
+    folded = canonical_id(entry)
+    return next((name for name in ENGINE_NAMES if folded == canonical_id(name) or folded.startswith(canonical_id(name) + " ")), None)
+
+
+def record_engine(payload, tag, generated_at=None, prior=()):
     """Append the engine/version tag to provenance.engines unless this engine was the last to run (idempotent re-run),
     and stamp generated_at: the --generated-at value, else the value already present, else the current UTC time. The
-    review packet renders both, so no engine output ever lacks them (quality-gate-criteria.md #8.14)."""
+    review packet renders both, so no engine output ever lacks them (quality-gate-criteria.md #8.14).
+
+    The engine-owned entries already in the ledger (engine_ledger_name) must be exactly `prior`, the exact tags of the
+    stages that run before this one, in run order, optionally followed by this engine's own tag (a re-run on its own
+    output), and must end the ledger. A missing, renamed, re-versioned, reordered, repeated or extra engine entry is
+    an input error, never repaired (quality-gate-criteria.md #8.21)."""
     provenance = payload.setdefault("provenance", {})
     if not isinstance(provenance, dict):
         raise InputError("provenance must be an object when present")
     engines = provenance.setdefault("engines", [])
     if not isinstance(engines, list):
         raise InputError("provenance.engines must be an array when present")
+    first = next((index for index, entry in enumerate(engines) if engine_ledger_name(entry)), len(engines))
+    owned = engines[first:]
+    if any(engine_ledger_name(entry) is None for entry in owned) or owned not in (list(prior), list(prior) + [tag]):
+        raise InputError(f"provenance.engines must end with exactly the {len(prior)} entr{'y' if len(prior) == 1 else 'ies'} of the engines "
+                         f"that produced this input, in run order; an engine entry is missing, renamed, reordered, repeated or extra. "
+                         f"Re-run the chain from the review input; the engine ledger cannot be edited (quality-gate-criteria.md #8.21)")
     if engines[-1:] != [tag]:
         engines.append(tag)
     if generated_at:
@@ -442,6 +469,149 @@ def record_engine(payload, tag, generated_at=None):
     elif not (isinstance(provenance.get("generated_at"), str) and provenance["generated_at"].strip()):
         provenance["generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return provenance
+
+
+# --- Whole-document re-derivation (quality-gate-criteria.md #8.21; checklist A23) ----------------------------------
+# Every top-level section of the contract. gate_check and severity_rank re-derive the whole upstream document from the
+# review input and compare every member, these and any other, in canonical JSON form; the names are used only to say
+# which section differs. tests/run_tests.py fails when the contract gains a section or provenance member that is
+# neither listed here nor in NOT_ENGINE_OWNED.
+COMPARED_SECTIONS = ("contract_version", "engagement_id", "scenario_id", "deliverable", "criteria", "assertions", "evidence_set",
+                     "prior_findings", "assertion_mappings", "gate_results", "findings", "ranked_findings", "release_readiness",
+                     "escalations", "provenance")
+# Members no engine derives from the review input, each with the reason it is safe to leave out of the comparison.
+NOT_ENGINE_OWNED = {
+    ("provenance", "generated_at"): (
+        "The run timestamp. It comes from the operator's --generated-at flag (else the value already present, else the "
+        "clock), never from review data, and every stage overwrites it. Re-derivation reuses the carried value as its own "
+        "stamp, so it is reproduced by construction; the contract still requires an RFC 3339 date-time (#8.14). It decides "
+        "no finding, severity, rank, count, escalation or status and is rendered only as the packet's generation time."),
+}
+
+
+def require_review_input(payload):
+    """assertion_map's entry checks on the review input (the root every later stage re-derives from)."""
+    if not isinstance(payload, dict):
+        raise InputError("input must be a JSON object")
+    if payload.get("contract_version") != CONTRACT_VERSION:
+        raise InputError(f"expected contract {CONTRACT_VERSION}, got {describe(payload.get('contract_version'))}")
+    for key in ("deliverable", "criteria"):
+        if not isinstance(payload.get(key), dict):
+            raise InputError(f"missing required object: {key}")
+    for key in ("assertions", "evidence_set"):
+        if key not in payload:
+            raise InputError(f"missing required array: {key}")
+        if not isinstance(payload[key], list):
+            raise InputError(f"{key} must be an array")
+    criteria_sections = payload["criteria"].get("criteria_sections")
+    if criteria_sections is None:
+        raise InputError("missing required criteria list: criteria.criteria_sections")
+    if not isinstance(criteria_sections, list):
+        raise InputError("criteria.criteria_sections must be an array")
+    for index, section in enumerate(criteria_sections):
+        if not isinstance(section, str) or not section.strip():
+            raise InputError(f"criteria.criteria_sections[{index}] must be a non-blank string, got {describe(section)}")
+    for key in ("findings", "escalations"):
+        if key in payload and not isinstance(payload[key], list):
+            raise InputError(f"{key} must be an array")
+
+
+def assertion_map_stage(payload, generated_at=None):
+    """assertion_map's whole derivation, in place, with no file I/O: validate the review input, withhold flagged text,
+    map every assertion, merge recomputed AM- findings, add escalations and stamp provenance. assertion_map.py runs it,
+    and gate_check and severity_rank run it again on the review input to re-derive the mapped document (#8.21).
+    Returns (payload, mappings)."""
+    require_review_input(payload)
+    # Every section is checked against the contract before any reader touches it (quality-gate-criteria.md #8.16).
+    validate_contract(payload, "assertion_map")
+    evidence_index(payload["evidence_set"])
+    validate_assertions(payload["assertions"])
+    # Ownership of a supplied finding ID is read before withholding (quality-gate-criteria.md #8.4).
+    raw_findings = copy.deepcopy(payload.get("findings", []))
+    # Flagged text is withheld before mapping, so no mapping, finding or later stage repeats it
+    # (quality-gate-criteria.md #8.7); gate_check raises the G8 hold for every marker.
+    withhold_untrusted(payload, raw_input=True)
+    evidence_by_id = evidence_index(payload["evidence_set"])
+    escalations = list(payload.get("escalations", []))
+    mappings, recomputed = [], []
+    for assertion in payload["assertions"]:
+        mapping, finding, escalation = map_assertion(assertion, evidence_by_id, review_subject(payload))
+        mappings.append(mapping)
+        if finding:
+            recomputed.append(finding)
+            # Appended once: re-running assertion_map on its own output reproduces it.
+            if escalation not in escalations:
+                escalations.append(escalation)
+    # A supplied finding colliding with a recomputed one (canonical ID) is replaced by the genuine finding and held
+    # as a spoof under G8, never duplicated (quality-gate-criteria.md #8.4).
+    findings, spoofed = merge_recomputed_findings(list(payload.get("findings", [])), raw_findings, recomputed)
+    if spoofed and AM_SPOOF_ESCALATION not in escalations:
+        escalations.append(AM_SPOOF_ESCALATION)
+    payload["assertion_mappings"], payload["findings"], payload["escalations"] = mappings, findings, escalations
+    record_engine(payload, AM_LEDGER_TAG, generated_at)
+    return payload, mappings
+
+
+def carried_stamp(carried):
+    """The carried provenance.generated_at when it is a valid date-time, else None: the run stamp re-derivation uses
+    (NOT_ENGINE_OWNED), so it is reproduced and every other member must re-derive exactly."""
+    provenance = carried.get("provenance") if isinstance(carried, dict) else None
+    stamp = provenance.get("generated_at") if isinstance(provenance, dict) else None
+    return stamp if is_timestamp(stamp) else None
+
+
+def _canonical_json(value):
+    """Exact comparison form: key order ignored, JSON types kept (true is not 1, 1 is not 1.0)."""
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+def _without_allowed(document):
+    document = copy.deepcopy(document)
+    if isinstance(document, dict):
+        for section, member in NOT_ENGINE_OWNED:
+            if isinstance(document.get(section), dict):
+                document[section].pop(member, None)
+    return document
+
+
+def differing_members(carried, derived):
+    """The top-level members of `carried` that differ from `derived` outside NOT_ENGINE_OWNED: missing, extra or
+    changed, compared in canonical JSON form. A non-object `carried` differs as a whole."""
+    carried, derived = _without_allowed(carried), _without_allowed(derived)
+    if not isinstance(carried, dict):
+        return [None]
+    keys = list(dict.fromkeys(list(derived) + list(carried)))
+    return [key for key in keys if key not in carried or key not in derived or _canonical_json(carried[key]) != _canonical_json(derived[key])]
+
+
+# What each authenticating stage calls the document it re-derives, and how to recover (require_rederived).
+REDERIVED = {
+    "gate_check": ("the mapped input (--mapped)", "re-run assertion_map on the review input, then gate_check"),
+    "severity_rank": ("the gate-check input (--gates)", "re-run assertion_map and gate_check on the review input, then severity_rank"),
+    "verify": ("the ranked output (--verify)", "render nothing from it; re-run assertion_map, gate_check and severity_rank on the review input"),
+}
+
+
+def require_rederived(carried, candidates, stage):
+    """Refuse `carried` unless it equals one of the re-derived `candidates` (the first is the expected upstream
+    document; a later one is this stage's own output, so a re-run on it reproduces it) in every member outside
+    NOT_ENGINE_OWNED (quality-gate-criteria.md #8.21). `candidates` yields documents lazily. The message names the
+    contract sections (COMPARED_SECTIONS) that differ from the first candidate and counts any other member, whose name
+    is input; it never quotes a value, ID or path (#8.9)."""
+    first = None
+    for derived in candidates:
+        differing = differing_members(carried, derived)
+        if not differing:
+            return
+        if first is None:
+            first = differing
+    first = first or [None]
+    mismatched = [key for key in COMPARED_SECTIONS if key in first]
+    count = len(first) - len(mismatched)
+    shown = ", ".join(mismatched + ([f"{count} other member(s)"] if count else []))
+    raise InputError(f"{REDERIVED[stage][0]} does not match its re-derivation from the review input (--input) in: {shown}. Every "
+                     f"engine-owned field, provenance included, must be exactly what the engines derive; {REDERIVED[stage][1]} "
+                     f"(quality-gate-criteria.md #8.21)")
 
 
 def os_reason(exc):
@@ -508,7 +678,8 @@ class EngineArgumentParser(argparse.ArgumentParser):
     argument or an ambiguous abbreviation, is reported without the text that was typed. `prog` is the engine's fixed
     script name, never sys.argv[0]."""
 
-    SAFE_ERROR = re.compile(r"the following arguments are required: --[a-z-]+(?:, --[a-z-]+)*|argument --[a-z-]+: expected one argument")
+    SAFE_ERROR = re.compile(r"the following arguments are required: --[a-z-]+(?:, --[a-z-]+)*|argument --[a-z-]+: expected one argument"
+                            r"|argument --[a-z-]+: not allowed with argument --[a-z-]+")
 
     def error(self, message):
         if not self.SAFE_ERROR.fullmatch(message):

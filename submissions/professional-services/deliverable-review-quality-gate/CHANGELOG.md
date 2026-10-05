@@ -487,6 +487,19 @@ The structural patterns described at the top of this entry are replaced, not sup
 
   Both old fixtures were history holds with hand-written fields, which round 13 correctly refuses.
 
+### QA round 12 on 1.0.4 (whole-document re-derivation at every stage, checklist A23)
+
+- **Defect class: field-by-field reconciliation kept missing fields.** Each round found another carried member that no stage compared, so the fix replaces per-field checks with a whole-document one (quality-gate-criteria.md #8.21, new):
+  - `gate_check.py` and `severity_rank.py` now require `--input review-input.json`. Each re-runs every earlier engine on the review input with the shared code (`assertion_rules.assertion_map_stage`, `gate_check.gate_stage`, `severity_rank.rank_stage`), using the carried `provenance.generated_at` as the run stamp, and refuses its upstream file, writing nothing, unless it equals that re-derivation as canonical JSON (`assertion_rules.require_rederived`).
+  - Only `provenance.generated_at` is exempt. `provenance.engines` must hold exactly the earlier engines' entries in run order.
+  - The refusal names only the contract sections that differ and counts other members; it never quotes a value, ID or path.
+  - A stage still accepts its own output on an idempotent re-run.
+- **The final rendering step is covered.** `severity_rank.py --verify severity-ranked.json --input review-input.json` re-derives the ranked output and writes nothing. review-packet runs it first and renders no packet unless it passes, so an emptied or edited `ranked_findings[]`, verdict or ledger never reaches the template, and the "None: the engines produced no findings" wording is used only after verify passed.
+- The reconciliations in #8.4, #8.16-#8.20 and severity-rules.md #3.7-#3.8 still run first, as defence in depth and for their specific messages.
+- Docs: quality-gate-criteria.md #8.21 is new and severity-rules.md #3.7 and #3.8 are updated, in all six copies; gate-check and review-packet SKILL.md and the packet template show the `--input` and `--verify` commands.
+- Tests: 1267 checks (were 1166), with the new ones in `qa104_round12_tests`. Goldens are byte-identical.
+- The two golden `expected/engine-run.log` files are now tracked in git; the repository-wide `*.log` ignore rule had kept them out, so a fresh clone failed the golden checks.
+
 ## 1.0.3 - 2026-10-01
 
 Fixes every FAIL, WEAK and should-fix item in the Cowork 1.0.2 evaluation (42/50, Blocked).

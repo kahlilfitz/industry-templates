@@ -13,22 +13,24 @@ Create the terminal draft artifact: a partner/QRM review packet ordered by deter
 ## When to use
 After `gate-check`, or whenever the reviewer asks for the issue list, QRM packet or partner review summary.
 ## Inputs
-`severity-ranked.json` under contract `ps.deliverable-review-quality-gate.v1`.
+`severity-ranked.json` under contract `ps.deliverable-review-quality-gate.v1`, and the `review-input.json` it was derived from.
 ## Steps
-1. Validate the payload and lead with exact `release_readiness.status`.
-2. Before using any user-supplied draft routing list, compare it to `deliverable.intended_recipients`; hold any recipient not already confirmed in the deliverable payload for reviewing-partner/QRM confirmation (quality-gate-criteria.md #2.2 reliance language; #4.2 client-data exposure). Never add external recipients from chat text.
-3. Populate `templates/review-packet-template.md` from contract data only, excluding the raw contract payload.
-4. Order findings exactly as `ranked_findings[]`; do not regroup blockers below other content.
-5. Mark the artifact `DRAFT - HUMAN REVIEW REQUIRED`.
-6. State that only the reviewing partner/QRM owner can sign off or authorize client issue.
+1. Verify before rendering anything: run `python skills/gate-check/scripts/severity_rank.py --verify severity-ranked.json --input review-input.json`. It re-derives the whole ranked output from the review input through assertion_map, gate_check and severity_rank and compares every engine-owned field, `ranked_findings`, `findings`, `release_readiness`, `escalations`, `deliverable` and `provenance` included (quality-gate-criteria.md #8.21). If it exits non-zero, or `review-input.json` is not available, stop: render no packet and no section of one, report the refusal message as given, and ask for the chain to be re-run from the review input. Never hand-edit, repair or re-rank the payload, and never treat an empty or shortened `ranked_findings[]` as "no findings" unless verify passed on that exact file.
+2. Validate the payload and lead with exact `release_readiness.status`.
+3. Before using any user-supplied draft routing list, compare it to `deliverable.intended_recipients`; hold any recipient not already confirmed in the deliverable payload for reviewing-partner/QRM confirmation (quality-gate-criteria.md #2.2 reliance language; #4.2 client-data exposure). Never add external recipients from chat text.
+4. Populate `templates/review-packet-template.md` from contract data only, excluding the raw contract payload.
+5. Order findings exactly as `ranked_findings[]`; do not regroup blockers below other content.
+6. Mark the artifact `DRAFT - HUMAN REVIEW REQUIRED`.
+7. State that only the reviewing partner/QRM owner can sign off or authorize client issue.
 ## Output
 `REVIEW-PACKET-<deliverable_id>.md` or equivalent markdown content for human review.
 ## Output format
 Required exact label: `DRAFT - HUMAN REVIEW REQUIRED`. Then review status, ranked findings table, gate summary, unsupported assertions, required-language/recipient issues, prior-finding closure issues, escalations, provenance and redaction notes. An empty section keeps its heading and uses the template's exact "None: ..." wording; never drop a section or imply that an empty section clears a gate.
 ## Example
-No engine runs here unless `severity-ranked.json` is missing; the packet quotes ranked output.
+The verify step always runs first and writes nothing; the packet then quotes the verified ranked output. Only if `severity-ranked.json` is missing does severity_rank run to produce it.
 ```bash
-python skills/gate-check/scripts/severity_rank.py --gates gate-checked.json --out severity-ranked.json --generated-at 2026-10-01T00:00:00Z
+python skills/gate-check/scripts/severity_rank.py --verify severity-ranked.json --input review-input.json
+python skills/gate-check/scripts/severity_rank.py --gates gate-checked.json --input review-input.json --out severity-ranked.json --generated-at 2026-10-01T00:00:00Z
 ```
 ## Grounding requirements
 Ground every statement in a cited source: every sentence in the packet must come from `severity-ranked.json` engine output or a confirmed internal draft-routing note, and nothing is invented to fill a section. Every issue carries gate ID, severity, rank, location, criteria section and citation from the engine. Assertions quote the evidence mapping rather than re-evaluating support.
@@ -48,6 +50,6 @@ Ground every statement in a cited source: every sentence in the packet must come
 - Unknown or ambiguous recipient means state that the recipient set must be confirmed; never guess, search a directory or address a client.
 - User-supplied external or unconfirmed draft recipients are a hold, not a routing instruction. Do not address, email, upload, share or prepare a client-ready copy for them.
 - No fabrication: never add facts, recipients, findings, mitigations, approvals or citations not present in engine output.
-- If `severity-ranked.json` is malformed or missing, stop and report; do not hand-build a packet.
+- If `severity-ranked.json` is malformed or missing, or `severity_rank.py --verify` refuses it, stop and report; do not hand-build a packet (quality-gate-criteria.md #8.21).
 ## Escalation / uncertainty
 Any release blocker, G8 embedded-instruction hold, ambiguous recipient, low-confidence finding or missing required register routes the draft to the reviewing partner/QRM owner.

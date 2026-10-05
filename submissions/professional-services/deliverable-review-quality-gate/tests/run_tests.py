@@ -43,22 +43,157 @@ def load_engine(name):
 
 
 MODULES = {name: load_engine(name) for name in ENGINES}
+# gate_check and severity_rank re-derive their input from the review input (--input, quality-gate-criteria.md #8.21).
+# Tests that do not pass --input get it from INPUT_FOR: the canonical JSON of every engine output the harness has seen
+# -> a snapshot of the review input it was derived from. A document the harness never saw (a hand-built or edited
+# intermediate) is paired with raw_of(document), the review input it would have come from had it been genuine, so a
+# consistent hand-built input still runs and an edited engine-owned field is refused by the comparison.
+HARNESS_DIR = tempfile.mkdtemp(prefix="drqg-harness-")
+INPUT_FOR = {}
+UPSTREAM_FLAG = {"gate_check": "--mapped", "severity_rank": "--gates"}
 
 
-def run(name, *argv):
-    saved = sys.argv
+def canonical_key(document):
+    return hashlib.sha256(json.dumps(document, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def file_key(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return canonical_key(json.load(fh))
+    except (OSError, ValueError, RecursionError):
+        return None
+
+
+def snapshot(path):
+    """A content-addressed copy of a review input, so a later edit of the original file cannot change what an indexed
+    output points to."""
+    with open(path, "rb") as fh:
+        data = fh.read()
+    target = os.path.join(HARNESS_DIR, "input-" + hashlib.sha256(data).hexdigest()[:20] + ".json")
+    if not os.path.exists(target):
+        with open(target, "wb") as fh:
+            fh.write(data)
+    return target
+
+
+ENGINE_ID = re.compile(r"^(?:AM|GC|SR)-", re.IGNORECASE)
+
+
+def raw_of(document):
+    """The review input a hand-built intermediate would have been derived from: every engine-derived section and engine
+    finding removed and the engine ledger entries dropped."""
+    raw = copy.deepcopy(document)
+    if not isinstance(raw, dict):
+        return raw
+    for key in ("assertion_mappings", "gate_results", "ranked_findings", "release_readiness"):
+        raw.pop(key, None)
+    if isinstance(raw.get("findings"), list):
+        raw["findings"] = [item for item in raw["findings"]
+                           if not (isinstance(item, dict) and isinstance(item.get("finding_id"), str) and ENGINE_ID.match(item["finding_id"]))]
+    provenance = raw.get("provenance")
+    if isinstance(provenance, dict) and isinstance(provenance.get("engines"), list):
+        provenance["engines"] = [entry for entry in provenance["engines"] if not MODULES["assertion_map"].rules.engine_ledger_name(entry)]
+    return raw
+
+
+def with_review_input(name, argv):
+    """argv with --input added when the test left it out; returns (argv, how): "explicit", "indexed" (a genuine engine
+    output the harness saw), "fallback" (a hand-built or edited intermediate, paired with raw_of) or "unreadable"."""
+    if name not in UPSTREAM_FLAG or "--input" in argv:
+        return argv, "explicit"
+    flag = "--verify" if "--verify" in argv else UPSTREAM_FLAG[name]
+    position = argv.index(flag) + 1 if flag in argv else None
+    doc_path = argv[position] if position is not None and position < len(argv) else None
+    key = file_key(doc_path) if doc_path else None
+    if key in INPUT_FOR:
+        return argv + ["--input", INPUT_FOR[key]], "indexed"
+    default = os.path.join(ROOT, "demo-data", "scenario-a-happy", "review-input.json")
+    if key is None:
+        # The engine refuses the unreadable upstream document before it reads the review input.
+        return argv + ["--input", default], "unreadable"
+    raw_path = os.path.join(HARNESS_DIR, f"raw-of-{key[:20]}.json")
+    try:
+        write(raw_path, raw_of(read(doc_path)))
+    except RecursionError:
+        raw_path = default
+    return argv + ["--input", raw_path], "fallback"
+
+
+def record_output(name, argv):
+    """Index a successful engine output under the review input it was derived from (a content-addressed snapshot)."""
+    if "--out" not in argv or argv.index("--out") + 1 >= len(argv) or "--input" not in argv or argv.index("--input") + 1 >= len(argv):
+        return
+    key = file_key(argv[argv.index("--out") + 1])
+    if key:
+        INPUT_FOR[key] = snapshot(argv[argv.index("--input") + 1])
+
+
+def invoke(name, argv, bypass_authentication=False):
+    module = MODULES[name]
+    saved_argv, saved_authenticate = sys.argv, getattr(module, "authenticate", None)
     sys.argv = [ENGINES[name]] + list(argv)
+    if bypass_authentication:
+        module.authenticate = lambda carried, input_path: None
     out, err = io.StringIO(), io.StringIO()
     try:
         with redirect_stdout(out), redirect_stderr(err):
-            code = MODULES[name].main()
-        return code or 0, out.getvalue(), err.getvalue()
+            code = module.main() or 0
+        return code, out.getvalue(), err.getvalue()
     except SystemExit as exc:
         code = 0 if exc.code in (None, 0) else int(exc.code)
         return code, out.getvalue(), err.getvalue()
     finally:
-        sys.argv = saved
+        sys.argv = saved_argv
+        if bypass_authentication:
+            module.authenticate = saved_authenticate
 
+
+def output_state(argv):
+    if "--out" not in argv or argv.index("--out") + 1 >= len(argv):
+        return None
+    try:
+        with open(argv[argv.index("--out") + 1], "rb") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+# Whole-document re-derivation refusals (quality-gate-criteria.md #8.21) of edited or hand-built intermediates that a test
+# fed without --input: (engine, refused cleanly, detail). run_group turns each group's entries into one check.
+A23_REFUSALS = []
+
+
+def run(name, *argv):
+    """Run one engine in process. gate_check and severity_rank get --input when the test leaves it out (INPUT_FOR).
+
+    Tests written before whole-document re-derivation (QA round 12) feed edited intermediates and expect the inner
+    stage's holds or refusals. When the CLI refuses such a document (paired by raw_of) and the stage with only
+    `authenticate` bypassed behaves differently, authentication is what refused it: the refusal is recorded and checked
+    (exit 1, no stdout, the output file untouched, no path in the message) and the bypassed run's result is returned, so
+    the earlier defence-in-depth expectations are still checked on the inner stage. Genuine (indexed) inputs and tests
+    that pass --input are never bypassed."""
+    argv, how = with_review_input(name, list(argv))
+    before = output_state(argv)
+    result = invoke(name, argv)
+    if result[0] == 0:
+        try:
+            record_output(name, argv)
+        except (OSError, ValueError, RecursionError):
+            pass
+        return result
+    if how != "fallback":
+        return result
+    untouched = output_state(argv) == before
+    inner = invoke(name, argv, bypass_authentication=True)
+    if inner == result:
+        return result
+    code, stdout, stderr = result
+    paths = [argv[index + 1] for index, flag in enumerate(argv[:-1]) if flag in ("--mapped", "--gates", "--input", "--out")]
+    clean = (code == 1 and not stdout and stderr.startswith(f"{name} input error: ") and "Traceback" not in stderr
+             and not any(path in stderr or os.path.basename(path) in stderr for path in paths))
+    A23_REFUSALS.append((name, clean and untouched, stderr.strip()[:240]))
+    return inner
 
 def check(label, condition, detail=""):
     RESULTS.append((label, bool(condition), detail))
@@ -89,8 +224,8 @@ def chain(input_path, workdir):
     }
     steps = [
         ("assertion_map", ["--input", input_path, "--out", paths["mapped"]]),
-        ("gate_check", ["--mapped", paths["mapped"], "--out", paths["gated"]]),
-        ("severity_rank", ["--gates", paths["gated"], "--out", paths["ranked"]]),
+        ("gate_check", ["--mapped", paths["mapped"], "--input", input_path, "--out", paths["gated"]]),
+        ("severity_rank", ["--gates", paths["gated"], "--input", input_path, "--out", paths["ranked"]]),
     ]
     log = []
     for name, argv in steps:
@@ -2263,10 +2398,16 @@ def skill_doc_tests():
 
 def run_group(group, *args):
     """Run one test group; an unexpected exception is recorded as a FAIL so later groups still run and report."""
+    del A23_REFUSALS[:]
     try:
         group(*args)
     except Exception as exc:  # noqa: BLE001 - any crash must surface as a failed check, not abort the suite
         check(f"{group.__name__} completed without raising", False, f"{type(exc).__name__}: {exc}")
+    if A23_REFUSALS:
+        unclean = [entry for entry in A23_REFUSALS if not entry[1]]
+        check(f"{group.__name__}: every edited or hand-built intermediate the CLI refused at whole-document re-derivation "
+              f"was refused cleanly (exit 1, no output written, no path in the message; quality-gate-criteria.md #8.21)",
+              not unclean, unclean[:3])
 
 
 def qa104_round6_tests(tmp):
@@ -5052,7 +5193,366 @@ def mobilization_round13_sweep_tests(tmp):
         check(f"M13-6 {os.path.basename(demo)} runs end to end with byte-identical goldens", same)
 
 
+def qa104_round12_tests(tmp):
+    """QA round 12 on 1.0.4 (checklist A23): gate_check and severity_rank re-derive the whole upstream document from the
+    review input and refuse any difference in an engine-owned member; the review packet renders only after
+    `severity_rank.py --verify` re-derives the ranked output (quality-gate-criteria.md #8.21). Every run here passes the
+    true review input explicitly, so no harness pairing or inner-stage bypass applies."""
+    rules = MODULES["assertion_map"].rules
+    demo = {name: os.path.join(ROOT, "demo-data", name) for name in ("scenario-a-happy", "scenario-b-drama")}
+    raw_path = {name: os.path.join(path, "review-input.json") for name, path in demo.items()}
+    golden = {name: {stage: read(os.path.join(path, "expected", f"{stage}.json")) for stage in ("assertion-mapped", "gate-checked", "severity-ranked")}
+              for name, path in demo.items()}
+    work = os.path.join(tmp, "qr12")
+    os.makedirs(work, exist_ok=True)
+    flags = {"gate_check": "--mapped", "severity_rank": "--gates"}
+
+    def stage(engine, doc, raw, label, existing=None, extra=()):
+        """Run one engine on `doc` with the true review input `raw`; return (code, output or None, messages, written)."""
+        path = os.path.join(work, f"{label}-in.json")
+        out = os.path.join(work, f"{label}-out.json")
+        write(path, doc)
+        if os.path.exists(out):
+            os.remove(out)
+        if existing is not None:
+            with open(out, "wb") as fh:
+                fh.write(existing)
+        code, stdout, stderr = run(engine, flags[engine], path, "--input", raw, "--out", out, *extra)
+        state = output_state(["--out", out])
+        written = state is not None and state != existing
+        return code, (read(out) if code == 0 else None), stdout + stderr, written
+
+    def verify(doc, raw, label):
+        path = os.path.join(work, f"{label}-verify.json")
+        write(path, doc)
+        before = sorted(os.listdir(work))
+        code, stdout, stderr = run("severity_rank", "--verify", path, "--input", raw)
+        return code, stdout + stderr, sorted(os.listdir(work)) == before
+
+    def value_free(message, *values):
+        return not any(value and value in message for value in list(values) + [work, tmp, "Traceback"])
+
+    def refused(result, *sections, values=()):
+        code, _, message, written = result
+        return (code == 1 and not written and "does not match its re-derivation from the review input" in message
+                and all(section in message for section in sections) and value_free(message, *values))
+
+    def refused_cleanly(result, *values):
+        """Refused by any stage check (an earlier reconciliation may fire before the comparison), with no output."""
+        code, _, message, written = result
+        return code == 1 and not written and "input error" in message and value_free(message, *values)
+
+    a, b = "scenario-a-happy", "scenario-b-drama"
+    mapped_a, gated_a, ranked_a = (golden[a][key] for key in ("assertion-mapped", "gate-checked", "severity-ranked"))
+    mapped_b, gated_b, ranked_b = (golden[b][key] for key in ("assertion-mapped", "gate-checked", "severity-ranked"))
+
+    # R12-1: an escalation carried from the review input cannot be deleted between stages.
+    review = read(raw_path[a])
+    review["assertions"] = []
+    review["deliverable"]["brand_checks"][0]["status"] = "pass"
+    review["escalations"] = ["G1: reviewing partner confirmation remains required"]
+    esc_raw = os.path.join(work, "r12-escalation-only-input.json")
+    write(esc_raw, review)
+    esc_dir = os.path.join(work, "esc-chain")
+    os.makedirs(esc_dir, exist_ok=True)
+    esc = chain(esc_raw, esc_dir)
+    esc_gated = read(esc["gated"])
+    code, ranked, output, _ = stage("severity_rank", esc_gated, esc_raw, "r12-esc-intact")
+    check("R12-1 escalation-only input with its carried escalation intact ranks not_ready_for_release",
+          code == 0 and status(ranked) == "not_ready_for_release" and not ranked["findings"], output.strip()[-200:])
+    deleted = copy.deepcopy(esc_gated)
+    deleted["escalations"] = [item for item in deleted["escalations"] if item != "G1: reviewing partner confirmation remains required"]
+    check("R12-1 deleting the carried escalation from gate-checked.json is refused (escalations), not downgraded to the clean verdict",
+          refused(stage("severity_rank", deleted, esc_raw, "r12-esc-deleted"), "escalations", values=["reviewing partner confirmation"]))
+    deleted_mapped = copy.deepcopy(read(esc["mapped"]))
+    deleted_mapped["escalations"] = []
+    check("R12-1 deleting the carried escalation from assertion-mapped.json is refused at gate_check",
+          refused(stage("gate_check", deleted_mapped, esc_raw, "r12-esc-deleted-mapped"), "escalations"))
+    for label, edit in (("engine-added escalation deleted", lambda doc: doc["escalations"].pop()),
+                        ("escalation appended", lambda doc: doc["escalations"].append("G8: reviewer note added after the gate run")),
+                        ("escalation reworded", lambda doc: doc["escalations"].__setitem__(0, doc["escalations"][0] + " (cleared)")),
+                        ("escalations reordered", lambda doc: doc["escalations"].reverse())):
+        doc = copy.deepcopy(gated_b)
+        edit(doc)
+        check(f"R12-1 scenario b: {label} in gate-checked.json is refused at severity_rank with no output",
+              refused_cleanly(stage("severity_rank", doc, raw_path[b], f"r12-esc-{label.replace(' ', '-')}"), "cleared", "reviewer note"))
+
+    # R12-2: the review packet renders only after verify re-derives the ranked output.
+    for name in (a, b):
+        code, output, unchanged = verify(golden[name]["severity-ranked"], raw_path[name], f"r12-verify-{name}")
+        check(f"R12-2 verify accepts the {name} golden ranked output, prints the engine verdict and writes nothing",
+              code == 0 and unchanged and f"status={status(golden[name]['severity-ranked'])}" in output
+              and f"ranked_findings={len(golden[name]['severity-ranked']['ranked_findings'])}" in output and "render from it" in output, output.strip())
+    blockers = copy.deepcopy(ranked_b)
+    blockers["ranked_findings"] = []
+    code, output, unchanged = verify(blockers, raw_path[b], "r12-verify-emptied")
+    check("R12-2 verify refuses a ranked output whose ranked_findings[] was emptied (6 release blockers deleted): do not render",
+          code == 1 and unchanged and "ranked_findings" in output and "Do not render the review packet" in output and value_free(output, "GC-"), output.strip())
+    ranked_edits = (
+        ("blockers deleted from ranked_findings and findings", lambda doc: [doc.__setitem__(key, [item for item in doc[key] if item["severity"] != "release_blocker"]) for key in ("ranked_findings", "findings")], "ranked_findings"),
+        ("ranked_findings reordered", lambda doc: doc["ranked_findings"].reverse(), "ranked_findings"),
+        ("a ranked finding downgraded", lambda doc: doc["ranked_findings"][0].__setitem__("severity", "advisory"), "ranked_findings"),
+        ("release status edited", lambda doc: doc["release_readiness"].__setitem__("status", "partner_review_required_no_engine_findings"), "release_readiness"),
+        ("blocker count edited", lambda doc: doc["release_readiness"].__setitem__("release_blockers", 0), "release_readiness"),
+        ("escalations emptied", lambda doc: doc.__setitem__("escalations", []), "escalations"),
+        ("deliverable identity edited", lambda doc: doc["deliverable"].__setitem__("deliverable_id", "EDITED-AFTER-GATE-CHECK"), "deliverable"),
+        ("ledger entry deleted", lambda doc: doc["provenance"]["engines"].remove("gate_check/1.0.4"), "provenance"),
+    )
+    for label, edit, section in ranked_edits:
+        doc = copy.deepcopy(ranked_b)
+        edit(doc)
+        code, output, unchanged = verify(doc, raw_path[b], f"r12-verify-{label.replace(' ', '-')}")
+        check(f"R12-2 verify refuses a ranked output with {label}, naming {section} and nothing else from the input",
+              code == 1 and unchanged and section in output and "Do not render" in output
+              and value_free(output, "EDITED-AFTER-GATE-CHECK", ranked_b["deliverable"]["deliverable_id"]), output.strip())
+    code, output, _ = verify(ranked_b, raw_path[a], "r12-verify-wrong-input")
+    check("R12-2 verify refuses a genuine ranked output checked against another review input", code == 1 and "Do not render" in output, output.strip())
+    stamped = copy.deepcopy(ranked_a)
+    stamped["provenance"]["generated_at"] = "not a timestamp"
+    code, output, _ = verify(stamped, raw_path[a], "r12-verify-bad-stamp")
+    check("R12-2 verify refuses a ranked output whose run stamp is not an RFC 3339 date-time", code == 1 and "generated_at" in output and "not a timestamp" not in output, output.strip())
+    restamped = copy.deepcopy(ranked_a)
+    restamped["provenance"]["generated_at"] = "2027-01-02T03:04:05Z"
+    code, output, _ = verify(restamped, raw_path[a], "r12-verify-restamped")
+    check("R12-2 verify accepts a genuine ranked output re-stamped with another run time (the one allow-listed member)", code == 0, output.strip())
+    code, stdout, stderr = run("severity_rank", "--verify", os.path.join(demo[a], "expected", "severity-ranked.json"), "--input", raw_path[a], "--out", os.path.join(work, "never.json"))
+    check("R12-2 verify takes no --out (it writes nothing) and says so without repeating the path",
+          code == 2 and "not allowed with argument --verify" in stderr and "never.json" not in stderr and not os.path.exists(os.path.join(work, "never.json")), stderr.strip())
+    skill = read_text(os.path.join(ROOT, "skills", "review-packet", "SKILL.md"))
+    template = read_text(os.path.join(ROOT, "skills", "review-packet", "templates", "review-packet-template.md"))
+    step_one = skill[skill.index("## Steps"):skill.index("2. Validate the payload")]
+    check("R12-2 review-packet SKILL.md requires verify as step 1, before any rendering, and stopping on refusal",
+          "severity_rank.py --verify severity-ranked.json --input review-input.json" in step_one and "exits non-zero" in step_one
+          and "stop" in step_one and "render no packet" in step_one and "--verify` refuses it, stop" in skill)
+    check("R12-2 the packet template's empty-findings wording applies only after verify passed",
+          "only after `severity_rank.py --verify` passed on this exact file" in template and "None: the engines produced no findings." in template)
+
+    # R12-3: a copied deliverable identity cannot be edited between stages.
+    for engine, doc, label in (("gate_check", mapped_a, "mapped"), ("severity_rank", gated_a, "gated")):
+        edited = copy.deepcopy(doc)
+        edited["deliverable"]["deliverable_id"] = "EDITED-AFTER-GATE-CHECK"
+        check(f"R12-3 an edited deliverable_id in the {label} input is refused at {engine} (deliverable), echoing neither ID",
+              refused(stage(engine, edited, raw_path[a], f"r12-id-{label}"), "deliverable", values=["EDITED-AFTER-GATE-CHECK", "DELIV-ASTER-ORION-V0.8"]))
+    for field, value in (("title", "Orion Programme Benefits Review (final)"), ("client_name", "Another Client Ltd"), ("version", "1.0")):
+        edited = copy.deepcopy(gated_a)
+        edited["deliverable"][field] = value
+        check(f"R12-3 an edited deliverable.{field} in gate-checked.json is refused at severity_rank with no output",
+              refused_cleanly(stage("severity_rank", edited, raw_path[a], f"r12-deliv-{field}"), value))
+    for key, value in (("engagement_id", "PS-OTHER-001"), ("scenario_id", "scenario-z")):
+        edited = copy.deepcopy(gated_a)
+        edited[key] = value
+        check(f"R12-3 an edited top-level {key} is refused at severity_rank", refused(stage("severity_rank", edited, raw_path[a], f"r12-top-{key}"), key, values=[value]))
+
+    # R12-4: the provenance ledger is engine-owned: missing, renamed, reordered, repeated or extra entries are refused.
+    ledger_edits = {
+        "mapped": (mapped_a, "gate_check", [
+            ("assertion_map entry deleted", []),
+            ("assertion_map entry renamed", ["assertion-map/1.0.4"]),
+            ("assertion_map entry re-versioned", ["assertion_map/1.0.3"]),
+            ("assertion_map entry repeated", ["assertion_map/1.0.4", "assertion_map/1.0.4"]),
+            ("future severity_rank entry added", ["assertion_map/1.0.4", "severity_rank/1.0.4"]),
+            ("non-engine entry after the engines", ["assertion_map/1.0.4", "reviewer-tool/2.0"]),
+        ]),
+        "gated": (gated_a, "severity_rank", [
+            ("gate_check entry deleted", ["assertion_map/1.0.4"]),
+            ("assertion_map entry deleted", ["gate_check/1.0.4"]),
+            ("entries reordered", ["gate_check/1.0.4", "assertion_map/1.0.4"]),
+            ("gate_check entry renamed", ["assertion_map/1.0.4", "Gate-Check/1.0.4"]),
+            ("gate_check entry repeated", ["assertion_map/1.0.4", "gate_check/1.0.4", "gate_check/1.0.4"]),
+            ("extra severity_rank entry", ["assertion_map/1.0.4", "gate_check/1.0.4", "severity_rank/1.0.4"]),
+            ("ledger emptied", []),
+        ]),
+    }
+    for label, (doc, engine, edits) in ledger_edits.items():
+        for name, engines in edits:
+            edited = copy.deepcopy(doc)
+            edited["provenance"]["engines"] = engines
+            code, _, output, written = stage(engine, edited, raw_path[a], f"r12-ledger-{label}-{name.replace(' ', '-')}")
+            check(f"R12-4 {label} input with the {name} is refused at {engine} with no output",
+                  code == 1 and not written and ("provenance" in output or "provenance.engines" in output) and value_free(output, "reviewer-tool", "Gate-Check", "1.0.3"), output.strip())
+    for name, engines, prior, tag in (
+            ("deleted", ["reviewer-tool/2.0"], ("assertion_map/1.0.4",), "gate_check/1.0.4"),
+            ("renamed", ["assertion map/1.0.4"], ("assertion_map/1.0.4",), "gate_check/1.0.4"),
+            ("reordered", ["gate_check/1.0.4", "assertion_map/1.0.4"], ("assertion_map/1.0.4", "gate_check/1.0.4"), "severity_rank/1.0.4"),
+            ("extra", ["assertion_map/1.0.4", "gate_check/1.0.4", "gate_check/9.9"], ("assertion_map/1.0.4", "gate_check/1.0.4"), "severity_rank/1.0.4")):
+        try:
+            rules.record_engine({"provenance": {"engines": list(engines)}}, tag, FIXED_TS, prior=prior)
+            outcome = "accepted"
+        except rules.InputError as exc:
+            outcome = str(exc)
+        check(f"R12-4 record_engine refuses a ledger with an engine entry {name}", "provenance.engines must end with exactly" in outcome and value_free(outcome, "9.9", "reviewer-tool"), outcome)
+    upstream = read(raw_path[a])
+    upstream["provenance"] = {"engines": ["intake-tool/2.1"], "generated_at": FIXED_TS}
+    upstream_path = os.path.join(work, "r12-upstream-ledger-input.json")
+    write(upstream_path, upstream)
+    upstream_dir = os.path.join(work, "upstream-chain")
+    os.makedirs(upstream_dir, exist_ok=True)
+    try:
+        upstream_ranked = read(chain(upstream_path, upstream_dir)["ranked"])["provenance"]["engines"]
+    except RuntimeError as exc:
+        upstream_ranked = str(exc)
+    check("R12-4 a non-engine upstream ledger entry before the engines is kept and the chain runs",
+          upstream_ranked == ["intake-tool/2.1", "assertion_map/1.0.4", "gate_check/1.0.4", "severity_rank/1.0.4"], upstream_ranked)
+
+    # A23 schema coverage: every contract section is compared; the only exemption is allow-listed and justified.
+    contract = read(os.path.join(ROOT, "contracts", "ps.deliverable-review-quality-gate.v1.json"))
+    top = list(contract.get("properties", {}))
+    check("A23 schema coverage: every top-level contract property is a compared section, and every compared section is in the contract",
+          sorted(top) == sorted(rules.COMPARED_SECTIONS) and len(set(rules.COMPARED_SECTIONS)) == len(rules.COMPARED_SECTIONS),
+          (sorted(set(top) - set(rules.COMPARED_SECTIONS)), sorted(set(rules.COMPARED_SECTIONS) - set(top))))
+
+    def property_paths(node, prefix):
+        if isinstance(node, dict) and "$ref" in node:
+            node = contract.get("definitions", {}).get(node["$ref"].rsplit("/", 1)[-1], {})
+        paths = []
+        for key, child in (node.get("properties", {}) if isinstance(node, dict) else {}).items():
+            paths.append(prefix + (key,))
+            if len(prefix) < 1:
+                paths.extend(property_paths(child, prefix + (key,)))
+        return paths
+    nested = [path for path in property_paths(contract, ()) if len(path) == 2]
+    allowed = set(rules.NOT_ENGINE_OWNED)
+    check("A23 schema coverage: every allow-listed member exists in the contract and carries a justification",
+          all(path in nested for path in allowed) and all(len(reason) > 120 for reason in rules.NOT_ENGINE_OWNED.values()), sorted(allowed))
+    check("A23 the allow-list holds only the run stamp provenance.generated_at", allowed == {("provenance", "generated_at")}, sorted(allowed))
+    uncovered = [path for path in nested if path[0] not in rules.COMPARED_SECTIONS and path not in allowed]
+    check("A23 schema coverage: every nested contract member is either inside a compared section or allow-listed", not uncovered, uncovered)
+    probe = {key: [] for key in rules.COMPARED_SECTIONS}
+    probe["provenance"] = {"engines": [], "generated_at": FIXED_TS}
+    for path in nested:
+        if path in allowed:
+            continue
+        mutated = copy.deepcopy(probe)
+        container = mutated.setdefault(path[0], {})
+        if not isinstance(container, dict):
+            mutated[path[0]] = container = {}
+        container[path[1]] = "probe"
+        if rules.differing_members(mutated, probe) != [path[0]]:
+            uncovered.append(path)
+    stamped = copy.deepcopy(probe)
+    stamped["provenance"]["generated_at"] = "2027-01-01T00:00:00Z"
+    check("A23 comparison: every non-allow-listed contract member is compared and the allow-listed one is not",
+          not uncovered and rules.differing_members(stamped, probe) == [], uncovered)
+    check("A23 comparison keeps JSON types: true is not 1 and 1 is not 1.0, key order is ignored",
+          rules.differing_members({"x": True}, {"x": 1}) == ["x"] and rules.differing_members({"x": 1}, {"x": 1.0}) == ["x"]
+          and rules.differing_members({"x": {"a": 1, "b": 2}}, {"x": {"b": 2, "a": 1}}) == [])
+
+    # A23 per-section mutations: each section of gate-checked.json edited alone is refused, naming only that section.
+    def mutate(value):
+        if isinstance(value, str):
+            return value + " (edited)"
+        if isinstance(value, list):
+            return value[:-1] if value else [{"note": "added"}]
+        if isinstance(value, dict):
+            edited = copy.deepcopy(value)
+            key = next((k for k, v in edited.items() if isinstance(v, str)), None)
+            if key is None:
+                edited["note"] = "added"
+            else:
+                edited[key] = edited[key] + " (edited)"
+            return edited
+        return value
+    for section in rules.COMPARED_SECTIONS:
+        if section not in gated_b or section in ("contract_version",):
+            continue
+        edited = copy.deepcopy(gated_b)
+        edited[section] = mutate(edited[section])
+        code, _, output, written = stage("severity_rank", edited, raw_path[b], f"r12-section-{section}")
+        check(f"A23 scenario b: gate-checked.json with only {section} edited is refused at severity_rank with no output and no value echoed",
+              code == 1 and not written and "input error" in output and value_free(output, "(edited)", "added"), output.strip()[-240:])
+    def add_reviewer_finding(doc):
+        """A reviewer finding added after the gate run, with gate_results kept consistent (severity-rules.md #3.5)."""
+        added = dict(copy.deepcopy(doc["findings"][0]), finding_id="REV-EDITED-1", source="skill:deliverable-ingest")
+        doc["findings"].append(added)
+        next(item for item in doc["gate_results"] if item["gate_id"] == added["gate_id"])["finding_count"] += 1
+
+    # Edits the per-field reconciliations (severity-rules.md #3.7) cannot see, so only the comparison catches them.
+    unseen = (("deliverable", lambda doc: doc["deliverable"].__setitem__("title", doc["deliverable"]["title"] + " (edited)")),
+              ("criteria", lambda doc: doc["criteria"].__setitem__("criteria_sections", doc["criteria"]["criteria_sections"] + ["Annex (edited)"])),
+              ("escalations", lambda doc: doc["escalations"].append("G8: reviewer note (edited)")),
+              ("findings", lambda doc: add_reviewer_finding(doc)),
+              ("provenance", lambda doc: doc["provenance"].__setitem__("note", "reviewer note (edited)")))
+    for section, edit in unseen:
+        edited = copy.deepcopy(gated_b)
+        edit(edited)
+        check(f"A23 scenario b: an edit only to {section} that no per-field reconciliation sees is refused by the comparison, which names it",
+              refused(stage("severity_rank", edited, raw_path[b], f"r12-named-{section}"), section, values=["(edited)", "REV-EDITED-1"]))
+    extra = copy.deepcopy(gated_a)
+    extra["reviewer_override"] = "release approved"
+    code, _, output, written = stage("severity_rank", extra, raw_path[a], "r12-extra-member")
+    check("A23 an extra top-level member is refused (by the contract or the comparison) without echoing its name or value",
+          code == 1 and not written and value_free(output, "reviewer_override", "release approved"), output.strip())
+
+    # A23 genuine runs: own outputs re-run byte for byte; refusals leave an existing output untouched; --input is required.
+    for name in (a, b):
+        for engine, doc, expected in (("gate_check", golden[name]["gate-checked"], "gate-checked"), ("severity_rank", golden[name]["severity-ranked"], "severity-ranked")):
+            out = os.path.join(work, f"r12-rerun-{engine}-{name}.json")
+            code, stdout, stderr = run(engine, flags[engine], os.path.join(demo[name], "expected", f"{expected}.json"), "--input", raw_path[name], "--out", out)
+            check(f"A23 {name}: {engine} re-run on its own golden output with the review input reproduces it byte for byte",
+                  code == 0 and read_text(out) == read_text(os.path.join(demo[name], "expected", f"{expected}.json")), stderr.strip())
+    restamped = copy.deepcopy(gated_a)
+    restamped["provenance"]["generated_at"] = "2027-01-02T03:04:05Z"
+    code, ranked, output, _ = stage("severity_rank", restamped, raw_path[a], "r12-restamped")
+    expected_ranked = copy.deepcopy(ranked_a)
+    expected_ranked["provenance"]["generated_at"] = "2027-01-02T03:04:05Z"
+    check("A23 the allow-listed run stamp may differ: severity_rank accepts it and reproduces the golden under that stamp",
+          code == 0 and ranked == expected_ranked, output.strip())
+    code, _, output, written = stage("severity_rank", gated_b, raw_path[a], "r12-wrong-input")
+    check("A23 a genuine gate-checked.json checked against another scenario's review input is refused", code == 1 and not written, output.strip())
+    code, _, output, written = stage("gate_check", ranked_a, raw_path[a], "r12-gc-on-ranked")
+    check("A23 gate_check refuses severity_rank output as its mapped input", code == 1 and not written, output.strip())
+    sentinel = b"previous output\n"
+    edited = copy.deepcopy(gated_b)
+    edited["escalations"] = []
+    code, _, output, written = stage("severity_rank", edited, raw_path[b], "r12-existing", existing=sentinel)
+    check("A23 a refused run leaves an existing output file untouched",
+          code == 1 and not written and read_text(os.path.join(work, "r12-existing-out.json")) == sentinel.decode(), output.strip())
+    for engine in ("gate_check", "severity_rank"):
+        path = os.path.join(work, f"r12-noinput-{engine}.json")
+        write(path, gated_a)
+        saved = sys.argv
+        sys.argv = [ENGINES[engine], flags[engine], path, "--out", os.path.join(work, f"r12-noinput-{engine}-out.json")]
+        err = io.StringIO()
+        try:
+            with redirect_stdout(io.StringIO()), redirect_stderr(err):
+                MODULES[engine].main()
+            code = 0
+        except SystemExit as exc:
+            code = exc.code
+        finally:
+            sys.argv = saved
+        check(f"A23 {engine} requires --input (the review input) and says so without repeating a path",
+              code == 2 and "the following arguments are required: --input" in err.getvalue() and path not in err.getvalue(), err.getvalue().strip())
+    gate_skill = read_text(os.path.join(ROOT, "skills", "gate-check", "SKILL.md"))
+    check("A23 gate-check SKILL.md passes --input review-input.json to both engines in its steps and example",
+          gate_skill.count("--input review-input.json --out gate-checked.json") == 2 and gate_skill.count("--input review-input.json --out severity-ranked.json") == 2)
+    for name in (a, b):
+        workdir = os.path.join(work, f"demo-{name}")
+        os.makedirs(workdir, exist_ok=True)
+        outputs = chain(raw_path[name], workdir)
+        same = all(read_text(outputs[key]) == read_text(os.path.join(demo[name], "expected", golden_name))
+                   for key, golden_name in (("mapped", "assertion-mapped.json"), ("gated", "gate-checked.json"), ("ranked", "severity-ranked.json"), ("log", "engine-run.log")))
+        check(f"R12 {name} runs end to end with --input at every stage, byte-identical to its goldens", same)
+
+
+def seed_inputs():
+    """The demo goldens map to their scenario's review input, so a test that edits a golden is compared with it."""
+    for scenario in ("scenario-a-happy", "scenario-b-drama"):
+        base = os.path.join(ROOT, "demo-data", scenario)
+        raw = snapshot(os.path.join(base, "review-input.json"))
+        for golden in ("assertion-mapped.json", "gate-checked.json", "severity-ranked.json"):
+            INPUT_FOR[file_key(os.path.join(base, "expected", golden))] = raw
+
+
 def main():
+    try:
+        return run_all()
+    finally:
+        shutil.rmtree(HARNESS_DIR, ignore_errors=True)
+
+
+def run_all():
+    seed_inputs()
     with tempfile.TemporaryDirectory() as tmp:
         for group in (golden_tests, negative_tests, register_tests, page_label_tests, g8_tests,
                       strictness_tests, round3_tests, g8_structural_tests, steering_guard_tests, demo_derivation_tests,
@@ -5060,7 +5560,7 @@ def main():
                        qa104_round6_tests, id_keyed_sweep_tests, qa104_round7_tests, qa104_round8_tests, qa104_round8_sweep_tests, round9_sweep_tests,
                       qa104_round9_tests, te_round8_sweep_tests, qa104_round10_tests,
                       mobilization_round11_sweep_tests, mobilization_round12_sweep_tests,
-                      tne_round10_sweep_tests, mobilization_round13_sweep_tests):
+                      tne_round10_sweep_tests, mobilization_round13_sweep_tests, qa104_round12_tests):
             run_group(group, tmp)
     for group in (recipient_classifier_tests, tripwire_tests, packet_template_tests, skill_doc_tests,
                   skill_trigger_tests, version_tests, shared_copy_tests):

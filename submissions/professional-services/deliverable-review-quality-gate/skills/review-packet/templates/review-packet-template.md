@@ -15,7 +15,7 @@ Produced by deliverable-ingest -> criteria-retrieve -> assertion-map -> gate-che
 
 When `location.page` or `location.paragraph` is null (a register-level finding such as a register that was not supplied), render `register-level` / `{{location.section}}` / `{{location.label}}` instead of a page or paragraph number. Never substitute page 1 or any other placeholder page.
 
-If `ranked_findings[]` is empty, replace the table with exactly: "None: the engines produced no findings. This does not clear any gate; the reviewing partner/QRM owner decides release."
+If `ranked_findings[]` is empty, and only after `severity_rank.py --verify` passed on this exact file (review-packet SKILL.md step 1; quality-gate-criteria.md #8.21), replace the table with exactly: "None: the engines produced no findings. This does not clear any gate; the reviewing partner/QRM owner decides release." A ranked output that verify refused is never rendered, so an emptied list can never reach this wording.
 
 ## Gate checklist
 | Gate | Status | Highest severity | Evidence |
