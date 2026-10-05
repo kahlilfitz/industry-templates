@@ -430,6 +430,82 @@ def run_spans(items, skip=()):
             if h: out.append((span, list(h))); done.append(ss)
     return out
 def run_label(span): return "+".join(f"[{k}]" for k in span)
+# Rendered-output runs (#4.5). The pack puts values from different fields, records and sources on adjacent lines, so
+# the whole rendered output is read the way scan_lines reads a source: every neighbouring pair (pair_hits), every
+# window of 3 to RUN_MAX lines and, for a longer output, the whole output. Every line was screened alone first, so a
+# window is read only as its two joins (" ; " and label-stripped space, as steering_guard.scan_fields joins fields).
+@functools.lru_cache(maxsize=65536)
+def _joined_hits(texts, trusted):
+    vals = [v for v in texts if v.strip()]
+    if len(vals) < 2: return ()
+    hooks = dict(HOOKS, trusted_domains=trusted)
+    for j in (" ; ".join(vals), " ".join(sg._LABEL.sub("", v).strip() for v in vals)):
+        if len(j) > sg.MAX_TOTAL_CHARS: return ("oversize",)
+        f = [h.family for h in sg.scan(j, **hooks) if h.family != "mixed_script"]
+        if "oversize" in f: return ("oversize",)
+        if f: return ("split_across_fields",)
+    return ()
+def rendered_runs(lines):
+    """[(0-based line indices, families)] for every pair of neighbouring rendered lines and every run of 3 to RUN_MAX
+    lines (and the whole output) that trips only when read together. Blank lines, withheld lines and lines that trip
+    alone are skipped (they never break a run); a run containing a flagged pair or smaller run is not reported (#4.5)."""
+    seq = [n for n, x in enumerate(lines) if x.strip() and not is_withheld(x) and not hits(x)]; out = []; done = []
+    for a, b in zip(seq, seq[1:]):
+        h = pair_hits(lines[a], lines[b])
+        if h: out.append(([a, b], h)); done.append({a, b})
+    sizes = list(range(3, min(RUN_MAX, len(seq)) + 1)) + ([len(seq)] if len(seq) > RUN_MAX else [])
+    for size in sizes:
+        for a in range(len(seq) - size + 1):
+            span = seq[a:a + size]; ss = set(span)
+            if any(d <= ss for d in done): continue
+            h = _joined_hits(tuple(unlabel(lines[k]) for k in span), _TRUSTED)
+            if h: out.append((span, list(h))); done.append(ss)
+    return out
+def rendered_values(*xs):
+    """The free-text values a rendered line shows, in order: blank and withheld values are not text to screen."""
+    return tuple(x for x in xs if isinstance(x, str) and x.strip() and not is_withheld(x))
+RENDER_KEEP = ("contract_version", "run_metadata", "provenance", "holds")
+def withhold_values(p, blocked, keep=RENDER_KEEP):
+    """Every free-text string in the document that carries a held rendered value is withheld, wherever it appears;
+    hold paths and reasons that interpolate one keep their structure with the value replaced (#4.3, #4.5)."""
+    if not blocked: return p
+    rx = re.compile("|".join(r"(?<!\w)" + re.escape(b) + r"(?!\w)" for b in sorted(blocked, key=len, reverse=True)))
+    def has(v): return isinstance(v, str) and bool(rx.search(v))
+    def walk(v, key):
+        if isinstance(v, dict): return {k: walk(x, k) for k, x in v.items()}
+        if isinstance(v, list): return [walk(x, key) for x in v]
+        return WITHHELD if has(v) and not is_withheld(v) and prose_key(key) and not engine_scalar(key, v) else v
+    q = {k: (v if k in keep else walk(v, k)) for k, v in p.items()}
+    if "holds" in q:
+        hs = []
+        for h in q["holds"]:
+            h = dict(h)
+            for k in ("path", "reason"):
+                v = h.get(k)
+                if has(v) and not engine_text(k, v) and not any(v.startswith(x + ".") for x in BIND_STAGES): h[k] = rx.sub("(text withheld)", v)
+            hs.append(h)
+        q["holds"] = hs
+    return q
+RENDER_PASSES = 8
+def rendered_escalation(label, n): return f"{n} rendered {label} line run(s) held because text from different fields or records reads as an instruction only when the lines are read together; the text on those lines is withheld (confidentiality-and-ethical-wall-rules.md #4.5)"
+def screen_rendered(doc, rows_fn, label):
+    """(document, holds) with every value a rendered view shows read in its rendered order (rows_fn(doc) ->
+    [(field path, rendered_values)]): each line's values, every pair and run of lines and the whole view
+    (rendered_runs). A hit is held and every value on its lines is withheld everywhere in the document
+    (withhold_values); the view is read again until it is clean (#4.5)."""
+    ph, blocked = [], set()
+    for _ in range(RENDER_PASSES):
+        d = withhold_values(doc, blocked); rows = rows_fn(d); texts = [" - ".join(v) for _, v in rows]
+        found = [([k], h) for k, x in enumerate(texts) if x for h in [hits(x)] if h] + rendered_runs(texts)
+        if not found: return d, ph
+        grew = False
+        for span, h in found:
+            x = hold(f"rendered order of {label}: " + " + ".join(rows[k][0] for k in span), "\n".join(texts[k] for k in span), h)
+            if hold_key(x) not in {hold_key(y) for y in ph}: ph.append(x); grew = True
+            new = {v for k in span for v in rows[k][1]} - blocked
+            if new: blocked |= new; grew = True
+        if not grew: break
+    raise InputError(f"the rendered {label} still reads as an instruction across lines after its text was withheld (text not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #4.5)")
 def hold(path, text, hit):
     d = hashlib.sha256(strip_cf(text or "").encode()).hexdigest()[:12]
     why = ",".join(hit) if isinstance(hit, (list, tuple)) else hit
@@ -722,6 +798,8 @@ REC_CITATION = "role-access-matrix.md #3.2"
 def rec_hold(path, engine): return {"hold_id": REC_HOLD_ID, "path": path, "reason": REC_REASON, "source": engine, "confidence": 0.98, "citation": REC_CITATION}
 def rec_escalation(n): return f"{n} staffing recommendation(s) are not backed by an eligible slate verdict for the same candidate; not proposed - confirm with the engagement manager (role-access-matrix.md #3.2)"
 EXCLUDED_HOLD_ID = "HOLD-EXCLUDED-PERSON-NAMED"
+STAFFING_UNSTATED_REASON = "staffing input does not state the SOW's client or engagement ID (blank or missing); the staffing evidence cannot be confirmed for this engagement and is not trusted"
+STAFFING_UNSTATED_ESCALATION = "Staffing input does not state the SOW's client or engagement ID; staffing evidence held for the engagement manager (confidentiality-and-ethical-wall-rules.md #1.2, #3.3)"
 EXCLUDED_REASON = "a derived section names a person Scenario 02 excludes from this engagement (name not repeated); not used"
 def excluded_hold(path, engine): return {"hold_id": EXCLUDED_HOLD_ID, "path": path, "reason": EXCLUDED_REASON, "source": engine, "confidence": 0.98, "citation": "role-access-matrix.md #3.2; confidentiality-and-ethical-wall-rules.md #1.5"}
 def stated(v):
@@ -750,7 +828,7 @@ ENGINE_REASONS = {OVERSIZE_REASON, OTHER_HOLD_REASON,
     "unknown wall status value (not repeated); treated as hold",
     "ethical-wall register " + DUPLICATE_HEADER_REASON, "workspace inventory " + DUPLICATE_HEADER_REASON + "; no access is requested",
     "workspace inventory workspace_id " + DUPLICATE_ID_REASON + "; no access is requested", LINK_REASON, REC_REASON,
-    WITHHELD_FIELD_REASON, EXCLUDED_REASON}
+    WITHHELD_FIELD_REASON, EXCLUDED_REASON, STAFFING_UNSTATED_REASON}
 _PERM = r"(?:none|viewer|member|contributor|admin|owner)"
 ENGINE_REASON_RES = [re.compile(r"embedded_instruction:[a-z_]+(?:,[a-z_]+)*"),
     re.compile(r"\d+ declared client/firm domain\(s\) are malformed or consumer/file-sharing domains and are not trusted \(not repeated\)"),
@@ -857,6 +935,7 @@ _ESC_ID = [(re.compile(r"Confirmed roster row .+ has a blank or unrecognised Sce
     (re.compile(r"Roster row \d+ has a blank or unrecognised onboarding_status; .*"), "HOLD-UNKNOWN-ONBOARDING-STATUS"),
     (re.compile(r"A declared client/firm domain is malformed or a consumer/file-sharing domain; .*"), "HOLD-DOMAIN-NOT-TRUSTED"),
     (re.compile(r"Staffing input is for a different client or engagement than the SOW; .*"), "HOLD-STAFFING-ENGAGEMENT-MISMATCH"),
+    (re.compile(re.escape(STAFFING_UNSTATED_ESCALATION)), "HOLD-STAFFING-ENGAGEMENT-MISMATCH"),
     (re.compile(r"\d+ record\(s\) linked by ID state a different person, asset, client or engagement; .*"), LINK_HOLD_ID),
     (re.compile(r"\d+ staffing recommendation\(s\) are not backed by an eligible slate verdict for the same candidate; .*"), REC_HOLD_ID)]
 def _strings(v):
@@ -924,31 +1003,23 @@ def stage_timestamp(doc, where):
 def reread(doc, label="re-derived document"):
     """doc exactly as the next stage reads it back: serialised like dump_json, parsed like load_json."""
     return json.loads(json_bytes(None, doc, label).decode("utf-8"), parse_constant=_no_constant, parse_float=_finite_float, object_pairs_hook=_unique_keys)
-CANONICAL_ID_LISTS = (("wall_decision", ("allowed_knowledge_ids", "denied_knowledge_ids", "denied_workspace_ids", "held_workspace_ids", "name_withheld_workspace_ids")), ("knowledge_digest", ("denied_items",)))
-HOLD_CANON = {"hold_id": canon_id, "path": canon_text, "reason": canon_text, "source": canon_text, "citation": canon_text}
-def canonical_document(doc):
-    """The comparison form of a pipeline document: every value exactly as written (types included), except where the
-    engines already compare canonically (#1.3): trusted domains in domain form, the wall decision's and the digest's
-    ID lists by item_key, and each hold's ID, path, reason, source and citation. A canonical variant compares equal;
-    nothing is dropped, so an extra member anywhere still differs."""
-    if not isinstance(doc, dict): return doc
-    d = dict(doc); e = d.get("engagement")
-    if isinstance(e, dict) and isinstance(e.get("trusted_domains"), list):
-        d["engagement"] = dict(e, trusted_domains=[("domain", canon_text(x).lstrip("@.")) if isinstance(x, str) else x for x in e["trusted_domains"]])
-    for sec, keys in CANONICAL_ID_LISTS:
-        x = d.get(sec)
-        if isinstance(x, dict): d[sec] = dict(x, **{k: item_keys(x[k]) for k in keys if isinstance(x.get(k), list)})
-    if isinstance(d.get("holds"), list):
-        d["holds"] = [{k: (("canon", HOLD_CANON[k](v)) if k in HOLD_CANON and isinstance(v, str) else v) for k, v in h.items()} if isinstance(h, dict) else h for h in d["holds"]]
-    return d
+# Every member of an engine-owned document is compared EXACTLY, as written: no case folding, spacing, separator,
+# Cf or domain-form canonicalisation of any field (hold IDs, paths, reasons, sources and citations, trusted domains,
+# ID lists included). An unedited document is byte-for-byte its re-derivation, so canonical comparison could only
+# admit edited variants - for example a hold source that breaks the contract pattern. The canonical form (#1.3) is
+# for joining and grouping values taken from the raw inputs, never for re-derivation equality. The only carried
+# values not derivable from the raw inputs are the run parameters in CARRIED_PARAMETERS, and the re-derivation runs
+# with them, so they too compare exactly (#1.4; QA r15).
 def document_differences(carried, derived):
-    """(missing, extra, changed) member counts between a carried document and its re-derivation, both in comparison
-    form: objects member by member, lists item by item in order, scalars by type and value (1, 1.0 and true differ)."""
+    """(missing, extra, changed) member counts between a carried document and its re-derivation, compared exactly:
+    objects member by member, lists item by item in order, scalars by type and value (1, 1.0 and true differ; so do
+    `engine:wall_check` and `ENGINE:WALL_CHECK`)."""
     miss = extra = changed = 0; stack = [(carried, derived)]
     while stack:
         x, y = stack.pop()
         if isinstance(x, dict) and isinstance(y, dict):
             extra += len(x.keys() - y.keys()); miss += len(y.keys() - x.keys()); stack.extend((x[k], y[k]) for k in x.keys() & y.keys())
+            if x.keys() == y.keys() and list(x) != list(y): changed += 1  # members in a different order: the file was rewritten
         elif isinstance(x, list) and isinstance(y, list):
             extra += max(0, len(x) - len(y)); miss += max(0, len(y) - len(x)); stack.extend(zip(x, y))
         elif type(x) is not type(y) or x != y: changed += 1
@@ -956,7 +1027,7 @@ def document_differences(carried, derived):
 def same_document(carried, derived, where):
     """Refuse a carried intermediate that is not, in every member and section (provenance included), the document the
     upstream engines derive from the raw inputs. The message gives counts only: no value, member name or path (#1.3, #1.4)."""
-    m, x, c = document_differences(canonical_document(carried), canonical_document(reread(derived, where)))
+    m, x, c = document_differences(carried, reread(derived, where))
     need(not (m or x or c), f"the {where} is not the document the upstream engines re-derive from the raw inputs ({m} missing, {x} extra and {c} changed field(s); values and field paths not repeated); every field and section, provenance included, must equal its re-derivation - the file was edited or is stale for the inputs given; re-run the chain from the raw sources; fail closed (confidentiality-and-ethical-wall-rules.md #1.4)")
 
 # ---------------------------------------------------------------- other-client identities from the wall register
@@ -1148,18 +1219,30 @@ def unreadable_identity_holds(rows, label, engine):
         for k, v in r.items():
             if base_col(k) in ("client_name", "matter_id") and identity_unreadable(v): out.append(other_hold(f"{label} row {i}.{lab.get(k, 'column')}", v, engine))
     return out
-def register_identity_holds(path, engine):
-    """unreadable_identity_holds for the wall register at path (none when it is absent)."""
+MISSING_REGISTER_MSG = ("the ethical-wall register is missing (path not repeated); it is the source of the other clients' names every engine "
+    "screens out of every output, so no stage runs without it - supply raw/ethical-wall-register.csv; nothing written; fail closed "
+    "(confidentiality-and-ethical-wall-rules.md #2.1, #3.3)")
+NO_IDENTITY_COLUMN_MSG = ("the ethical-wall register has rows but no client_name column, so other clients' names cannot be screened; "
+    "nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #2.1, #3.3)")
+def register_rows(path):
+    """The wall register at path, read as every engine reads it. Every stage that screens for other clients needs it:
+    an absent register, or one with rows but no client_name column, would leave the other-client screen with no
+    identities, so the stage refuses instead of writing unscreened text (#2.1, #3.3)."""
     rows = read_csv(path, False, "wall register")
-    return unreadable_identity_holds(rows, REGISTER_LABEL, engine) if rows is not None else []
+    need(rows is not None, MISSING_REGISTER_MSG)
+    cols = list(getattr(rows, "columns", ()) or ())
+    need(not rows or any(base_col(k) == "client_name" for k in cols), NO_IDENTITY_COLUMN_MSG)
+    return rows
+def register_identity_holds(path, engine):
+    """unreadable_identity_holds for the wall register at path (refused when it is absent, register_rows)."""
+    return unreadable_identity_holds(register_rows(path), REGISTER_LABEL, engine)
 def register_terms(path, e, own):
     """Other-client terms from the wall register at path, read and screened exactly as wall_check reads it. Term
     harvesting is independent of decision validity: a register with a missing or repeated column still names the other
     clients it lists, and wall_check holds the decision while every engine still withholds those names (#2.1, #3.3).
     Identities are harvested from the unmodified register, before any screen redacts a cell: a restriction that also
-    trips the wire still names the client it restricts (#3.3, #4.3). Only an absent register yields none."""
-    rows = read_csv(path, False, "wall register")
-    if rows is None: return []
+    trips the wire still names the client it restricts (#3.3, #4.3). An absent register is refused (register_rows)."""
+    rows = register_rows(path)
     return client_terms(other_names(rows, e, own), own)
 def screen_csv_other(rows, label, terms, engine, only=None, skip=()):
     """Withhold every raw CSV cell that names another client or matter before anything is derived from it, holding it

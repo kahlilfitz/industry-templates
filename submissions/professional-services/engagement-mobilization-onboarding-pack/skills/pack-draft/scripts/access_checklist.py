@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, copy
+import argparse, copy, re
 from safety_text import *
 import wall_check
 from wall_check import govern
@@ -16,19 +16,58 @@ def cset(xs): return {join_key(x) for x in xs or []}-{None}  # workspace IDs, ty
 def safe(x): return WITHHELD if hits(x) else x  # confidentiality-and-ethical-wall-rules.md #4.3
 def strs(xs): return [x for x in (xs or []) if isinstance(x,str)]  # contract-valid arrays render without a TypeError (#1.3)
 DECISION_COLUMNS=("workspace_id","workspace_type","default_permission","requested_permission","depends_on_knowledge","data_classification")  # workspace-inventory-rules.md #1.3
-def pack(p):
+def _src(*xs): return rendered_values(*xs)
+def _role_src(r): return () if low(r) in {low(k) for k in M} else _src(r)  # a matrix role is fixed vocabulary, not free text
+def pack_rows(p):
+    """[(line, the free-text values it renders)] for the pack, one entry per line, before line screening (#4.3, #4.5)."""
     e=p.get("engagement") or {}; s=p.get("scope_summary") or {}; j=p.get("joiner") or {}; kd=p.get("knowledge_digest") or {}; mp=p.get("mobilization_pack") or {}
     hc=len(p.get("holds",[])); pend=sum(i.get("status")=="hold_pending_wall_review" for i in p.get("access_checklist",[]))
     parts=([f"{hc} open hold(s)"] if hc else [])+([f"{pend} workspace(s) pending wall review"] if pend else [])+(["wall status on hold"] if "wall_status_hold" in mp.get("hold_reasons",[]) and not hc else [])
-    L=["# Engagement Mobilization & Onboarding Pack","","**DRAFT - for internal review only. Do not send to the client or provision access.**","",f"Pack status: {mp.get('status','on_hold_internal_only')}"+(" - "+"; ".join(parts)+"; resolve before sharing with the joiner." if parts else ""),f"Generated at: {p.get('run_metadata',{}).get('generated_at',p.get('provenance',{}).get('generated_at',''))}",f"Engagement: {e.get('title','')} ({e.get('engagement_id','')})",f"Client: {e.get('client_name','')}",f"Joiner: {j.get('person','')} - {j.get('role','')}","","## Client context and objectives"]+[f"- {x}" for x in s.get("objectives",[])]+["","## SOW scope and exclusions","","### In scope"]+[f"- {x}" for x in s.get("in_scope",[])]+["","### Exclusions"]+[f"- {x}" for x in s.get("exclusions",[])]+["","## Deliverables and key dates"]
-    L += [f"- Deliverable: {x}" for x in s.get("deliverables",[])] + [f"- Key date: {x}" for x in s.get("key_dates",[])]
-    L += ["","## Prior-knowledge digest",f"Status: {kd.get('status','unknown')}"]
-    L += [f"- {i.get('title')} ({i.get('knowledge_id')}) [{i.get('review_status','pending_practice_review')}] - {i.get('summary')} Source: {'; '.join(strs(i.get('citations')))}" for i in kd.get("items",[])] or ["- No knowledge items are cleared for this joiner in this run."]
-    L += ["","## Team roster"] + [f"- {r.get('person')} - {r.get('role')} - {', '.join(strs(r.get('responsibilities')))} - POC: {r.get('point_of_contact')}" for r in p.get("team_roster",[])] + [f"- Proposed, not assigned: {r.get('candidate_name')} for {r.get('role_title')}" for r in p.get("proposed_staffing",[])]
-    L += ["","## Access-request checklist"] + ([f"- {i.get('workspace_name')} ({i.get('workspace_id')}): {i.get('status')} - {i.get('requested_permission','none')} - {i.get('reason')}" for i in p.get("access_checklist",[])] or ["- No access is requested in this run; see Escalations and holds."])
-    L += ["","## Confidentiality and ethical-wall briefing"] + ([f"- May not access/discuss {i.get('type')}: {i.get('item')} - {i.get('restriction')}" for i in (p.get("wall_decision") or {}).get("may_not_access_discuss",[])] or ["- No wall restriction was found for the joiner, subject to human review of this draft."])
-    L += ["","## First-week plan"] + [f"{n}. {x}" for n,x in enumerate(s.get("first_week_focus",[]),1)] + ["","## Escalations and holds"] + [f"- {x}" for x in p.get("escalations",[])] + [f"- HOLD {h.get('hold_id')}: {h.get('reason')} at {h.get('path')} ({h.get('citation')})" for h in p.get("holds",[])]
-    return "\n".join(L[:5]+[x if x.startswith(("#","Status:")) or not x else safe(x) for x in L[5:]])+"\n"  # hold lines are screened too (#4.3)
+    E=lambda *xs:[(x,()) for x in xs]
+    R=E("# Engagement Mobilization & Onboarding Pack","","**DRAFT - for internal review only. Do not send to the client or provision access.**","",f"Pack status: {mp.get('status','on_hold_internal_only')}"+(" - "+"; ".join(parts)+"; resolve before sharing with the joiner." if parts else ""),f"Generated at: {p.get('run_metadata',{}).get('generated_at',p.get('provenance',{}).get('generated_at',''))}")
+    R+=[(f"Engagement: {e.get('title','')} ({e.get('engagement_id','')})",_src(e.get("title"))),(f"Client: {e.get('client_name','')}",_src(e.get("client_name"))),(f"Joiner: {j.get('person','')} - {j.get('role','')}",_src(j.get("person"))+_role_src(j.get("role")))]
+    R+=E("","## Client context and objectives")+[(f"- {x}",_src(x)) for x in s.get("objectives",[])]+E("","## SOW scope and exclusions","","### In scope")+[(f"- {x}",_src(x)) for x in s.get("in_scope",[])]+E("","### Exclusions")+[(f"- {x}",_src(x)) for x in s.get("exclusions",[])]+E("","## Deliverables and key dates")
+    R+=[(f"- Deliverable: {x}",_src(x)) for x in s.get("deliverables",[])]+[(f"- Key date: {x}",_src(x)) for x in s.get("key_dates",[])]
+    R+=E("","## Prior-knowledge digest",f"Status: {kd.get('status','unknown')}")
+    R+=[(f"- {i.get('title')} ({i.get('knowledge_id')}) [{i.get('review_status','pending_practice_review')}] - {i.get('summary')} Source: {'; '.join(strs(i.get('citations')))}",_src(i.get("title"),i.get("summary"))) for i in kd.get("items",[])] or E("- No knowledge items are cleared for this joiner in this run.")
+    R+=E("","## Team roster")+[(f"- {r.get('person')} - {r.get('role')} - {', '.join(strs(r.get('responsibilities')))} - POC: {r.get('point_of_contact')}",_src(r.get("person"),*strs(r.get("responsibilities")),r.get("point_of_contact"))+_role_src(r.get("role"))) for r in p.get("team_roster",[])]+[(f"- Proposed, not assigned: {r.get('candidate_name')} for {r.get('role_title')}",_src(r.get("candidate_name"),r.get("role_title"))) for r in p.get("proposed_staffing",[])]
+    R+=E("","## Access-request checklist")+([(f"- {i.get('workspace_name')} ({i.get('workspace_id')}): {i.get('status')} - {i.get('requested_permission','none')} - {i.get('reason')}",_src(i.get("workspace_name") if i.get("workspace_name")!=i.get("workspace_id") else None)) for i in p.get("access_checklist",[])] or E("- No access is requested in this run; see Escalations and holds."))
+    R+=E("","## Confidentiality and ethical-wall briefing")+([(f"- May not access/discuss {i.get('type')}: {i.get('item')} - {i.get('restriction')}",_src(i.get("item"),i.get("restriction"))) for i in (p.get("wall_decision") or {}).get("may_not_access_discuss",[])] or E("- No wall restriction was found for the joiner, subject to human review of this draft."))
+    R+=E("","## First-week plan")+[(f"{n}. {x}",_src(x)) for n,x in enumerate(s.get("first_week_focus",[]),1)]+E("","## Escalations and holds")+[(f"- {x}",_src(x)) for x in p.get("escalations",[])]+E(*(f"- HOLD {h.get('hold_id')}: {h.get('reason')} at {h.get('path')} ({h.get('citation')})" for h in p.get("holds",[])))
+    return R
+def pack_lines(p,held_lines=()):
+    """The mobilization pack, one entry per rendered line. Every line after the header is screened alone (#4.3); a
+    line in a run the whole-pack screen held that carries no free-text value to withhold is withheld whole (#4.5)."""
+    L=[x for x,_ in pack_rows(p)]
+    return L[:5]+[(("- " if x.startswith("- ") else "")+WITHHELD) if x in held_lines else x if x.startswith(("#","Status:")) or not x else safe(x) for x in L[5:]]  # hold lines are screened too (#4.3)
+def pack(p,held_lines=()): return "\n".join(pack_lines(p,held_lines))+"\n"
+# The rendered pack is screened as a whole (#4.5): values from different fields, records and sources are placed on
+# adjacent lines ("Client: ..." above "Joiner: ..."), so a claim split across them would compose only in the pack.
+# The pack is read in its rendered order as scan_lines reads a source: each line's free-text values (joined as the
+# line renders them), every pair of neighbouring lines, every run of 3 to RUN_MAX lines and the whole pack. Lines that
+# render only engine text (headings, labels, statuses, reasons, hold lines) or are withheld are skipped and never break
+# a run: the engine's fixed vocabulary ("pending wall review", "denied") is not source text and would compose with
+# ordinary names ("Cleared Healthcare ..."). A hit holds the run, withholds every free-text value on its lines in the
+# whole access checklist and the pack, holds the wall like any screening hold, and the pack is re-derived until it
+# reads clean (derive). pack-draft's pre-render check (verify_render.py) refuses a pack that does not.
+PACK_PASSES=8
+PACK_RUN_PATH="mobilization-pack.md"
+def pack_screen(p,entries=None):
+    """One screening text per rendered pack entry: the free-text values it renders, in pack order ('' for an entry that
+    renders only engine text or is withheld)."""
+    rows=pack_rows(p); L=pack_lines(p) if entries is None else entries
+    return ["" if not s or WITHHELD in x else " - ".join(s) for (_,s),x in zip(rows,L)]
+def pack_runs(texts):
+    """[(entry indices, families)] for every pack entry whose values trip together, and every pair or run of entries
+    that trips only when read together (#4.5)."""
+    return [([k],h) for k,x in enumerate(texts) if x for h in [hits(x)] if h]+rendered_runs(texts)
+def pack_run_hold(entries,span,h):
+    first=[0]
+    for e in entries: first.append(first[-1]+e.count("\n")+1)
+    a,b=first[span[0]]+1,first[span[-1]+1]
+    return hold(f"{PACK_RUN_PATH} line {a}" if a==b else f"{PACK_RUN_PATH} lines {a}-{b}","\n".join(entries[k] for k in span),h)
+def pack_escalation(n): return rendered_escalation("pack",n)
+PACK_KEEP=RENDER_KEEP+("mobilization_pack",)
 def check_governed(p):
     need(isinstance(p,dict),f"governed input must be a JSON object, got {type(p).__name__}; fail closed")
     if p.get("contract_version")!=CONTRACT_VERSION: raise InputError(f"expected contract {CONTRACT_VERSION} in governed input")
@@ -61,6 +100,28 @@ def main():
 def derive(p,register,inventory,ts):
     """(access checklist document, mobilization pack text) for a governed document already proved equal to its
     re-derivation from the raw inputs (#1.4). pack-draft's pre-render check (verify_render.py) re-runs this too."""
+    d,entries=derive_entries(p,register,inventory,ts); return d,"\n".join(entries)+"\n"
+def derive_entries(p,register,inventory,ts):
+    """(access checklist document, rendered pack entries). The rendered pack is screened whole (pack_runs); each held
+    run adds a hold and withholds its text, and the document is derived again until the pack reads clean (#4.5)."""
+    ph=[]; blocked=set(); held=set()
+    for _ in range(PACK_PASSES):
+        d=_derive(copy.deepcopy(p),register,inventory,ts,ph,blocked); entries=pack_lines(d,held)
+        found=pack_runs(pack_screen(d,entries))
+        if not found: return d,entries
+        rows=pack_rows(d); grew=False
+        for span,h in found:
+            x=pack_run_hold(entries,span,h)
+            if hold_key(x) not in {hold_key(y) for y in ph}: ph.append(x); grew=True
+            for k in span:
+                src=[v for v in rows[k][1] if v not in blocked]
+                if src: blocked.update(src); grew=True
+                elif rows[k][0] not in held: held.add(rows[k][0]); grew=True
+        if not grew: break
+    raise InputError("the rendered mobilization pack still reads as an instruction across lines after its text was withheld (text not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #4.5)")
+def _derive(p,register,inventory,ts,ph=(),blocked=()):
+    """The access checklist document for the governed document p, with the whole-pack holds raised so far (ph) and
+    the pack values they withhold (blocked)."""
     adopt_trust(p)  # from the declaration lines scope_digest accepted, never a carried list (#1.4, #4.4)
     # The governed document is untrusted input: its upstream holds and every content field are screened for embedded
     # instructions and for other clients named in the wall register, and flagged text withheld, before anything is
@@ -117,18 +178,20 @@ def derive(p,register,inventory,ts):
         return out,ah
     # Access-decision holds (missing or unusable inventory, role not in the matrix, and below an invalid row or a
     # clamped permission) govern their checklist rows and the pack status, not the wall (role-access-matrix.md #2.3).
-    wall=effective_wall(p,register,inventory,gh+oh+screened); out,ah=build(wall)
+    wall=effective_wall(p,register,inventory,gh+oh+screened+list(ph)); out,ah=build(wall)
     p["wall_decision"]=wall; wstat=wall.get("status"); need(wstat in WALL_STATUSES,"re-derived wall status is not recognised; fail closed")
     if wstat in {"hold","denied"}:
         # No knowledge is released while the effective wall status is hold or denied, whatever the digest says (#2.2, #2.3).
         kd=p.get("knowledge_digest") or {}
         if kd.get("status") not in {"hold","denied_by_wall"}: kd["status"]="denied_by_wall" if wstat=="denied" else "hold"
         kd["items"]=[]; p["knowledge_digest"]=kd; wall["allowed_knowledge_ids"]=[]
-    holds=list(p.get("holds",[]))+gh+oh+screened+fixed+ah
+    holds=list(p.get("holds",[]))+gh+oh+screened+fixed+ah+list(ph)
+    if ph: esc.append(pack_escalation(len(ph)))
     holds=dedup_holds(holds); pend=sum(i["status"]=="hold_pending_wall_review" for i in out)
     reasons=(["open_holds"] if holds else [])+(["wall_status_hold"] if wstat=="hold" else [])+(["workspaces_pending_wall_review"] if pend else [])  # workspace-inventory-rules.md #3.3
     if pend: esc.append(f"{pend} workspace(s) held pending wall review; the pack stays on hold until Risk/Conflicts resolve the wall decision (workspace-inventory-rules.md #3.3)")
     p["access_checklist"]=out; p["holds"]=holds; p["mobilization_pack"]={"status":"on_hold_internal_only" if reasons else "draft_internal_only","hold_reasons":reasons,"label":"DRAFT - for internal review only. Do not send to the client or provision access.","sections":["client_context","scope","prior_knowledge","team_roster","access_checklist","wall_briefing","first_week_plan"],"source":ENGINE,"confidence":.94,"citation":"workspace-inventory-rules.md #3.1,#3.3; confidentiality-and-ethical-wall-rules.md #3.1"}; p.setdefault("provenance",{}).setdefault("engines",[]).append(f"access_checklist/{VERSION}"); p["provenance"]["generated_at"]=ts
+    p=withhold_values(p,blocked,PACK_KEEP)  # text on a held pack run is withheld everywhere it appears (#4.5)
     p=bind_withheld(settle_trust(p),"access",ENGINE); check_contract(p,"access","access")  # the document written is held to the contract (#1.3)
-    return p,pack(p)
+    return p
 if __name__=="__main__": guard(main)

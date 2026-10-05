@@ -592,7 +592,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "e.g. embedded_instruction:<family>[,<family>...] (pattern family names only; flagged text is never echoed), missing ethical-wall register, unknown wall status, briefing topic names another client, invalid workspace inventory row. Text naming another client or matter is withheld with reason 'text names another client or matter (name not repeated)'; permission clamps hold as HOLD-PERMISSION-CLAMPED.",
+            "description": "e.g. embedded_instruction:<family>[,<family>...] (pattern family names only; flagged text is never echoed), ethical-wall register is missing required column(s), unknown wall status, briefing topic names another client, invalid workspace inventory row. Text naming another client or matter is withheld with reason 'text names another client or matter (name not repeated)'; permission clamps hold as HOLD-PERMISSION-CLAMPED.",
             "pattern": "\\S"
           },
           "source": {

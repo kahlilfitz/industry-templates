@@ -59,6 +59,9 @@ def derive(s,closeout,register,ts):
     # Both upstream documents are screened whole (every string, holds included) and redacted before use (#4.1, #4.3).
     s,sh=screen_upstream(s,"scope",ENGINE)
     raw=adapt(closeout); ce=copy.deepcopy(raw["engagement"])  # the closed engagement's identity, harvested from the UNMODIFIED closeout before screening redacts it (#3.3)
+    # Each Closeout record may state its own client, engagement or matter: those are identities too, harvested from the
+    # unmodified records, so a record whose engagement block is absent still screens the client it names (#3.3).
+    rid=copy.deepcopy([(f"released_assets[{i}]",r) for i,r in enumerate(raw["released_assets"])]+[(f"knowledge_record.reusable_assets[{i}]",r) for i,r in enumerate(raw["knowledge_record"].get("reusable_assets",[]))]+[(f"knowledge_record.lessons[{i}]",r) for i,r in enumerate(raw["knowledge_record"].get("lessons",[]))])
     c,own_h=screen_upstream(raw,"upstream/closeout",ENGINE,raw=True); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES and canon_id(x.get("asset_id")) and not is_withheld(x.get("asset_id"))}  # joined by canon_id (#1.3); a blank or withheld ID joins nothing (#4.3)
     inc=[]; exc=[]; kr=c["knowledge_record"]; ceng=c.get("engagement") or {}; lh=[]  # subjects compared on screened text only (#4.3)
     for i,asset in enumerate(kr.get("reusable_assets",[])):
@@ -87,13 +90,13 @@ def derive(s,closeout,register,ts):
     # The scope's engagement identity is carried state: a closed engagement for a different client is another
     # client's in full, so its engagement ID is screened even when it equals the carried one (#1.4, #3.3).
     cdiff=bool(other_parts(ce.get("client_name"),mine.get("client_name"),"client_name"))
-    terms=client_terms([x for k_ in ("client_name","engagement_id") for x in (identity_parts(ce.get(k_)) if cdiff and k_=="engagement_id" else other_parts(ce.get(k_),mine.get(k_),k_,own_words(s)))],own_words(s))
+    terms=client_terms([x for k_ in ("client_name","engagement_id") for x in (identity_parts(ce.get(k_)) if cdiff and k_=="engagement_id" else other_parts(ce.get(k_),mine.get(k_),k_,own_words(s)))]+[x for _,r in rid for k_ in OWNER for x in other_parts(r.get(k_),mine.get(k_),k_,own_words(s))],own_words(s))
     # Every other client named in the wall register is screened out here too, not only at wall_check (#3.3).
     terms+=[t for t in register_terms(register,mine,own_words(s)) if t[0] not in {x[0] for x in terms}]
     # Upstream scope holds are supplied content: screened for other-client names and steering text (#3.3, #4.3).
     # A structured identity (Closeout engagement, register client_name/matter_id) that trips the wire and names no
     # usable identity holds anyway: the other-client screen cannot be confirmed (#3.3).
-    ih=[other_hold(f"upstream/closeout.engagement.{k_}",ce.get(k_),ENGINE) for k_ in ("client_name","engagement_id") if identity_unreadable(ce.get(k_))]+register_identity_holds(register,ENGINE)
+    ih=[other_hold(f"upstream/closeout.engagement.{k_}",ce.get(k_),ENGINE) for k_ in ("client_name","engagement_id") if identity_unreadable(ce.get(k_))]+[other_hold(f"upstream/closeout.{w}.{k_}",r.get(k_),ENGINE) for w,r in rid for k_ in ("client_name","engagement_id") if identity_unreadable(r.get(k_))]+register_identity_holds(register,ENGINE)
     if ih: s.setdefault("escalations",[]).append(other_escalation(len(ih)))
     up,uh=screen_holds(s.get("holds",[]),terms,ENGINE,"scope.holds"); holds=dedup_holds(up+sh+own_h+uh+ih+lh)
     if lh: s.setdefault("escalations",[]).append(link_escalation(len(lh)))

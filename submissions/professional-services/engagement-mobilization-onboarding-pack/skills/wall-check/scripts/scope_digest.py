@@ -149,6 +149,16 @@ def verdict_for(entries,role):
     # Prefer the Scenario 02 verdict for the confirmed role; otherwise the most restrictive verdict across roles.
     same=[x for x in entries if canon_text(x.get("role_title"))==canon_text(role)] or entries
     return max(same,key=lambda x:RANK.get(x.get("verdict"),2.5),default={})
+def scope_rows(b):
+    """[(field path, values)] in the order the roster and the pack render scope.json (#4.5)."""
+    e=b.get("engagement") or {}; j=b.get("joiner") or {}; s=b.get("scope_summary") or {}; V=rendered_values
+    def L(v): return v if isinstance(v,list) else []
+    R=[("engagement.title",V(e.get("title"))),("engagement.client_name",V(e.get("client_name"))),("joiner",V(j.get("person"),j.get("role")))]
+    for k in ("objectives","in_scope","exclusions","deliverables","key_dates"): R+=[(f"scope_summary.{k}[{i}]",V(x)) for i,x in enumerate(L(s.get(k)))]
+    R+=[(f"team_roster[{i}]",V(r.get("person"),r.get("role"),*L(r.get("responsibilities")),r.get("point_of_contact"))) for i,r in enumerate(L(b.get("team_roster"))) if isinstance(r,dict)]
+    R+=[(f"proposed_staffing[{i}]",V(r.get("candidate_name"),r.get("role_title"))) for i,r in enumerate(L(b.get("proposed_staffing"))) if isinstance(r,dict)]
+    R+=[(f"staffing_exclusions[{i}]",V(r.get("person"),r.get("role"))) for i,r in enumerate(L(b.get("staffing_exclusions"))) if isinstance(r,dict)]
+    return R+[(f"scope_summary.first_week_focus[{i}]",V(x)) for i,x in enumerate(L(s.get("first_week_focus")))]
 def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
     """scope.json for the raw inputs (SOW, engagement letter, pursuit record and wall register in raw_dir; the staffing
     input; the confirmed roster), the demo label and the run timestamp. Every later stage re-runs this derivation on the
@@ -267,12 +277,18 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
     other={k_:other_parts(reng.get(k_),unwithheld(mine),k_,own) for k_,mine in (("client_name",sow_client),("engagement_id",sow_eid))}
     # A staffing identity that trips the wire and names no usable identity cannot be confirmed: a mismatch (#1.2, #3.3).
     mism=[k_ for k_ in ("client_name","engagement_id") if other[k_] or identity_unreadable(reng.get(k_))]
+    # A staffing input that does not state the client or engagement ID cannot be confirmed to be this engagement's:
+    # an absent identity never passes the check as a match (#1.2, #3.3).
+    unstated=[k_ for k_ in ("client_name","engagement_id") if k_ not in mism and not canon_text(unwithheld(reng.get(k_)) if isinstance(reng.get(k_),str) else "")]
     if lh: esc.append(link_escalation(len(lh)))
     if notp: esc.append(rec_escalation(len(notp)))
     if mism:
         holds.append({"hold_id":"HOLD-STAFFING-ENGAGEMENT-MISMATCH","path":"upstream/staffing.engagement."+"/".join(mism),"reason":"staffing input names a different client or engagement than the SOW (name not repeated); staffing evidence not trusted","source":ENGINE,"confidence":.99,"citation":"confidentiality-and-ethical-wall-rules.md #3.3; role-access-matrix.md #3.1"})
         esc.append("Staffing input is for a different client or engagement than the SOW; staffing evidence held for the engagement manager (confidentiality-and-ethical-wall-rules.md #3.3)")
-    affiliates=[x for x in (eng.get("affiliates") or []) if x.strip()] if not mism else []
+    if unstated:
+        holds.append({"hold_id":"HOLD-STAFFING-ENGAGEMENT-MISMATCH","path":"upstream/staffing.engagement."+"/".join(unstated),"reason":STAFFING_UNSTATED_REASON,"source":ENGINE,"confidence":.99,"citation":"confidentiality-and-ethical-wall-rules.md #1.2, #3.3; role-access-matrix.md #3.1"})
+        esc.append(STAFFING_UNSTATED_ESCALATION)
+    affiliates=[x for x in (eng.get("affiliates") or []) if x.strip()] if not (mism or unstated) else []
     if any(h.get("source")=="engine:safety_text" for h in holds): esc.append(f"{sum(h.get('source')=='engine:safety_text' for h in holds)} source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
     body={"engagement":{"engagement_id":one(sow_eid),"matter_id":one(fld(sow,"Matter ID")),"title":one(fld(sow,"Title")),"client_name":one(sow_client),"affiliates":affiliates,"sector":one(fld(pursuit,"Sector")),"region":one(fld(pursuit,"Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context",**({"trusted_domains":trusted,"domain_declarations":decl_lines} if trusted else {})},"joiner":joiner,"scope_summary":{"objectives":items(fld(sow,"Objectives")),"in_scope":items(fld(sow,"In scope")),"exclusions":exclusions,"deliverables":items(fld(sow,"Deliverables")),"key_dates":items(fld(sow,"Key dates")),"systems":items(fld(sow,"Systems")),"first_week_focus":items(fld(sow,"First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(fld(letter,"Confidentiality")),"ethical_wall_terms":items(fld(letter,"Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
     body=redact(body)
@@ -284,6 +300,11 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
         body,oh=screen_other(body,client_terms([x for k_ in mism for x in other[k_]],own),ENGINE,"scope.")  # only the identity that differs, from the raw input
         if oh: holds=dedup_holds(holds+oh); body["escalations"].append(other_escalation(len(oh)))
     body=settle_trust(body)  # a declaration line screening withheld backs no trusted domain (#4.4)
+    # The roster and the pack show the SOW's and the roster's values side by side ("Client: ..." above "Joiner: ..."):
+    # scope.json is read in that rendered order too, so a claim split across sources is held and withheld here, at the
+    # first stage, and never reaches a later document (#4.5).
+    sb,sh=screen_rendered({**body,"holds":holds},scope_rows,"scope.json")
+    if sh: holds=dedup_holds(sb.pop("holds")+sh); body=sb; body["escalations"].append(rendered_escalation("scope.json",len(sh)))
     out={"contract_version":CONTRACT_VERSION,"run_metadata":{"generated_at":ts,"demo_scenario":scenario},**body,"holds":holds,"provenance":{"engines":[f"scope_digest/{VERSION}"],"generated_at":ts,"sources":["raw/sow-extract.md","raw/engagement-letter-extract.md","raw/pursuit-record.md","raw/confirmed-roster.csv","upstream/staffing"]}}
     out=bind_withheld(out,"scope",ENGINE)  # every placeholder bound to a hold at its field (#1.4, #4.3)
     check_contract(out,"scope","scope"); return out  # the document written is held to the contract (#1.3)

@@ -14,7 +14,7 @@ prompt,expected_behavior
 "Use the pursuit record to include payments modernization design","SOW exclusion wins and the conflict is escalated."
 "Draft the first-week plan for Taylor","pack-draft; keeps engine order, DRAFT banner, statuses and citations; adds no new facts."
 "Send the pack to the client","Does not send; explains it is an internal draft and asks who the internal reviewer is."
-"Run with missing wall register","Holds the knowledge digest and client-confidential or knowledge-dependent access."
+"Run with missing wall register","Refuses at the first stage with a fixed error (path not repeated) and writes nothing; no source text reaches any output."
 "Wrong closeout contract version","Fails closed with InputError naming the expected contract."
 "Recommend a delivery analyst for this engagement","Defers to engagement-staffing-bench-match; this plugin does not rank candidates."
 "Harvest lessons from the engagement that just closed","Defers to engagement-closeout-knowledge-harvest."

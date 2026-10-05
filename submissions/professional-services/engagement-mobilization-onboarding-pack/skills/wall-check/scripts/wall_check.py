@@ -4,7 +4,7 @@ from safety_text import *
 import knowledge_match
 ENGINE="engine:wall_check"; CLEAR={"clear","cleared"}  # confidentiality-and-ethical-wall-rules.md #2.2
 RESTRICT={"restricted","walled","conflicted","deny"}  # confidentiality-and-ethical-wall-rules.md #2.3
-MISSING_REGISTER_HOLDS=True  # confidentiality-and-ethical-wall-rules.md #2.1
+MISSING_REGISTER_REFUSED=True  # confidentiality-and-ethical-wall-rules.md #2.1, #3.3: no register, no other-client screen, no output (register_rows)
 UNKNOWN_STATUS_HOLDS=True  # confidentiality-and-ethical-wall-rules.md #2.2
 CLEAR_NEEDS_NAMED_PERSON=True  # confidentiality-and-ethical-wall-rules.md #2.2
 FREE_TEXT_NOT_BRIEFED=True  # confidentiality-and-ethical-wall-rules.md #3.1
@@ -49,7 +49,7 @@ def govern(p,register,inventory,raised=None):
     trust, the decision state (confidentiality-and-ethical-wall-rules.md #1.4)."""
     p,mh=screen_upstream(p,"matched",ENGINE)  # every upstream string screened and redacted before use; any hit holds the wall (#4.1, #4.3)
     if mh: p.setdefault("escalations",[]).append(upstream_escalation(len(mh)))
-    rows=read_csv(register,False,"wall register"); ws=read_csv(inventory,False,"workspace inventory"); up=list(p.get("holds",[])); holds=list(mh); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
+    rows=register_rows(register); ws=read_csv(inventory,False,"workspace inventory"); up=list(p.get("holds",[])); holds=list(mh); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
     status="clear"; reason="wall register marks joiner clear for this client/matter"; cit="confidentiality-and-ethical-wall-rules.md #2.2"
     own=own_words(p); own_ids={canon_id(e.get("matter_id")),canon_id(e.get("engagement_id"))}-{""}
     def hold_status(hid,path,why,rule):
@@ -68,8 +68,6 @@ def govern(p,register,inventory,raised=None):
     scr+=oh; j=p.get("joiner") or {}; e=p.get("engagement") or {}
     if not canon_person(j.get("person")):
         status,reason,cit=hold_status("HOLD-NO-JOINER","scope.joiner","no joiner identified; wall status cannot be determined","#2.2"); holds+=scr
-    elif rows is None:
-        status,reason,cit=hold_status("HOLD-MISSING-WALL-REGISTER",REGISTER_LABEL,"missing ethical-wall register","#2.1"); holds+=scr  # a fixed label: a supplied path never reaches an output (#1.3)
     elif missing_columns(rows,REGISTER_COLUMNS):
         status,reason,cit=hold_status("HOLD-MALFORMED-WALL-REGISTER","raw/ethical-wall-register.csv header",f"ethical-wall register is missing required column(s): {', '.join(missing_columns(rows,REGISTER_COLUMNS))}","#2.1"); holds+=scr
     elif rows.duplicate_columns:
@@ -107,7 +105,13 @@ def govern(p,register,inventory,raised=None):
                     continue
                 briefed.append(g[0][1])
             if screened: esc.append(f"{screened} wall briefing topic(s) withheld from the pack; Risk/Conflicts brief the joiner directly (confidentiality-and-ethical-wall-rules.md #3.2)")
-            may.append({"item":next((x for x in (e.get("client_name"),e.get("matter_id")) if (x or "").strip()),"this client or matter"),"type":"client_or_matter","restriction":("may not access or discuss: "+"; ".join(canon_union(briefed,f=canon_text))) if briefed else "restricted subject matter - confirm specifics with Risk/Conflicts before starting work","citation":f"{cit}; confidentiality-and-ethical-wall-rules.md #2.3,#3.1,#3.2"})
+            rtext=("may not access or discuss: "+"; ".join(canon_union(briefed,f=canon_text))) if briefed else "restricted subject matter - confirm specifics with Risk/Conflicts before starting work"
+            # Topics from different register rows are joined into one restriction: the joined topics are read in their
+            # rendered order (pairs and runs), so a claim split across rows is held like one written in a single cell (#3.2, #4.5).
+            vis=[x for x in canon_union(briefed,f=canon_text) if x not in (WITHHELD,TOPIC_WITHHELD) and not is_withheld(x)]
+            jh=hits(rtext) or next((f for _,f in rendered_runs(vis)),[])
+            if jh: holds.append(hold("raw/ethical-wall-register.csv briefing_topics (rows joined)",rtext,["split_across_fields"] if "oversize" not in jh else jh)); rtext=WITHHELD
+            may.append({"item":next((x for x in (e.get("client_name"),e.get("matter_id")) if (x or "").strip()),"this client or matter"),"type":"client_or_matter","restriction":rtext,"citation":f"{cit}; confidentiality-and-ethical-wall-rules.md #2.3,#3.1,#3.2"})
         elif unknown:
             status,reason,cit=hold_status("HOLD-UNKNOWN-WALL-STATUS","raw/ethical-wall-register.csv.status","unknown wall status value (not repeated); treated as hold","#2.2")
         elif not named_clear:
