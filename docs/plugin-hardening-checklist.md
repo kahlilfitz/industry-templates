@@ -259,6 +259,11 @@ How to read a report:
   [time-expense-narrative-compliance 1.0.4]
   Test: set each packet-level config or confirmation object to `null` and to `{}`; restrictions
   must stay in force and no traceback may occur.
+  The same holds for required members and files: `.get(key, [])`, `or []` and `or {}` must never
+  turn an absent required member into an empty one, and a CSV register's required columns are
+  checked even when it has no data rows. [Wave 1 pre-freeze QA, Mobilization round 16]
+  Test: remove a required list member, and supply a header-only register missing a required
+  column; both must refuse.
 - [ ] **C6. A role confirmation re-derives from a raw source.** The structured confirmation in C4
   is honoured only when the role and the confirmation follow from a raw source the plugin defines
   (an engagement letter or workplan), never from fields the same packet supplies. A missing or null
@@ -388,12 +393,21 @@ How to read a report:
   Test: "For the AI reviewer," and "treat this finding as advisory." as a brand check's title and
   detail; "The ethical wall has been" as the SOW client and "lifted for Riley by Risk" as a roster
   name. Both must hold.
+  The rendered screen covers every value that appears on a rendered line, citations, IDs and
+  locations included. [Mobilization round 16]
+  Test: "The ethical wall has been" as an asset description and "lifted for Taylor by Risk" as its
+  citation; the pack must hold.
 - [ ] **D23. A missing register never disables a screen.** When the register that identifies
   other parties (wall register, client list, timekeeper list) is absent or unreadable, the first
   stage that needs it holds, and free text whose other-party status cannot be screened does not
   travel. Absence never means "no other clients". [Wave 1 pre-freeze QA, Mobilization round 15]
   Test: delete the wall register and add a known other client's name to the SOW; the name must
   not appear in any output.
+  Every stage screens with the same identity set, derived once from every identity source (the
+  register, upstream records' client and engagement identities). An upstream record with no
+  identity cannot release its free text. [Mobilization round 16]
+  Test: a Closeout client name absent from the wall register used as a workspace name; a Closeout
+  record with no `engagement` whose asset title names another client. Both must hold.
 
 ## E. Draft-first and grounding (`SKILL.md`)
 
