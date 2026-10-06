@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-import argparse, copy
+import argparse, copy, re
 from safety_text import *
+import safety_text
 import scope_digest
 ENGINE="engine:knowledge_match"; CLOSE="ps.engagement-closeout-knowledge-harvest.v1"  # knowledge-reuse-rules.md #1.1
 STATES={"RELEASE_CANDIDATE_SANITISED","RELEASE_CANDIDATE_SANITIZED"}  # knowledge-reuse-rules.md #2.1
@@ -20,19 +21,21 @@ def adapt(p):
     if not isinstance(x,dict) or x.get("contract_version")!=CLOSE: raise InputError(f"closeout adapter expected a JSON object with contract_version {CLOSE} (supplied value not repeated); fail closed")
     kr=x.get("knowledge_record")
     if not kr or not isinstance(kr,dict): raise InputError("closeout adapter requires top-level knowledge_record object; fail closed")
-    if not isinstance(x.get("released_assets",[]),list) or any(not isinstance(r,dict) for r in x.get("released_assets",[])): raise InputError("closeout adapter requires released_assets[] of objects; fail closed")
-    ra=x.get("released_assets",[])
+    # Required members are present: an absent list is refused, never read as an empty one (knowledge-reuse-rules.md #1.4).
+    if "released_assets" not in x or not isinstance(x["released_assets"],list) or any(not isinstance(r,dict) for r in x["released_assets"]): raise InputError("closeout adapter requires top-level released_assets[] of objects (an absent member is not an empty list); fail closed")
+    ra=x["released_assets"]
     for key in ("reusable_assets","lessons"):
-        v=kr.get(key,[])
-        if not isinstance(v,list) or any(not isinstance(r,dict) for r in v): raise InputError(f"closeout adapter requires knowledge_record.{key}[] of objects; fail closed")
+        if key not in kr or not isinstance(kr[key],list) or any(not isinstance(r,dict) for r in kr[key]): raise InputError(f"closeout adapter requires knowledge_record.{key}[] of objects (an absent member is not an empty list); fail closed")
     W="upstream/closeout"; check_timestamps(x,W)  # carried timestamps are format-checked (confidentiality-and-ethical-wall-rules.md #1.3)
+    check_ids(x,W)  # every identifier member (asset_id, cluster_id, record_id, evidence_ids, engagement_id, matter_id ...) has the identifier shape (#1.3)
     for i,r in enumerate(ra): check_asset(r,f"{W}.released_assets[{i}]",True)
-    for i,r in enumerate(kr.get("reusable_assets",[])): check_asset(r,f"{W}.knowledge_record.reusable_assets[{i}]")
-    for i,r in enumerate(kr.get("lessons",[])): check_lesson(r,f"{W}.knowledge_record.lessons[{i}]")
+    for i,r in enumerate(kr["reusable_assets"]): check_asset(r,f"{W}.knowledge_record.reusable_assets[{i}]")
+    for i,r in enumerate(kr["lessons"]): check_lesson(r,f"{W}.knowledge_record.lessons[{i}]")
     # Records keyed by ID are never indexed last-wins: released assets by asset_id; reusable assets and lessons share
     # the knowledge_id space they are published under (confidentiality-and-ethical-wall-rules.md #1.3).
-    dup=duplicate_ids([(ra,"asset_id","released_assets")],W)+duplicate_ids([(kr.get("reusable_assets",[]),"asset_id","knowledge_record.reusable_assets"),(kr.get("lessons",[]),"cluster_id","knowledge_record.lessons")],W)
+    dup=duplicate_ids([(ra,"asset_id","released_assets")],W)+duplicate_ids([(kr["reusable_assets"],"asset_id","knowledge_record.reusable_assets"),(kr["lessons"],"cluster_id","knowledge_record.lessons")],W)
     if dup: raise InputError("closeout records keyed by ID must be unique (values not repeated): "+"; ".join(dup)+"; fail closed")
+    # The closed engagement's identity block may be absent or null (it is then unattributed: see unattributed_names).
     ce=field(x,"engagement","obj",W,nullable=True,default={})
     for k in ("engagement_id","client_name","matter_id","title"): field(ce,k,"str",W+".engagement",nullable=True)  # every field a reader uses (OWNER) is type-checked (#1.3)
     return {"knowledge_record":kr,"released_assets":ra,"engagement":ce,"provenance":x.get("provenance",x.get("run_metadata",{}))}
@@ -52,19 +55,99 @@ def rel(scope,item):
     ss=scope["scope_summary"]
     over=sorted(toks(item.get("title") or "",item.get("description") or ""," ".join(item.get("tags") or []),item.get("category") or "") & toks((scope.get("joiner") or {}).get("role") or ""," ".join(ss.get("objectives",[]))," ".join(ss.get("in_scope",[]))," ".join(ss.get("deliverables",[]))))
     return (round(min(.99,.55+.08*len(over)),2) if over else .4),over
-def derive(s,closeout,register,ts):
+# ---------------------------------------------------------------- one other-client identity set (#3.3)
+# Every stage screens with the same identity set, derived here from every identity source: the wall register, the
+# Closeout's closed engagement and record-level identities, names in Closeout records that state no identity, and a
+# staffing input for a different client or engagement. knowledge_match, wall_check, access_checklist and the pre-render
+# check all call other_client_terms, so a name screened at one stage is screened at every stage after it.
+def closeout_records(raw):
+    """[(path, record)] for every Closeout record a reader uses, from the adapted (unmodified) Closeout."""
+    kr=raw["knowledge_record"]
+    return [(f"released_assets[{i}]",r) for i,r in enumerate(raw["released_assets"])]+[(f"knowledge_record.reusable_assets[{i}]",r) for i,r in enumerate(kr["reusable_assets"])]+[(f"knowledge_record.lessons[{i}]",r) for i,r in enumerate(kr["lessons"])]
+RECORD_TEXT=("title","description","category","drafting_guidance","citation","evidence_citations")  # every record value that renders or travels as text
+RECORD_IDS=("asset_id","cluster_id","record_id")
+HARVEST_OWN={"id","ids"}  # "evidence IDs" in drafting guidance is vocabulary, not a name
+def attributed(r,ce):
+    """A Closeout record is attributed when it, or the closed engagement it belongs to, states a usable client
+    identity: its client is then compared and screened by name (#3.3)."""
+    return bool(identity_parts(r.get("client_name")) or identity_parts(ce.get("client_name")))
+def lower_vocab(*docs):
+    """Words this engagement's own scope document writes in lowercase: ordinary vocabulary, so an ALL-CAPS or
+    capitalised use of them in a Closeout record that states no client names no one. Read from the scope only, so a
+    Closeout record cannot clear a name by also writing it in lowercase (#3.2)."""
+    out=set(); st=list(docs)
+    while st:
+        v=st.pop()
+        if isinstance(v,dict): st.extend(v.values())
+        elif isinstance(v,list): st.extend(v)
+        elif isinstance(v,str): out|=set(re.findall(r"(?<![A-Za-z0-9])[a-z][a-z0-9]*(?![A-Za-z0-9])",unwithheld(v)))
+    return out
+def people_words(s):
+    """Words of this engagement's own people (joiner, roster, proposed staffing, exclusions, points of contact): a
+    colleague named in a Closeout record is not another client (#3.3)."""
+    j=s.get("joiner") or {}; L=lambda k:[x for x in (s.get(k) or []) if isinstance(x,dict)]
+    vs=[j.get("person"),j.get("point_of_contact")]+[r.get(k) for r in L("team_roster") for k in ("person","point_of_contact")]+[r.get("candidate_name") for r in L("proposed_staffing")]+[r.get("person") for r in L("staffing_exclusions")]
+    return words(*(unwithheld(v) for v in vs if isinstance(v,str)))
+def unattributed_names(raw,mine,own,vocab=frozenset()):
+    """Identities named in the text of Closeout records that state no client (no engagement block, a null engagement
+    or a null record-level client_name): with no stated client to compare, every proper-noun run and matter-like ID in
+    such a record's text that is not this engagement's own identity or people, generic or ordinary vocabulary
+    (lower_vocab, people_words) or a Closeout record ID is another party, so the text is withheld wherever it travels and held (#3.3). Read from the UNMODIFIED Closeout."""
+    ce=raw["engagement"]; recs=closeout_records(raw); kr=raw["knowledge_record"]
+    ids=[v for _,r in recs for k in RECORD_IDS for v in [r.get(k)] if isinstance(v,str) and v.strip()]+[v for _,r in recs for v in (r.get("evidence_ids") or []) if isinstance(v,str) and v.strip()]+[v for v in [kr.get("record_id")] if isinstance(v,str) and v.strip()]
+    rx=re.compile("|".join(r"(?<![A-Za-z0-9])"+re.escape(v.strip())+r"(?![A-Za-z0-9])" for v in sorted(set(ids),key=len,reverse=True)),re.I) if ids else None
+    own_ids={canon_id(mine.get(k)) for k in ("engagement_id","matter_id") if isinstance(mine.get(k),str)}-{""}
+    names=[]
+    for _,r in recs:
+        if attributed(r,ce): continue
+        for k in RECORD_TEXT:
+            for v in (r.get(k) if isinstance(r.get(k),list) else [r.get(k)]):
+                if not isinstance(v,str) or not v.strip(): continue
+                v=unwithheld(v); v=rx.sub(" ",v) if rx else v
+                names+=[m for m in safety_text._MATTER_ID_RE.findall(v) if canon_id(m) not in own_ids]
+                names+=proper_names(v,own|HARVEST_OWN|vocab)
+    return names
+def staffing_names(staffing,mine,own):
+    """A staffing input for a different client or engagement is another client's: the identity parts that differ from
+    this engagement's, read from the UNMODIFIED staffing input as scope_digest reads them (#1.2, #3.3)."""
+    st=load_json(staffing,"staffing input"); scope_digest.validate_staffing(st)
+    reng=st.get("engagement") or {}  # absent: unstated, held by scope_digest (HOLD-STAFFING-ENGAGEMENT-MISMATCH); it names no one
+    return [x for k_ in ("client_name","engagement_id") for x in other_parts(reng.get(k_),unwithheld(mine.get(k_)) if isinstance(mine.get(k_),str) else mine.get(k_),k_,own)]
+def other_client_terms(s,closeout,register,staffing):
+    """(terms, identity holds): the one other-client identity set every stage screens with, derived from every
+    identity source for the document s's engagement (#3.3). Identity holds are raised by knowledge_match only."""
+    raw=adapt(closeout); ce=copy.deepcopy(raw["engagement"]); rid=closeout_records(raw)
+    mine=s.get("engagement") or {}; own=own_words(s)
+    # The closed engagement is usually another client: its name and IDs never reach this pack. Its identity comes from
+    # the raw Closeout: a client_name that also trips the wire still names the client, and only the parts that are not
+    # this engagement's own become terms (identity_parts). The scope's engagement identity is carried state: a closed
+    # engagement for a different client is another client's in full, so its engagement ID is screened even when it
+    # equals the carried one (#1.4, #3.3). Each record may state its own client, engagement or matter (OWNER).
+    cdiff=bool(other_parts(ce.get("client_name"),mine.get("client_name"),"client_name"))
+    names=[x for k_ in ("client_name","engagement_id") for x in (identity_parts(ce.get(k_)) if cdiff and k_=="engagement_id" else other_parts(ce.get(k_),mine.get(k_),k_,own))]
+    names+=[x for _,r in rid for k_ in OWNER for x in other_parts(r.get(k_),mine.get(k_),k_,own)]
+    names+=unattributed_names(raw,mine,own,lower_vocab(s)|people_words(s))+staffing_names(staffing,mine,own)
+    terms=client_terms(names,own)
+    # Every other client named in the wall register (#2.1, #3.3).
+    terms+=[t for t in register_terms(register,mine,own) if t[0] not in {x[0] for x in terms}]
+    # A structured identity (Closeout engagement or record, register client_name/matter_id) that trips the wire and
+    # names no usable identity holds anyway: the other-client screen cannot be confirmed (#3.3).
+    ih=[other_hold(f"upstream/closeout.engagement.{k_}",ce.get(k_),ENGINE) for k_ in ("client_name","engagement_id") if identity_unreadable(ce.get(k_))]+[other_hold(f"upstream/closeout.{w}.{k_}",r.get(k_),ENGINE) for w,r in rid for k_ in ("client_name","engagement_id") if identity_unreadable(r.get(k_))]+register_identity_holds(register,ENGINE)
+    return terms,ih
+def knowledge_rows(doc):
+    """[(field path, values)] for the knowledge items in the order the pack renders them: title, ID, summary and every
+    supplied citation share one line ("- title (id) [...] - summary Source: citations"), so they are read together (#4.5)."""
+    return [(f"prior_knowledge_candidates[{i}]",rendered_values(x.get("title"),x.get("knowledge_id"),x.get("summary"),*rendered_citations(x.get("citations")))) for i,x in enumerate(doc.get("prior_knowledge_candidates") or []) if isinstance(x,dict)]
+def derive(s,closeout,register,ts,staffing):
     """matched.json for a scope document (scope_digest's output, or a carried scope proved equal to it), the Closeout
-    record, the wall register and this stage's run timestamp. Later stages re-run it (rederive, #1.4)."""
+    record, the wall register, this stage's run timestamp and the staffing input. Later stages re-run it (rederive, #1.4)."""
     adopt_trust(s)  # from the declaration lines scope_digest accepted, never a carried list (#1.4, #4.4)
     # Both upstream documents are screened whole (every string, holds included) and redacted before use (#4.1, #4.3).
     s,sh=screen_upstream(s,"scope",ENGINE)
-    raw=adapt(closeout); ce=copy.deepcopy(raw["engagement"])  # the closed engagement's identity, harvested from the UNMODIFIED closeout before screening redacts it (#3.3)
-    # Each Closeout record may state its own client, engagement or matter: those are identities too, harvested from the
-    # unmodified records, so a record whose engagement block is absent still screens the client it names (#3.3).
-    rid=copy.deepcopy([(f"released_assets[{i}]",r) for i,r in enumerate(raw["released_assets"])]+[(f"knowledge_record.reusable_assets[{i}]",r) for i,r in enumerate(raw["knowledge_record"].get("reusable_assets",[]))]+[(f"knowledge_record.lessons[{i}]",r) for i,r in enumerate(raw["knowledge_record"].get("lessons",[]))])
+    raw=adapt(closeout)
     c,own_h=screen_upstream(raw,"upstream/closeout",ENGINE,raw=True); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES and canon_id(x.get("asset_id")) and not is_withheld(x.get("asset_id"))}  # joined by canon_id (#1.3); a blank or withheld ID joins nothing (#4.3)
     inc=[]; exc=[]; kr=c["knowledge_record"]; ceng=c.get("engagement") or {}; lh=[]  # subjects compared on screened text only (#4.3)
-    for i,asset in enumerate(kr.get("reusable_assets",[])):
+    for i,asset in enumerate(kr["reusable_assets"]):
         aid=asset.get("asset_id")
         if not canon_id(aid) or is_withheld(aid) or canon_id(aid) not in rels: exc.append({"asset_id":aid,"reason":"not_in_released_assets","citation":"knowledge-reuse-rules.md #2.1"}); continue
         if subjects_differ(asset,rels[canon_id(aid)],ASSET) or subjects_differ(asset,ceng,OWNER) or subjects_differ(rels[canon_id(aid)],ceng,OWNER):
@@ -74,7 +157,7 @@ def derive(s,closeout,register,ts):
         score,over=rel(s,asset)
         if score<.5: exc.append({"asset_id":aid,"reason":"below_relevance_floor","citation":"knowledge-reuse-rules.md #3.1"}); continue
         inc.append({"knowledge_id":aid,"title":nb(asset.get("title"),rels[canon_id(aid)].get("title"),f"Released knowledge asset {aid}"),"summary":nb(asset.get("description"),"Released Closeout knowledge candidate; use the title and citation only until practice review confirms."),"relevance_score":score,"matched_terms":over,"clearance_state":rels[canon_id(aid)].get("clearance_state"),"confidentiality_permission":perm or "release_candidate_state","review_status":review_status(asset,rels[canon_id(aid)]),"source":"adapter:closeout-governed.knowledge_record","confidence":min(asset.get("confidence",.9),rels[canon_id(aid)].get("confidence",.9)),"citations":[nb(asset.get("citation"),"knowledge_record.reusable_assets"),nb(rels[canon_id(aid)].get("citation"),"released_assets"),"knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"]})
-    for i,lesson in enumerate(kr.get("lessons",[])):
+    for i,lesson in enumerate(kr["lessons"]):
         lp=lesson.get("confidentiality_permission")
         if not canon_id(lesson.get("cluster_id")) or is_withheld(lesson.get("cluster_id")): exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"no_lesson_id","citation":"knowledge-reuse-rules.md #1.4"}); continue  # every knowledge item carries its identity (contract $defs/knowledge_item)
         if subjects_differ(lesson,ceng,OWNER): lh.append(link_hold(f"upstream/closeout.knowledge_record.lessons[{i}]",ENGINE)); exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"linked_record_subject_mismatch","citation":LINK_CITATION}); continue
@@ -83,20 +166,10 @@ def derive(s,closeout,register,ts):
         score,over=rel(s,{"title":lesson.get("category") or "","description":lesson.get("drafting_guidance") or "","tags":lesson.get("tags") or []})
         if score>=.5: inc.append({"knowledge_id":lesson.get("cluster_id"),"title":f"Lesson: {nb(lesson.get('category'),'uncategorised')}","summary":nb(lesson.get("drafting_guidance"),"Closeout lesson; use the title and citation only until practice review confirms."),"relevance_score":score,"matched_terms":over,"clearance_state":"LESSON_FOR_INTERNAL_DRAFT","confidentiality_permission":lp or "closeout_governed_lesson","review_status":review_status({"review_required":lesson.get("review_candidate")}),"source":"adapter:closeout-governed.knowledge_record.lessons","confidence":lesson.get("confidence",.85),"citations":[x for x in (lesson.get("evidence_citations") or []) if nb(x)]+[nb(lesson.get("citation"),"knowledge_record.lessons"),"knowledge-reuse-rules.md #2.2,#2.4,#3.2"]})
     inc=redact(inc)  # flagged Closeout text never travels (confidentiality-and-ethical-wall-rules.md #4.3)
-    # The closed engagement is usually another client: its name and IDs never reach this pack (#3.3).
-    # Its identity comes from the raw closeout (ce): a client_name that also trips the wire still names the client,
-    # and only the parts that are not this engagement's own become terms (identity_parts, #3.3).
-    mine=s.get("engagement") or {}
-    # The scope's engagement identity is carried state: a closed engagement for a different client is another
-    # client's in full, so its engagement ID is screened even when it equals the carried one (#1.4, #3.3).
-    cdiff=bool(other_parts(ce.get("client_name"),mine.get("client_name"),"client_name"))
-    terms=client_terms([x for k_ in ("client_name","engagement_id") for x in (identity_parts(ce.get(k_)) if cdiff and k_=="engagement_id" else other_parts(ce.get(k_),mine.get(k_),k_,own_words(s)))]+[x for _,r in rid for k_ in OWNER for x in other_parts(r.get(k_),mine.get(k_),k_,own_words(s))],own_words(s))
-    # Every other client named in the wall register is screened out here too, not only at wall_check (#3.3).
-    terms+=[t for t in register_terms(register,mine,own_words(s)) if t[0] not in {x[0] for x in terms}]
+    # The one other-client identity set (other_client_terms): Closeout engagement and record identities, names in
+    # unattributed Closeout records, a different staffing client and every client in the wall register (#3.3).
+    terms,ih=other_client_terms(s,closeout,register,staffing)
     # Upstream scope holds are supplied content: screened for other-client names and steering text (#3.3, #4.3).
-    # A structured identity (Closeout engagement, register client_name/matter_id) that trips the wire and names no
-    # usable identity holds anyway: the other-client screen cannot be confirmed (#3.3).
-    ih=[other_hold(f"upstream/closeout.engagement.{k_}",ce.get(k_),ENGINE) for k_ in ("client_name","engagement_id") if identity_unreadable(ce.get(k_))]+[other_hold(f"upstream/closeout.{w}.{k_}",r.get(k_),ENGINE) for w,r in rid for k_ in ("client_name","engagement_id") if identity_unreadable(r.get(k_))]+register_identity_holds(register,ENGINE)
     if ih: s.setdefault("escalations",[]).append(other_escalation(len(ih)))
     up,uh=screen_holds(s.get("holds",[]),terms,ENGINE,"scope.holds"); holds=dedup_holds(up+sh+own_h+uh+ih+lh)
     if lh: s.setdefault("escalations",[]).append(link_escalation(len(lh)))
@@ -105,6 +178,10 @@ def derive(s,closeout,register,ts):
     if terms:
         s["prior_knowledge_candidates"]=inc; s["excluded_items"]=exc; s,oh=screen_other(s,terms,ENGINE,"matched."); inc=s.pop("prior_knowledge_candidates"); exc=s.pop("excluded_items")
         if oh: holds=dedup_holds(holds+oh); s.setdefault("escalations",[]).append(other_escalation(len(oh)))
+    # Each knowledge item is read as the pack renders it - title, ID, summary and supplied citations on one line, item
+    # after item - so a claim split across a summary and its citation is held here and withheld everywhere (#4.5).
+    s["prior_knowledge_candidates"]=inc; s["excluded_items"]=exc; s,rh=screen_rendered(s,knowledge_rows,"matched knowledge items"); inc=s.pop("prior_knowledge_candidates"); exc=s.pop("excluded_items")
+    if rh: holds=dedup_holds(holds+rh); s.setdefault("escalations",[]).append(rendered_escalation("knowledge item",len(rh)))
     status="ready" if inc and not holds else "hold" if holds else "empty"
     if not inc and not holds: s.setdefault("escalations",[]).append("No released, permissioned prior-knowledge records matched the engagement (knowledge-reuse-rules.md #2.1,#2.2,#3.1)")
     s["prior_knowledge_candidates"]=inc; s["knowledge_digest"]={"status":status,"items":inc,"excluded_items":exc,"source":ENGINE,"confidence":.92 if inc else .7,"citation":"knowledge-reuse-rules.md #1.1-#3.2"}; s["holds"]=holds; s.setdefault("provenance",{}).setdefault("engines",[]).append(f"knowledge_match/{VERSION}"); s["provenance"]["generated_at"]=ts
@@ -114,12 +191,12 @@ def rederive_scope(doc,raw_dir,staffing,roster,where):
     return scope_digest.derive(raw_dir,staffing,roster,*run_parameters(doc,where))
 def rederive(doc,raw_dir,staffing,roster,closeout,register,ts,where):
     """The matched document the raw inputs give: scope_digest then this engine, re-run whole (#1.4)."""
-    return derive(reread(rederive_scope(doc,raw_dir,staffing,roster,where),"re-derived scope"),closeout,register,ts)
+    return derive(reread(rederive_scope(doc,raw_dir,staffing,roster,where),"re-derived scope"),closeout,register,ts,staffing)
 def main():
     ap=ArgParser()
     for k in ("--scope","--raw-dir","--staffing","--confirmed-roster","--closeout","--wall-register","--out","--generated-at"): ap.add_argument(k,required=True)
     a=ap.parse_args(); ts=require_iso_z(a.generated_at)
     s=load_json(a.scope,"scope input"); check_scope(s)
     same_document(s,rederive_scope(s,a.raw_dir,a.staffing,a.confirmed_roster,"scope input"),"scope input")  # every field equals scope_digest's re-derivation from the raw inputs (#1.4)
-    dump_json(a.out,derive(s,a.closeout,a.wall_register,ts),"matched output")
+    dump_json(a.out,derive(s,a.closeout,a.wall_register,ts,a.staffing),"matched output")
 if __name__=="__main__": guard(main)

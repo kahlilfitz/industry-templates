@@ -51,6 +51,7 @@ def validate_staffing(st):
     need(isinstance(st,dict),f"staffing adapter expected a JSON object, got {type(st).__name__}; fail closed")
     if st.get("contract_version")!=STAFF: raise InputError(f"staffing adapter expected contract {STAFF} at upstream/staffing.contract_version (supplied value not repeated); fail closed")
     W="upstream/staffing"; check_timestamps(st,W)  # carried timestamps are format-checked (confidentiality-and-ethical-wall-rules.md #1.3)
+    check_ids(st,W)  # every identifier member (engagement_id, role_id, candidate_id ...) has the identifier shape (#1.3)
     field(st,"governed_roles","objlist",W,required=True)
     eng=field(st,"engagement","obj",W,default={})
     for k in ("engagement_id","client_name"): field(eng,k,"str",W+".engagement",nullable=True)
@@ -150,15 +151,34 @@ def verdict_for(entries,role):
     same=[x for x in entries if canon_text(x.get("role_title"))==canon_text(role)] or entries
     return max(same,key=lambda x:RANK.get(x.get("verdict"),2.5),default={})
 def scope_rows(b):
-    """[(field path, values)] in the order the roster and the pack render scope.json (#4.5)."""
-    e=b.get("engagement") or {}; j=b.get("joiner") or {}; s=b.get("scope_summary") or {}; V=rendered_values
+    """[(field path, values)] in the order the roster and the pack render scope.json: every value a rendered line
+    shows - IDs, citations, rules and locations included - is read with its line (#4.5)."""
+    e=b.get("engagement") or {}; j=b.get("joiner") or {}; s=b.get("scope_summary") or {}; V=rendered_values; C=rendered_citations
     def L(v): return v if isinstance(v,list) else []
-    R=[("engagement.title",V(e.get("title"))),("engagement.client_name",V(e.get("client_name"))),("joiner",V(j.get("person"),j.get("role")))]
+    def D(v): return v if isinstance(v,dict) else {}
+    def rv(r): return (D(r.get("staffing_review")).get("blocking_rule"),*C(D(r.get("staffing_review")).get("citation")))
+    R=[("engagement.title",V(e.get("title"),e.get("engagement_id"))),("engagement.client_name",V(e.get("client_name"))),("joiner",V(j.get("person"),j.get("role")))]
     for k in ("objectives","in_scope","exclusions","deliverables","key_dates"): R+=[(f"scope_summary.{k}[{i}]",V(x)) for i,x in enumerate(L(s.get(k)))]
-    R+=[(f"team_roster[{i}]",V(r.get("person"),r.get("role"),*L(r.get("responsibilities")),r.get("point_of_contact"))) for i,r in enumerate(L(b.get("team_roster"))) if isinstance(r,dict)]
-    R+=[(f"proposed_staffing[{i}]",V(r.get("candidate_name"),r.get("role_title"))) for i,r in enumerate(L(b.get("proposed_staffing"))) if isinstance(r,dict)]
-    R+=[(f"staffing_exclusions[{i}]",V(r.get("person"),r.get("role"))) for i,r in enumerate(L(b.get("staffing_exclusions"))) if isinstance(r,dict)]
-    return R+[(f"scope_summary.first_week_focus[{i}]",V(x)) for i,x in enumerate(L(s.get("first_week_focus")))]
+    R+=[(f"team_roster[{i}]",V(r.get("person"),r.get("role"),*L(r.get("responsibilities")),r.get("point_of_contact"),*C(r.get("citation")),*rv(r))) for i,r in enumerate(L(b.get("team_roster"))) if isinstance(r,dict)]
+    R+=[(f"proposed_staffing[{i}]",V(r.get("candidate_name"),r.get("role_title"),*C(r.get("citation")))) for i,r in enumerate(L(b.get("proposed_staffing"))) if isinstance(r,dict)]
+    R+=[(f"staffing_exclusions[{i}]",V(r.get("person"),r.get("role"),r.get("blocking_rule"),*C(r.get("citation")))) for i,r in enumerate(L(b.get("staffing_exclusions"))) if isinstance(r,dict)]
+    R+=[(f"scope_summary.first_week_focus[{i}]",V(x)) for i,x in enumerate(L(s.get("first_week_focus")))]
+    R+=[(f"escalations[{i}]",V(x)) for i,x in enumerate(L(b.get("escalations")))]
+    return R+[(f"holds[{i}]",V(*(h.get(k) for k in ("hold_id","reason","path","citation") if not engine_text(k,h.get(k))))) for i,h in enumerate(L(b.get("holds"))) if isinstance(h,dict)]
+# The scope.json string members scope_rows does not screen, and why (#4.5): none is on a line the pack or the
+# roster presentation renders, or it is engine vocabulary no input supplies. A "*" entry covers a whole object.
+# tests/run_tests.py (qa101y_checks) fails if scope.json gains a string member that is neither screened nor listed.
+SCOPE_UNSCREENED={
+    "contract_version":"engine constant","run_metadata.*":"demo label (SCENARIO_RE slug) and run timestamp; not rendered","provenance.*":"engine and source labels; not rendered",
+    "engagement.matter_id":"identifier shape (#1.3); not rendered","engagement.affiliates[]":"not rendered","engagement.sector":"not rendered","engagement.region":"not rendered",
+    "engagement.source":"engine label","engagement.citation":"engine citation","engagement.trusted_domains[]":"not rendered","engagement.domain_declarations*":"not rendered",
+    "engagement_terms.*":"not rendered (briefing text comes from the wall register)","scope_summary.systems[]":"not rendered","scope_summary.source":"engine label","scope_summary.citation":"engine citation",
+    "joiner.*":"the joiner is a copy of a confirmed team_roster row, screened there; the joiner line renders person and role only",
+    "team_roster[].onboarding_status":"not rendered (the presented status is derived)","team_roster[].assignment_status":"contract const confirmed","team_roster[].source":"engine label",
+    "team_roster[].staffing_review.verdict":"contract enum (role-access-matrix.md #3.3)",
+    "proposed_staffing[].assignment_status":"engine label","proposed_staffing[].source":"engine label",
+    "staffing_exclusions[].reason":"not rendered: only the verdict and rule citation are presented (role-access-matrix.md #3.2)","staffing_exclusions[].source":"engine label",
+    "holds[].source":"engine label"}
 def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
     """scope.json for the raw inputs (SOW, engagement letter, pursuit record and wall register in raw_dir; the staffing
     input; the confirmed roster), the demo label and the run timestamp. Every later stage re-runs this derivation on the
@@ -173,6 +193,7 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
     dup=duplicate_rows(rows,"person")  # the roster is keyed by person: a repeat is refused, never resolved last-wins (#1.3)
     if dup: raise InputError(f"confirmed roster row(s) {', '.join(map(str,dup))} name the same person (name not repeated); each person appears once; fail closed")
     validate_staffing(st)
+    for n in ("Engagement ID","Matter ID"): check_id(fld(sow,n),"raw/sow-extract.md "+n)  # the SOW's identifiers have the identifier shape (#1.3)
     # The engagement's own client and firm domains, declared in the signed SOW or engagement letter, are the only
     # trusted e-mail/URL destinations; consumer or malformed domains are never trusted (confidentiality-and-ethical-wall-rules.md #4.4).
     # A declaration is trusted only when its line is clean read without its own trust: a declaration can never vouch

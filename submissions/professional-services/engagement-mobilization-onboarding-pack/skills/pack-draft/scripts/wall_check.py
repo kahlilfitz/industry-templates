@@ -43,13 +43,14 @@ def check_matched(p):
     # Every placeholder, escalation or held status from an earlier stage must still have its hold (#1.4); the rest of
     # the document is proved equal to its re-derivation from the raw inputs (same_document).
     check_hold_evidence(p,"matched")
-def govern(p,register,inventory,raised=None):
+def govern(p,register,inventory,closeout,staffing,raised=None):
     """Derive the wall decision, the workspace decisions and the digest gating for document p from the raw wall
-    register and workspace inventory. access_checklist re-runs this on the governed document to re-derive, never
-    trust, the decision state (confidentiality-and-ethical-wall-rules.md #1.4)."""
+    register and workspace inventory, screening with the one other-client identity set (knowledge_match.
+    other_client_terms: register, Closeout and staffing identities). access_checklist re-runs this on the governed
+    document to re-derive, never trust, the decision state (confidentiality-and-ethical-wall-rules.md #1.4, #3.3)."""
     p,mh=screen_upstream(p,"matched",ENGINE)  # every upstream string screened and redacted before use; any hit holds the wall (#4.1, #4.3)
     if mh: p.setdefault("escalations",[]).append(upstream_escalation(len(mh)))
-    rows=register_rows(register); ws=read_csv(inventory,False,"workspace inventory"); up=list(p.get("holds",[])); holds=list(mh); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
+    rows=register_rows(register); ws=read_csv(inventory,False,"workspace inventory"); check_csv_ids(ws,"raw/workspace-inventory.csv",("workspace_id",)); up=list(p.get("holds",[])); holds=list(mh); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
     status="clear"; reason="wall register marks joiner clear for this client/matter"; cit="confidentiality-and-ethical-wall-rules.md #2.2"
     own=own_words(p); own_ids={canon_id(e.get("matter_id")),canon_id(e.get("engagement_id"))}-{""}
     def hold_status(hid,path,why,rule):
@@ -58,7 +59,8 @@ def govern(p,register,inventory,raised=None):
     # missing or repeated column still names the clients it lists (every copy of a repeated column counts), so the
     # names are withheld everywhere while the decision holds (#2.1, #3.3). They are harvested from the register AS
     # READ, before scan_rows rewrites a flagged cell: a restriction that trips the wire still names its client (#3.3).
-    terms=client_terms(other_names(rows,e,own),own) if rows is not None else []
+    # The register is one source of the shared identity set; the Closeout and staffing identities are the others (#3.3).
+    terms,_=knowledge_match.other_client_terms(p,closeout,register,staffing)
     idh=unreadable_identity_holds(rows,REGISTER_LABEL,ENGINE) if rows is not None else []  # a tripped identity cell naming no one usable holds (#3.3)
     scr=(scan_rows(rows,REGISTER_LABEL) if rows is not None else [])+idh
     p,oh=screen_other(p,terms,ENGINE,"matched.")  # every text field, not only the briefing (#3.3)
@@ -158,18 +160,19 @@ def govern(p,register,inventory,raised=None):
     elif status=="denied": kd.update({"status":"denied_by_wall","items":[],"denied_items":deniedk})
     else: kd.update({"status":"hold","items":[]})
     p["knowledge_digest"]=kd; p["holds"]=holds; return p
-def derive(p,register,inventory,ts):
+def derive(p,register,inventory,ts,closeout,staffing):
     """governed.json for a matched document (knowledge_match's output, or a carried one proved equal to it), the wall
-    register, the workspace inventory and this stage's run timestamp. access_checklist re-runs it (rederive, #1.4)."""
+    register, the workspace inventory, this stage's run timestamp and the Closeout and staffing inputs the identity
+    set is derived from. access_checklist re-runs it (rederive, #1.4)."""
     adopt_trust(p)  # from the declaration lines scope_digest accepted, never a carried list (#1.4, #4.4)
-    p=govern(p,register,inventory)
+    p=govern(p,register,inventory,closeout,staffing)
     p.setdefault("provenance",{}).setdefault("engines",[]).append(f"wall_check/{VERSION}"); p["provenance"]["generated_at"]=ts
     p=bind_withheld(settle_trust(p),"governed",ENGINE); check_contract(p,"governed","governed"); return p  # the document written is held to the same contract (#1.3)
 def rederive(doc,raw_dir,staffing,roster,closeout,register,inventory,ts,where):
     """The governed document the raw inputs give: scope_digest, knowledge_match and this engine, re-run whole. The
     matched stage ran under its own timestamp, which only the governed document's provenance overwrote (#1.4)."""
     m=knowledge_match.rederive(doc,raw_dir,staffing,roster,closeout,register,ts,where)
-    return derive(reread(m,"re-derived matched document"),register,inventory,ts)
+    return derive(reread(m,"re-derived matched document"),register,inventory,ts,closeout,staffing)
 def main():
     ap=ArgParser()
     for k in ("--matched","--raw-dir","--staffing","--confirmed-roster","--closeout","--wall-register","--workspace-inventory","--out","--generated-at"): ap.add_argument(k,required=True)
@@ -177,5 +180,5 @@ def main():
     p=load_json(a.matched,"matched input"); check_matched(p)
     m=knowledge_match.rederive(p,a.raw_dir,a.staffing,a.confirmed_roster,a.closeout,a.wall_register,stage_timestamp(p,"matched input"),"matched input")
     same_document(p,m,"matched input")  # every field equals the scope_digest + knowledge_match re-derivation from the raw inputs (#1.4)
-    dump_json(a.out,derive(p,a.wall_register,a.workspace_inventory,ts),"governed output")
+    dump_json(a.out,derive(p,a.wall_register,a.workspace_inventory,ts,a.closeout,a.staffing),"governed output")
 if __name__=="__main__": guard(main)

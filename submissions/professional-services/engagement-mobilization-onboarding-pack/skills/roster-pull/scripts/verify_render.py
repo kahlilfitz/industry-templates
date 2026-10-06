@@ -22,7 +22,7 @@ def rederive_access(doc,raw_dir,staffing,roster,closeout,register,inventory,wher
     import access_checklist, wall_check
     ts=stage_timestamp(doc,where)
     g=reread(wall_check.rederive(doc,raw_dir,staffing,roster,closeout,register,inventory,ts,where),"re-derived governed document")
-    return access_checklist.derive_entries(g,register,inventory,ts)
+    return access_checklist.derive_entries(g,register,inventory,ts,closeout,staffing)
 def read_bytes(p,label):
     try:
         with open(p,"rb") as f: return f.read()

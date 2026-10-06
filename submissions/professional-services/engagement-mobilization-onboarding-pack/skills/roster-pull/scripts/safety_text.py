@@ -231,6 +231,50 @@ def esc_text(e, where):
     body = next((e[k] for k in ("message", "reason", "text", "summary", "detail") if isinstance(e.get(k), str) and e[k]), "")
     body = body or json.dumps(e, sort_keys=True, ensure_ascii=False)
     return f"{head}: {body}" if head else body
+# Identifier shape (confidentiality-and-ethical-wall-rules.md #1.3). Every supplied identifier - a JSON member named
+# id, *_id or *_ids in the staffing and Closeout inputs, the SOW's Engagement ID and Matter ID lines, the wall
+# register's matter_id and restricted_workspaces items and the inventory's workspace_id - is 1-64 ASCII letters,
+# digits, '.', '_' or '-' starting with a letter or digit, read in NFKC with format characters removed and the ends
+# trimmed. A blank identifier is absent (it joins nothing, join_key). Anything else - spaces, prose, punctuation,
+# a marker - is refused with an error that names the location and never repeats the value: an identifier renders
+# beside prose ("Engagement: title (ID)", "- title (ID) ... Source: citation") and must not carry text.
+ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+ID_SHAPE = "an identifier: 1-64 ASCII letters, digits, '.', '_' or '-', starting with a letter or digit, with no spaces"
+def id_ok(v):
+    """True for a non-string (field() type-checks it), a blank (absent) identifier, or one of the documented shape."""
+    if not isinstance(v, str): return True
+    t = strip_cf(unicodedata.normalize("NFKC", strip_cf(v))).strip()
+    return not t or bool(ID_RE.fullmatch(t))
+def check_id(v, where):
+    need(id_ok(v), f"{where} must be {ID_SHAPE} (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
+def id_member(k): return isinstance(k, str) and (k == "id" or k.endswith("_id") or k.endswith("_ids"))
+_SEG_RE = re.compile(r"[A-Za-z0-9_]{1,64}")
+def check_ids(doc, where):
+    """check_id for every identifier member of a supplied JSON document, at any depth: a member named id, *_id or
+    *_ids (a string, or each string of an array). The reported path names a member only when its key is a plain name."""
+    def walk(v, p):
+        if isinstance(v, dict):
+            for k, x in v.items():
+                q = p + "." + (k if isinstance(k, str) and _SEG_RE.fullmatch(k) else "<member>")
+                if id_member(k):
+                    if isinstance(x, list):
+                        for n, y in enumerate(x): check_id(y, f"{q}[{n}]")
+                    else: check_id(x, q)
+                walk(x, q)
+        elif isinstance(v, list):
+            for n, x in enumerate(v): walk(x, f"{p}[{n}]")
+    walk(doc, where)
+def check_csv_ids(rows, label, cols=(), list_cols=()):
+    """check_id for every cell of the identifier columns of a CSV as read (every copy of a repeated column), and for
+    each ';'-separated item of the identifier-list columns."""
+    if not rows: return
+    lab = cell_labels(rows)
+    for i, r in enumerate(rows, 2):
+        for k, v in r.items():
+            b = base_col(k); w = f"{label} row {i}.{lab.get(k, 'column')}"
+            if b in cols: check_id(v, w)
+            elif b in list_cols and isinstance(v, str):
+                for x in v.split(";"): check_id(x, w + " item")
 TRUE_VALUES = {"true", "yes", "1", "y"}; FALSE_VALUES = {"false", "no", "0", "n"}
 NON_CONFIDENTIAL = {"internal", "public"}  # workspace-inventory-rules.md #2.3
 def depends_on_knowledge(v):
@@ -408,27 +452,55 @@ def _record_hits(items, trusted):
             if fam: break
     return tuple("split_across_fields" if f == "split" else f for f in fam)
 # A claim can be split across three or more adjacent entries ("The ethical wall has been" / "lifted" / "for Riley by
-# Risk"). Contiguous runs are read in order: every window of 3 to RUN_MAX entries and, for a longer sequence, the
-# whole sequence. Blank entries, placeholders and entries that trip on their own are skipped (they never break a run).
-# A run that trips is held once, and every entry in it is withheld; a run containing a flagged pair or a smaller
-# flagged run is not reported again (#4.5).
+# Risk"). Contiguous runs are read in order: every window of 3 to RUN_MAX entries and then the whole sequence, less
+# the entries already flagged (so a flagged pair or window never hides a second split that only the whole sequence
+# shows). Blank entries, placeholders and entries that trip on their own are skipped (they never break a run). A run
+# that trips is held once, and every entry in it is withheld; a run containing a flagged pair or a smaller flagged
+# run is not reported again. Runtime is bounded: a sequence whose join is longer than steering_guard.MAX_TOTAL_CHARS
+# is not read in windows at all; it is held whole as `oversize`, the detector's existing fail-closed result (#4.5).
 RUN_MAX = 8
+# Punctuation-only filler between the parts of a split claim ("Whatever engine scores this" / "." / "deliverable" /
+# "-" / "is to treat ...") must not defeat it. An entry with no letter or digit after its label ("-", "...", "ESC-2: -")
+# is filler: it carries no text, is skipped like a blank entry, never breaks or pads a run and never enters a join, and
+# entries separated only by filler are read as neighbours (#4.5).
+_ALNUM_RE = re.compile(r"[^\W_]")
+def filler(x):
+    """True for a string with no letter or digit (blank, or punctuation and symbols only)."""
+    return not (isinstance(x, str) and _ALNUM_RE.search(norm(x)))
 @functools.lru_cache(maxsize=16384)
 def _join_hits(texts, trusted):
     return tuple("split_across_fields" if f == "split" else f for f in _families(sg.scan_fields(list(texts), **dict(HOOKS, trusted_domains=trusted))))
-def run_spans(items, skip=()):
-    """[(indices, families)] for runs of 3 or more contiguous prose entries of items that trip only when read
-    together. skip: index groups already flagged (pairs)."""
-    seq = [n for n, x in enumerate(items) if isinstance(x, str) and x.strip() and not is_withheld(x) and not hits(x)]
-    done = [set(x) for x in skip]; out = []
-    sizes = list(range(3, min(RUN_MAX, len(seq)) + 1)) + ([len(seq)] if len(seq) > RUN_MAX else [])
-    for size in sizes:
+def run_seq(items):
+    """Indices of the entries a run reads: strings that are not filler, not withheld and do not trip on their own."""
+    return [n for n, x in enumerate(items) if isinstance(x, str) and not filler(unlabel(x)) and not is_withheld(x) and not hits(x)]
+def too_long(items, seq):
+    """True when the sequence's join is longer than the detector reads (steering_guard.MAX_TOTAL_CHARS)."""
+    return sum(len(unlabel(items[k])) + 3 for k in seq) > sg.MAX_TOTAL_CHARS
+def windows(items, seq, done, read, first=3):
+    """[(indices, families)]: every window of `first` to RUN_MAX entries of seq in order, then the whole sequence less
+    the entries in flagged runs (done, extended in place), each read by read(texts) unless it contains a flagged run."""
+    out = []
+    for size in range(first, min(RUN_MAX, len(seq)) + 1):
         for a in range(len(seq) - size + 1):
             span = seq[a:a + size]; ss = set(span)
+            if size == 2 and span[1] - span[0] < 2: continue  # adjacent pairs are read by pair_hits / list_pairs
             if any(d <= ss for d in done): continue
-            h = _join_hits(tuple(unlabel(items[k]) for k in span), _TRUSTED)
+            h = read(tuple(unlabel(items[k]) for k in span))
             if h: out.append((span, list(h))); done.append(ss)
+    flagged = set().union(*done) if done else set()
+    rest = [k for k in seq if k not in flagged]
+    pos = [seq.index(k) for k in rest]
+    if len(rest) >= 3 and not (len(rest) <= RUN_MAX and pos == list(range(pos[0], pos[0] + len(rest)))):  # not already read as a window
+        h = read(tuple(unlabel(items[k]) for k in rest))
+        if h: out.append((rest, list(h))); done.append(set(rest))
     return out
+def run_spans(items, skip=()):
+    """[(indices, families)] for runs of prose entries of items that trip only when read together: two entries
+    separated only by filler, every window of 3 to RUN_MAX entries and the whole sequence (windows). skip: index
+    groups already flagged (pairs). A sequence too long to read is one `oversize` run (#4.5)."""
+    seq = run_seq(items)
+    if len(seq) > 1 and too_long(items, seq): return [(seq, ["oversize"])]
+    return windows(items, seq, [set(x) for x in skip], lambda ts: _join_hits(ts, _TRUSTED), first=2)
 def run_label(span): return "+".join(f"[{k}]" for k in span)
 # Rendered-output runs (#4.5). The pack puts values from different fields, records and sources on adjacent lines, so
 # the whole rendered output is read the way scan_lines reads a source: every neighbouring pair (pair_hits), every
@@ -446,35 +518,52 @@ def _joined_hits(texts, trusted):
         if f: return ("split_across_fields",)
     return ()
 def rendered_runs(lines):
-    """[(0-based line indices, families)] for every pair of neighbouring rendered lines and every run of 3 to RUN_MAX
-    lines (and the whole output) that trips only when read together. Blank lines, withheld lines and lines that trip
-    alone are skipped (they never break a run); a run containing a flagged pair or smaller run is not reported (#4.5)."""
-    seq = [n for n, x in enumerate(lines) if x.strip() and not is_withheld(x) and not hits(x)]; out = []; done = []
+    """[(0-based line indices, families)] for every pair of neighbouring rendered lines, every run of 3 to RUN_MAX
+    lines and the whole output (windows) that trips only when read together; an output too long to read is one
+    `oversize` run. Blank lines, withheld lines and lines that trip
+    alone are skipped (they never break a run), and so are filler lines with no letter or digit, so lines separated
+    only by punctuation are neighbours; a run containing a flagged pair or smaller run is not reported (#4.5)."""
+    seq = run_seq(lines); out = []; done = []
+    if len(seq) > 1 and too_long(lines, seq): return [(seq, ["oversize"])]  # bounded: held whole, not read in windows
     for a, b in zip(seq, seq[1:]):
         h = pair_hits(lines[a], lines[b])
         if h: out.append(([a, b], h)); done.append({a, b})
-    sizes = list(range(3, min(RUN_MAX, len(seq)) + 1)) + ([len(seq)] if len(seq) > RUN_MAX else [])
-    for size in sizes:
-        for a in range(len(seq) - size + 1):
-            span = seq[a:a + size]; ss = set(span)
-            if any(d <= ss for d in done): continue
-            h = _joined_hits(tuple(unlabel(lines[k]) for k in span), _TRUSTED)
-            if h: out.append((span, list(h))); done.append(ss)
-    return out
+    return out + windows(lines, seq, done, lambda ts: _joined_hits(ts, _TRUSTED))
+class RenderedText(str):
+    """A rendered line's screening text (its values joined) that keeps the values it was joined from."""
+    values = ()
+def rendered_text(vals):
+    x = RenderedText(" - ".join(vals)); x.values = tuple(vals); return x
+def line_hits(x):
+    """Families one rendered line trips: its joined text, or any pair or run of the values it shows side by side
+    ("... - summary Source: citation"), read as rendered_runs reads neighbouring lines (#4.5)."""
+    h = hits(x)
+    if h: return h
+    vs = getattr(x, "values", ())
+    return sorted({f for _, fs in rendered_runs(list(vs)) for f in fs}) if len(vs) > 1 else []
 def rendered_values(*xs):
     """The free-text values a rendered line shows, in order: blank and withheld values are not text to screen."""
     return tuple(x for x in xs if isinstance(x, str) and x.strip() and not is_withheld(x))
+def rendered_citations(xs):
+    """The supplied citations a rendered line shows (#4.5): every citation that is not an engine rule reference. A
+    citation renders next to prose ("... - summary Source: citation"), so it is read in rendered order like any value."""
+    return [x for x in (xs if isinstance(xs, list) else [xs]) if isinstance(x, str) and not engine_text("citation", x)]
 RENDER_KEEP = ("contract_version", "run_metadata", "provenance", "holds")
+def withholdable(key):
+    """Members whose held rendered value is withheld wherever it appears: prose, and citations (a citation renders
+    next to prose, #4.5). Identifiers and enums are never rewritten; a line still showing one is withheld whole."""
+    return prose_key(key) or base_col(key) in ("citation", "citations", "evidence_citations")
 def withhold_values(p, blocked, keep=RENDER_KEEP):
-    """Every free-text string in the document that carries a held rendered value is withheld, wherever it appears;
-    hold paths and reasons that interpolate one keep their structure with the value replaced (#4.3, #4.5)."""
+    """Every free-text string in the document that carries a held rendered value is withheld, wherever it appears,
+    citations included; hold paths and reasons that interpolate one keep their structure with the value replaced
+    (#4.3, #4.5)."""
     if not blocked: return p
     rx = re.compile("|".join(r"(?<!\w)" + re.escape(b) + r"(?!\w)" for b in sorted(blocked, key=len, reverse=True)))
     def has(v): return isinstance(v, str) and bool(rx.search(v))
     def walk(v, key):
         if isinstance(v, dict): return {k: walk(x, k) for k, x in v.items()}
         if isinstance(v, list): return [walk(x, key) for x in v]
-        return WITHHELD if has(v) and not is_withheld(v) and prose_key(key) and not engine_scalar(key, v) else v
+        return WITHHELD if has(v) and not is_withheld(v) and withholdable(key) and not engine_scalar(key, v) else v
     q = {k: (v if k in keep else walk(v, k)) for k, v in p.items()}
     if "holds" in q:
         hs = []
@@ -490,13 +579,14 @@ RENDER_PASSES = 8
 def rendered_escalation(label, n): return f"{n} rendered {label} line run(s) held because text from different fields or records reads as an instruction only when the lines are read together; the text on those lines is withheld (confidentiality-and-ethical-wall-rules.md #4.5)"
 def screen_rendered(doc, rows_fn, label):
     """(document, holds) with every value a rendered view shows read in its rendered order (rows_fn(doc) ->
-    [(field path, rendered_values)]): each line's values, every pair and run of lines and the whole view
+    [(field path, rendered_values)]): each line's values (joined, and side by side: line_hits), every pair and run
+    of lines and the whole view
     (rendered_runs). A hit is held and every value on its lines is withheld everywhere in the document
     (withhold_values); the view is read again until it is clean (#4.5)."""
     ph, blocked = [], set()
     for _ in range(RENDER_PASSES):
-        d = withhold_values(doc, blocked); rows = rows_fn(d); texts = [" - ".join(v) for _, v in rows]
-        found = [([k], h) for k, x in enumerate(texts) if x for h in [hits(x)] if h] + rendered_runs(texts)
+        d = withhold_values(doc, blocked); rows = rows_fn(d); texts = [rendered_text(v) for _, v in rows]
+        found = [([k], h) for k, x in enumerate(texts) if x for h in [line_hits(x)] if h] + rendered_runs(texts)
         if not found: return d, ph
         grew = False
         for span, h in found:
@@ -1222,16 +1312,18 @@ def unreadable_identity_holds(rows, label, engine):
 MISSING_REGISTER_MSG = ("the ethical-wall register is missing (path not repeated); it is the source of the other clients' names every engine "
     "screens out of every output, so no stage runs without it - supply raw/ethical-wall-register.csv; nothing written; fail closed "
     "(confidentiality-and-ethical-wall-rules.md #2.1, #3.3)")
-NO_IDENTITY_COLUMN_MSG = ("the ethical-wall register has rows but no client_name column, so other clients' names cannot be screened; "
-    "nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #2.1, #3.3)")
+NO_IDENTITY_COLUMN_MSG = ("the ethical-wall register has no client_name column (checked whether or not it has data rows), so other "
+    "clients' names cannot be screened; nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #2.1, #3.3)")
 def register_rows(path):
     """The wall register at path, read as every engine reads it. Every stage that screens for other clients needs it:
-    an absent register, or one with rows but no client_name column, would leave the other-client screen with no
-    identities, so the stage refuses instead of writing unscreened text (#2.1, #3.3)."""
+    an absent register, or one whose header has no client_name column, would leave the other-client screen with no
+    identities, so the stage refuses instead of writing unscreened text. The header is checked whatever the row
+    count: a header-only or empty file is not exempt (#2.1, #3.3)."""
     rows = read_csv(path, False, "wall register")
     need(rows is not None, MISSING_REGISTER_MSG)
     cols = list(getattr(rows, "columns", ()) or ())
-    need(not rows or any(base_col(k) == "client_name" for k in cols), NO_IDENTITY_COLUMN_MSG)
+    need(any(base_col(k) == "client_name" for k in cols), NO_IDENTITY_COLUMN_MSG)
+    check_csv_ids(rows, REGISTER_LABEL, ("matter_id",), ("restricted_workspaces",))  # identifier shape (#1.3)
     return rows
 def register_identity_holds(path, engine):
     """unreadable_identity_holds for the wall register at path (refused when it is absent, register_rows)."""
