@@ -35,7 +35,10 @@ result in any field but provenance.generated_at is refused with no output.
 Free text is data (#11.1): a signal or entry whose text trips the shared embedded-instruction
 tripwire is marked embedded_instruction / needs_review so no later step drafts from it.
 IDs are keys (#13.9): every ID and code cell, timesheet link and letter ID must be a bounded record ID
-(contract_check.valid_record_id), checked as written; prose in an ID is refused, never echoed.
+(contract_check.valid_record_id), checked as written; prose in an ID is refused, never echoed. No ID-bearing cell (IDs,
+codes, match keys, file names, timekeeper names, letter fields) may take the engines' positional-label form (#13.10,
+signal_policy.refuse_reserved), and every row's grammar is checked before its timekeeper, engagement or date can
+exclude it, so an out-of-scope row is refused for a malformed cell, never skipped unread.
 A requested period with no rows for the requester produces a period_check warning.
 
 Engagement identity (#13.3): only rows whose engagement_id is the engagement letter's are read, and the
@@ -145,14 +148,18 @@ def record_id(value, cite, key, optional=False):
     return value
 
 
-def unreserved_id(value, cite, key):
-    """#13.10: an activity ID, entry ID or link never has the positional-label form the engines give another party's
-    records (calendar-export-row-4), so a label can never name an in-scope record. The error cites the row only."""
-    record_id(value, cite, key)
-    if signal_policy.positional_label(value):
-        raise InputError(f"{cite} {key} has the reserved positional-label form the engines give another party's "
-                         f"records ({signal_policy.FOREIGN_CITATION}); rename the record")
-    return value
+def unreserved(value, cite, key):
+    """#13.10 (T&E QA round 15): an ID-bearing cell (an ID, match key, file name or timekeeper name) never has the
+    positional-label form the engines give another party's records, so a label can never name an in-scope record.
+    signal_policy.refuse_reserved is the one check; the error cites the row only."""
+    return signal_policy.refuse_reserved(value, f"{cite} {key}", InputError)
+
+
+def unreserved_id(value, cite, key, optional=False):
+    """#13.9 and #13.10: a record ID of the bounded shape (record_id) that is not in the positional-label form
+    (calendar-export-row-4, other-engagement-signal-1). optional: a blank cell is no ID (None)."""
+    value = record_id(value, cite, key, optional=optional)
+    return value if value is None else unreserved(value, cite, key)
 
 
 def unique(index, key, cite, what, value=None):
@@ -338,15 +345,16 @@ def pull(args, script_dir=None, extra_sources=None):
     workplan, workplan_ids = {}, {}
     for idx, row in enumerate(workplan_rows, start=2):
         cite = f"raw/engagement-workplan.csv row {idx}"
-        unique(workplan_ids, signal_policy.canon_id(record_id(row["workplan_id"], cite, "workplan_id")), cite, "workplan_id")
+        unique(workplan_ids, signal_policy.canon_id(unreserved_id(row["workplan_id"], cite, "workplan_id")), cite,
+               "workplan_id")
         # #8.4: every workplan row states its engagement; a row naming none is refused, never skipped.
-        record_id(row["engagement_id"], cite, "engagement_id")
-        if signal_policy.canon_id(row["engagement_id"]) != eng_key:
-            continue  # #13.10: another engagement's workplan row is never read further or joined
+        unreserved_id(row["engagement_id"], cite, "engagement_id")
         # Item types and match keys compare in canonical form (A13): a variant spelling of a workplan key is the same
         # key, never a missed match that drops the row's activity class. #8.4: a row whose item type is not one the
         # joins use, or whose match key folds to blank (A21), is refused rather than left unindexed, so a workplan of
         # unrecognised rows is never read as an empty one and a blank key never joins a blank event ID or file.
+        # T&E QA round 15: every row's grammar is checked before its scope, so another engagement's row is refused
+        # for an unrecognised item type or a blank key exactly as this engagement's is, never skipped unread.
         key = (signal_policy.canon_id(row["item_type"]), signal_policy.canon_id(row["match_key"]))
         if key[0] not in WORKPLAN_ITEM_TYPES:
             raise InputError(f"{cite} item_type must be one of {', '.join(WORKPLAN_ITEM_TYPES.values())}; an "
@@ -354,6 +362,10 @@ def pull(args, script_dir=None, extra_sources=None):
         if not key[1]:
             raise InputError(f"{cite} match_key must not be empty (or only separators or format characters); a blank "
                              "key never joins (client-billing-guidelines.md #8.4)")
+        unreserved(row["match_key"], cite, "match_key")
+        unreserved(row["activity_class"], cite, "activity_class")
+        if signal_policy.canon_id(row["engagement_id"]) != eng_key:
+            continue  # #13.10: another engagement's workplan row is never read further or joined
         unique(workplan, key, cite, "item_type and match_key", value=(idx, row))
 
     signals, skipped_sources, out_of_scope = [], [], []
@@ -379,16 +391,27 @@ def pull(args, script_dir=None, extra_sources=None):
         for idx, row in enumerate(rows, start=2):
             cite = f"raw/{filename} row {idx}"
             # #8.4: a row naming no timekeeper is refused in every scope (as the team view always refused it), never
-            # skipped as someone else's.
+            # skipped as someone else's. T&E QA round 15: every cell's grammar is checked here, before the row's
+            # timekeeper, engagement or date can exclude it, so another party's or another period's row is refused
+            # for a malformed or reserved cell exactly as an in-scope one is, never skipped unread.
             cell_id(row, "person", cite)
-            if not allowed(row["person"]):
-                continue  # #12.1: other timekeepers' rows are never read into the packet
+            unreserved(row["person"], cite, "person")
             unreserved_id(row["activity_id"], cite, "activity_id")
-            record_id(row["engagement_id"], cite, "engagement_id", optional=True)
+            unreserved_id(row["engagement_id"], cite, "engagement_id", optional=True)
             if key == "calendar":
-                record_id(row["event_id"], cite, "event_id", optional=True)
+                unreserved_id(row["event_id"], cite, "event_id", optional=True)
             unique(activity_rows, signal_policy.canon_id(row["activity_id"]), cite, "activity_id")
             row["date"] = cell_date(row, "date", cite)
+            if key == "calendar":
+                duration = hours_between(row["start"], row["end"], cite)
+                unreserved(row["organizer"], cite, "organizer")
+                for attendee in row["attendees"].split(";"):
+                    unreserved(attendee, cite, "attendees")
+            else:
+                duration = round(cell_hours(row, "duration_hours", cite), 2)
+                unreserved(row["file_name"], cite, "file_name")
+            if not allowed(row["person"]):
+                continue  # #12.1: other timekeepers' rows are never read into the packet
             if signal_policy.canon_id(row["engagement_id"]) != eng_key:
                 # #13.3, #13.10: another engagement's row is recorded by its position only; its supplied ID and
                 # fields go nowhere, and a timesheet link to it is recorded under the same label.
@@ -404,7 +427,6 @@ def pull(args, script_dir=None, extra_sources=None):
                 match = workplan.get((signal_policy.canon_id("calendar_event"), signal_policy.canon_id(row["event_id"])))
                 activity_class = (match[1]["activity_class"] if match else "") or "unclassified_meeting"
                 subject = row["subject"].strip()
-                duration = hours_between(row["start"], row["end"], cite)
                 meeting_id = record_id(row["event_id"], cite, "event_id", optional=True)
                 extra = {"organizer": row["organizer"].strip() or None,
                          "attendees": [a.strip() for a in row["attendees"].split(";") if a.strip()]}
@@ -415,7 +437,6 @@ def pull(args, script_dir=None, extra_sources=None):
                          workplan.get((signal_policy.canon_id("document"), signal_policy.canon_id(row["file_name"]))))
                 activity_class = DOCUMENT_CLASS.get(signal_policy.canon_id(row["activity_type"]), "unclassified_document_activity")
                 subject = subject_from_file(row["file_name"])
-                duration = round(cell_hours(row, "duration_hours", cite), 2)
                 meeting_id = None
                 extra = {"file_name": row["file_name"]}
             citations = [cite]
@@ -470,8 +491,8 @@ def pull(args, script_dir=None, extra_sources=None):
     for idx, row in enumerate(timesheet_rows, start=2):
         cite = f"raw/timesheet.csv row {idx}"
         cell_id(row, "person", cite)  # #8.4: a row naming no timekeeper is refused, never skipped
-        if not allowed(row["person"]):
-            continue
+        # T&E QA round 15: every cell's grammar is checked before the row's timekeeper or date can exclude it.
+        unreserved(row["person"], cite, "person")
         unreserved_id(row["entry_id"], cite, "entry_id")
         unique(entry_rows, signal_policy.canon_id(row["entry_id"]), cite, "entry_id")
         row["date"] = cell_date(row, "date", cite)
@@ -484,6 +505,10 @@ def pull(args, script_dir=None, extra_sources=None):
                                  "a blank key never matches an activity")
             unreserved_id(link, cite, "activity_ids link")
             unique(linked, signal_policy.canon_id(link), cite, "activity_ids link")
+        phase_code = unreserved_id(row["phase_code"], cite, "phase_code", optional=True)
+        task_code = unreserved_id(row["task_code"], cite, "task_code", optional=True)
+        if not allowed(row["person"]):
+            continue
         dates_available.add(row["date"])
         if not in_period(row["date"], period):
             continue
@@ -515,8 +540,8 @@ def pull(args, script_dir=None, extra_sources=None):
             "duration_hours": hours,
             "narrative": row["narrative"],
             "activity_ids": kept_links,
-            "submitted_phase_code": record_id(row["phase_code"], cite, "phase_code", optional=True),
-            "submitted_task_code": record_id(row["task_code"], cite, "task_code", optional=True),
+            "submitted_phase_code": phase_code,
+            "submitted_task_code": task_code,
             "source": "connector:timesheet",
             "confidence": TIMESHEET_CONFIDENCE,
             "citations": [cite],

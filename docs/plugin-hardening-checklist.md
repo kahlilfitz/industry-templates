@@ -189,6 +189,27 @@ How to read a report:
   validates against the contract like every engine stage. [Mobilization round 15]
   Test: change only the case of a hold's `source` or `path`; the stage and the pre-render check
   must refuse.
+- [ ] **A24. Validate a record before scope excludes it.** Every raw parser checks each record's
+  grammar (ID and code shape, closed enums, dates, times and amounts, blank keys, reserved forms,
+  duplicate IDs) before any skip for another engagement, client, deliverable, person or period. A
+  malformed record is refused whatever its scope, so nobody can hide a defect by marking the row
+  as foreign. Excluded records are still never read into output, and an error names the file and
+  row, never a value. [Wave 1 pre-freeze QA, T&E round 15]
+  Test: append another engagement's (or another person's, or an out-of-period) row with an
+  unknown enum value, a blank join key or a bad date; the first stage must refuse, with no output.
+  A well-formed foreign row must still be excluded silently.
+- [ ] **A25. Recognise structure after normalising its syntax.** A parser that assigns lines to
+  sections or recognises declared fields in markdown or text normalises leading whitespace and
+  quotes, bullet style (`-`, `*`, `+`, numbered, task box), table rows, bold, italic or code
+  wrappers, key case, spacing and separators, and the key/value separator, and treats every
+  heading form (any level, ATX or setext, wrapped, numbered or with a trailing colon) as the same
+  heading, before it decides that a line is unrelated prose. The same normaliser decides "field
+  inside the section" (accepted) and "declared field outside it" (refused). Only lines that do not
+  normalise to a declared field are prose. [Wave 1 pre-freeze QA, T&E round 15]
+  Test: append `## Appendix` and then `  - client_name: X`, `* **Client Name**: X` or
+  `| client_name | X |`; each must be refused. The same variants inside the owning section must be
+  accepted with an unchanged output. A prose line mentioning the field outside the section must
+  still be accepted.
 
 ## B. Finding integrity (engines)
 
@@ -438,6 +459,19 @@ How to read a report:
   [Wave 1 pre-freeze QA, DRQG round 16]
   Test: a brand check for another deliverable whose ID, title and detail name another client; no
   output file or packet line may contain any of them.
+- [ ] **D25. Reserved labels are reserved in every ID-bearing field.** Every positional or fixed
+  label form an engine emits for another party's records (`<file>-row-N`, `other-*-N`,
+  `brand_checks[0]`, `calendar row 4` and so on) is refused in every field that carries an
+  identifier or reaches output, not only the primary record ID. That covers engagement, client,
+  matter and deliverable IDs, workplan and register IDs, join and match keys, event, entry and
+  document IDs, codes, file names, and person, reviewer, organizer and attendee names, in the raw
+  inputs and in every intermediate packet. One shared helper does the check, folding case,
+  surrounding whitespace and separators as the requester or ID check does. Only an argument that
+  replays engine-emitted labels by design may accept them.
+  [Wave 1 pre-freeze QA, T&E round 15]
+  Test: change the engagement ID consistently across every raw source to the engine's own
+  other-engagement label, then to `Other_Engagement_Signal_1`; the first stage must refuse. Put a
+  label form in each other ID field in turn, raw and packet; each must be refused.
 
 ## E. Draft-first and grounding (`SKILL.md`)
 

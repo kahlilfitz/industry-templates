@@ -733,7 +733,63 @@ All five classes reproduced before the fix. New guidelines are client-billing-gu
   - Each group was run alone and compared with the full run. 35 give the same checks and pass. Two read state that earlier groups leave behind, so `--group` also runs their prerequisites. `qa13_tests` needs the edited packets recorded inside `defence_in_depth()`: by the 12 groups run inside it and by `qa12_tests`, which enters it itself (33 packets, the same as a full run). `drqg14_tests` needs the reports earlier groups render: its coverage check scans at least 50, so it also runs `qa_tests`, `integrity2_tests`, `integrity3_tests`, `qa5_tests` and `r5_tests` (51 reports). Run that way, the coverage check's label shows 54 reports instead of the full run's 103.
   - `print_results()` now prints the end-of-run recap only, not every line. Its qa12-02 self-test also requires the `== failures` block and that no PASS line is repeated. A full run gives the same 1263 check labels as before. No engine, skill, reference, contract or demo-data change.
 
+### QA round 15 of 8aed3ad (fixed in 1.0.4, no version bump)
+Round 15 is the Wave 1 round cap for this plugin. It found three blocking defects, each fixed as a class across the plugin, with regression group `qa15_tests` (20 checks). Hardening checklist A24, A25 and D25.
+- **R15-01 (class r15-A): the reserved-label namespace is enforced in every ID-bearing field.**
+  - **Defect.** Scenario A with `engagement_id` changed to `other-engagement-signal-1` in the letter, workplan, calendar and document exports passed all five stages, and the label reached every output. Only `--requester` and supplied activity IDs, entry IDs and links were checked.
+  - **Fix.** One shared helper, `signal_policy.refuse_reserved` (`signal_policy.py:210`), which uses `positional_label` and so folds case, whitespace and separators. `POSITIONAL_LABEL_RE` now covers the `<file>-row-N` form of every raw file, not only the calendar and document exports (`signal_policy.py:108`).
+    - The five engagement-letter fields (`signal_policy.py:824`).
+    - In activity-pull (`activity_pull.py:151-162`, `unreserved` and `unreserved_id`):
+      - every workplan ID, engagement ID, match key and activity class (`348-366`);
+      - every calendar or document person, activity ID, engagement ID, event ID, organizer, attendee and file name (`398-412`);
+      - every timesheet person, entry ID, link, phase code and task code (`495-509`).
+    - In every packet at every stage, `check_exclusions` (`signal_policy.py:2383`, `2422-2425`) covers:
+      - the engagement identity keys and `billing_guidelines_id`, also in `provenance.engagement_identity`;
+      - each signal's person, meeting ID, file name, organizer and attendees;
+      - each entry's person, engagement ID and submitted codes.
+    - `--person` still accepts the labels, because re-derivation replays the withheld `other-timekeeper-name-N` labels.
+  - **Docs.** #13.10 lists the reserved fields (all six copies). The README is updated.
+- **R15-02 (class r15-B): validate the raw-record grammar before excluding a record by scope.**
+  - **Defect.** A workplan row with `engagement_id=ENG-OTHER-1`, `item_type=TBD` and `match_key=FOREIGN-KEY` was skipped as foreign before its item type and match key were checked, and passed.
+  - **Fix.** Every raw parser was audited for a skip that runs before field validation. Each site now validates first:
+    - Workplan. The item-type enum, blank-key and reserved-form checks now run before the foreign-engagement `continue` (`activity_pull.py:358-368`). This supersedes the round 17 sweep D note that such rows were skipped before any other field was read. Row uniqueness is still per engagement.
+    - Calendar and document exports. The person, ID, reserved-form, duplicate-ID, date, start/end or duration, organizer, attendee and file-name checks now run before the other-timekeeper skip (`414`), the other-engagement skip (`415-421`) and the out-of-period skip (`424`), at `activity_pull.py:394-412`. A duplicate activity ID across timekeepers is now refused.
+    - Timesheet. The person, entry-ID, duplicate, date, hours, link and phase/task-code checks now run before the other-timekeeper skip (`511`) and the out-of-period skip (`514`), at `activity_pull.py:493-509`.
+    - Not raw parsers, so unchanged: `verify_scope_source` (its only skip is for a disabled source, which is policy), and the packet-level loops in `billing_rules`, `exception_report` and `signal_policy`.
+  - **Privacy.** A colleague's row is still never read into the packet. A refusal names the file and row only, never a value, and #13.10 is clarified.
+  - **Docs.** #8.4 (all six copies), the README and activity-pull SKILL.md are updated.
+- **R15-03 (class r15-C): section ownership and declared-field recognition normalise syntactic variants.**
+  - **Defect.** The letter with `## Appendix` and `  - client_name: Another Client` (or `* client_name: ...`) appended was silently accepted. `ENGAGEMENT_LABEL_RE` matched only an unindented `-` bullet, so a variant was read as prose.
+  - **Fix.** `signal_policy.engagement_field` (`signal_policy.py:706`) recognises a declared field line after normalising:
+    - leading whitespace and `>`;
+    - `-`, `*`, `+`, `•`, numbered and task-box bullets, and table rows;
+    - bold, italic, strike and code wrappers on the key;
+    - key case, spacing and separators;
+    - `:`, `=`, `|`, full-width and dash separators.
+
+    It returns `(field, value, separated)`. `_headings` (`signal_policy.py:738`) normalises ATX headings (any indent, `#` count, spacing, closing hashes, a quote, wrappers, a number, a trailing colon) and setext headings. `read_engagement` (`signal_policy.py:757`) then:
+    - accepts a separated field inside the one Engagement section;
+    - refuses any other line there;
+    - refuses a declared field outside the section in any form, with or without a separator, or as a heading.
+
+    Prose and undeclared labels outside the section (for example `Client contact: Jamie Ortiz`) are still accepted. The letter is the only markdown raw parser: `client-billing-guidelines-extract.md`, `code-structure.md` and `mailbox-summary.txt` are never parsed (#8.3), so no other site has the gap.
+  - **Docs.** #8.4 (all six copies), the README and activity-pull SKILL.md are updated.
+- **Tests.** 1263 to 1283 checks (`qa15_tests`, 20 checks):
+  - every reproducer, at activity-pull and at each of the four re-deriving stages;
+  - the reserved label in every ID-bearing raw field, every letter field and the packet, in case, separator and whitespace variants;
+  - malformed cells in foreign, colleague and out-of-period rows of every raw export;
+  - 22 outside-the-section field variants, inside-the-section variants and a duplicate given as a variant;
+  - eight heading variants of the one section, and five forms of a second section;
+  - controls: scenario A, an ID that only resembles a label, well-formed foreign, colleague and out-of-period rows, and prose outside the section.
+
+  Two `drqg17_tests` expectations encoded the defective behaviour and were retargeted, with the count unchanged:
+  - a `*` bullet field in the section is now accepted (moved into the letter control);
+  - the foreign workplan row control now uses a valid item type, since a `TBD` one is refused.
+
+  Goldens and demo data are byte-identical.
+
 ### Tests and goldens
+- QA round 15 on 1.0.4: 1263 to 1283 checks (`qa15_tests`, 20 checks; see the QA round 15 section). Goldens are byte-identical.
 - DRQG QA round 17 class sweep: 1252 to 1263 checks (`drqg17_tests`, 11 checks; see the DRQG round 17 section). Goldens are byte-identical.
 - DRQG QA round 16 class sweep: 1239 to 1252 checks (`drqg16_tests`, 13 checks; see the DRQG round 16 section). Goldens are byte-identical.
 - Mobilization QA round 20 class sweep: 1221 to 1239 checks (`mob20_tests`, 18 checks; see the Mobilization round 20 section). Goldens are byte-identical.

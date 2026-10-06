@@ -8150,8 +8150,6 @@ def drqg17_tests(tmp):
             ("an optional field without its colon",
              lambda t: t.replace("- engagement_manager: Dana Whitfield", "- engagement_manager Dana Whitfield")),
             ("an undeclared label", lambda t: t.replace(fields, fields + "- Responsible partner: Jordan Kim\n")),
-            ("a field in another bullet style",
-             lambda t: re.sub(r"- (billing_guidelines_id:)", r"* \1", t, count=1)),
             ("a declared field moved out of the section",
              lambda t: re.sub(r"(- billing_guidelines_id:[^\n]*\n)", "", t, count=1)
              + "- billing_guidelines_id: OCG-SYNTH-2026-09\n"),
@@ -8163,14 +8161,16 @@ def drqg17_tests(tmp):
                 and _mob20_quiet(msg, raw, tmp, "TBD", "Jordan", "Dana", "Other Client", "OCG-SYNTH")):
             missed.append((label, code, msg[:160]))
     check("drqg17 letter: an unrecognised line in the Engagement section ('TBD', a field without its colon, an "
-          "undeclared label, another bullet style), a declared field outside it, and a missing or repeated section "
-          "are refused by activity_pull (exit 1, nothing written, no line text echoed)", not missed, missed)
-    raw, code, msg, packet, _ = pulled("drqg17-lctl", letter_edit(lambda t: t.replace(
-        "## Engagement\n", "### Engagement ##\n\n").replace(fields, fields + "  \n").replace(
-        "## Billing terms\n", "## Billing terms\nNote: TBD\n- Rate card: standard rates apply\n")))
-    check("drqg17 letter control: a heading variant ('### Engagement ##'), blank lines in the section and prose or "
-          "colon lines in the unread billing-terms section give the same packet", code == 0 and packet == baseline_b,
-          msg[:160])
+          "undeclared label), a declared field outside it, and a missing or repeated section are refused by "
+          "activity_pull (exit 1, nothing written, no line text echoed)", not missed, missed)
+    # T&E QA round 15 (r15-C): a field in another bullet style is the same field, accepted in the section (qa15_tests).
+    raw, code, msg, packet, _ = pulled("drqg17-lctl", letter_edit(lambda t: re.sub(
+        r"- (billing_guidelines_id:)", r"* \1", t.replace(
+            "## Engagement\n", "### Engagement ##\n\n").replace(fields, fields + "  \n").replace(
+            "## Billing terms\n", "## Billing terms\nNote: TBD\n- Rate card: standard rates apply\n"), count=1)))
+    check("drqg17 letter control: a heading variant ('### Engagement ##'), a field in another bullet style, blank "
+          "lines in the section and prose or colon lines in the unread billing-terms section give the same packet",
+          code == 0 and packet == baseline_b, msg[:160])
 
     # 2. Raw CSV exports: a row that is not a record (no timekeeper, a lone or comment line) is refused in every scope;
     #    before this sweep a self-scoped run skipped a row with a blank person as if it were a colleague's.
@@ -8290,11 +8290,284 @@ def drqg17_tests(tmp):
     check("drqg17 named colleagues: a --requester in the reserved label form is refused (exit 1, nothing written)",
           code == 1 and packet is None and not os.path.exists(out) and "#13.10" in msg, msg[:160])
     raw, code, msg, packet, _ = pulled("drqg17-wp-foreign", lambda raw: _append_csv_row(
-        raw, "engagement-workplan.csv", 1, workplan_id="WP-ZZ-01", engagement_id="ENG-ATLAS-77", item_type="TBD",
+        raw, "engagement-workplan.csv", 1, workplan_id="WP-ZZ-01", engagement_id="ENG-ATLAS-77",
         purpose="Atlas Credit Partners diligence", deliverable="Atlas term sheet"))
-    check("drqg17 another engagement's workplan row: never read further or joined (even one sharing a match key, with "
-          "an unrecognised item type), so the packet is unchanged and none of its text appears",
+    check("drqg17 another engagement's well-formed workplan row: never read further or joined (even one sharing a "
+          "match key), so the packet is unchanged and none of its text appears (a malformed one is refused, "
+          "qa15_tests)",
           code == 0 and packet == baseline_b and not DRQG16_LEAK_RE.search(json.dumps(packet)), msg[:160])
+
+
+# --- T&E QA round 15: reserved labels in every ID field (r15-A); grammar before scope (r15-B); field and heading
+#     syntax normalised before a letter line is read as prose (r15-C) -----------------------------------------------
+QA15_LETTER = "engagement-letter-extract.md"
+QA15_OTHER = "Another Client"
+
+
+def qa15_tests(tmp):
+    """T&E QA round 15 of 8aed3ad. r15-A (#13.10): no ID-bearing field - letter fields, workplan IDs, engagement IDs,
+    match keys, activity, event, entry and code IDs, file names and timekeeper names - may take the engines'
+    positional-label form, in any case, spacing or separator; the raw exports and the packet are both checked.
+    r15-B (#8.4): every raw row's grammar and enums are checked before its engagement, timekeeper or date can exclude
+    it. r15-C (#8.4): field lines and headings in the engagement letter are recognised after their syntax is
+    normalised, so a variant is accepted inside the Engagement section and refused outside it."""
+    sp = MODULES["narrative_draft"].signal_policy
+    raw_a = os.path.join(ROOT, "demo-data", "scenario-a-happy", "raw")
+    text_a = read_text(os.path.join(raw_a, QA15_LETTER))
+    fields = re.search(r"## Engagement\n((?:- [^\n]*\n)+)", text_a).group(1)
+
+    def pulled(tag, edit, argv=SCENARIO_A_ARGS):
+        raw = raw_copy(tmp, tag, "scenario-a-happy")
+        edit(raw)
+        return (raw,) + pull(tmp, tag, raw, *argv)
+
+    def letter(fn):
+        return lambda raw: _write_raw(raw, QA15_LETTER, fn(read_text(os.path.join(raw, QA15_LETTER))))
+
+    def refused(result, *values, cite=None):
+        raw, code, msg, packet, out = result
+        return (code == 1 and packet is None and not os.path.exists(out) and _mob20_quiet(msg, raw, tmp, *values)
+                and not any(v and str(v).lower() in msg.lower() for v in values) and (cite is None or cite in msg))
+
+    def later_refuse(tag, raw):
+        """Every later stage given this raw folder re-derives the packet and refuses the same way."""
+        missed = []
+        for engine, flag, golden in QA12_STAGES:
+            src = os.path.join(ROOT, "demo-data", "scenario-a-happy", "expected", golden) if golden else \
+                os.path.join(ROOT, "demo-data", "scenario-a-happy", "activity.json")
+            dst = os.path.join(tmp, f"{tag}-{engine}.out")
+            code, msg = run(engine, flag, src, "--raw-dir", raw, "--out", dst, "--generated-at", FIXED_TS)
+            if not _qa16_refused(code, os.path.exists(dst), msg, raw, tmp):
+                missed.append((engine, code, msg[:160]))
+        return missed
+
+    _, code, msg, baseline, _ = pulled("qa15-base", lambda raw: None)
+    golden_a = _golden("scenario-a-happy", "activity.json")
+    same = code == 0 and dict(baseline, provenance=dict(baseline["provenance"], demo_scenario="scenario-a-happy")) \
+        == golden_a
+    check("qa15 control: a copy of scenario A's raw exports still pulls (exit 0) and equals the shipped golden activity "
+          "packet (but for demo_scenario, which a copy outside demo-data does not carry)", same, msg[:160])
+
+    # --- r15-A: the reserved-label namespace is enforced in every ID-bearing field ---------------------------------
+    def every_file(value):
+        def edit(raw):
+            for name in (QA15_LETTER, "engagement-workplan.csv", "calendar-export.csv", "document-activity-log.csv"):
+                _write_raw(raw, name, read_text(os.path.join(raw, name)).replace("ENG-SYN-042", value))
+        return edit
+    result = pulled("qa15-a-repro", every_file("other-engagement-signal-1"))
+    check("qa15 R15-01 reproducer: engagement_id other-engagement-signal-1 given consistently in the letter, workplan, "
+          "calendar and document exports is refused by activity_pull citing #13.10 (exit 1, nothing written, the "
+          "value never repeated)", refused(result, "other-engagement-signal-1", cite="#13.10"), result[2][:160])
+    later = later_refuse("qa15-a-repro", result[0])
+    check("qa15 R15-01 reproducer: every later stage given that raw folder (--raw-dir) refuses it too", not later, later)
+    missed = []
+    for i, value in enumerate(("Other-Engagement-Signal-1", "OTHER_ENGAGEMENT_SIGNAL_1", "other.engagement.signal.1",
+                               "Calendar-Export-Row-4", "document_activity_log_row_2", "Timesheet-Row-3")):
+        result = pulled(f"qa15-a-var{i}", every_file(value))
+        if not refused(result, value, cite="#13.10"):
+            missed.append((value, result[1], result[2][:160]))
+    result = pulled("qa15-a-ws", letter(lambda t: t.replace("- engagement_id: ENG-SYN-042",
+                                                             "- engagement_id:    Other-Engagement-Signal-1   ")))
+    if not refused(result, "Other-Engagement-Signal-1", cite="#13.10"):
+        missed.append(("surrounding whitespace in the letter", result[1], result[2][:160]))
+    check("qa15 r15-A variants: the engagement ID in any case, separator or surrounding whitespace, and in every "
+          "<file>-row-N form, is refused (#13.10)", not missed, missed)
+
+    missed = []
+    for i, (label, filename, column, value) in enumerate((
+            ("workplan_id", "engagement-workplan.csv", "workplan_id", "Engagement-Workplan-Row-2"),
+            ("workplan match_key", "engagement-workplan.csv", "match_key", "calendar-export-row-2"),
+            ("workplan activity_class", "engagement-workplan.csv", "activity_class", "other-timekeeper-signal-1"),
+            ("calendar event_id (reproducer)", "calendar-export.csv", "event_id", "other-timekeeper-signal-1"),
+            ("calendar engagement_id", "calendar-export.csv", "engagement_id", "Other_Engagement_Entry_2"),
+            ("calendar person", "calendar-export.csv", "person", "Other Timekeeper Name 1"),
+            ("calendar organizer", "calendar-export.csv", "organizer", "other-timekeeper-name-2"),
+            ("calendar attendee", "calendar-export.csv", "attendees", "Orion product lead; other-timekeeper-name-3"),
+            ("document engagement_id", "document-activity-log.csv", "engagement_id", "OTHER-ENGAGEMENT-SIGNAL-7"),
+            ("document file_name", "document-activity-log.csv", "file_name", "code-structure-row-5"),
+            ("document person", "document-activity-log.csv", "person", "OTHER-TIMEKEEPER-NAME-1"),
+            ("timesheet phase_code (reproducer)", "timesheet.csv", "phase_code", "calendar-export-row-9"),
+            ("timesheet task_code", "timesheet.csv", "task_code", "Mailbox-Summary-Row-1"),
+            ("timesheet person", "timesheet.csv", "person", "other-timekeeper-name-1"))):
+        result = pulled(f"qa15-a-f{i}", lambda raw, f=filename, c=column, v=value: edit_csv(raw, f, 1, c, v))
+        shown = value.split(";")[-1].strip()
+        if not refused(result, shown, cite="#13.10"):
+            missed.append((label, result[1], result[2][:160]))
+    for i, (key, value) in enumerate((("engagement_manager", "Other-Timekeeper-Name-1"),
+                                      ("billing_guidelines_id", "engagement-letter-extract-row-2"),
+                                      ("client_name", "Other Engagement Entry 4"),
+                                      ("matter_name", "other_engagement_signal_9"))):
+        result = pulled(f"qa15-a-l{i}", letter(lambda t, k=key, v=value: re.sub(
+            rf"(- {k}:)[^\n]*", lambda m: f"{m.group(1)} {v}", t, count=1)))
+        if not refused(result, value, cite="#13.10"):
+            missed.append((f"letter {key}", result[1], result[2][:160]))
+    check("qa15 r15-A every ID-bearing field: a workplan ID, match key or activity class, a calendar event, "
+          "engagement, person, organizer or attendee, a document engagement, file name or person, a timesheet phase "
+          "or task code or person, and every engagement-letter field in the reserved label form (any spelling) is "
+          "refused by activity_pull citing #13.10, the value never repeated", not missed, missed)
+
+    base = _golden("scenario-a-happy", "activity.json")
+    missed = []
+    for i, (label, mutate, value) in enumerate((
+            ("engagement_id and identity", lambda p: (p["engagement"].update(engagement_id="other-engagement-signal-1"),
+                                                      p["provenance"]["engagement_identity"].update(
+                                                          engagement_id="other-engagement-signal-1")),
+             "other-engagement-signal-1"),
+            ("an entry's submitted phase code", lambda p: entry(p, "TE-A-001").update(
+                submitted_phase_code="Calendar-Export-Row-9"), "Calendar-Export-Row-9"),
+            ("a signal's meeting_id", lambda p: p["activity_signals"][0].update(meeting_id="other-timekeeper-signal-1"),
+             "other-timekeeper-signal-1"))):
+        pkt = copy.deepcopy(base)
+        mutate(pkt)
+        code, msg, wrote, _ = _engine_on(tmp, f"qa15-a-p{i}", "narrative_draft", "--activity", pkt)
+        if not (code == 1 and not wrote and value.lower() not in msg.lower() and "#13.10" in msg):
+            missed.append((label, code, msg[:160]))
+    check("qa15 r15-A packet: a forged activity packet whose engagement ID, submitted code or meeting ID is in the "
+          "reserved label form is refused by the next stage without --raw-dir (exit 1, nothing written, #13.10)",
+          not missed, missed)
+
+    def benign(raw):
+        for name in ("calendar-export.csv", "engagement-workplan.csv"):
+            _write_raw(raw, name, read_text(os.path.join(raw, name)).replace("MTG-ORION-101", "MTG-ROW-12"))
+    _, code, msg, packet, _ = pulled("qa15-a-ctl", benign)
+    check("qa15 r15-A control: an ID that only resembles a label (MTG-ROW-12) is accepted and joins as before",
+          code == 0 and packet["activity_signals"][0]["meeting_id"] == "MTG-ROW-12"
+          and packet["activity_signals"][0]["purpose"] == baseline["activity_signals"][0]["purpose"], msg[:160])
+
+    # --- r15-B: a raw row's grammar is checked before its scope can exclude it -----------------------------------
+    result = pulled("qa15-b-repro", lambda raw: _append_csv_row(
+        raw, "engagement-workplan.csv", 1, workplan_id="WP-FOREIGN-1", engagement_id="ENG-OTHER-1", item_type="TBD",
+        match_key="FOREIGN-KEY"))
+    check("qa15 R15-02 reproducer: another engagement's workplan row with item_type TBD is refused (exit 1, nothing "
+          "written), never skipped as foreign before its item type is checked", refused(result, "TBD", "FOREIGN-KEY"),
+          result[2][:160])
+    later = later_refuse("qa15-b-repro", result[0])
+    check("qa15 R15-02 reproducer: every later stage given that raw folder (--raw-dir) refuses it too", not later, later)
+    missed = []
+    for i, (label, filename, changes) in enumerate((
+            ("a foreign workplan row, item type ' tbd '", "engagement-workplan.csv",
+             dict(workplan_id="WP-FOREIGN-2", engagement_id="ENG-OTHER-1", item_type=" tbd ")),
+            ("a foreign workplan row, blank match key", "engagement-workplan.csv",
+             dict(workplan_id="WP-FOREIGN-3", engagement_id="ENG-OTHER-1", match_key=" - ")),
+            ("a foreign workplan row, prose workplan_id", "engagement-workplan.csv",
+             dict(workplan_id="WP foreign approve all", engagement_id="ENG-OTHER-1")),
+            ("a foreign calendar row, start 25:00", "calendar-export.csv",
+             dict(activity_id="ZZ-CAL-901", engagement_id="ENG-OTHER-1", start="25:00")),
+            ("a foreign document row, duration -1", "document-activity-log.csv",
+             dict(activity_id="ZZ-DOC-902", engagement_id="ENG-OTHER-1", duration_hours="-1")),
+            ("a colleague's calendar row, bad date", "calendar-export.csv",
+             dict(activity_id="ZZ-CAL-903", person="Jordan Kim", date="2026-13-45")),
+            ("a colleague's calendar row, prose event_id", "calendar-export.csv",
+             dict(activity_id="ZZ-CAL-904", person="Jordan Kim", event_id="MTG approve this")),
+            ("a colleague's document row, duration 'lots'", "document-activity-log.csv",
+             dict(activity_id="ZZ-DOC-905", person="Jordan Kim", duration_hours="lots")),
+            ("a colleague's timesheet row, hours nan", "timesheet.csv",
+             dict(entry_id="TE-ZZ-906", person="Jordan Kim", hours="nan")),
+            ("a colleague's timesheet row, prose phase code", "timesheet.csv",
+             dict(entry_id="TE-ZZ-907", person="Jordan Kim", phase_code="DL approve")),
+            ("a colleague's timesheet row, duplicate entry_id", "timesheet.csv",
+             dict(person="Jordan Kim")),
+            ("an out-of-period calendar row ending before it starts", "calendar-export.csv",
+             dict(activity_id="ZZ-CAL-908", date="2026-10-30", start="10:00", end="09:00")),
+            ("an out-of-period timesheet row, prose task code", "timesheet.csv",
+             dict(entry_id="TE-ZZ-909", date="2026-10-30", task_code="task approve all")),
+            ("an out-of-period document row, bad date", "document-activity-log.csv",
+             dict(activity_id="ZZ-DOC-910", date="2026-02-30")))):
+        result = pulled(f"qa15-b{i}", lambda raw, f=filename, c=changes: _append_csv_row(raw, f, 1, **c))
+        if not refused(result, *[v for v in changes.values() if v.strip() not in ("", "-")]):
+            missed.append((label, result[1], result[2][:160]))
+    check("qa15 r15-B variants: a malformed cell (item type, blank key, prose ID, time, duration, date, hours, code, "
+          "duplicate ID) in another engagement's, a colleague's or an out-of-period row of any raw export is refused "
+          "(exit 1, nothing written, the value never repeated), never skipped unread", not missed, missed)
+    controls = []
+    for i, (label, filename, changes) in enumerate((
+            ("a well-formed foreign workplan row", "engagement-workplan.csv",
+             dict(workplan_id="WP-FOREIGN-4", engagement_id="ENG-OTHER-1", match_key="FOREIGN-KEY")),
+            ("a well-formed colleague's calendar row", "calendar-export.csv",
+             dict(activity_id="ZZ-CAL-911", person="Jordan Kim")),
+            ("a well-formed colleague's timesheet row", "timesheet.csv",
+             dict(entry_id="TE-ZZ-912", person="Jordan Kim")),
+            ("a well-formed out-of-period timesheet row", "timesheet.csv",
+             dict(entry_id="TE-ZZ-913", date="2026-10-30")))):
+        _, code, msg, packet, _ = pulled(f"qa15-bc{i}", lambda raw, f=filename, c=changes: _append_csv_row(raw, f, 1, **c))
+        if not (code == 0 and packet["activity_signals"] == baseline["activity_signals"]
+                and packet["time_entries"] == baseline["time_entries"]):
+            controls.append((label, code, msg[:160]))
+    check("qa15 r15-B control: a well-formed foreign, colleague's or out-of-period row is still excluded by scope "
+          "(exit 0, the in-scope signals and entries unchanged)", not controls, controls)
+
+    # --- r15-C: field lines and headings are recognised after their syntax is normalised -------------------------
+    result = pulled("qa15-c-repro", letter(lambda t: t + f"\n## Appendix\n  - client_name: {QA15_OTHER}\n"))
+    check("qa15 R15-03 reproducer: an indented '  - client_name:' under '## Appendix' is refused as a declared field "
+          "outside the Engagement section (exit 1, nothing written, the value never repeated)",
+          refused(result, QA15_OTHER, cite="#8.4"), result[2][:160])
+    later = later_refuse("qa15-c-repro", result[0])
+    check("qa15 R15-03 reproducer: every later stage given that raw folder (--raw-dir) refuses it too", not later, later)
+    missed = []
+    for i, line in enumerate((
+            f"* client_name: {QA15_OTHER}", f"+ client_name: {QA15_OTHER}", f"1. client_name: {QA15_OTHER}",
+            f"2) client_name: {QA15_OTHER}", f"\t- client_name: {QA15_OTHER}", f"    * client_name: {QA15_OTHER}",
+            f"- **client_name**: {QA15_OTHER}", f"- **client_name:** {QA15_OTHER}", f"- `client_name`: {QA15_OTHER}",
+            f"- _Client Name_: {QA15_OTHER}", f"- CLIENT_NAME : {QA15_OTHER}", f"- ClientName: {QA15_OTHER}",
+            f"- client-name = {QA15_OTHER}", f"client_name: {QA15_OTHER}", f"> - client_name: {QA15_OTHER}",
+            f"| client_name | {QA15_OTHER} |", f"- client_name \u2014 {QA15_OTHER}", f"- client_name\uff1a {QA15_OTHER}",
+            f"- client_name {QA15_OTHER}", f"### client_name: {QA15_OTHER}", f"- [ ] matter_name: {QA15_OTHER}",
+            f"- Engagement Manager: {QA15_OTHER}")):
+        result = pulled(f"qa15-c{i}", letter(lambda t, ln=line: t + f"\n## Appendix\n{ln}\n"))
+        if not refused(result, QA15_OTHER):
+            missed.append((line, result[1], result[2][:160]))
+    check("qa15 r15-C outside variants: a declared field outside the Engagement section in any bullet (-, *, +, "
+          "numbered, task box, quote, table), indentation, wrapper (bold, code, italic), key case or spacing, separator "
+          "(':', '=', dash, full-width colon, none) or heading form is refused (exit 1, nothing written)",
+          not missed, missed)
+    variants = ("* engagement_id: ENG-SYN-042\n"
+                "  + **Client Name**: Orion Advisory Cooperative\n"
+                "1. `matter_name`: Billing Controls Implementation\n"
+                "- Billing-Guidelines-ID : OCG-SYNTH-2026-09\n"
+                "- **engagement_manager:** Dana Whitfield\n")
+    _, code, msg, packet, _ = pulled("qa15-c-in", letter(lambda t: t.replace(fields, variants)))
+    check("qa15 r15-C inside variants: the same five fields written with other bullets, numbering, indentation, "
+          "wrappers, key case and spacing are accepted in the Engagement section and give the same packet",
+          code == 0 and packet == baseline, msg[:160])
+    result = pulled("qa15-c-dup", letter(lambda t: t.replace(fields, fields + f"* Client Name: {QA15_OTHER}\n")))
+    check("qa15 r15-C inside variants: a variant spelling of a field already given in the section is the same field "
+          "given twice and is refused", refused(result, QA15_OTHER), result[2][:160])
+    missed = []
+    for i, heading in enumerate(("##Engagement", "  ## **Engagement**", "## Engagement:", "## 1. Engagement",
+                                 "#### ENGAGEMENT ####", "> ## Engagement", "\nEngagement\n----------",
+                                 "\n`Engagement`\n==========")):
+        _, code, msg, packet, _ = pulled(f"qa15-h{i}", letter(lambda t, h=heading: t.replace("## Engagement", h, 1)))
+        if not (code == 0 and packet == baseline):
+            missed.append((heading, code, msg[:160]))
+    check("qa15 r15-C heading variants: the Engagement heading with no space, indentation, a quote, wrappers, a "
+          "trailing colon, a number, another level or a setext underline is still the one Engagement section",
+          not missed, missed)
+    missed = []
+    for i, extra in enumerate(("\n##engagement\n", "\n## **Engagement**\n", "\n### Engagement:\n",
+                               "\nEngagement\n==========\n", f"\n## 2. ENGAGEMENT\n- client_name: {QA15_OTHER}\n")):
+        result = pulled(f"qa15-h2{i}", letter(lambda t, e=extra: t + e))
+        if not refused(result, QA15_OTHER):
+            missed.append((extra.strip(), result[1], result[2][:160]))
+    check("qa15 r15-C heading variants: a second Engagement section in any heading variant is a repeated section "
+          "and is refused", not missed, missed)
+    prose = ("\n## Notes\n"
+             "The client name on every invoice must match the engagement letter.\n"
+             "Client contact: Jamie Ortiz\n"
+             "Note: client_name above is the legal entity.\n"
+             "- Matter: billing controls; engagement manager approval is required.\n"
+             "1. Client meetings - billed at standard rates\n")
+    _, code, msg, packet, _ = pulled("qa15-c-prose", letter(lambda t: t + prose))
+    check("qa15 r15-C control: prose and undeclared labels outside the section that mention the client, matter or "
+          "engagement manager are accepted and change nothing", code == 0 and packet == baseline, msg[:160])
+    try:
+        sp.read_engagement(os.path.join(raw_copy(tmp, "qa15-c-unit", "scenario-a-happy"), QA15_LETTER), sp.PolicyError)
+        ok = sp.engagement_field("  * **Client Name:** Orion") == ("client_name", "Orion", True) \
+            and sp.engagement_field("- client_name Orion") == ("client_name", None, False) \
+            and sp.engagement_field("- Client contact: Jamie") is None
+    except sp.PolicyError as exc:
+        ok = str(exc)
+    check("qa15 r15-C shared parser: signal_policy.engagement_field normalises the line (field, value, separated) "
+          "and leaves undeclared labels alone", ok is True, ok)
 
 
 # Every group in canonical order: (function, runs inside defence_in_depth()). A group's name is its function's name.
@@ -8336,6 +8609,7 @@ GROUPS = (
     (mob20_tests, False),
     (drqg16_tests, False),
     (drqg17_tests, False),
+    (qa15_tests, False),
 )
 GROUP_NAMES = tuple(fn.__name__ for fn, _ in GROUPS)
 # Groups that read state an earlier group leaves behind; --group runs these first. qa13_tests requires the real gate to

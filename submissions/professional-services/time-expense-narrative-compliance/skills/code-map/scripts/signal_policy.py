@@ -103,7 +103,11 @@ OTHER_ENGAGEMENT_ENTRY_REASON = "engagement scope names another engagement; excl
 # a well-formed ID is not trusted on a foreign record, and none of its fields is carried into any output. Supplied IDs
 # in this reserved form are refused, so a label never names an in-scope record.
 FOREIGN_CITATION = "client-billing-guidelines.md #13.10"
-POSITIONAL_LABEL_RE = re.compile(r"(?:calendar export|document activity log) row [1-9][0-9]*"
+# T&E QA round 15: the whole <raw file>-row-N namespace is reserved (every raw file the plugin reads or ships), not only
+# the two exports whose rows are labelled today, so a label can never name an in-scope record in any ID-bearing field.
+POSITIONAL_LABEL_RE = re.compile(r"(?:calendar export|document activity log|timesheet|engagement workplan"
+                                 r"|engagement letter extract|mailbox summary|client billing guidelines extract"
+                                 r"|code structure) row [1-9][0-9]*"
                                  r"|other (?:engagement|timekeeper) (?:signal|entry|name) [1-9][0-9]*")
 SIGNAL_POLICY_VERSION = "signal_policy/1.0.4"
 TEAM_VIEW_PREFIX = "engagement-manager:"
@@ -201,6 +205,17 @@ def engagement_identity(engagement, citations):
 def positional_label(value):
     """True when an ID has the engines' reserved positional-label form (#13.10), compared in canonical form (A13)."""
     return isinstance(value, str) and bool(POSITIONAL_LABEL_RE.fullmatch(canon_id(value)))
+
+
+def refuse_reserved(value, where, error):
+    """#13.10 (T&E QA round 15): the one check every ID-bearing field goes through - engagement, workplan, activity,
+    event, entry and code IDs, match keys, file names and timekeeper names, in the raw exports, the engagement letter
+    and the packet. A value in the engines' positional-label form (any case, spacing or separator, A13) is refused, so
+    a label never names an in-scope record. The error names the field, never the value."""
+    if positional_label(value):
+        raise error(f"{where} has the reserved positional-label form the engines give another party's records "
+                    f"({FOREIGN_CITATION}); rename the record")
+    return value
 
 
 def raw_row_label(filename, row):
@@ -593,17 +608,36 @@ RAW_LETTER = "raw/" + ENGAGEMENT_FILE
 ENGAGEMENT_FIELDS = ("engagement_id", "client_name", "matter_name", "billing_guidelines_id", "engagement_manager")
 # One labelled field per line. The text is split with str.splitlines() (every line boundary, including U+2028, \x85
 # and \x0b-\x0c), and the value can never cross a line, so a blank field can't take the next line as its value.
-# Labels compare in canonical form (A11, A13): "- Engagement-ID:" is engagement_id, so a variant spelling can neither
-# be ignored next to the declared label nor shadow it - it is the same field given twice.
-ENGAGEMENT_LABEL_RE = re.compile(r"- ([^:\r\n]{1,60}):([^\r\n]*)")
-ENGAGEMENT_LABELS = {canon_id(f): f for f in ENGAGEMENT_FIELDS}
+# Labels compare in canonical form (A11, A13) with every separator and space removed: "- Engagement-ID:",
+# "- EngagementID:" and "- engagement_id:" are one field, so a variant spelling can neither be ignored next to the
+# declared label nor shadow it - it is the same field given twice.
+ENGAGEMENT_LABELS = {canon_id(f).replace(" ", ""): f for f in ENGAGEMENT_FIELDS}
+# T&E QA round 15 (#8.4): whether a line is a labelled field is decided after normalising its syntax, never by one
+# narrow pattern, so a variant can neither be skipped as prose outside the section nor refused as unrecognised inside
+# it. Stripped before the label: indentation, '>' quotes, table pipes, -, *, + and other bullet glyphs, numbered items
+# ("1." "1)" "(1)") and task boxes; around the label: bold, italic, code and strike wrappers and escapes. The label
+# ends at the first ':' or '=' (or a full-width form), a table '|', a dash or a spaced hyphen.
+_FIELD_LEAD_RE = re.compile(r"(?:\s|>|\||[-*+\u2022\u2023\u2043\u2219\u25aa\u25cf\u25e6\u00b7\u2013\u2014]"
+                            r"|\(?[0-9]{1,9}[.)]|\[[ xX]?\])*")
+_FIELD_SEP_RE = re.compile(r"[:=|\uff1a\ufe13\ufe55\uff1d\ufe66\uff5c\u2013\u2014]|\s-\s")
+_WRAP_EDGES_RE = re.compile(r"^[\s*_`~\\]+|[\s*_`~\\]+$")
+_WRAP_CHARS = "*_`~"
+FIELD_LABEL_MAX = 60
 # #8.4 (DRQG QA round 17): the fields are read only from the letter's one "## Engagement" section (any heading level,
 # compared in canonical form), which holds nothing but labelled fields and blank lines. An unrecognised line there
 # ("TBD", "- Responsible partner: ...", "engagement_manager Dana") is refused, never skipped, and a declared field
 # outside the section is refused too, so a field can never be lost or read from prose. Other sections (billing terms)
-# are not read.
+# are not read. T&E QA round 15: headings are normalised the same way - any indentation or quote, any number of '#'
+# with or without a space, a closing '#' run, wrappers, a trailing ':' or '.', a leading item number, and a setext
+# underline ('===' or '---' under a line that starts a block) - so a heading variant can neither hide a second
+# Engagement section nor leave fields outside the section unseen. A declared field written as a heading is refused.
 ENGAGEMENT_SECTION = "engagement"
-HEADING_RE = re.compile(r" {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*")
+_ATX_RE = re.compile(r"[\s>]*(#+)(.*)")
+_ATX_CLOSE_RE = re.compile(r"(?:^|\s)#+\s*$")
+_SETEXT_RULE_RE = re.compile(r"[ \t]{0,3}(?:=+|-+)[ \t]*")
+_LIST_ITEM_RE = re.compile(r"\s*(?:[-*+\u2022]|\(?[0-9]{1,9}[.)])(?:\s|$)")
+_HEADING_EDGES_RE = re.compile(r"^[\s*_`~\\]+|[\s*_`~\\:.]+$")
+_HEADING_NUMBER_RE = re.compile(r"^(?:\(?[0-9]{1,9}[.)]|[A-Za-z][.)])\s+")
 RAW_EXPORTS = {
     "timesheet": ("timesheet.csv", ("entry_id", "date", "person", "hours", "narrative", "activity_ids", "phase_code",
                                     "task_code")),
@@ -662,43 +696,104 @@ def read_raw_csv(path, required, error=PolicyError):
     return rows
 
 
-def _heading(line):
-    """A markdown ATX heading's text in canonical form ("" for a bare "#"), or None when the line is not a heading."""
-    m = HEADING_RE.fullmatch(line)
-    return canon_id(m.group(1) or "") if m else None
+def _field_label(label):
+    """A label in canonical form with wrappers, escapes, separators and spaces removed ("**Client Name**" -> clientname)."""
+    if len(label.strip()) > FIELD_LABEL_MAX:
+        return ""
+    return canon_id(_WRAP_EDGES_RE.sub("", label).replace("\\", "")).replace(" ", "")
+
+
+def engagement_field(line):
+    """(declared field, value, separated) when the line, once its syntax is normalised (T&E QA round 15), names one of
+    ENGAGEMENT_FIELDS; None when it does not. separated is False for a field name with no separator after it
+    ("engagement_manager Dana"): field-shaped, so it is refused outside the section, and unrecognised inside it. The
+    value is the text after the separator with surrounding whitespace (and a wrapper the label opened) trimmed."""
+    lead = _FIELD_LEAD_RE.match(line).end()
+    body = line[lead:]
+    sep = _FIELD_SEP_RE.search(body)
+    field = ENGAGEMENT_LABELS.get(_field_label(body[:sep.start()])) if sep else None
+    if field:
+        value = body[sep.end():]
+        if "|" in line[:lead] or sep.group() in "|\uff5c":
+            value = value.strip().rstrip("|\uff5c")
+        value = value.strip()
+        if re.search(r"[*_`~]", line[:lead]) or body.lstrip()[:1] in _WRAP_CHARS:
+            closing = re.match(r"[*_`~]+(?=\s|$)", value)
+            value = value[closing.end():].strip() if closing else value
+            trailing = re.search(r"(?<=\S)[*_`~]+$", value)
+            if trailing and not value.startswith(trailing.group()):
+                value = value[:trailing.start()].rstrip()
+        return field, value, True
+    first = body.split(None, 1)
+    field = ENGAGEMENT_LABELS.get(_field_label(first[0])) if first else None
+    return (field, None, False) if field else None
+
+
+def _section_key(text):
+    """A heading's text in canonical form, with wrappers, a trailing ':' or '.' and a leading item number removed."""
+    text = _HEADING_NUMBER_RE.sub("", _HEADING_EDGES_RE.sub("", text))
+    return canon_id(_HEADING_EDGES_RE.sub("", text))
+
+
+def _headings(lines):
+    """(heading text per line - None for a line that is not a heading's text line - and the set of setext underline
+    lines). ATX: any indentation or quote, any number of '#', with or without a space, closing '#' run removed. Setext:
+    a '===' or '---' line under a non-list text line that starts a block (first line, or after a blank line or a
+    heading); anything less certain is not a heading, so its lines stay ordinary lines and fail closed."""
+    texts, rules = [], set()
+    for line in lines:
+        m = _ATX_RE.fullmatch(line)
+        texts.append(_ATX_CLOSE_RE.sub("", m.group(2)) if m else None)
+    for n in range(1, len(lines)):
+        prev = lines[n - 1]
+        if (_SETEXT_RULE_RE.fullmatch(lines[n]) and prev.strip() and texts[n - 1] is None and texts[n] is None
+                and (n - 1) not in rules and not _SETEXT_RULE_RE.fullmatch(prev) and not _LIST_ITEM_RE.match(prev)
+                and (n == 1 or not lines[n - 2].strip() or texts[n - 2] is not None or (n - 2) in rules)):
+            texts[n - 1] = prev
+            rules.add(n)
+    return texts, rules
 
 
 def read_engagement(path, error=PolicyError):
     """The engagement letter's labelled fields (activity_pull and the team-view check share it). Each value is the text
-    after the label's colon with surrounding whitespace trimmed (str.strip); nothing else is folded, so case and
+    after the label's separator with surrounding whitespace trimmed (str.strip); nothing else is folded, so case and
     internal spacing are kept and every comparison with a packet value is otherwise exact. The fields are read only
-    from the one Engagement section, which holds nothing else (#8.4)."""
+    from the one Engagement section, which holds nothing else (#8.4). Field lines and headings are recognised after
+    their syntax is normalised (engagement_field, _headings), inside the section and outside it alike."""
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
     except (OSError, UnicodeError) as exc:
         raise error(f"cannot read {ENGAGEMENT_FILE}: {error_text(exc)}") from exc
     lines = text.splitlines()
-    headings = [_heading(line) for line in lines]
-    sections = [n for n, h in enumerate(headings) if h == ENGAGEMENT_SECTION]
+    texts, rules = _headings(lines)
+    sections = [n for n, t in enumerate(texts) if t is not None and _section_key(t) == ENGAGEMENT_SECTION]
     if not sections:
         raise error(f"{ENGAGEMENT_FILE} has no '## Engagement' section; the engagement fields are read only there "
                     "(client-billing-guidelines.md #8.4)")
     if len(sections) > 1:
         raise error(f"{ENGAGEMENT_FILE} has more than one Engagement section (a repeated section is malformed, never "
                     "merged)")
-    start = sections[0]
-    end = next((n for n in range(start + 1, len(lines)) if headings[n] is not None), len(lines))
+    start = sections[0] + (2 if sections[0] + 1 in rules else 1)
+    end = next((n for n in range(start, len(lines)) if texts[n] is not None), len(lines))
     found = []
     for n, line in enumerate(lines):
-        m = ENGAGEMENT_LABEL_RE.fullmatch(line)
-        field = ENGAGEMENT_LABELS.get(canon_id(m.group(1))) if m else None
-        inside = start < n < end
-        if field and not inside:
-            raise error(f"{ENGAGEMENT_FILE} line {n + 1} gives {field} outside the Engagement section; a field is read "
-                        "only there and is refused elsewhere, never skipped (client-billing-guidelines.md #8.4)")
-        if field:
-            found.append((field, m.group(2).strip()))
+        if texts[n] is not None:
+            shaped = engagement_field(texts[n])
+            if shaped:
+                raise error(f"{ENGAGEMENT_FILE} line {n + 1} gives {shaped[0]} as a heading; a field is read only as a "
+                            "labelled line in the Engagement section and is refused elsewhere, never skipped "
+                            "(client-billing-guidelines.md #8.4)")
+            continue
+        if n in rules:
+            continue
+        shaped = engagement_field(line)
+        inside = start <= n < end
+        if shaped and not inside:
+            raise error(f"{ENGAGEMENT_FILE} line {n + 1} gives {shaped[0]} outside the Engagement section; a field is "
+                        "read only there and is refused elsewhere, never skipped (client-billing-guidelines.md #8.4)")
+        if shaped and shaped[2]:
+            found.append((shaped[0], shaped[1]))
         elif inside and line.strip():
             raise error(f"{ENGAGEMENT_FILE} line {n + 1} in the Engagement section is not a labelled engagement field "
                         f"('- <field>: <value>' with one of {', '.join(ENGAGEMENT_FIELDS)}); an unrecognised line is "
@@ -723,6 +818,10 @@ def read_engagement(path, error=PolicyError):
     for key in ("engagement_id", "billing_guidelines_id"):
         if key in fields and not contract_check.valid_record_id(fields[key]):
             raise error(f"{ENGAGEMENT_FILE} {key} is not {contract_check.ID_RULE}")
+    # #13.10 (T&E QA round 15): no identity field of the letter may take the engines' positional-label form.
+    for key in ENGAGEMENT_FIELDS:
+        if key in fields:
+            refuse_reserved(fields[key], f"{ENGAGEMENT_FILE} {key}", error)
     return fields
 
 
@@ -2309,6 +2408,21 @@ def check_exclusions(packet, level):
             if positional_label(link):
                 raise SchemaError(f"invalid input: time_entries[{i}].activity_ids[{j}] has the reserved "
                                   f"positional-label form the engines give another party's records ({FOREIGN_CITATION})")
+    # T&E QA round 15: every other ID-bearing field of the packet's engagement and active records goes through the
+    # same check (refuse_reserved), as activity_pull applies it to the raw exports and the engagement letter.
+    identity = provenance.get("engagement_identity")
+    reserved = [("engagement", packet.get("engagement"), IDENTITY_KEYS + ("billing_guidelines_id",)),
+                ("provenance.engagement_identity", identity, IDENTITY_KEYS)]
+    reserved += [(f"activity_signals[{i}]", s, ("person", "meeting_id", "file_name", "organizer"))
+                 for i, s in enumerate(signals)]
+    reserved += [(f"time_entries[{i}]", e, ("person", "engagement_id", "submitted_phase_code", "submitted_task_code"))
+                 for i, e in enumerate(entries)]
+    for where, record, keys in reserved:
+        for key in keys if isinstance(record, dict) else ():
+            refuse_reserved(record.get(key), f"invalid input: {where}.{key}", SchemaError)
+    for i, signal in enumerate(signals):
+        for j, name in enumerate(signal.get("attendees") or [] if isinstance(signal, dict) else []):
+            refuse_reserved(name, f"invalid input: activity_signals[{i}].attendees[{j}]", SchemaError)
     for i, entry in enumerate(entries):
         for key, barred in (("activity_ids", excluded | out_of_scope), ("cross_person_activity_ids", out_of_scope)):
             for j, link in enumerate(entry.get(key) or []):
