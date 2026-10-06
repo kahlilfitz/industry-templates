@@ -365,7 +365,12 @@ How to read a report:
 - [ ] **D17. Errors don't echo input.** Validation and contract errors name the field path and the
   expected type or value set; they never format the rejected value with `!r` or an f-string, which
   writes untrusted text to stderr. [Wave 1 pre-freeze QA round 5]
+  The field path is untrusted too: it names a member only when the key is in the plugin's own
+  contract vocabulary, and any other key or CSV header appears as a placeholder such as `<member>`.
+  This holds even when the key matches the shape of an identifier.
+  [engagement-mobilization-onboarding-pack 1.0.1 QA round 18]
   Test: put instruction-like text in a field that fails validation; stderr must not contain it.
+  Repeat with a supplied key or header that names another party; stderr must not contain it.
 - [ ] **D18. No skipped subtrees; join adjacent array entries.** Screening recurses into
   `provenance`, `run_metadata` and similar containers, exempting only specific engine-generated
   scalars. Adjacent prose strings in a JSON array are also screened as contiguous runs (the whole
