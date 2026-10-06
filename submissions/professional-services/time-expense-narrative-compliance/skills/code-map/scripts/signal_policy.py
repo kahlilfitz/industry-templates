@@ -98,6 +98,13 @@ ENGAGEMENT_CITATION = "client-billing-guidelines.md #13.3"
 IDENTITY_KEYS = ("engagement_id", "client_name", "matter_name", "engagement_manager")
 OTHER_ENGAGEMENT_REASON = "source or engagement scope names another engagement; excluded and never rendered"
 OTHER_ENGAGEMENT_ENTRY_REASON = "engagement scope names another engagement; excluded and never rendered"
+# #13.10 (DRQG QA round 16): a record identified as another engagement's or another timekeeper's is named only by an
+# engine label built from its position (calendar-export-row-4, other-engagement-signal-3), never by its supplied ID:
+# a well-formed ID is not trusted on a foreign record, and none of its fields is carried into any output. Supplied IDs
+# in this reserved form are refused, so a label never names an in-scope record.
+FOREIGN_CITATION = "client-billing-guidelines.md #13.10"
+POSITIONAL_LABEL_RE = re.compile(r"(?:calendar export|document activity log) row [1-9][0-9]*"
+                                 r"|other (?:engagement|timekeeper) (?:signal|entry|name) [1-9][0-9]*")
 SIGNAL_POLICY_VERSION = "signal_policy/1.0.4"
 TEAM_VIEW_PREFIX = "engagement-manager:"
 TEAM_VIEW_TOKEN_RE = re.compile(r"engagement-manager:[A-Za-z0-9._-]+")
@@ -191,6 +198,23 @@ def engagement_identity(engagement, citations):
                 citations=list(citations) + [ENGAGEMENT_CITATION])
 
 
+def positional_label(value):
+    """True when an ID has the engines' reserved positional-label form (#13.10), compared in canonical form (A13)."""
+    return isinstance(value, str) and bool(POSITIONAL_LABEL_RE.fullmatch(canon_id(value)))
+
+
+def raw_row_label(filename, row):
+    """The label of a raw-export row identified as another party's: calendar-export.csv row 4 -> calendar-export-row-4."""
+    return f"{os.path.splitext(filename)[0]}-row-{row}"
+
+
+def foreign_label(party, kind, position):
+    """The label of a packet record identified as another party's: its 1-based position in the section it was read
+    from (other-engagement-signal-3, other-engagement-entry-2, other-timekeeper-signal-1), or of a colleague a
+    self-scoped requester named (other-timekeeper-name-1, in sorted order)."""
+    return f"other-{party}-{kind}-{position}"
+
+
 def other_engagement_ids(packet):
     """Activity IDs that belong to another engagement (never rendered, #13.3): every stage applies the same set, from
     both identity sources - the records a stage excluded for naming another engagement, and the raw-export rows
@@ -212,7 +236,7 @@ def describe_excluded(links, packet):
     hidden = len(links) - len(shown) - withheld
     # A withheld ID is counted, never quoted: prose never embeds a marker, so a later stage can refuse any embedded
     # marker as supplied (D20).
-    parts = ([", ".join(shown)] if shown else []) \
+    parts = ([id_list(shown)] if shown else []) \
         + ([f"{withheld} withheld ID(s) (flagged as embedded_instruction, {METADATA_CITATION})"] if withheld else []) \
         + ([f"{hidden} from another engagement (not shown, {ENGAGEMENT_CITATION})"] if hidden else [])
     return "; ".join(parts)
@@ -414,16 +438,29 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
     enabled, used = effective_sources(packet, config_path, script_dir, extra_sources)
     provenance = packet.setdefault("provenance", {})
     engagement_id = (packet.get("engagement") or {}).get("engagement_id")
-    # #13.3: another engagement's time entries are dropped first and recorded without their text.
+    # #13.3: another engagement's time entries are dropped first and recorded without their text; #13.10: by their
+    # position, never their supplied entry ID.
     entries = packet.get("time_entries", [])
-    foreign = [e for e in entries if other_engagement(e, engagement_id)]
+    foreign = [n for n, e in enumerate(entries, start=1) if other_engagement(e, engagement_id)]
     if foreign:
         packet["time_entries"] = [e for e in entries if not other_engagement(e, engagement_id)]
         recorded = provenance.setdefault("excluded_entries", [])
         known = {_id_key(e.get("entry_id")) for e in recorded}
-        recorded += [{"entry_id": e.get("entry_id"), "reason": OTHER_ENGAGEMENT_ENTRY_REASON, "excluded_by": engine,
-                      "citations": [ENGAGEMENT_CITATION]} for e in foreign if _id_key(e.get("entry_id")) not in known]
+        for label in (foreign_label("engagement", "entry", n) for n in foreign):
+            if _id_key(label) not in known:
+                recorded.append({"entry_id": label, "reason": OTHER_ENGAGEMENT_ENTRY_REASON, "excluded_by": engine,
+                                 "citations": [ENGAGEMENT_CITATION]})
+                known.add(_id_key(label))
     excluded = list(provenance.get("excluded_signals", []))
+    # #13.10: another engagement's signal, and every link that names it, is recorded under its positional label.
+    labels = {_id_key(s.get("activity_id")): foreign_label("engagement", "signal", n)
+              for n, s in enumerate(packet.get("activity_signals", []), start=1) if other_engagement(s, engagement_id)}
+    relabel = lambda a: a if is_withheld(a) else labels.get(_id_key(a), a)  # noqa: E731
+    if labels:
+        for entry in packet.get("time_entries", []):
+            for name in ("excluded_activity_ids", "cross_person_activity_ids"):
+                if isinstance(entry.get(name), list):
+                    entry[name] = [relabel(a) for a in entry[name]]
     # A13: one activity is recorded once, whatever spelling of its ID a later signal or link uses.
     seen = {_id_key(e.get("activity_id")) for e in excluded}
     kept = []
@@ -433,9 +470,10 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
         if key is not None and enabled.get(key) is True and not foreign:
             kept.append(signal)
             continue
-        if _id_key(signal.get("activity_id")) not in seen:
+        recorded_id = relabel(signal.get("activity_id")) if foreign else signal.get("activity_id")
+        if _id_key(recorded_id) not in seen:
             excluded.append({
-                "activity_id": signal.get("activity_id"),
+                "activity_id": recorded_id,
                 # Another engagement's source label is not kept either: nothing of it is rendered (#13.3).
                 "source": None if foreign else signal.get("source"),
                 "policy_key": key,
@@ -443,13 +481,13 @@ def filter_packet(packet, config_path=None, script_dir=None, engine="engine:unkn
                 "excluded_by": engine,
                 "citations": [ENGAGEMENT_CITATION] if foreign else [POLICY_CITATION],
             })
-            seen.add(_id_key(signal.get("activity_id")))
+            seen.add(_id_key(recorded_id))
     packet["activity_signals"] = kept
     kept_ids = {_id_key(s.get("activity_id")) for s in kept}
     moved = set()
     for n, entry in enumerate(packet.get("time_entries", [])):
         links = entry.get("activity_ids") or []
-        dropped = [a for a in links if _id_key(a) not in kept_ids]
+        dropped = [relabel(a) for a in links if _id_key(a) not in kept_ids]
         if not dropped:
             continue
         moved.add(n)
@@ -559,6 +597,13 @@ ENGAGEMENT_FIELDS = ("engagement_id", "client_name", "matter_name", "billing_gui
 # be ignored next to the declared label nor shadow it - it is the same field given twice.
 ENGAGEMENT_LABEL_RE = re.compile(r"- ([^:\r\n]{1,60}):([^\r\n]*)")
 ENGAGEMENT_LABELS = {canon_id(f): f for f in ENGAGEMENT_FIELDS}
+# #8.4 (DRQG QA round 17): the fields are read only from the letter's one "## Engagement" section (any heading level,
+# compared in canonical form), which holds nothing but labelled fields and blank lines. An unrecognised line there
+# ("TBD", "- Responsible partner: ...", "engagement_manager Dana") is refused, never skipped, and a declared field
+# outside the section is refused too, so a field can never be lost or read from prose. Other sections (billing terms)
+# are not read.
+ENGAGEMENT_SECTION = "engagement"
+HEADING_RE = re.compile(r" {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*")
 RAW_EXPORTS = {
     "timesheet": ("timesheet.csv", ("entry_id", "date", "person", "hours", "narrative", "activity_ids", "phase_code",
                                     "task_code")),
@@ -617,18 +662,47 @@ def read_raw_csv(path, required, error=PolicyError):
     return rows
 
 
+def _heading(line):
+    """A markdown ATX heading's text in canonical form ("" for a bare "#"), or None when the line is not a heading."""
+    m = HEADING_RE.fullmatch(line)
+    return canon_id(m.group(1) or "") if m else None
+
+
 def read_engagement(path, error=PolicyError):
     """The engagement letter's labelled fields (activity_pull and the team-view check share it). Each value is the text
     after the label's colon with surrounding whitespace trimmed (str.strip); nothing else is folded, so case and
-    internal spacing are kept and every comparison with a packet value is otherwise exact."""
+    internal spacing are kept and every comparison with a packet value is otherwise exact. The fields are read only
+    from the one Engagement section, which holds nothing else (#8.4)."""
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
     except (OSError, UnicodeError) as exc:
         raise error(f"cannot read {ENGAGEMENT_FILE}: {error_text(exc)}") from exc
-    found = [(ENGAGEMENT_LABELS[canon_id(m.group(1))], m.group(2).strip())
-             for m in map(ENGAGEMENT_LABEL_RE.fullmatch, text.splitlines())
-             if m and canon_id(m.group(1)) in ENGAGEMENT_LABELS]
+    lines = text.splitlines()
+    headings = [_heading(line) for line in lines]
+    sections = [n for n, h in enumerate(headings) if h == ENGAGEMENT_SECTION]
+    if not sections:
+        raise error(f"{ENGAGEMENT_FILE} has no '## Engagement' section; the engagement fields are read only there "
+                    "(client-billing-guidelines.md #8.4)")
+    if len(sections) > 1:
+        raise error(f"{ENGAGEMENT_FILE} has more than one Engagement section (a repeated section is malformed, never "
+                    "merged)")
+    start = sections[0]
+    end = next((n for n in range(start + 1, len(lines)) if headings[n] is not None), len(lines))
+    found = []
+    for n, line in enumerate(lines):
+        m = ENGAGEMENT_LABEL_RE.fullmatch(line)
+        field = ENGAGEMENT_LABELS.get(canon_id(m.group(1))) if m else None
+        inside = start < n < end
+        if field and not inside:
+            raise error(f"{ENGAGEMENT_FILE} line {n + 1} gives {field} outside the Engagement section; a field is read "
+                        "only there and is refused elsewhere, never skipped (client-billing-guidelines.md #8.4)")
+        if field:
+            found.append((field, m.group(2).strip()))
+        elif inside and line.strip():
+            raise error(f"{ENGAGEMENT_FILE} line {n + 1} in the Engagement section is not a labelled engagement field "
+                        f"('- <field>: <value>' with one of {', '.join(ENGAGEMENT_FIELDS)}); an unrecognised line is "
+                        "refused, never skipped (client-billing-guidelines.md #8.4)")
     repeated = sorted({k for k, _ in found if [n for n, _ in found].count(k) > 1})
     if repeated:
         raise error(f"{ENGAGEMENT_FILE} gives {', '.join(repeated)} more than once (a repeated field "
@@ -704,7 +778,11 @@ def verify_scope_source(packet, raw_dir, error=PolicyError, script_dir=None):
             if key != "timesheet" and not enabled.get(key):
                 continue
             name, columns = RAW_EXPORTS[key]
-            for row in read_raw_csv(os.path.join(raw_dir, name), columns, error):
+            for idx, row in enumerate(read_raw_csv(os.path.join(raw_dir, name), columns, error), start=2):
+                # #8.4: a row naming no timekeeper is refused here as activity_pull refuses it, never skipped.
+                if not canon_id(row["person"]):
+                    raise error(f"raw/{name} row {idx} person must not be empty (or only separators or format "
+                                "characters); a row with no timekeeper is refused, never skipped")
                 if key == "timesheet" or canon_id(row["engagement_id"]) == engagement_key:
                     people.add(person_key(row["person"]))
     except (ValueError, OSError) as exc:  # error(...) is a ValueError
@@ -817,6 +895,19 @@ def enforce_timekeeper_scope(packet, engine="engine:unknown", strict=False):
                               f"({SCOPE_CITATION}); re-run activity_pull with --requester")
         allowed = {person_key(requester)}
     withheld = 0
+    if not strict:
+        # #13.10: an in-scope entry's link to a signal withheld here is renamed to the signal's positional label, so
+        # another timekeeper's activity ID never reaches an output (filter_packet then records it as unresolvable).
+        signals = packet.get("activity_signals")
+        labels = {_id_key(s.get("activity_id")): foreign_label("timekeeper", "signal", n)
+                  for n, s in enumerate(signals if isinstance(signals, list) else [], start=1)
+                  if isinstance(s, dict) and person_key(s.get("person")) not in allowed}
+        for entry in packet.get("time_entries") or [] if labels else []:
+            if not isinstance(entry, dict) or person_key(entry.get("person")) not in allowed:
+                continue
+            for name in ("activity_ids", "excluded_activity_ids", "cross_person_activity_ids"):
+                if isinstance(entry.get(name), list):
+                    entry[name] = [a if is_withheld(a) else labels.get(_id_key(a), a) for a in entry[name]]
     for key in keys:
         items = packet.get(key)
         if not isinstance(items, list):
@@ -1208,23 +1299,68 @@ def has_data(text):
     return isinstance(text, str) and any(ch.isalnum() for ch in text)
 
 
-def _tripping_seq(texts):
-    """Indices to withhold in a sequence of strings: each alone, then every contiguous run of 2 to RUN_WINDOW
-    entries, shortest first (an instruction split across neighbouring array entries, which the rest of a long array
-    would dilute), then the whole sequence (every index when only the whole trips). Every entry of a run that trips
-    is withheld; a run that holds an entry already withheld is not screened again. Entries with no letter or digit
-    are filler (has_data) and are skipped, so a run is counted in data entries."""
+def _seq_scan(texts):
+    """(indices to withhold, hits) for a sequence of strings: each alone, then every contiguous run of 2 to
+    RUN_WINDOW entries, shortest first (an instruction split across neighbouring array entries, which the rest of a
+    long array would dilute), then the whole sequence (every index when only the whole trips). Every entry of a run
+    that trips is withheld; a run that holds an entry already withheld is not screened again. Entries with no letter
+    or digit are filler (has_data) and are skipped, so a run is counted in data entries."""
     live = [i for i, t in enumerate(texts) if has_data(t)]
-    bad = {i for i in live if _scan_text(texts[i])}
+    hits = []
+    bad = set()
+    for i in live:
+        found = _scan_text(texts[i])
+        if found:
+            bad.add(i)
+            hits += found
     for size in range(2, min(RUN_WINDOW, len(live)) + 1):
         for start in range(len(live) - size + 1):
             run = live[start:start + size]
-            if not bad.intersection(run) and _scan_record({str(n): texts[i] for n, i in enumerate(run)}):
-                bad.update(run)
+            if not bad.intersection(run):
+                found = _scan_record({str(n): texts[i] for n, i in enumerate(run)})
+                if found:
+                    bad.update(run)
+                    hits += found
     rest = [i for i in live if i not in bad]
-    if not bad and len(rest) > 2 and _scan_record({str(i): texts[i] for i in rest}):
-        bad = set(rest)
-    return bad
+    if not bad and len(rest) > 2:
+        found = _scan_record({str(i): texts[i] for i in rest})
+        if found:
+            bad = set(rest)
+            hits += found
+    return bad, hits
+
+
+def _tripping_seq(texts):
+    """Indices to withhold in a sequence of strings (_seq_scan)."""
+    return _seq_scan(texts)[0]
+
+
+# Sweep A (QA round 14): text an engine composes from more than one supplied value (a flag detail, a review reason)
+# is screened before the values are interpolated. When the values trip, the text names how many there were and this
+# note, never the values, and the entry is held (billing_rules.govern). Never shaped like a withheld marker (D20).
+COMPOSED_WITHHELD_NOTE = "not shown: flagged as embedded_instruction when read together"
+
+
+def composed_hits(values, text=None):
+    """steering_guard hits for text composed from supplied values: each value alone, the values in composed order
+    as one sequence (_seq_scan: every run of up to RUN_WINDOW, then the whole), then the composed text itself (the
+    engine's own words around the values included). [] when clean; an 'oversize' hit means a value was not
+    scanned."""
+    values = [v for v in values if isinstance(v, str)]
+    hits = _seq_scan(values)[1]
+    if not hits and isinstance(text, str) and text.strip():
+        hits = screen(text)
+    return hits
+
+
+def id_list(ids):
+    """IDs for a review reason or flag detail, joined in the given order - or, when two or more of them read as an
+    instruction together (composed_hits), their count and COMPOSED_WITHHELD_NOTE (#11.1, #11.2)."""
+    ids = list(ids)
+    text = ", ".join(ids)
+    if len(ids) > 1 and composed_hits(ids, text):
+        return f"{len(ids)} IDs {COMPOSED_WITHHELD_NOTE} ({INJECTION_CITATION})"
+    return text
 
 
 PAIR_LIMIT = 40  # more strings than this in one object are withheld whole: too many to pair-screen (fail closed)
@@ -2161,6 +2297,18 @@ def check_exclusions(packet, level):
         if _id_key(signal.get("activity_id")) in out_of_scope:
             raise SchemaError(f"invalid input: activity_signals[{i}] is listed in provenance.out_of_scope_rows; an "
                               f"out-of-scope row is never a signal ({EXCLUSION_CITATION})")
+    # #13.10: the positional-label form is reserved for records identified as another party's; an active record or
+    # link in that form could be confused with one.
+    for where, records, key in (("activity_signals", signals, "activity_id"), ("time_entries", entries, "entry_id")):
+        for i, record in enumerate(records):
+            if positional_label(record.get(key)):
+                raise SchemaError(f"invalid input: {where}[{i}].{key} has the reserved positional-label form the "
+                                  f"engines give another party's records ({FOREIGN_CITATION})")
+    for i, entry in enumerate(entries):
+        for j, link in enumerate(entry.get("activity_ids") or []):
+            if positional_label(link):
+                raise SchemaError(f"invalid input: time_entries[{i}].activity_ids[{j}] has the reserved "
+                                  f"positional-label form the engines give another party's records ({FOREIGN_CITATION})")
     for i, entry in enumerate(entries):
         for key, barred in (("activity_ids", excluded | out_of_scope), ("cross_person_activity_ids", out_of_scope)):
             for j, link in enumerate(entry.get(key) or []):
@@ -2229,7 +2377,7 @@ def cross_person_reason(count):
 
 
 def uncovered_reason(ids):
-    return UNCOVERED_PREFIX + ", ".join(ids)
+    return UNCOVERED_PREFIX + id_list(ids)
 
 
 def multi_link_reason(count):
@@ -2237,6 +2385,10 @@ def multi_link_reason(count):
 
 
 def rewrite_scope_reason(activity_id, others):
+    if composed_hits([activity_id, *others], ", ".join([activity_id, *others])):
+        return (f"{REWRITE_SCOPE_PREFIX}1 linked activity only; this entry also links {len(others)} other(s) (IDs "
+                f"{COMPOSED_WITHHELD_NOTE}, {INJECTION_CITATION}) - use with the other rewrites or split the entry "
+                f"({LINK_BLOCK_CITATIONS})")
     return (f"{REWRITE_SCOPE_PREFIX}{activity_id} only; this entry also links " + ", ".join(others)
             + f" - use with the other rewrites or split the entry ({LINK_BLOCK_CITATIONS})")
 
@@ -2517,8 +2669,9 @@ def clause_values(activity, person):
 def split_activities(linked, person=None):
     """IDs of linked activities whose prose trips only when read with the other linked activities' prose, in the
     order a draft joins them (client meeting first): an instruction split across signals that one narrative or one
-    entry's rewrites would put side by side (#11.1). Two sequences are screened: the prose fields (SPLIT_PROSE_KEYS)
-    and every value a clause prints for the entry's person, in printed order (D22: attendees included).
+    entry's rewrites would put side by side (#11.1). Three kinds of sequence are screened: the prose fields
+    (SPLIT_PROSE_KEYS), every value a clause prints for the entry's person, in printed order (D22: attendees
+    included), and each supplied field (SIGNAL_TEXT_KEYS, activity_class included) down the linked activities.
     Activities that trip on their own are flagged_activities()'."""
     if len(linked) < 2:
         return []
@@ -2537,6 +2690,19 @@ def split_activities(linked, person=None):
                     texts.append(value)
                     owners.append(activity.get("activity_id"))
         tripped |= {owners[i] for i in _tripping_seq(texts)}
+    # QA round 14: every supplied field is also read down the linked activities in the same order, one field at a
+    # time (a list field item by item): an instruction split across one field of two signals - two activity classes
+    # that a block-billing detail would join - trips here although neither record trips on its own.
+    for key in SIGNAL_TEXT_KEYS:
+        texts, owners = [], []
+        for activity in ordered:
+            value = activity.get(key)
+            for item in (value if isinstance(value, list) else [value]):
+                if isinstance(item, str) and item.strip():
+                    texts.append(item)
+                    owners.append(activity.get("activity_id"))
+        if len(set(owners)) > 1:
+            tripped |= {owners[i] for i in _tripping_seq(texts)}
     if len(tripped) < 2:
         return []  # inside one activity: that activity's own record screen decides it
     return [a.get("activity_id") for a in ordered if a.get("activity_id") in tripped]
@@ -2576,7 +2742,7 @@ def grounded_narrative(entry, linked):
         why = hold_reason(hits, "linked activity text flagged as embedded_instruction") if flagged else SPLIT_REASON
         flagged = flagged or split
         return ("", "needs_review_embedded_instruction", NO_EVIDENCE_CONFIDENCE,
-                [f"{why} ({', '.join(flagged)}); "
+                [f"{why} ({id_list(flagged)}); "
                  "treated as data and withheld - no narrative drafted from it (client-billing-guidelines.md #11.1, #11.2)"],
                 [])
     ordered = sorted(linked, key=lambda a: 0 if class_in(a.get("activity_class"), ("client_meeting",)) else 1)
@@ -2592,7 +2758,7 @@ def grounded_narrative(entry, linked):
     if found:  # the joined narrative itself trips: withheld like its sources (#11.1, #11.2)
         return ("", "needs_review_embedded_instruction", NO_EVIDENCE_CONFIDENCE,
                 [f"{hold_reason(found, 'drafted narrative flagged as embedded_instruction')} "
-                 f"({', '.join(a.get('activity_id') for a in ordered)}); treated as data and withheld - no narrative "
+                 f"({id_list([a.get('activity_id') for a in ordered])}); treated as data and withheld - no narrative "
                  "drafted from it (client-billing-guidelines.md #11.1, #11.2)"], [])
     if len(linked) > 1:
         reasons.append(multi_link_reason(len(linked)))
@@ -2626,7 +2792,7 @@ def build_narrative(entry, linked):
     # One entry's rewrites sit side by side: activities whose text trips only together get no rewrite (#11.1).
     split = split_activities(linked, entry.get("person"))
     if split:
-        reasons.append(f"{SPLIT_REASON} ({', '.join(split)}); treated as data and withheld - no rewrite drafted "
+        reasons.append(f"{SPLIT_REASON} ({id_list(split)}); treated as data and withheld - no rewrite drafted "
                        "from it (client-billing-guidelines.md #11.1, #11.2)")
     for activity in linked:
         if activity.get("activity_id") in split:

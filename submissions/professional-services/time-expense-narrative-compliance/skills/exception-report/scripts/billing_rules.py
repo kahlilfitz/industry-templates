@@ -110,6 +110,14 @@ def usable_narratives(entry, linked):
 
 WITHHELD_MAPPING_NOTE = ("the narrative is withheld as embedded_instruction and is not read to infer a code "
                          "(client-billing-guidelines.md #11.2)")
+# Sweep A (QA round 14): a flag detail composed from several supplied values (activity classes, IDs, a submitted
+# code) shows them only when they are clean read together (signal_policy.composed_hits); otherwise it gives counts
+# and one of these notes, and govern holds the entry (COMPOSED_REASON).
+COMPOSED_CLASSES_NOTE = (f"activity class names {signal_policy.COMPOSED_WITHHELD_NOTE} "
+                         f"({signal_policy.INJECTION_CITATION})")
+COMPOSED_IDS_NOTE = f"IDs {signal_policy.COMPOSED_WITHHELD_NOTE} ({signal_policy.INJECTION_CITATION})"
+COMPOSED_REASON = ("supplied values the engine would join into a flag detail or review reason read as an "
+                   "instruction together; the detail gives counts only")
 
 
 def choose_mapping(entry, linked):
@@ -143,14 +151,20 @@ def code_mapping(entry, linked):
     submitted_phase = entry.get("submitted_phase_code")
     flags = []
     if task == "UNMAPPED":
-        detail = ("linked signals point to different codes (" + ", ".join(sorted({
-            f"{signal_policy.redact(a.get('activity_class'))}->{(signal_mapping(a) or ('?', '?'))[1]}" for a in linked}))
-            + "); no code is recommended"
+        pairs = sorted({f"{signal_policy.redact(a.get('activity_class'))}->{(signal_mapping(a) or ('?', '?'))[1]}"
+                        for a in linked})
+        detail = ("linked signals point to different codes (" + ", ".join(pairs) + "); no code is recommended"
                   if basis == "conflicting_activity_classes" else "no activity class or keyword maps to a code")
         if basis == "unmapped" and any(usable_narratives(entry, linked)[2:]):
             detail = f"{WITHHELD_MAPPING_NOTE}; no activity class maps to a code"
         if submitted_task:
             detail += f"; submitted {submitted_task} cannot be confirmed"
+        if basis == "conflicting_activity_classes" and signal_policy.composed_hits(
+                pairs + ([submitted_task] if isinstance(submitted_task, str) else []), detail):
+            # QA round 14: the class names and the submitted code read as an instruction together - counted only.
+            detail = (f"linked signals point to {len({p.rsplit('->', 1)[1] for p in pairs})} different codes; "
+                      f"{COMPOSED_CLASSES_NOTE}; no code is recommended"
+                      + ("; the submitted task code cannot be confirmed" if submitted_task else ""))
         flags.append({
             "flag": "unmapped_code",
             "detail": detail,
@@ -367,12 +381,18 @@ def withhold_missing_runs(items):
     (D22) - and each item in a tripping run is withheld and held like a flagged one."""
     texts = [None if item.get("embedded_instruction") else item.get("subject") for item in items]
     bad = set(signal_policy._tripping_seq(texts))
+    # QA round 14: the items' activity classes are a column too (listed side by side in missing_time_report).
+    classes = signal_policy._tripping_seq([None if item.get("embedded_instruction") else item.get("activity_class")
+                                           for item in items])
+    bad |= classes
     bad |= signal_policy.crossing_runs([[(i, v) for v in _rendered_row(item)] for i, item in enumerate(items)])
     for i in sorted(bad):
         item = items[i]
         if item.get("embedded_instruction"):
             continue  # already withheld and held (missing_time_item)
         item["subject"] = signal_policy.WITHHELD_TEXT
+        if i in classes:
+            item["activity_class"] = signal_policy.WITHHELD_TEXT
         item["embedded_instruction"] = True
         item["finding"] += "; " + SPLIT_MISSING_REASON + "; withheld"
         item["citations"] = signal_policy.safe_citations(item["citations"], True)[0] + [
@@ -458,19 +478,34 @@ def govern(out):
             add_flag(flags, "required_elements_missing", "needs_review", f"missing required element: {missing[0]}",
                      ["client-billing-guidelines.md #1.2"], 0.88)
 
+        # QA round 14: the class names are joined into the detail only when they are clean read together - in the
+        # detail's order with the detail's own words, and in link order (the class column of split_activities);
+        # otherwise the detail counts them (COMPOSED_CLASSES_NOTE) and the entry is held below.
+        link_classes = [a.get("activity_class") for a in linked if isinstance(a.get("activity_class"), str)]
+
+        def class_detail(detail, neutral):
+            if len(classes) > 1 and (signal_policy.composed_hits(classes, detail)
+                                     or signal_policy.composed_hits(link_classes)):
+                return neutral
+            return detail
+
         if duration > BLOCK_BILLING_HOURS and len(classes) > BLOCK_BILLING_CLASS_LIMIT:
-            add_flag(flags, "block_billing", "reject",
-                     f"{duration} hours combines {len(classes)} activity classes: {', '.join(classes)}",
-                     ["client-billing-guidelines.md #2.1"], 0.97)
+            add_flag(flags, "block_billing", "reject", class_detail(
+                f"{duration} hours combines {len(classes)} activity classes: {', '.join(classes)}",
+                f"{duration} hours combines {len(classes)} activity classes; {COMPOSED_CLASSES_NOTE}"),
+                ["client-billing-guidelines.md #2.1"], 0.97)
         elif duration <= BLOCK_BILLING_HOURS and len(classes) > RELATED_CLASS_LIMIT:
+            head = (f"{duration} hours combines {len(classes)} activity classes (at most {RELATED_CLASS_LIMIT} at <= "
+                    f"{BLOCK_BILLING_HOURS} hours)")
             add_flag(flags, "block_billing", "reject",
-                     f"{duration} hours combines {len(classes)} activity classes (at most {RELATED_CLASS_LIMIT} at <= "
-                     f"{BLOCK_BILLING_HOURS} hours): {', '.join(classes)}", ["client-billing-guidelines.md #2.2"], 0.95)
+                     class_detail(f"{head}: {', '.join(classes)}", f"{head}; {COMPOSED_CLASSES_NOTE}"),
+                     ["client-billing-guidelines.md #2.2"], 0.95)
         elif (duration <= BLOCK_BILLING_HOURS and len(classes) == RELATED_CLASS_LIMIT and not text_withheld
               and not (elements["subject"] and elements["purpose"])):
-            add_flag(flags, "block_billing", "needs_review",
-                     f"{duration} hours combines {', '.join(classes)} without an explicit subject and purpose",
-                     ["client-billing-guidelines.md #2.2"], 0.9)
+            add_flag(flags, "block_billing", "needs_review", class_detail(
+                f"{duration} hours combines {', '.join(classes)} without an explicit subject and purpose",
+                f"{duration} hours combines {len(classes)} activity classes ({COMPOSED_CLASSES_NOTE}) without an "
+                "explicit subject and purpose"), ["client-billing-guidelines.md #2.2"], 0.9)
 
         for term in PROHIBITED_TERMS:
             if term in narrative_norm:
@@ -489,6 +524,42 @@ def govern(out):
                              ["client-billing-guidelines.md #3.2", "client-billing-guidelines.md #3.3"], 0.93)
 
         rewrites = [r for r in draft.get("suggested_rewrites") or [] if isinstance(r, dict)]
+        # QA round 14: the date-mismatch and duplicate-meeting details are composed from several supplied values (IDs
+        # and dates), so they are built here, before the embedded_instruction gate, and added in their usual place.
+        date_flags, meeting_flags = [], []
+        if off_date:
+            detail = (f"entry dated {entry.get('date')} links activity from another date: "
+                      + ", ".join(f"{a['activity_id']} ({a.get('date')})" for a in off_date))
+            if signal_policy.composed_hits([entry.get("date")] + [v for a in off_date
+                                                                  for v in (a["activity_id"], a.get("date"))], detail):
+                detail = (f"entry links {len(off_date)} activit{'y' if len(off_date) == 1 else 'ies'} from another "
+                          f"date; activity {COMPOSED_IDS_NOTE}")
+            add_flag(date_flags, "date_mismatch", "needs_review", detail, ["client-billing-guidelines.md #6.2"], 0.85)
+        # Meetings are matched in canonical form (canon_id): a variant spelling of a meeting ID is the same meeting
+        # and cannot escape the duplicate rule; the detail names the entry's own spelling.
+        meeting_ids = {}
+        for a in linked:
+            # A21: a meeting ID that folds to nothing is no meeting: two blank IDs are never "the same meeting".
+            if signal_policy.canon_id(a.get("meeting_id")):
+                meeting_ids.setdefault(signal_policy.canon_id(a["meeting_id"]), a["meeting_id"])
+        for meeting_key, meeting_id in sorted(meeting_ids.items()):
+            if text_withheld:
+                break  # D19: a withheld narrative is compared with no other narrative, and none with it
+            prior = meeting_seen.setdefault(meeting_key, [])
+            best = None
+            for prior_id, prior_text in prior:
+                score = similarity(prior_text, narrative_norm)
+                if score >= NEAR_DUPLICATE_RATIO and (best is None or score > best[1]):
+                    best = (prior_id, score)
+            if best:
+                detail = (f"near-duplicate meeting narrative for {meeting_id}: similarity {best[1]} >= "
+                          f"{NEAR_DUPLICATE_RATIO} with {best[0]}")
+                if signal_policy.composed_hits([meeting_id, best[0]], detail):
+                    detail = (f"near-duplicate meeting narrative: similarity {best[1]} >= {NEAR_DUPLICATE_RATIO} "
+                              f"with an earlier entry; meeting and entry {COMPOSED_IDS_NOTE}")
+                add_flag(meeting_flags, "duplicate_meeting", "reject", detail, ["client-billing-guidelines.md #7.1"],
+                         0.92)
+            prior.append((entry["entry_id"], narrative_norm))
         # The draft's review reasons, citations and every rewrite are free text too (#11.1).
         records = signal_policy.draft_records(draft)
         record_hits = [signal_policy.screen(r) for r in records]
@@ -502,8 +573,13 @@ def govern(out):
                   or bool(signal_policy.split_activities(linked, entry.get("person")))
                   or any(r.get("status") == "withheld_embedded_instruction" for r in rewrites)
                   or signal_policy.WITHHELD_TEXT in reasons)
-        if marked or hits or packet_hold:
+        # A detail or reason that counts supplied values instead of joining them (sweep A) holds the entry too.
+        composed = any(isinstance(text, str) and signal_policy.COMPOSED_WITHHELD_NOTE in text
+                       for text in [f.get("detail") for f in flags + mapping["flags"] + date_flags + meeting_flags]
+                       + reasons)
+        if marked or hits or packet_hold or composed:
             causes = ([signal_policy.hold_reason(hits, EMBEDDED_DEFAULT)] if marked or hits else []) \
+                + ([COMPOSED_REASON] if composed else []) \
                 + ([TEXT_WITHHELD_REASON] if text_withheld else []) \
                 + ([signal_policy.PACKET_HOLD_REASON] if packet_hold else [])
             add_flag(flags, "embedded_instruction", "hold_for_review",
@@ -537,11 +613,7 @@ def govern(out):
         if not rounded_to_increment(duration):
             add_flag(flags, "rounding_increment", "needs_review", f"{duration} is not rounded to 0.1 hour",
                      ["client-billing-guidelines.md #6.1"], 0.91)
-        if off_date:
-            add_flag(flags, "date_mismatch", "needs_review",
-                     f"entry dated {entry.get('date')} links activity from another date: "
-                     + ", ".join(f"{a['activity_id']} ({a.get('date')})" for a in off_date),
-                     ["client-billing-guidelines.md #6.2"], 0.85)
+        flags.extend(date_flags)
         if not linked and duration > EVIDENCE_OVERRUN_HOURS:
             add_flag(flags, "no_linked_evidence", "hold_for_review",
                      f"{duration} billed hours has no linked activity evidence (0 hours); the #6.2 tolerance is "
@@ -554,28 +626,7 @@ def govern(out):
 
         for map_flag in mapping["flags"]:
             flags.append(map_flag)
-
-        # Meetings are matched in canonical form (canon_id): a variant spelling of a meeting ID is the same meeting
-        # and cannot escape the duplicate rule; the detail names the entry's own spelling.
-        meeting_ids = {}
-        for a in linked:
-            # A21: a meeting ID that folds to nothing is no meeting: two blank IDs are never "the same meeting".
-            if signal_policy.canon_id(a.get("meeting_id")):
-                meeting_ids.setdefault(signal_policy.canon_id(a["meeting_id"]), a["meeting_id"])
-        for meeting_key, meeting_id in sorted(meeting_ids.items()):
-            if text_withheld:
-                break  # D19: a withheld narrative is compared with no other narrative, and none with it
-            prior = meeting_seen.setdefault(meeting_key, [])
-            best = None
-            for prior_id, prior_text in prior:
-                score = similarity(prior_text, narrative_norm)
-                if score >= NEAR_DUPLICATE_RATIO and (best is None or score > best[1]):
-                    best = (prior_id, score)
-            if best:
-                add_flag(flags, "duplicate_meeting", "reject",
-                         f"near-duplicate meeting narrative for {meeting_id}: similarity {best[1]} >= "
-                         f"{NEAR_DUPLICATE_RATIO} with {best[0]}", ["client-billing-guidelines.md #7.1"], 0.92)
-            prior.append((entry["entry_id"], narrative_norm))
+        flags.extend(meeting_flags)
 
         lowest_conf = min([f.get("confidence", 1.0) for f in flags]
                           + [draft.get("confidence", 1.0), mapping["confidence"]])

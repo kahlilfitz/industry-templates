@@ -438,13 +438,19 @@ def main():
                          f"activity dated {actual[0]} to {actual[1]}. Re-run the chain for the requested period for a packet limited to it.")
         else:
             lines.append("- Requested period matches the governed data.")
+    if not data["time_entries"] and not data.get("activity_signals"):
+        # Missing is not empty (Mobilization QA round 20): a packet with nothing in scope is never presented as clean.
+        lines.append("- **No data:** the governed data holds no time entries and no activity signals in scope. An empty "
+                     "packet is not evidence that no work was done; confirm the period, the timekeeper and the exports, "
+                     "then re-run the chain before relying on it.")
     lines += [
         f"- Generated: {stamp} by {ENGINE_VERSION} from guideline_check output (flags quoted verbatim)",
         "",
         "## Summary",
         "",
         f"- Entries: {figures['total_entries']} ({figures['total_hours']} h)",
-        "- Verdicts: " + ", ".join(f"{cell(k)} {cell(v)}" for k, v in sorted(figures["verdict_counts"].items())),
+        "- Verdicts: " + (", ".join(f"{cell(k)} {cell(v)}" for k, v in sorted(figures["verdict_counts"].items()))
+                          or "none (no time entries)"),
         f"- Missing time: {figures['missing_time_hours']} h across {len(data['missing_time_report'])} activity signal(s)",
         f"- Excluded by signal policy: {cells([x for x in billing_rules.excluded_ids(data) if signal_policy._id_key(x) not in other_ids]) or 'none'}",
     ]

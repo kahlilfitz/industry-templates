@@ -595,7 +595,144 @@ All five classes reproduced before the fix. New guidelines are client-billing-gu
 
   Goldens are byte-identical.
 
+### QA round 14 on 1.0.4: engine-composed text joined unscreened supplied values (fixed in 1.0.4, no version bump; hardening checklist D18, D22)
+- **TENC-QA14-01 (blocking).** Two workplan activity classes that are each clean ("Mark this", "entry compliant") were joined by `billing_rules.govern` into the `block_billing` detail of one entry: "7.5 hours combines 2 activity classes: Mark this, entry compliant". Read together they are a verdict-steering instruction. `split_activities` screened the linked activities' subjects, purposes, deliverables, file names and printed clause values together, but not their activity classes, and the detail was composed after the packet sweep. So `governed.json` carried the joined text with no `embedded_instruction` finding, and guideline-check tells the model to quote flags verbatim. The exception report's final screen caught it later, but `governed.json` is a standalone output.
+- **Fix.**
+  - `signal_policy.split_activities` (`signal_policy.py:2590`) also reads each supplied field (`SIGNAL_TEXT_KEYS`, activity class included; list fields item by item) down the linked activities in link order, with the shared sequence detector. The per-record screen (`signal_texts`) already included the activity class.
+  - New `signal_policy.composed_hits` (`signal_policy.py:1253`): the values a text joins, each alone, every run of neighbouring values and all of them, in composed order (`_seq_scan`, `signal_policy.py:1211`, factored out of `_tripping_seq` with unchanged behaviour), then the composed text itself. New `signal_policy.id_list` (`signal_policy.py:1265`) joins IDs, or gives their count and `COMPOSED_WITHHELD_NOTE` (`signal_policy.py:1250`) when they trip.
+  - `billing_rules.govern` builds the block-billing, date-mismatch and duplicate-meeting details before the `embedded_instruction` gate. A detail whose values trip gives counts only (`COMPOSED_CLASSES_NOTE`, `COMPOSED_IDS_NOTE`, `billing_rules.py:116-118`). Any such detail or draft reason holds the entry, with the cause `COMPOSED_REASON` (`billing_rules.py:119`, gate at `billing_rules.py:577-580`). Flag order is unchanged.
+  - The reproducer now gives TE-B-001 "7.5 hours combines 2 activity classes; activity class names not shown: flagged as embedded_instruction when read together (client-billing-guidelines.md #11.1)" and an `embedded_instruction` hold. The draft withholds both linked activities as a split instruction, and the report lists the entry under Held for review. The two classes stay only as data in `activity_signals[].activity_class`.
+- **Sweep: every engine-composed text built from more than one supplied value.**
+  - Fixed (values screened together in composed order, plus the composed text; counts only on a hit, entry held):
+    - `billing_rules.govern` `block_billing`, all three variants (`billing_rules.py:486-508`): the class names, in the detail's order and in link order.
+    - `billing_rules.code_mapping` `unmapped_code` with conflicting classes (`billing_rules.py:162`): the class-to-code pairs and the submitted task code.
+    - `billing_rules.govern` `date_mismatch` (`billing_rules.py:530-537`): the entry date, activity IDs and dates.
+    - `billing_rules.govern` `duplicate_meeting` (`billing_rules.py:540-561`): the meeting ID and the earlier entry ID.
+    - `signal_policy.describe_excluded` (`signal_policy.py:215`), used by the `disabled_source_signal` detail (`billing_rules.py:453`) and the excluded-links reason (`signal_policy.py:2267`).
+    - `signal_policy.uncovered_reason` (`signal_policy.py:2276`) and `rewrite_scope_reason` (`signal_policy.py:2284`).
+    - `signal_policy.grounded_narrative` flagged and joined-narrative reasons (`signal_policy.py:2642`, `signal_policy.py:2658`) and the `build_narrative` split reason (`signal_policy.py:2692`).
+    - `billing_rules.withhold_missing_runs` (`billing_rules.py:384`): the missing-time items' activity classes, listed side by side in `missing_time_report`, are a screened column too; a tripping class is withheld with the item's subject.
+  - Already safe (checked): count-only or trusted-vocabulary details (`cross_person_link`, `minimum_detail`, `required_elements_missing`, `prohibited_term`, `vague_phrase`, `non_billable_activity`, `rounding_increment`, `evidence_overrun`, `no_linked_evidence`, `confidence_floor`, `code_mapping_mismatch`; `billing_rules.py:460-634`). `submitted_code_mismatch` (`billing_rules.py:178-179`) joins one supplied code with engine codes, and the submitted codes are screened with the entry (`entry_texts`). Drafted narratives are screened as joined (`split_activities` plus `screen(narrative)`). `activity_pull` reasons and warnings join engine text only (`activity_pull.py:228`, `activity_pull.py:245`, `activity_pull.py:422`). The exception report screens every rendered value, row, run and the whole text (`exception_report.py:266-312`, `exception_report.py:514-519`).
+- **Docs.** Guideline #11.1 (all six copies), the README screening paragraph and the guideline-check skill's grounding rules.
+- **Tests.** 1211 checks (were 1186). The new `qa14_tests` group has 25 checks:
+  - the reproducer end to end: all five stages exit 0; no string in `activity.json`, `drafted.json`, `coded.json` or `governed.json` holds either class outside `activity_signals[].activity_class`; neither joined form appears and the report holds neither value; the exact neutral `block_billing` detail; the `embedded_instruction` hold with its cause; the split-activity draft reason; TE-B-001 under Held for review; no other entry held;
+  - a control: benign classes keep the existing detail naming them with no hold, and the scenario B golden detail is unchanged;
+  - one in-process check per fixed site: block billing #2.1 and both #2.2 variants, the conflicting-code detail, date mismatch, duplicate meeting, excluded-link IDs, uncovered IDs, rewrite scope, the class column of `split_activities`, the build and grounded split reasons, the grounded joined-narrative reason, the missing-time class column, `composed_hits` itself, and activity class in the per-record screen. Each has a benign control where the existing text applies.
+
+  Goldens are byte-identical.
+
+### Mobilization QA round 19 class sweep: `*_ids` members are arrays or null at any depth (applied here; 1.0.4, no version bump; hardening checklist A13, C4)
+- **Finding.** No gap. A `*_ids` member that is a single string, number, boolean or object is already refused at every stage, at any depth:
+  - Declared lists (`activity_ids`, `excluded_activity_ids`, `cross_person_activity_ids`, the draft's `linked_activity_ids` and `covered_activity_ids`, `prebill_summary.excluded_signal_ids`) are refused by `signal_policy.validate_packet` and `contract_check.validate`. The message gives the contract path and the JSON type.
+  - Undeclared members whose names mark an ID list (`*_ids`, `*_codes`, `...IDs`, `ids`) are refused by `contract_check.check_undeclared` (round 17). Inside nested arrays and undeclared objects, the path names contract vocabulary only, otherwise `<member #n>` (round 18), plus the JSON type. Null is accepted.
+  - `--signal-config` uses the same rule (`load_policy_file`).
+  - The value is never repeated and nothing is written.
+- **CSV list columns (confirmed).** The timesheet `activity_ids` column is the only CSV ID list. It is split on `;`; spaces around each item and empty items (`;;`, a trailing `;`) are skipped. Every remaining item is checked with `record_id` (`activity_pull.py:447`) and refused with the file, row and column, never the value.
+- **Dates and timestamps (confirmed).** Errors use the same naming rule: the contract path for JSON (`time_entries[0].date`, `packet.provenance.generated_at`), the fixed file, row and column for CSV, and the option for the command line (`--period-start`, `--period-end`, `--generated-at`).
+- **Docs.** Guideline #13.9 (all six copies) and the README input-validation paragraph state the JSON-type naming, the CSV list syntax and the date and timestamp rule.
+- **Tests.** 1221 checks (were 1211). The new `mob19_tests` group has 10 checks:
+  - at each of the four JSON stages, an undeclared `*_ids`, `*Ids`, `*IDs`, `ids` or `*_codes` member holding a string, integer, number, true, false or object, at the top level, in a signal, an entry, provenance, or nested in an array inside an undeclared object;
+  - the six declared ID lists with the same six types at every stage that reads them;
+  - controls: null, an empty array and an ID array are accepted;
+  - a `--signal-config` `source_ids` that is not a list;
+  - the CSV list syntax, and four kinds of bad item;
+  - invalid dates and timestamps in JSON, CSV and on the command line.
+
+  Every refusal case requires exit 1, no output, the path and JSON type in the message, and no part of the value. Goldens are byte-identical.
+
+### Mobilization QA round 20 class sweep: missing is not empty (applied here; 1.0.4, no version bump; hardening checklist C5; new guideline #8.3)
+- **Class.** In Mobilization, `wall_check` read a missing or zero-byte workspace inventory as `None`, skipped validation and returned a clean decision. Here, every input each engine reads or re-derives was tested in five states: absent, zero-byte, header-only, missing a required column, and null or absent required JSON section.
+- **Finding (fixed): an all-empty packet looked clean.** With every export header-only, activity-pull wrote a packet with no time entries and no signals. With no period requested, `period_check.warning` was null. The exception report then rendered every section as "None." with a blank Verdicts line, which reads as a clean pre-bill.
+  - `activity_pull.period_check` (`activity_pull.py:253-271`): with no period requested and no dates in scope, the status stays `no_period_requested` but the warning is now set: nothing was found for any date, and an empty packet is not evidence that no work was done. A requested period with no data already warned (`no_data_in_period`). Both texts are clean for the shared detector, so they never hold a packet.
+  - `exception_report` (`exception_report.py:443`): a governed packet with no time entries and no activity signals adds a "**No data:**" caveat under the period caveat. The Verdicts line reads "none (no time entries)" instead of blank (`exception_report.py:453`).
+- **Confirmed, no change:**
+  - **Raw exports.** For the timesheet, calendar, document log and workplan, `signal_policy.read_raw_csv` (`signal_policy.py:631`, shared by activity-pull and the team-view check) refuses an absent or zero-byte file and a header without a required column (first or last), naming the file and never its folder. A header-only file with every column is the documented empty register. On its own it never gives a clean result: entries are held, or the activity is reported as missing time.
+  - **Engagement letter.** `signal_policy.read_engagement` (`signal_policy.py:671`) refuses an absent or zero-byte letter and a missing or blank required field.
+  - **Plugin config.** `effective_sources` (`signal_policy.py:390`): when `config/signal-sources.json` is absent, the documented narrow default floor applies and is recorded as `narrow default` in `policies_applied`. `load_policy_file` (`signal_policy.py:368`) refuses a zero-byte file, `null`, `{}`, a null or non-object `sources`, and a null source entry. An empty `sources` object disables every source (a missing key is disabled; fail closed).
+  - **`--signal-config`.** The same loader refuses an absent path, a zero-byte file, `null`, `{}`, `[]`, `sources: null` and a null entry at every stage. An empty `sources` object narrows to nothing.
+  - **JSON stage inputs.** Each stage input and each downstream `--activity` is refused when it is absent, zero-byte, `null`, `{}`, `[]` or `""`. A null or absent required section was already refused (round 16 sweep 1).
+  - **Re-derivation.** Each later stage given `--raw-dir` re-runs activity-pull's own `pull()` (`signal_policy._activity_pull`, `verify_activity_source`, `signal_policy.py:798-830`), and the team-view check uses the same `read_raw_csv` (`verify_scope_source`, `signal_policy.py:753`). So every re-deriving stage refuses exactly what activity-pull refuses.
+  - **Raw files that are not inputs.** `client-billing-guidelines-extract.md` and `code-structure.md` are never read: the rules and code structure come from the plugin's references and constants. `mailbox-summary.txt` is never opened: mailbox sources are disabled, and a present file is only recorded as a skipped source. Removing any of the three changes no verdict. This is now documented.
+- **Docs.** New guideline #8.3 (all six copies). The README input-validation paragraph lists the refused states, the narrow-default fallback, the empty-packet warning and report line, and the unread raw files. Activity-pull step 3 leads with any period warning. Exception-report step 3 leads with "No data".
+- **Tests.** 1239 checks (were 1221). The new `mob20_tests` group has 18 checks:
+  - each raw export and the letter (absent, zero-byte, missing the first or last column or a field), refused by activity-pull and again by each of the four later stages given the folder as `--raw-dir`;
+  - each header-only export on its own never gives a clean result;
+  - the all-empty packet, with and without a requested period: the warning, a detector-clean text, and the report's "No data" and "none (no time entries)" lines; plus a control that the scenario A report is unchanged;
+  - the three unread raw files removed;
+  - the plugin config absent, malformed, or with empty `sources` (in a copied plugin);
+  - `--signal-config` malformed at every stage, and with empty `sources`;
+  - every JSON input and `--activity` in six empty or absent forms.
+
+  Every refusal requires exit 1, no output, no traceback, and no path echoed. Goldens are byte-identical.
+
+### DRQG QA round 16 class sweep: another party's record never carries its own identifier or text (applied here; 1.0.4, no version bump; hardening checklist D18, D23; new guideline #13.10)
+- **Class.** In DRQG, a brand-check row identified as another deliverable's still put its ID-shaped `check_id` into the finding ID, location, detail and escalation, and the whole row stayed in intermediate outputs. Here, every place a record is identified as another engagement's or another timekeeper's was checked: raw calendar and document rows, activity signals, time entries, and the links to them.
+- **Rule (#13.10).** Such a record is named only by an engine label built from its position. A raw row becomes `calendar-export-row-N` or `document-activity-log-row-N` (N is the file row number; the header is row 1). A packet record becomes `other-engagement-signal-N`, `other-engagement-entry-N` or `other-timekeeper-signal-N` (N is its 1-based position in its section). A shape-valid supplied ID is not trusted on a foreign record. New shared helpers: `positional_label`, `raw_row_label` and `foreign_label` (`signal_policy.py:201-215`), `FOREIGN_CITATION` and `POSITIONAL_LABEL_RE` (`signal_policy.py:105-107`).
+- **Findings (fixed):**
+  - **D1.** Activity-pull recorded another engagement's raw row in `provenance.out_of_scope_rows` under its supplied `activity_id`. It now records the row label (`activity_pull.py:392-398`).
+  - **D2.** A timesheet link to such a row was recorded under the supplied ID in the entry's `excluded_activity_ids` and in `excluded_signals`. The link now resolves to the row's label (`activity_pull.py:500`).
+  - **D3.** `filter_packet` recorded another engagement's time entry in `provenance.excluded_entries` under its supplied `entry_id`. It is now recorded as `other-engagement-entry-N` (`signal_policy.py:441-453`).
+  - **D4.** `filter_packet` recorded another engagement's signal in `excluded_signals` under its supplied `activity_id`, and in-scope entries' links to it kept that ID. The record and every link (`activity_ids` moved to excluded, `excluded_activity_ids`, `cross_person_activity_ids`) now carry `other-engagement-signal-N` (`signal_policy.py:454-485`).
+  - **D5.** `enforce_timekeeper_scope` dropped another timekeeper's signal, but an in-scope entry's link to it kept the colleague's ID (for example in `cross_person_activity_ids`). Every in-scope link is now renamed `other-timekeeper-signal-N` before the signal is withheld (`signal_policy.py:899-910`).
+  - **Reserved form.** A supplied ID in a label form could have posed as an engine label. Activity-pull now refuses a raw `activity_id`, timesheet `entry_id` or `activity_ids` link in that form, in any spelling that folds to it (`unreserved_id`, `activity_pull.py:148`; called at `activity_pull.py:386`, `475` and `485`). Every later stage refuses an active signal ID, entry ID or evidence link in that form (`check_exclusions`, `signal_policy.py:2300-2311`). The refusal cites #13.10 and never repeats the value.
+- **Confirmed, no change:**
+  - **Other timekeepers' raw rows.** Activity-pull skips them before reading any field. The requester's own link to one is reported exactly like a link to an ID that does not exist. Relabelling it would reveal that the colleague's row exists. A test confirms the two packets are identical.
+  - **Count-only rendering.** `other_engagement_ids` (`signal_policy.py:218`) now holds labels. Every draft reason, flag detail and report line still only counts these records ("N from another engagement (not shown, #13.3)"; `exception_report.py:379`).
+  - **Workplan rows.** Another engagement's workplan rows are never indexed or joined (`activity_pull.py:345`).
+  - **Engagement header.** A packet whose engagement header differs from `engagement_identity` is refused at every stage (#13.3).
+  - **Team view.** Colleagues' `cross_person_activity_ids` in an authorised team view name in-scope records; their text is count-only (#12.2).
+  - **`timekeeper_scope.withheld.requested`.** Superseded by the DRQG round 17 sweep: colleagues named with `--person` are now recorded as `other-timekeeper-name-N`.
+- **Docs.** New guideline #13.10 and a #13.3 cross-reference (all six copies). The README engagement-identity paragraph, activity-pull step 4 and exception-report step 3 are updated.
+- **Tests.** 1252 checks (were 1239). The new `drqg16_tests` group has 13 checks:
+  - raw calendar and document rows of another engagement linked from an in-scope entry: no supplied ID, event ID, subject, file name or engagement ID in any output; labels in `out_of_scope_rows` and the entry's links; the entry is held and the report counts the rows;
+  - the colleague-row and missing-ID packets are identical;
+  - a forged packet with another engagement's signal and entry: no leak, and both labels present;
+  - a colleague's signal: a cross-person link is relabelled, a direct link is refused unnamed, and a unit check of `enforce_timekeeper_scope`;
+  - the reserved form refused at activity-pull (four cases) and at narrative-draft (three cases);
+  - a control: no golden carries a label or a reserved ID.
+
+  Six existing checks now assert the labels and that the supplied IDs appear in no output (`qa4 item4` x2, `r7 chain` other-engagement entries, `r10qa A13` dedupe, `qa11 control`, `qa16-4 D23`). They are stricter than before and the check count is unchanged. Goldens are byte-identical: they hold no foreign records.
+
+### DRQG QA round 17 class sweep: an unrecognised line is refused, never skipped (applied here; 1.0.4, no version bump; hardening checklist C5, D23; new guideline #8.4)
+- **Class.** In DRQG, a register section whose only line was "TBD" was read as "no entries". Here, every parser of raw markdown, CSV or text was checked. Only two read raw text: `signal_policy.read_raw_csv` (timesheet, calendar, document log, workplan) and `signal_policy.read_engagement` (the engagement letter). Every other input is strict JSON.
+- **Rule (#8.4).** A non-blank line or row that is not a record or the defined explicit "none" is refused, naming the file and the row or line, never its text. The only explicit "none" is a header-only CSV with every column (#8.3).
+- **Findings (fixed):**
+  - **E1. Engagement letter.** `read_engagement` skipped every line that was not a declared `- <field>: <value>`, anywhere in the file. A "TBD" line, a field without its colon or an undeclared label was silently ignored. The fields are now read only from the letter's one `## Engagement` section (any ATX heading level whose text folds to "engagement"), and any other non-blank line in that section is refused. A declared field outside the section, a missing section and a repeated section are refused too. The billing-terms prose outside the section is not a register and is not read (`signal_policy.py:605-606`, `665-726`).
+  - **E2. CSV rows naming no timekeeper.** In a self-scoped run, activity-pull checked the timekeeper scope before validating the row, so a calendar, document or timesheet row with a blank person was skipped as "not the requester's". That covers a row of empty cells, or `TBD` with empty cells. Team view already refused it. The person cell is now validated first in every scope (`activity_pull.py:383`, `472`).
+  - **E3. Workplan rows.** A workplan row with an item type other than `calendar_event` or `document`, or a blank match key, was silently left unindexed. A workplan of such rows read as an empty one, so every signal lost its class without a refusal. A row naming no engagement was skipped as another engagement's. All three are now refused (`activity_pull.py:75`, `341-357`).
+  - **E4. Team-view check.** `verify_scope_source` dropped a blank-person row from the set of people in scope instead of refusing it. It now refuses it as activity-pull does, so every re-deriving stage refuses the same rows (`signal_policy.py:782-785`).
+- **Confirmed, no change:**
+  - **Short rows, comment lines and a lone "TBD".** `read_raw_csv` refuses any row without one cell per header column (`signal_policy.py:661`). That covers `TBD`, `# none` and a truncated row.
+  - **Unknown activity type or blank class.** These map to no class, so the entry's code is `UNMAPPED` and it is held (`billing_rules.py:127-144`).
+  - **CSV list cells.** Empty `activity_ids` and `attendees` items are skipped as documented (`activity_pull.py:479`, `410`). Every non-blank `activity_ids` item is ID-checked and reserved-form-checked.
+  - **Unread raw files.** `client-billing-guidelines-extract.md`, `code-structure.md` and `mailbox-summary.txt` are never parsed (#8.3), so they cannot hide an empty register.
+- **Sweep D completion (#13.10).** Every record list that carries a subject (timekeeper, matter or client) was rechecked.
+  - **Finding (fixed).** When a self-scoped requester named colleagues with `--person`, `provenance.timekeeper_scope.withheld.requested` recorded their names, and those reached every JSON output. They are now recorded by position only, as `other-timekeeper-name-N` (`activity_pull.py:245-246`). Re-derivation replays the labels and gets the same result.
+  - **Reserved form.** A `--requester` in a reserved label form is refused (`activity_pull.py:198`). `POSITIONAL_LABEL_RE` now covers the `name` kind (`signal_policy.py:106`).
+  - **Another engagement's workplan rows.** These are now skipped before any field other than the engagement is read (`activity_pull.py:344-345`).
+- **Docs.** New guideline #8.4, and #13.9 and #13.10 extended (all six copies). The README letter and input-validation paragraphs and the engagement-identity paragraph are updated. Activity-pull step 2 and its constraints are updated.
+- **Tests.** 1263 checks (were 1252). The new `drqg17_tests` group has 11 checks:
+  - the letter: a `TBD` line, a field without its colon or an undeclared label in the section, a field outside it, and a missing or repeated section are refused; a control with heading variants, blank lines and prose outside the section is accepted;
+  - CSV rows with no timekeeper (empty cells, `TBD` with no person, a lone `TBD`, `# none`) are refused in a self-scoped run;
+  - workplan rows with an unknown item type, no engagement, a blank match key or a `TBD` item;
+  - the same refusals at each of the four re-deriving stages, and at the team-view check;
+  - controls: a header-only workplan is accepted as empty, and the three unread raw files;
+  - named colleagues are recorded as labels, with no name in any output; a `--requester` in the label form is refused;
+  - another engagement's workplan row is never joined.
+
+  Four existing checks were retargeted, and the check count is unchanged:
+  - `naming colleagues without a team-view confirmation` and `qa5 class4 --person`: these now assert the `other-timekeeper-name-N` labels and that no name appears in any output (except, in the first, the attendee lists of the requester's own meetings, which are the requester's record);
+  - `r12 A21` for a workplan `match_key` of `-`: the row is now refused under #8.4 instead of left unindexed;
+  - `r12 A21` for a calendar `event_id` of `_`: the blank workplan `match_key` that check also set is removed, so the check still tests the event ID refusal alone (the blank key would now be refused first).
+
+  Goldens are byte-identical: no demo file holds an unrecognised line.
+
 ### Tests and goldens
+- DRQG QA round 17 class sweep: 1252 to 1263 checks (`drqg17_tests`, 11 checks; see the DRQG round 17 section). Goldens are byte-identical.
+- DRQG QA round 16 class sweep: 1239 to 1252 checks (`drqg16_tests`, 13 checks; see the DRQG round 16 section). Goldens are byte-identical.
+- Mobilization QA round 20 class sweep: 1221 to 1239 checks (`mob20_tests`, 18 checks; see the Mobilization round 20 section). Goldens are byte-identical.
+- Mobilization QA round 19 class sweep: 1211 to 1221 checks (`mob19_tests`, 10 checks; see the Mobilization round 19 section). Goldens are byte-identical.
+- QA round 14 on 1.0.4: 1186 to 1211 checks (`qa14_tests`, 25 checks; see the QA round 14 section). Goldens are byte-identical.
 - Mobilization QA round 18 class sweep: 1174 to 1186 checks (`r18_tests`, 12 checks; see the Mobilization round 18 section). Goldens are byte-identical.
 - Mobilization QA round 17 class sweep: 1149 to 1174 checks (`mob17_tests`, 25 checks; see the Mobilization round 17 section). Goldens are byte-identical.
 - DRQG QA round 15 class sweep: 1112 to 1149 checks (`drqg15_tests`, 37 checks; see the DRQG round 15 section). Goldens are byte-identical.

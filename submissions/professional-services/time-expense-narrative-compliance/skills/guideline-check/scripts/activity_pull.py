@@ -71,6 +71,8 @@ SOURCE_FILES = (
     ("mailbox_content", "mailbox-summary.txt", "connector:mailbox-content"),
 )
 PARSERS_AVAILABLE = ("calendar", "document_activity")
+# The workplan item types the joins use (canonical form -> declared spelling); any other is refused (#8.4).
+WORKPLAN_ITEM_TYPES = {signal_policy.canon_id(t): t for t in ("calendar_event", "document")}
 NO_CONFIRMATION = "no engagement-manager team-view confirmation was supplied"
 
 
@@ -143,6 +145,16 @@ def record_id(value, cite, key, optional=False):
     return value
 
 
+def unreserved_id(value, cite, key):
+    """#13.10: an activity ID, entry ID or link never has the positional-label form the engines give another party's
+    records (calendar-export-row-4), so a label can never name an in-scope record. The error cites the row only."""
+    record_id(value, cite, key)
+    if signal_policy.positional_label(value):
+        raise InputError(f"{cite} {key} has the reserved positional-label form the engines give another party's "
+                         f"records ({signal_policy.FOREIGN_CITATION}); rename the record")
+    return value
+
+
 def unique(index, key, cite, what, value=None):
     """Record `key` in `index`; a repeat is malformed input (an index would silently keep only one row). The error
     cites both rows, never the value."""
@@ -183,6 +195,9 @@ def resolve_scope(args, engagement):
     requester = " ".join((args.requester or "").split())
     if not signal_policy.person_key(requester):
         raise InputError("--requester must name the requesting timekeeper")
+    if signal_policy.positional_label(requester):
+        raise InputError(f"--requester has the reserved positional-label form the engines give another party "
+                         f"({signal_policy.FOREIGN_CITATION})")
     eng_id = engagement["engagement_id"]
     requested = [" ".join(p.split()) for p in (args.person or []) if signal_policy.person_key(p)]
     # Names compare in canonical form (person_key): one colleague named twice in variant spellings is one person.
@@ -224,7 +239,11 @@ def resolve_scope(args, engagement):
     else:
         reason = "the requester is not the engagement manager recorded in raw/engagement-letter-extract.md"
     scope["withheld"] = {
-        "requested": "all timekeepers" if args.all_timekeepers else others,
+        # #13.10: colleagues whose rows are withheld are other parties; they are recorded by position in sorted order
+        # (other-timekeeper-name-1), never by the names given, so no name reaches any output. Re-deriving with the
+        # labels as --person gives the same labels.
+        "requested": "all timekeepers" if args.all_timekeepers else [
+            signal_policy.foreign_label("timekeeper", "name", n) for n in range(1, len(others) + 1)],
         "reason": f"colleagues' rows withheld: {reason}; only the requester's rows are returned",
         "citations": [signal_policy.SCOPE_CITATION],
     }
@@ -233,7 +252,10 @@ def resolve_scope(args, engagement):
 
 def period_check(period, dates_available, dates_in_period):
     if not (period["start"] or period["end"]):
-        return {"status": "no_period_requested", "warning": None}
+        # Missing is not empty: with no period requested, a packet with no in-scope data at all still says so.
+        return {"status": "no_period_requested", "warning": None if dates_available else (
+            "No activity or time entries in scope were found for any date. An empty packet is not evidence that no "
+            "work was done - confirm the timekeeper, the engagement and the exports before relying on it.")}
     available = [min(dates_available), max(dates_available)] if dates_available else None
     in_period = [min(dates_in_period), max(dates_in_period)] if dates_in_period else None
     check = {"requested": dict(period), "data_dates_in_period": in_period, "data_dates_available": available}
@@ -317,15 +339,25 @@ def pull(args, script_dir=None, extra_sources=None):
     for idx, row in enumerate(workplan_rows, start=2):
         cite = f"raw/engagement-workplan.csv row {idx}"
         unique(workplan_ids, signal_policy.canon_id(record_id(row["workplan_id"], cite, "workplan_id")), cite, "workplan_id")
-        record_id(row["engagement_id"], cite, "engagement_id", optional=True)
-        # Engagement IDs, item types and match keys compare in canonical form (A13): a variant spelling of a
-        # workplan key is the same key, never a missed match that drops the row's activity class. A21: a row
-        # with a blank item type or match key is never indexed, so it can never join a blank event ID or file.
+        # #8.4: every workplan row states its engagement; a row naming none is refused, never skipped.
+        record_id(row["engagement_id"], cite, "engagement_id")
+        if signal_policy.canon_id(row["engagement_id"]) != eng_key:
+            continue  # #13.10: another engagement's workplan row is never read further or joined
+        # Item types and match keys compare in canonical form (A13): a variant spelling of a workplan key is the same
+        # key, never a missed match that drops the row's activity class. #8.4: a row whose item type is not one the
+        # joins use, or whose match key folds to blank (A21), is refused rather than left unindexed, so a workplan of
+        # unrecognised rows is never read as an empty one and a blank key never joins a blank event ID or file.
         key = (signal_policy.canon_id(row["item_type"]), signal_policy.canon_id(row["match_key"]))
-        if signal_policy.canon_id(row["engagement_id"]) == eng_key and all(key):
-            unique(workplan, key, cite, "item_type and match_key", value=(idx, row))
+        if key[0] not in WORKPLAN_ITEM_TYPES:
+            raise InputError(f"{cite} item_type must be one of {', '.join(WORKPLAN_ITEM_TYPES.values())}; an "
+                             "unrecognised workplan row is refused, never skipped (client-billing-guidelines.md #8.4)")
+        if not key[1]:
+            raise InputError(f"{cite} match_key must not be empty (or only separators or format characters); a blank "
+                             "key never joins (client-billing-guidelines.md #8.4)")
+        unique(workplan, key, cite, "item_type and match_key", value=(idx, row))
 
     signals, skipped_sources, out_of_scope = [], [], []
+    foreign_rows = {}  # canonical activity ID of another engagement's row -> its positional label (#13.10)
     activity_rows = {}
     read_keys = set()
     for key, filename, source in SOURCE_FILES:
@@ -346,17 +378,23 @@ def pull(args, script_dir=None, extra_sources=None):
             rows = read_csv(path, signal_policy.RAW_EXPORTS["document_activity"][1])
         for idx, row in enumerate(rows, start=2):
             cite = f"raw/{filename} row {idx}"
+            # #8.4: a row naming no timekeeper is refused in every scope (as the team view always refused it), never
+            # skipped as someone else's.
+            cell_id(row, "person", cite)
             if not allowed(row["person"]):
                 continue  # #12.1: other timekeepers' rows are never read into the packet
-            record_id(row["activity_id"], cite, "activity_id")
+            unreserved_id(row["activity_id"], cite, "activity_id")
             record_id(row["engagement_id"], cite, "engagement_id", optional=True)
             if key == "calendar":
                 record_id(row["event_id"], cite, "event_id", optional=True)
             unique(activity_rows, signal_policy.canon_id(row["activity_id"]), cite, "activity_id")
-            cell_id(row, "person", cite)
             row["date"] = cell_date(row, "date", cite)
             if signal_policy.canon_id(row["engagement_id"]) != eng_key:
-                out_of_scope.append({"activity_id": row["activity_id"], "reason": "outside engagement scope", "citations": [cite]})
+                # #13.3, #13.10: another engagement's row is recorded by its position only; its supplied ID and
+                # fields go nowhere, and a timesheet link to it is recorded under the same label.
+                label = signal_policy.raw_row_label(filename, idx)
+                foreign_rows[signal_policy.canon_id(row["activity_id"])] = label
+                out_of_scope.append({"activity_id": label, "reason": "outside engagement scope", "citations": [cite]})
                 continue
             dates_available.add(row["date"])
             if not in_period(row["date"], period):
@@ -430,12 +468,12 @@ def pull(args, script_dir=None, extra_sources=None):
     excluded_ids = {}
     entries, excluded, entry_rows = [], [], {}
     for idx, row in enumerate(timesheet_rows, start=2):
+        cite = f"raw/timesheet.csv row {idx}"
+        cell_id(row, "person", cite)  # #8.4: a row naming no timekeeper is refused, never skipped
         if not allowed(row["person"]):
             continue
-        cite = f"raw/timesheet.csv row {idx}"
-        record_id(row["entry_id"], cite, "entry_id")
+        unreserved_id(row["entry_id"], cite, "entry_id")
         unique(entry_rows, signal_policy.canon_id(row["entry_id"]), cite, "entry_id")
-        cell_id(row, "person", cite)
         row["date"] = cell_date(row, "date", cite)
         hours = cell_hours(row, "hours", cite)
         links = [a.strip() for a in (row["activity_ids"] or "").split(";") if a.strip()]
@@ -444,7 +482,7 @@ def pull(args, script_dir=None, extra_sources=None):
             if not signal_policy.canon_id(link):
                 raise InputError(f"{cite} activity_ids has a blank link (only separators or format characters); "
                                  "a blank key never matches an activity")
-            record_id(link, cite, "activity_ids link")
+            unreserved_id(link, cite, "activity_ids link")
             unique(linked, signal_policy.canon_id(link), cite, "activity_ids link")
         dates_available.add(row["date"])
         if not in_period(row["date"], period):
@@ -459,10 +497,10 @@ def pull(args, script_dir=None, extra_sources=None):
                 (kept_links if signal_policy.same_person(owners[link_key], row["person"]) else cross).append(
                     kept_ids[link_key])
                 continue
-            activity_id = excluded_ids.setdefault(link_key, link)
+            activity_id = excluded_ids.setdefault(link_key, foreign_rows.get(link_key, link))
             dropped.append(activity_id)
-            hint = next((k for ns, k in ID_NAMESPACE
-                         if f" {signal_policy.canon_id(ns)} " in f" {link_key} "), None)
+            hint = None if link_key in foreign_rows else next(
+                (k for ns, k in ID_NAMESPACE if f" {signal_policy.canon_id(ns)} " in f" {link_key} "), None)
             if hint and not enabled.get(hint):
                 reason = signal_policy.pull_disabled_reason(row["entry_id"], cite, hint)
             else:
