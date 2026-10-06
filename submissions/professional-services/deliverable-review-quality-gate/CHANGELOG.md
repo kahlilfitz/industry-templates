@@ -487,6 +487,10 @@ The structural patterns described at the top of this entry are replaced, not sup
 
   Both old fixtures were history holds with hand-written fields, which round 13 correctly refuses.
 
+### QA round 11 on 1.0.4 (suite run from another directory; 1 reproduced defect)
+
+- `tests/run_tests.py` `te_round8_sweep_tests` read engine paths relative to the working directory, so the suite failed 1140/1141 when run from the repository root. It now resolves them from the plugin root. Engines, goldens and the check count are unchanged.
+
 ### QA round 12 on 1.0.4 (whole-document re-derivation at every stage, checklist A23)
 
 - **Defect class: field-by-field reconciliation kept missing fields.** Each round found another carried member that no stage compared, so the fix replaces per-field checks with a whole-document one (quality-gate-criteria.md #8.21, new):
@@ -776,7 +780,7 @@ Three defect classes from T&E QA round 15, swept across every DRQG engine and ra
 
 ### Test harness
 
-- Test harness: results stream as they run; `--list-groups` and `--group`; summary line unchanged. `tests/run_tests.py` prints `== group <name>` before each group and each `PASS <label>` or `FAIL <label>  (detail)` line as the check is recorded (ASCII-safe, flushed), so a suite cut off by a sandbox timeout still leaves evidence (checklist G7). Failures are repeated under `== failures` before the last line, which is still `N/M checks passed`. `--list-groups` prints the 44 group names; `--group NAME` (repeatable) runs only those groups, in canonical order, with the same shared setup. Every group runs alone with the same checks it has in a full run, so none needs another as a prerequisite. An unknown group or argument exits 2. Check labels and the count (1607) are unchanged; engines, skills, references, contracts and demo data are untouched.
+- Test harness: results stream as they run; `--list-groups` and `--group`; summary line unchanged. `tests/run_tests.py` prints `== group <name>` before each group and each `PASS <label>` or `FAIL <label>  (detail)` line as the check is recorded (ASCII-safe, flushed), so a suite cut off by a sandbox timeout still leaves evidence (checklist G7). Failures are repeated under `== failures` before the last line, which is still `N/M checks passed`. `--list-groups` prints the 44 group names (45 after the r15 sweep above); `--group NAME` (repeatable) runs only those groups, in canonical order, with the same shared setup. Every group runs alone with the same checks it has in a full run, so none needs another as a prerequisite. An unknown group or argument exits 2. Check labels and the count (1607) are unchanged; engines, skills, references, contracts and demo data are untouched.
 
 ## 1.0.3 - 2026-10-01
 
