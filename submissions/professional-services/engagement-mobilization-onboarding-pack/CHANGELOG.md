@@ -444,6 +444,55 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
     - malformed `*_at` and `*_date` values under untrusted keys.
   - Suite 479 → 483 checks. Goldens byte-identical.
 
+- **QA round 20: missing is not empty, and a foreign record is quarantined (checklist D23, D24; workspace-inventory-rules.md #1.2, #1.3; confidentiality #1.2, #1.5, #3.3).** A missing or malformed workspace inventory now holds the wall stage. Two classes are swept across every stage and input: a missing, blank or headerless input must never read as empty or clean, and a record identified as another party's must never carry its supplied identifier or text into any output.
+  - *MOB-QA-20-01: a missing or malformed workspace inventory was treated as clean.*
+    - Defect: `wall_check` read the inventory with `read_csv(inventory, False, ...)`, so a missing file became `None`. All inventory validation sat under `if ws is not None`, with no missing-inventory branch and no required-column check. The wall status therefore stayed `clear` and the prior-knowledge candidates were released.
+    - Reproducer: scenario A's `matched.json` and raw inputs, with `--workspace-inventory` pointing at a nonexistent path or a zero-byte file. Both exited 0 and wrote `governed.json` with `wall_decision.status` `clear`, `knowledge_digest.status` `ready`, no holds and a populated `allowed_knowledge_ids`. `access_checklist` held the checklist, but the wall decision it carried stayed clear.
+    - Fix: new `wall_check.inventory_problem`, `inventory_hold` and `INVENTORY_COLUMNS`, one check that `wall_check` and `access_checklist` (and so `verify_render`) apply to the rows as read:
+      - a missing file raises `HOLD-MISSING-WORKSPACE-INVENTORY`;
+      - a header that repeats a column or lacks a required one raises `HOLD-MALFORMED-WORKSPACE-INVENTORY` (a zero-byte or whitespace-only file has no header);
+      - a repeated `workspace_id` raises `HOLD-MALFORMED-WORKSPACE-INVENTORY`.
+    - The hold is raised before the wall decision is gated, so the wall decision and the knowledge digest hold, with no allowed or released knowledge. A malformed inventory's rows are still screened for instructions and other clients before the inventory is emptied. Only a well-formed header with no rows is an explicitly empty inventory (no requests, no hold).
+  - *Sweep A: missing is not empty, for every input of every stage.* Each input was tried absent, zero-byte, whitespace-only, header-only, without a required column and (for JSON) without a required section, at the first stage that reads it and at every stage that re-derives it.
+    - `scope_digest.derive` (`scope_digest.py:189-192`, all 5 copies): a zero-byte or whitespace-only engagement letter or pursuit record ran clean as if the source were empty. Both are now refused with an `InputError` like a missing file, at `scope_digest` and at every re-deriving stage (`knowledge_match`, `wall_check`, `access_checklist`, `verify_render`). A blank SOW still holds with `HOLD-SOW-IDENTITY-MISSING` (#1.2).
+    - `config/mobilization-policy.json`: `missingWallRegister` said `hold` while every stage refuses (#2.1); it now reads `refuse`. `missingWorkspaceInventory` and `malformedWorkspaceInventory` (`hold`) are added. No engine reads this file.
+    - Reviewed and unchanged (already hold or refuse at every stage):
+      - SOW: missing is refused; blank holds.
+      - Confirmed roster: missing, zero-byte or missing a column is refused; header-only gives no joiner and holds.
+      - Wall register: missing, zero-byte or without `client_name` is refused; any other missing column holds.
+      - Role-access matrix: built into the engine, not an input; a role outside it holds with `HOLD-ROLE-NOT-IN-MATRIX`.
+      - Staffing and Closeout JSON: zero-byte files, missing or null required sections are refused; a staffing input without an `engagement` member holds with `HOLD-STAFFING-ENGAGEMENT-MISMATCH`.
+  - *Sweep B: a record identified as another party's never carries its supplied identifier or text into output (checklist D24).*
+    - `knowledge_match.derive` (`knowledge_match.py:143`, `:161`, `:170`, all 3 copies): a reusable asset, its released record or a lesson naming a different engagement, client or matter was excluded as `linked_record_subject_mismatch` under its supplied `asset_id` or `lesson_id`. The ID was shape-valid, so it reached `matched.json`, `governed.json` and `access-checklist.json`. New `foreign_exclusion` writes the ID as null and cites the record by position (`upstream/closeout.knowledge_record.reusable_assets[N]` / `lessons[N]`).
+    - `scope_digest.derive` (`scope_digest.py:246-250`, all 5 copies): a staffing input for a different client or engagement raised `HOLD-STAFFING-ENGAGEMENT-MISMATCH`, but its governed roles still produced proposed staffing, staffing exclusions, staffing reviews, escalations and link holds. These carried the other engagement's candidate names, IDs, rules and citations. The staffing record is now quarantined: it contributes no record, though every cell is still screened.
+    - `wall_check.govern` (`wall_check.py:32`, `:160-162`, `:175-179`) and `access_checklist._derive`/`build` (`access_checklist.py:166`, both copies): an inventory row naming another client was listed in `name_withheld_workspace_ids` and given a checklist row (or a held-workspace entry) under its supplied `workspace_id`. New `foreign_rows` quarantines the row: it is never requested, denied, held or listed, and only its positional `HOLD-OTHER-CLIENT-*` at `raw/workspace-inventory.csv row N.<column>` names it. A workspace the applicable register row restricts is still briefed, using the register's spelling and citation.
+    - Reviewed and unchanged:
+      - The other-client screen (`screen_csv_other`, `screen_other`, `screen_holds`) labels holds `<file> row N.<column>` or by JSON path, with hash-based hold IDs.
+      - Wall-register rows for other matters feed only the identity set and are never rendered.
+      - A Closeout record with another engagement identity already gives a positional `HOLD-OTHER-CLIENT-*` and no items.
+  - *Docs.* Changes to the references (all 6 copies):
+    - workspace-inventory-rules.md #1.2 and #1.3 name both holds, state that a missing or malformed inventory holds the wall decision and digest at every stage, and define the explicitly empty inventory as a well-formed header with no rows.
+    - Confidentiality #1.2 covers blank letters and pursuit records, #1.4 separates inventory-level holds from row-level ones, #1.5 adds positional exclusions, and #3.2 and #3.3 add quarantine of foreign inventory rows and foreign staffing input.
+    - The contract's `name_withheld_workspace_ids` description no longer lists other-client names (all 6 copies). The five SKILL.md failure-handling lines (identical) name both inventory holds and the blank-file refusal.
+  - *Behaviour changes.*
+    - A missing or malformed inventory now holds the wall and the digest, where `wall_check` used to report clear.
+    - A blank letter or pursuit record is refused.
+    - Foreign Closeout exclusions carry a null ID.
+    - A mismatched staffing input yields no staffing records.
+    - A foreign inventory row gets no checklist row and no name-withheld entry.
+    - Scenario goldens contain none of these cases.
+  - Tests: new `qa101zd_checks` (11 checks):
+    - the reproducer, run directly against `wall_check` with nonexistent, zero-byte, blank and missing-column inventories;
+    - the header-only control at `wall_check` and end to end;
+    - the full chain through `verify_render` for each malformed inventory;
+    - missing column plus a repeated ID, with the malformed file's cells still screened;
+    - `access_checklist` and `verify_render` refusing a clean document paired with a missing or zero-byte inventory;
+    - blank letter and pursuit records at all 5 stages;
+    - one check for each Sweep B finding, plus a `foreign_rows` unit check.
+  - Eight earlier checks whose fixtures exercise the changed behaviour were updated: 1.0.1 briefing, QA-1, QA-H2, QA-J, QA-M3, QA-N1, QA-P2 and MOB-QA-16-04. They now expect quarantine in place of the old ID-carrying rows; the qa101j helper was also made safe when a row is absent.
+  - Against the previous code, 9 of the 11 checks fail. The exceptions are the two header-only controls, which guard behaviour that already held.
+  - Suite 483 → 494 checks. Goldens byte-identical.
+
 ## 1.0.0 - 2026-10-01
 
 - Initial Wave 1 Scenario 03 plugin with `scope_digest`, `knowledge_match`, `wall_check` and `access_checklist`.

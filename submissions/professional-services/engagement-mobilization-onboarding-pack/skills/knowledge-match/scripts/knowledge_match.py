@@ -140,6 +140,11 @@ def knowledge_rows(doc):
     """[(field path, values)] for the knowledge items in the order the pack renders them: title, ID, summary and every
     supplied citation share one line ("- title (id) [...] - summary Source: citations"), so they are read together (#4.5)."""
     return [(f"prior_knowledge_candidates[{i}]",rendered_values(x.get("title"),x.get("knowledge_id"),x.get("summary"),*rendered_citations(x.get("citations")))) for i,x in enumerate(doc.get("prior_knowledge_candidates") or []) if isinstance(x,dict)]
+def foreign_exclusion(lh,exc,key,where):
+    """A Closeout record that names a different engagement, client or matter than the closed engagement is another
+    subject's: it is held and excluded by its position, never by its supplied ID (a shape-valid ID is still that
+    record's own text), and none of its fields reach any output (confidentiality-and-ethical-wall-rules.md #1.5, #3.3)."""
+    lh.append(link_hold(where,ENGINE)); exc.append({key:None,"reason":"linked_record_subject_mismatch","citation":f"{where}; {LINK_CITATION}"})
 def derive(s,closeout,register,ts,staffing):
     """matched.json for a scope document (scope_digest's output, or a carried scope proved equal to it), the Closeout
     record, the wall register, this stage's run timestamp and the staffing input. Later stages re-run it (rederive, #1.4)."""
@@ -153,7 +158,7 @@ def derive(s,closeout,register,ts,staffing):
         aid=asset.get("asset_id")
         if not canon_id(aid) or is_withheld(aid) or canon_id(aid) not in rels: exc.append({"asset_id":aid,"reason":"not_in_released_assets","citation":"knowledge-reuse-rules.md #2.1"}); continue
         if subjects_differ(asset,rels[canon_id(aid)],ASSET) or subjects_differ(asset,ceng,OWNER) or subjects_differ(rels[canon_id(aid)],ceng,OWNER):
-            lh.append(link_hold(f"upstream/closeout.knowledge_record.reusable_assets[{i}]",ENGINE)); exc.append({"asset_id":aid,"reason":"linked_record_subject_mismatch","citation":LINK_CITATION}); continue
+            foreign_exclusion(lh,exc,"asset_id",f"upstream/closeout.knowledge_record.reusable_assets[{i}]"); continue
         perm=asset.get("confidentiality_permission",rels[canon_id(aid)].get("confidentiality_permission"))
         if perm is not None and perm!=PERM: exc.append({"asset_id":aid,"reason":"confidentiality_permission_not_internal_reuse","citation":"knowledge-reuse-rules.md #2.2"}); continue
         score,over=rel(s,asset)
@@ -162,7 +167,7 @@ def derive(s,closeout,register,ts,staffing):
     for i,lesson in enumerate(kr["lessons"]):
         lp=lesson.get("confidentiality_permission")
         if not canon_id(lesson.get("cluster_id")) or is_withheld(lesson.get("cluster_id")): exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"no_lesson_id","citation":"knowledge-reuse-rules.md #1.4"}); continue  # every knowledge item carries its identity (contract $defs/knowledge_item)
-        if subjects_differ(lesson,ceng,OWNER): lh.append(link_hold(f"upstream/closeout.knowledge_record.lessons[{i}]",ENGINE)); exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"linked_record_subject_mismatch","citation":LINK_CITATION}); continue
+        if subjects_differ(lesson,ceng,OWNER): foreign_exclusion(lh,exc,"lesson_id",f"upstream/closeout.knowledge_record.lessons[{i}]"); continue
         if lp is not None and lp!=PERM: exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"confidentiality_permission_not_internal_reuse","citation":"knowledge-reuse-rules.md #2.2"}); continue
         if lesson.get("rewrite_required") is not False: exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"rewrite_required_or_unknown","citation":"knowledge-reuse-rules.md #2.4"}); continue
         score,over=rel(s,{"title":lesson.get("category") or "","description":lesson.get("drafting_guidance") or "","tags":lesson.get("tags") or []})

@@ -9,7 +9,7 @@ O={"none":0,"viewer":1,"member":2,"contributor":3,"admin":4,"owner":5}  # role-a
 NAMES={v:k for k,v in O.items() if k!="owner"}
 ADMIN_EXCLUDED=True  # workspace-inventory-rules.md #3.2
 WALL_STATUSES={"clear","denied","hold"}  # confidentiality-and-ethical-wall-rules.md #2.2
-INVENTORY_COLUMNS=("workspace_id","workspace_type","default_permission","depends_on_knowledge","data_classification")  # workspace-inventory-rules.md #1.3
+INVENTORY_COLUMNS=wall_check.INVENTORY_COLUMNS  # workspace-inventory-rules.md #1.3 (one definition, checked by wall_check.inventory_problem)
 KNOWN_CLASSIFICATIONS={"client_confidential","confidential","restricted","internal","public"}  # workspace-inventory-rules.md #2.3
 def low(v): return canon_text(v)  # enums and roles: the one canonical comparison form (confidentiality-and-ethical-wall-rules.md #1.3)
 def cset(xs): return {join_key(x) for x in xs or []}-{None}  # workspace IDs, types and classifications compare canonically; a blank key is in no set (#1.3)
@@ -158,17 +158,12 @@ def _derive(p,register,inventory,ts,closeout,staffing,ph=(),blocked=()):
     # Cells are screened from the rows AS READ, before an unusable header or a repeated ID empties the collection the
     # decisions use: an inventory that is not used is still screened and its flagged cells held (#1.3, #3.3, #4.3).
     rows=read_csv(inventory,False,"workspace inventory"); check_csv_ids(rows,"raw/workspace-inventory.csv",("workspace_id",))  # identifier shape (#1.3)
-    if rows is None:
-        add_hold(fixed,"HOLD-MISSING-WORKSPACE-INVENTORY","raw/workspace-inventory.csv","missing workspace inventory; no access is requested","workspace-inventory-rules.md #1.2"); rows=[]
-    else:
-        dup=duplicate_rows(rows,"workspace_id")  # keyed by workspace_id: a repeat holds, never last-wins (#1.3)
+    bad=wall_check.inventory_problem(rows)  # the one missing/malformed check wall_check applies, on the rows as read (#1.2, #1.3)
+    if bad: fixed.append(wall_check.inventory_hold(bad,ENGINE))
+    if rows is not None:
         screened=scan_rows(rows,"raw/workspace-inventory.csv")+screen_csv_other(rows,"raw/workspace-inventory.csv",terms,ENGINE)
-        if rows.duplicate_columns:
-            add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv header","workspace inventory "+DUPLICATE_HEADER_REASON+"; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
-        elif missing_columns(rows,INVENTORY_COLUMNS):
-            add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv header",f"workspace inventory is missing required column(s): {', '.join(missing_columns(rows,INVENTORY_COLUMNS))}; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
-        elif dup:
-            add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv rows "+", ".join(map(str,dup))+" workspace_id","workspace inventory workspace_id "+DUPLICATE_ID_REASON+"; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
+    if bad: rows=[]
+    foreign=wall_check.foreign_rows(rows)  # another client's workspace: never requested or listed by its supplied ID or name (#3.3)
     bad_rows=set(getattr(rows,"malformed",()))
     role=low((p.get("joiner") or {}).get("role")); allowed={canon_id(k):v for k,v in next((v for k,v in M.items() if low(k)==role),{}).items()}
     if not allowed: add_hold(fixed,"HOLD-ROLE-NOT-IN-MATRIX","scope.joiner.role","joiner role (not repeated) is not in the role-access matrix; no access is requested","role-access-matrix.md #4.3")
@@ -176,6 +171,7 @@ def _derive(p,register,inventory,ts,closeout,staffing,ph=(),blocked=()):
         """The checklist for one effective wall decision; returns (items, the access holds it raises)."""
         denied=cset(wall.get("denied_workspace_ids")); held=cset(wall.get("held_workspace_ids")); hidden=cset(wall.get("name_withheld_workspace_ids")); wstat=wall.get("status"); out=[]; ah=[]
         for n,r in enumerate(rows,2):
+            if n in foreign: continue
             wid=(r.get("workspace_id") or "").strip(); wt=low(r.get("workspace_type")); req=low(r.get("requested_permission")) or low(r.get("default_permission")); default=low(r.get("default_permission")) or req; dep=depends_on_knowledge(r.get("depends_on_knowledge")); conf=client_confidential(r.get("data_classification")); maxp=allowed.get(canon_id(wt)); status="request"; reason="role matrix allows requested workspace access"; perm=req; cit=f"{r.get('citation') or 'raw/workspace-inventory.csv'}; role-access-matrix.md #2.1; workspace-inventory-rules.md #3.1"
             withheld=[c for c in DECISION_COLUMNS if is_withheld(r.get(c))]  # a withheld identifier or enum is never a decision key (#3.3, #4.3)
             invalid=[x for x,bad in (("workspace_id blank",not wid),("withheld field(s): "+", ".join(withheld),bool(withheld)),("row has more fields than the header",n in bad_rows),("no requested or default permission",not req),("unrecognised default_permission",default not in O),("unrecognised data_classification",canon_id(r.get("data_classification")) not in cset(KNOWN_CLASSIFICATIONS)),("unrecognised depends_on_knowledge",low(r.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES)) if bad]
@@ -195,8 +191,9 @@ def _derive(p,register,inventory,ts,closeout,staffing,ph=(),blocked=()):
             if not (name or "").strip() or join_key(wid) in hidden or hits(name) or is_withheld(name): name=wid or "(blank workspace_id)"  # never rendered blank (#1.3)
             out.append({"workspace_id":wid,"workspace_name":name,"workspace_type":r["workspace_type"] if is_withheld(r.get("workspace_type")) else wt,"status":status,"requested_permission":perm,"reason":reason,"source":ENGINE,"confidence":.96,"citation":cit})
         return out,ah
-    # Access-decision holds (missing or unusable inventory, role not in the matrix, and below an invalid row or a
-    # clamped permission) govern their checklist rows and the pack status, not the wall (role-access-matrix.md #2.3).
+    # Access-decision holds (role not in the matrix, and below an invalid row or a clamped permission) govern their
+    # checklist rows and the pack status, not the wall (role-access-matrix.md #2.3). A missing or malformed inventory
+    # holds the wall too: wall_check raised the same hold, carried in the governed document (workspace-inventory-rules.md #1.2, #1.3).
     wall=effective_wall(p,register,inventory,closeout,staffing,gh+oh+screened+list(ph)); out,ah=build(wall)
     p["wall_decision"]=wall; wstat=wall.get("status"); need(wstat in WALL_STATUSES,"re-derived wall status is not recognised; fail closed")
     if wstat in {"hold","denied"}:

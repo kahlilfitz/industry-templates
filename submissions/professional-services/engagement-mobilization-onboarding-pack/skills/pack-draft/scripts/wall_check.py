@@ -11,6 +11,30 @@ FREE_TEXT_NOT_BRIEFED=True  # confidentiality-and-ethical-wall-rules.md #3.1
 BRIEFING_TOPICS_SCREENED=True  # confidentiality-and-ethical-wall-rules.md #3.2
 KNOWN_CLASSIFICATIONS={"client_confidential","confidential","restricted","internal","public"}  # workspace-inventory-rules.md #2.3
 OTHER_CLIENTS_SCREENED=True  # confidentiality-and-ethical-wall-rules.md #3.3
+INVENTORY_LABEL="raw/workspace-inventory.csv"
+INVENTORY_COLUMNS=("workspace_id","workspace_type","default_permission","depends_on_knowledge","data_classification")  # workspace-inventory-rules.md #1.3
+def inventory_problem(ws):
+    """(hold ID, path, reason, rule) when the workspace inventory cannot be used, else None. The one check wall_check
+    and access_checklist (and so verify_render) apply, on the rows AS READ, before screening rewrites a cell: a
+    missing file holds (#1.2); a header that repeats a column or lacks a required one (a zero-byte or blank file has
+    no header) or a repeated workspace_id is malformed and holds (#1.3). Only a well-formed header with no rows is an
+    explicitly empty inventory (#1.2)."""
+    if ws is None: return "HOLD-MISSING-WORKSPACE-INVENTORY",INVENTORY_LABEL,"missing workspace inventory; no access is requested","#1.2"
+    bad="HOLD-MALFORMED-WORKSPACE-INVENTORY"
+    if ws.duplicate_columns: return bad,INVENTORY_LABEL+" header","workspace inventory "+DUPLICATE_HEADER_REASON+"; no access is requested","#1.3"
+    miss=missing_columns(ws,INVENTORY_COLUMNS)
+    if miss: return bad,INVENTORY_LABEL+" header",f"workspace inventory is missing required column(s): {', '.join(miss)}; no access is requested","#1.3"
+    dup=duplicate_rows(ws,"workspace_id")  # keyed by workspace_id: a repeat holds, never last-wins (#1.3)
+    if dup: return bad,INVENTORY_LABEL+" rows "+", ".join(map(str,dup))+" workspace_id","workspace inventory workspace_id "+DUPLICATE_ID_REASON+"; no access is requested","#1.3"
+    return None
+def inventory_hold(problem,engine):
+    hid,path,why,rule=problem; return {"hold_id":hid,"path":path,"reason":why,"source":engine,"confidence":.99,"citation":"workspace-inventory-rules.md "+rule}
+def foreign_rows(ws):
+    """File row numbers of inventory rows with a cell the other-client screen withheld (screen_csv_other has run): the
+    workspace is identified with another client, so the row is quarantined. It is never requested, denied, held or
+    listed by its supplied ID or name; only its positional other-client hold names it (confidentiality-and-ethical-
+    wall-rules.md #3.3)."""
+    return {i for i,w in enumerate(ws or [],2) if any(isinstance(v,str) and OTHER_WITHHELD in v for v in w.values())}
 def applies(r,e,j):
     # Every populated field must match; blank person = engagement-wide row; a row must name this client or matter.
     # One canonical comparison (canon_person / canon_id): `Taylor  Reed` and `taylor reed` are the same joiner (#1.3).
@@ -119,21 +143,23 @@ def govern(p,register,inventory,closeout,staffing,raised=None):
         elif not named_clear:
             status,reason,cit=hold_status("HOLD-UNKNOWN-WALL-STATUS","raw/ethical-wall-register.csv","no wall register row clears this joiner for this client or matter","#2.2")
         else: cit="; ".join(row_cite(r) for r in named_clear)
+    # The workspace inventory gates the wall like every other source: a missing file, an unusable header (a zero-byte
+    # file has none) or a repeated workspace_id holds here, so the wall stage never yields a clear decision or an
+    # allowed-knowledge list while the inventory is absent or malformed (workspace-inventory-rules.md #1.2, #1.3).
+    bad=inventory_problem(ws); foreign=set()
+    if bad: holds.append(inventory_hold(bad,ENGINE))
     if ws is not None:
-        dupw=[] if ws.duplicate_columns else duplicate_rows(ws,"workspace_id")  # keyed by workspace_id: a repeat holds, never last-wins (#1.3)
-        if ws.duplicate_columns:
-            holds.append({"hold_id":"HOLD-MALFORMED-WORKSPACE-INVENTORY","path":"raw/workspace-inventory.csv header","reason":"workspace inventory "+DUPLICATE_HEADER_REASON+"; no access is requested","source":ENGINE,"confidence":.99,"citation":"workspace-inventory-rules.md #1.3"})
-        elif dupw:
-            holds.append({"hold_id":"HOLD-MALFORMED-WORKSPACE-INVENTORY","path":"raw/workspace-inventory.csv rows "+", ".join(map(str,dupw))+" workspace_id","reason":"workspace inventory workspace_id "+DUPLICATE_ID_REASON+"; no access is requested","source":ENGINE,"confidence":.99,"citation":"workspace-inventory-rules.md #1.3"})
         # Every inventory cell is screened, for instructions and for other clients, from the rows AS READ - IDs,
         # types, permissions, classifications and citations as well as names - before any decision uses them, and
         # before an unusable header or a repeated ID empties the collection the decisions use: an inventory that
         # is not used is still screened and its flagged cells held. A withheld identifier is never a decision key (#1.3, #3.3, #4.3).
-        holds+=scan_rows(ws,"raw/workspace-inventory.csv")
-        ih=screen_csv_other(ws,"raw/workspace-inventory.csv",terms,ENGINE)
+        holds+=scan_rows(ws,INVENTORY_LABEL)
+        ih=screen_csv_other(ws,INVENTORY_LABEL,terms,ENGINE)
         if ih: holds+=ih; esc.append(other_escalation(len(ih)))
-        if ws.duplicate_columns or dupw: ws=Rows()
+        if bad: ws=Rows()
+        foreign=foreign_rows(ws)  # another client's workspace: quarantined, named only by its positional hold (#3.3)
         for i,w in enumerate(ws,2):
+            if i in foreign: continue
             nm=w.get("name") or ""; wid=w.get("workspace_id")
             if (hits(nm) or is_withheld(nm)) and wid and not is_withheld(wid) and not cin(wid,withheld_names): withheld_names.append(wid)
     # Upstream holds are supplied content: another client's name or steering text in them never travels (#3.3, #4.3).
@@ -146,6 +172,11 @@ def govern(p,register,inventory,closeout,staffing,raised=None):
     for i,w in enumerate(ws or [],2):
         wid=w.get("workspace_id")
         if is_withheld(wid): continue  # never requested (access_checklist: invalid row) and never published
+        if i in foreign:
+            # Another client's inventory row is never requested, held or listed. A workspace the applicable register
+            # row restricts is still briefed, by the register's own spelling and citation, never the row's (#2.3, #3.3).
+            if status=="denied" and cin(wid,deniedw): may.append({"item":next(x for x in deniedw if join_key(x)==join_key(wid)),"type":"workspace","restriction":"workspace restricted by ethical-wall register","citation":f"{cit}; confidentiality-and-ethical-wall-rules.md #2.3; workspace-inventory-rules.md #2.2"})
+            continue
         conf=client_confidential(w.get("data_classification")); dep=depends_on_knowledge(w.get("depends_on_knowledge"))  # blank/unknown fail closed (workspace-inventory-rules.md #2.3)
         if not cin(w.get("data_classification"),KNOWN_CLASSIFICATIONS) or canon_text(w.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES: odd.append(str(i))
         if status=="denied" and cin(wid,deniedw):

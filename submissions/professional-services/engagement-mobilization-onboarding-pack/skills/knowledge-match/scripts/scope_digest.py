@@ -186,6 +186,10 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
     sowp=os.path.join(raw_dir,"sow-extract.md")
     if not os.path.exists(sowp): raise InputError("missing required SOW extract: raw/sow-extract.md")
     sow=read_text(sowp,"SOW extract"); letter=read_text(os.path.join(raw_dir,"engagement-letter-extract.md"),"engagement letter extract"); pursuit=read_text(os.path.join(raw_dir,"pursuit-record.md"),"pursuit record"); rows=read_csv(confirmed_roster,label="confirmed roster"); st=load_json(staffing,"staffing input")  # fixed labels: no message echoes a supplied path (#1.3)
+    # Missing is not empty: a zero-byte or blank engagement letter or pursuit record is refused like a missing one, so
+    # it never passes as a source with no terms, domains or conflicts (#1.2). A blank SOW holds (HOLD-SOW-IDENTITY-MISSING).
+    for t_,lab in ((letter,"engagement letter extract"),(pursuit,"pursuit record")):
+        if not t_.strip(): raise InputError(f"the {lab} is empty (a blank required file is not an empty source); fail closed")
     miss=missing_columns(rows,ROSTER_COLUMNS)
     if miss: raise InputError(f"confirmed roster is missing required column(s): {', '.join(miss)}; fail closed")
     if rows.duplicate_columns: raise InputError("confirmed roster "+DUPLICATE_HEADER_REASON+"; fail closed")
@@ -232,9 +236,21 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
     # A register client_name/matter_id that trips the wire and names no usable identity holds anyway (#3.3).
     soh=soh+roh+register_identity_holds(os.path.join(raw_dir,"ethical-wall-register.csv"),ENGINE)
     holds=h1+h2+h3+rsh+sth+soh
+    # A staffing file for another client or engagement is another client's data: hold it and screen its identity out
+    # of every output (confidentiality-and-ethical-wall-rules.md #3.3). Its identity is read from the raw staffing
+    # input (identity_parts: a client_name that also trips the wire still names the client), compared canonically
+    # with the SOW; a value the SOW does not declare is unconfirmed and differs (#1.2, #1.3).
+    eng=st.get("engagement") or {}; reng=st_raw.get("engagement") or {}; sow_client=fld(sow,"Client"); sow_eid=fld(sow,"Engagement ID")
+    other={k_:other_parts(reng.get(k_),unwithheld(mine),k_,own) for k_,mine in (("client_name",sow_client),("engagement_id",sow_eid))}
+    # A staffing identity that trips the wire and names no usable identity cannot be confirmed: a mismatch (#1.2, #3.3).
+    mism=[k_ for k_ in ("client_name","engagement_id") if other[k_] or identity_unreadable(reng.get(k_))]
+    # A staffing input identified as another engagement's is quarantined: it was screened above (its own holds are
+    # positional), but none of its records - verdicts, slates, recommendations, escalations or link holds - is used,
+    # so no candidate name, role title, rule or citation it supplies reaches any output (#3.3; role-access-matrix.md #3.1).
+    rec=st if not mism else {"governed_roles":[]}
     # Linked staffing records must name the same person: read from the screened staffing input only (#1.5, #4.3).
-    badlinks,lh=staffing_links(st); holds+=lh
-    smap,prop,notp=statuses(st,badlinks); holds+=[rec_hold(x,ENGINE) for x in notp]; roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in st.get("escalations",[])]+([other_escalation(len(soh))] if soh else [])
+    badlinks,lh=staffing_links(rec); holds+=lh
+    smap,prop,notp=statuses(rec,badlinks); holds+=[rec_hold(x,ENGINE) for x in notp]; roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in rec.get("escalations",[])]+([other_escalation(len(soh))] if soh else [])
     for i,r in enumerate(rows,2):
         name=(r.get("person") or "").strip()
         if not name: continue
@@ -283,21 +299,12 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
         holds.append({"hold_id":"HOLD-DOMAIN-NOT-TRUSTED","path":"raw/sow-extract.md or raw/engagement-letter-extract.md domain declaration","reason":f"{bad_dom} declared client/firm domain(s) are malformed or consumer/file-sharing domains and are not trusted (not repeated)","source":ENGINE,"confidence":.97,"citation":"confidentiality-and-ethical-wall-rules.md #4.4"})
         esc.append("A declared client/firm domain is malformed or a consumer/file-sharing domain; confirm the engagement's domains with the engagement manager (confidentiality-and-ethical-wall-rules.md #4.4)")
     holds=dedup_holds(holds)
-    eng=st.get("engagement") or {}; reng=st_raw.get("engagement") or {}; sow_client=fld(sow,"Client"); sow_eid=fld(sow,"Engagement ID")
     # The SOW alone declares the engagement's identity (#1.2): a blank SOW Client or Engagement ID is never filled
     # from the staffing file, and the run holds.
     blank=[n for n,v in (("Client",sow_client),("Engagement ID",sow_eid)) if not v]  # a withheld line already holds (#4.3)
     if blank:
         holds.append({"hold_id":"HOLD-SOW-IDENTITY-MISSING","path":"raw/sow-extract.md "+"/".join(blank),"reason":"the SOW does not declare the engagement's client or engagement ID; the engagement identity cannot be confirmed","source":ENGINE,"confidence":.99,"citation":"confidentiality-and-ethical-wall-rules.md #1.2"})
         esc.append("The SOW does not declare the engagement's client or engagement ID; confirm the engagement identity with the engagement manager (confidentiality-and-ethical-wall-rules.md #1.2)")
-    # A staffing file for another client or engagement is another client's data: hold it and screen its identity out
-    # of every output (confidentiality-and-ethical-wall-rules.md #3.3). Its identity is read from the raw staffing
-    # input (identity_parts: a client_name that also trips the wire still names the client), compared canonically
-    # with the SOW; a value the SOW does not declare is unconfirmed and differs (#1.2, #1.3).
-    own=engagement_words(sow_client,sow_eid,fld(sow,"Matter ID"),fld(sow,"Title"))
-    other={k_:other_parts(reng.get(k_),unwithheld(mine),k_,own) for k_,mine in (("client_name",sow_client),("engagement_id",sow_eid))}
-    # A staffing identity that trips the wire and names no usable identity cannot be confirmed: a mismatch (#1.2, #3.3).
-    mism=[k_ for k_ in ("client_name","engagement_id") if other[k_] or identity_unreadable(reng.get(k_))]
     # A staffing input that does not state the client or engagement ID cannot be confirmed to be this engagement's:
     # an absent identity never passes the check as a match (#1.2, #3.3).
     unstated=[k_ for k_ in ("client_name","engagement_id") if k_ not in mism and not canon_text(unwithheld(reng.get(k_)) if isinstance(reng.get(k_),str) else "")]

@@ -409,7 +409,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Workspaces shown by ID only because their name tripped the instruction tripwire or names another client or matter (confidentiality-and-ethical-wall-rules.md #3.2,#3.3)."
+          "description": "Workspaces shown by ID only because their name tripped the instruction tripwire; a workspace whose inventory row names another client or matter is quarantined and never listed (confidentiality-and-ethical-wall-rules.md #3.3,#4.3)."
         },
         "may_not_access_discuss": {
           "type": "array",
