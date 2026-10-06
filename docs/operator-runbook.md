@@ -654,6 +654,22 @@ instruction-like text in data fields, including reworded variants, text split ac
 look-alike letters. Do not edit files.
 ```
 
+### Running suites and agents
+
+In Wave 1 the large suites grew from about 1 minute to 7–10 minutes, partly because several ran at
+once (antivirus file-open contention). Fix agents that reran the full suite in blocking waits took
+over 90 minutes each, and a slow agent looked the same as a hung one.
+
+- Run full suites one at a time per machine.
+- Fix agents iterate with `python tests\run_tests.py --group <name>` (list groups with
+  `--list-groups`) and run the full suite once before committing.
+- Start long runs asynchronously and poll at most every 10 minutes.
+- Agents commit their own plugin folder when they finish (explicit paths, never `git add -A`), so
+  finished work is never left only in the working tree.
+- Start a fresh orchestrator session per phase, or when the session becomes slow. Keep the plan and
+  todos in files so they carry over.
+- The rules above still apply: neutral QA wording, and no skills.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -673,6 +689,9 @@ look-alike letters. Do not edit files.
 | `<name>-<COMPUTERNAME>.xlsx` appears | OneDrive conflict copy from concurrent edits | Merge by hand in Excel, then remove only the copy you created |
 | `.<version>-<pid>.tmp` folder under `Evaluation\` | An archive was interrupted while copying | See [Recovering an interrupted archive](#recovering-an-interrupted-archive) |
 | `EPERM`/`EBUSY: operation not permitted, rename '...tmp'` | OneDrive held the new staging folder longer than the script's retries (about 30 s) | The script already removed the staging folder and the receipt still says `prepared`; wait a minute and rerun `evaluation:archive` (or restart the watcher) |
+| Orchestrator keeps saying it is waiting on an agent, or a background agent seems hung | Completion notifications can be lost, and slow suites look like hangs | Read the agent's status directly (`read_agent`) and the todo table; check `git status` for finished but uncommitted work. Do not relaunch the agent |
+| `session host did not acknowledge … within 120s`, or a very slow orchestrator | A very long orchestration session (large event log, repeated compaction) | Commit finished work, then start a fresh session; the plan and todos carry over through files |
+| `evaluation:prepare` silent or slow during "Running shipped tests" | Large suites take 7–10 minutes | Watch the streamed output; raise `--test-timeout-minutes` if needed (see [evaluation-workflow.md](evaluation-workflow.md)) |
 
 ### Recovering an interrupted archive
 

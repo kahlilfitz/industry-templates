@@ -549,3 +549,11 @@ How to read a report:
 - [ ] **G6. Human spot-check prompts cover each fix.** `tests/sample-test-prompts.csv` includes a
   prompt for every blocker and `WEAK` fixed in this version.
   Test: map each CHANGELOG fix line to a prompt row.
+- [ ] **G7. Shipped tests stream their results.** `tests/run_tests.py` prints each result as it
+  runs, as an ASCII-safe `PASS` or `FAIL` line with flush. It supports `--list-groups` and a
+  repeatable `--group <name>`. Its last line is still `N/M checks passed`, and it exits 1 on any
+  failure. Cowork runs shipped suites in a sandbox with an unknown command timeout; a silent
+  7-minute suite leaves no evidence if it is killed, and the DRQG 1.0.3 report asked for
+  incremental output. [Wave 1 pre-freeze, DRQG round 17 hang]
+  Test: pipe the full suite and check that `PASS` lines appear before it ends; run one group from
+  `--list-groups` and check the last line and the exit code.
