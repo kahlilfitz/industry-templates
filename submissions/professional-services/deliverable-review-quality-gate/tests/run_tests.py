@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """Regression tests for Deliverable Review & Quality Gate engines (stdlib only).
 
-  python tests/run_tests.py
+  python tests/run_tests.py                     run every group
+  python tests/run_tests.py --list-groups       print the group names, one per line
+  python tests/run_tests.py --group NAME ...    run only the named groups (repeatable), in canonical order
+
+Each result prints as it is recorded (`PASS <label>` or `FAIL <label>  (detail)`), after a `== group <name>` header;
+any failures are repeated under `== failures`, and the last line is `N/M checks passed`. Every group runs alone with the
+same checks as in a full run: each builds its own files under the shared temporary directory, and the shared setup
+(seed_inputs, the temporary directory, harness clean-up) always runs, so no group is a prerequisite of another.
+Exit code 0 = all passed, 1 = a check failed, 2 = unknown argument or group.
 
 1. Golden files: re-running both demo scenarios with --generated-at pinned reproduces
    expected/*.json and expected/engine-run.log byte for byte.
@@ -38,11 +46,17 @@ ENGINES = {
     "severity_rank": "skills/gate-check/scripts/severity_rank.py",
 }
 RESULTS = []
+# The console stdout captured by main(), so a result recorded while a group redirects stdout still streams to it.
+STREAM = None
 
 
-def emit(line=""):
+def emit(line="", stream=None):
     """Print one line backslash-escaped to ASCII, so a cp1252 or ASCII console or pipe can always show it."""
-    print(str(line).encode("ascii", "backslashreplace").decode("ascii"))
+    print(str(line).encode("ascii", "backslashreplace").decode("ascii"), file=stream or sys.stdout, flush=True)
+
+
+def result_line(label, ok, detail):
+    return ("PASS " if ok else "FAIL ") + label + (f"  ({detail})" if detail and not ok else "")
 
 
 def load_engine(name):
@@ -207,6 +221,7 @@ def run(name, *argv):
 
 def check(label, condition, detail=""):
     RESULTS.append((label, bool(condition), detail))
+    emit(result_line(*RESULTS[-1]), stream=STREAM)
 
 
 def read(path):
@@ -2408,6 +2423,7 @@ def skill_doc_tests():
 
 def run_group(group, *args):
     """Run one test group; an unexpected exception is recorded as a FAIL so later groups still run and report."""
+    emit(f"== group {group.__name__}", stream=STREAM)
     del A23_REFUSALS[:]
     try:
         group(*args)
@@ -7317,32 +7333,86 @@ def seed_inputs():
             INPUT_FOR[file_key(os.path.join(base, "expected", golden))] = raw
 
 
-def main():
+TMP_GROUPS = (golden_tests, negative_tests, register_tests, page_label_tests, g8_tests,
+              strictness_tests, round3_tests, g8_structural_tests, steering_guard_tests, demo_derivation_tests,
+              qa104_tests, qa104_round3_tests, qa104_round4_tests, qa104_round5_tests,
+              qa104_round6_tests, id_keyed_sweep_tests, qa104_round7_tests, qa104_round8_tests, qa104_round8_sweep_tests, round9_sweep_tests,
+              qa104_round9_tests, te_round8_sweep_tests, qa104_round10_tests,
+              mobilization_round11_sweep_tests, mobilization_round12_sweep_tests,
+              tne_round10_sweep_tests, mobilization_round13_sweep_tests, qa104_round12_tests,
+              qa104_round13_tests, qa104_round13_sweep_tests, qa104_round14_tests, qa104_round15_tests, mobilization_round17_sweep_tests,
+              mobilization_round18_sweep_tests, qa104_round16_tests, mobilization_round20_sweep_tests, qa104_round17_tests)
+PLAIN_GROUPS = (recipient_classifier_tests, tripwire_tests, packet_template_tests, skill_doc_tests,
+                skill_trigger_tests, version_tests, shared_copy_tests)
+GROUP_NAMES = [group.__name__ for group in TMP_GROUPS + PLAIN_GROUPS]
+USAGE = "usage: python tests/run_tests.py [--list-groups] [--group NAME]..."
+
+
+class UsageError(Exception):
+    pass
+
+
+def parse_args(argv):
+    """Return (list_groups, help, selected group names in the order given); raise UsageError on anything else."""
+    list_groups, show_help, selected, args = False, False, [], list(argv)
+    while args:
+        arg = args.pop(0)
+        if arg == "--list-groups":
+            list_groups = True
+        elif arg in ("-h", "--help"):
+            show_help = True
+        elif arg == "--group" or arg.startswith("--group="):
+            if arg == "--group":
+                if not args:
+                    raise UsageError("--group needs a group name")
+                name = args.pop(0)
+            else:
+                name = arg.partition("=")[2]
+            if name not in GROUP_NAMES:
+                raise UsageError(f"unknown group {name} (see --list-groups)")
+            selected.append(name)
+        else:
+            raise UsageError(f"unknown argument {arg}")
+    return list_groups, show_help, selected
+
+
+def main(argv=None):
+    global STREAM
+    STREAM = sys.stdout
     try:
-        return run_all()
+        try:
+            list_groups, show_help, selected = parse_args(sys.argv[1:] if argv is None else argv)
+        except UsageError as exc:
+            sys.stderr.write(f"run_tests.py: {exc}\n{USAGE}\n".encode("ascii", "backslashreplace").decode("ascii"))
+            sys.stderr.flush()
+            return 2
+        if show_help:
+            emit(USAGE)
+            return 0
+        if list_groups:
+            for name in GROUP_NAMES:
+                emit(name)
+            return 0
+        return run_all(selected)
     finally:
         shutil.rmtree(HARNESS_DIR, ignore_errors=True)
 
 
-def run_all():
+def run_all(selected=()):
+    chosen = set(selected or GROUP_NAMES)
     seed_inputs()
     with tempfile.TemporaryDirectory() as tmp:
-        for group in (golden_tests, negative_tests, register_tests, page_label_tests, g8_tests,
-                      strictness_tests, round3_tests, g8_structural_tests, steering_guard_tests, demo_derivation_tests,
-                      qa104_tests, qa104_round3_tests, qa104_round4_tests, qa104_round5_tests,
-                       qa104_round6_tests, id_keyed_sweep_tests, qa104_round7_tests, qa104_round8_tests, qa104_round8_sweep_tests, round9_sweep_tests,
-                      qa104_round9_tests, te_round8_sweep_tests, qa104_round10_tests,
-                      mobilization_round11_sweep_tests, mobilization_round12_sweep_tests,
-                      tne_round10_sweep_tests, mobilization_round13_sweep_tests, qa104_round12_tests,
-                      qa104_round13_tests, qa104_round13_sweep_tests, qa104_round14_tests, qa104_round15_tests, mobilization_round17_sweep_tests,
-                      mobilization_round18_sweep_tests, qa104_round16_tests, mobilization_round20_sweep_tests, qa104_round17_tests):
-            run_group(group, tmp)
-    for group in (recipient_classifier_tests, tripwire_tests, packet_template_tests, skill_doc_tests,
-                  skill_trigger_tests, version_tests, shared_copy_tests):
-        run_group(group)
+        for group in TMP_GROUPS:
+            if group.__name__ in chosen:
+                run_group(group, tmp)
+    for group in PLAIN_GROUPS:
+        if group.__name__ in chosen:
+            run_group(group)
     failed = [result for result in RESULTS if not result[1]]
-    for label, ok, detail in RESULTS:
-        emit(("PASS " if ok else "FAIL ") + label + (f"  ({detail})" if detail and not ok else ""))
+    if failed:
+        emit("== failures")
+        for result in failed:
+            emit(result_line(*result))
     emit(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
     return 1 if failed else 0
 

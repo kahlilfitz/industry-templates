@@ -732,6 +732,10 @@ The structural patterns described at the top of this entry are replaced, not sup
 
   Goldens are byte-identical.
 
+### Test harness
+
+- Test harness: results stream as they run; `--list-groups` and `--group`; summary line unchanged. `tests/run_tests.py` prints `== group <name>` before each group and each `PASS <label>` or `FAIL <label>  (detail)` line as the check is recorded (ASCII-safe, flushed), so a suite cut off by a sandbox timeout still leaves evidence (checklist G7). Failures are repeated under `== failures` before the last line, which is still `N/M checks passed`. `--list-groups` prints the 44 group names; `--group NAME` (repeatable) runs only those groups, in canonical order, with the same shared setup. Every group runs alone with the same checks it has in a full run, so none needs another as a prerequisite. An unknown group or argument exits 2. Check labels and the count (1607) are unchanged; engines, skills, references, contracts and demo data are untouched.
+
 ## 1.0.3 - 2026-10-01
 
 Fixes every FAIL, WEAK and should-fix item in the Cowork 1.0.2 evaluation (42/50, Blocked).
