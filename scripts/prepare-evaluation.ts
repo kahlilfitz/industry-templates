@@ -20,7 +20,9 @@ import {
   parseArgs,
   requiredArg,
   resolveInputPath,
+  resolveTestTimeoutMinutes,
   sha256,
+  verifyShippedTests,
 } from "./evaluation-workflow.js";
 
 function run(command: string, args: string[]): void {
@@ -56,6 +58,7 @@ function main(): void {
   const inboxRoot = args.has("inbox-root")
     ? resolveInputPath(requiredArg(args, "inbox-root"))
     : DEFAULT_INBOX_ROOT;
+  const testTimeoutMinutes = resolveTestTimeoutMinutes({ flag: args.get("test-timeout-minutes") });
   const submission = findSubmission(slug);
 
   console.log(`Validating submissions before freezing ${slug} ${submission.version}...`);
@@ -66,7 +69,7 @@ function main(): void {
 
   const bundlePath = join(ROOT, "public", "bundles", `${slug}.zip`);
   assertNonEmptyFile(bundlePath, `generated bundle public\\bundles\\${slug}.zip`);
-  verifyShippedTests(bundlePath, slug);
+  verifyShippedTests(bundlePath, slug, { timeoutMinutes: testTimeoutMinutes });
 
   const runDir = join(inboxRoot, slug, submission.version);
   const artifactPath = join(runDir, `${slug}.zip`);

@@ -5,12 +5,15 @@ import { join } from "node:path";
 import test from "node:test";
 import AdmZip from "adm-zip";
 import {
+  DEFAULT_TEST_TIMEOUT_MINUTES,
+  TEST_TIMEOUT_ENV,
   containsDigest,
   confirmsArtifactMatch,
   extractVerdict,
   htmlToText,
   parseArgs,
   resolveSharepointRoot,
+  resolveTestTimeoutMinutes,
   sha256,
   verifyShippedTests,
 } from "./evaluation-workflow.js";
@@ -139,10 +142,28 @@ test("verifyShippedTests runs bundled tests from the extracted ZIP", () => {
       zip.writeZip(path);
       return path;
     };
-    verifyShippedTests(bundle("ok.zip", "import sys\nsys.exit(0)\n"), "demo-plugin");
+    verifyShippedTests(
+      bundle("ok.zip", "print('1/1 checks passed')\n"),
+      "demo-plugin",
+    );
     assert.throws(
       () => verifyShippedTests(bundle("bad.zip", "open('metadata.json').read()\n"), "demo-plugin"),
-      /fails when run from the built ZIP/,
+      /fails when run from the built ZIP.*metadata\.json/,
+    );
+    assert.throws(
+      () =>
+        verifyShippedTests(
+          bundle("slow.zip", "import time\nprint('starting', flush=True)\ntime.sleep(60)\n"),
+          "demo-plugin",
+          { timeoutMinutes: 0.05 },
+        ),
+      (error: Error) =>
+        /tests\/run_tests\.py did not finish within the 0\.05-minute test timeout/.test(error.message) &&
+        /--test-timeout-minutes/.test(error.message),
+    );
+    assert.throws(
+      () => verifyShippedTests(bundle("ok2.zip", "pass\n"), "demo-plugin", { timeoutMinutes: 0 }),
+      /positive number/,
     );
     const empty = new AdmZip();
     empty.addFile("demo-plugin/README.md", Buffer.from("x"));
@@ -151,4 +172,18 @@ test("verifyShippedTests runs bundled tests from the extracted ZIP", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("resolveTestTimeoutMinutes prefers the flag, then the env var, then 30; rejects non-positive", () => {
+  assert.equal(resolveTestTimeoutMinutes({ env: "" }), DEFAULT_TEST_TIMEOUT_MINUTES);
+  assert.equal(DEFAULT_TEST_TIMEOUT_MINUTES, 30);
+  assert.equal(resolveTestTimeoutMinutes({ env: "45" }), 45);
+  assert.equal(resolveTestTimeoutMinutes({ flag: "12.5", env: "45" }), 12.5);
+  assert.throws(() => resolveTestTimeoutMinutes({ flag: "0" }), /--test-timeout-minutes must be a positive/);
+  assert.throws(() => resolveTestTimeoutMinutes({ flag: "-5" }), /positive/);
+  assert.throws(() => resolveTestTimeoutMinutes({ flag: "abc" }), /positive/);
+  assert.throws(
+    () => resolveTestTimeoutMinutes({ env: "Infinity" }),
+    new RegExp(`${TEST_TIMEOUT_ENV} must be a positive`),
+  );
 });

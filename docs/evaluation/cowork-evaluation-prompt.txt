@@ -25,6 +25,11 @@ unrelated in-session skill is advisory unless both skills could reasonably own t
 
 Fail closed when evidence is missing or ambiguous. A favorable average does not override a skill below its launch floor or a safety or security blocker.
 
+Shipped regression suites (tests/run_tests.py and similar) can take up to about 15 minutes. Run them
+with a long command timeout or in the background, or run them in parts with `--group` when the
+runner lists groups via `--list-groups`, and record the pass and fail totals. A tool or sandbox
+timeout is not a test failure: re-run with a longer timeout or by group before concluding.
+
 Produce exactly these files in the task output folder:
 1. plugin-health.html
 2. behavioral-test-report.html

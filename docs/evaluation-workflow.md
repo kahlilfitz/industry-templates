@@ -71,10 +71,27 @@ The command:
 4. Extracts the built ZIP to a temporary folder and runs any shipped `tests/run_tests.py`,
    `tests/test_engines.py` and `tests/check_shared_copies.py` there with `python`, so tests that
    depend on source-only files (such as `metadata.json`) fail before freezing, not in Cowork.
+   Each runner's output streams to the console. The command prints the runner name before it
+   starts, and the elapsed seconds and exit code when it finishes. Large suites take 5–10 minutes,
+   so a quiet console is not a hang.
 5. Copies the generated bundle into an immutable local run folder.
 6. Records the SHA-256, Git commit, dirty-worktree state, artifact version, and Cowork task name.
 7. Generates a ready-to-paste Cowork prompt.
 8. Refuses to replace an existing candidate for the same plugin version.
+
+Each shipped runner has a 30-minute timeout. A runner that exceeds it is stopped, and preparation
+fails with an error naming the runner. If the suite is only slow, raise the limit with the flag or
+the environment variable (the flag wins; fractional minutes are accepted):
+
+```powershell
+npm run evaluation:prepare -- --slug <plugin-slug> --test-timeout-minutes 60
+$env:EVALUATION_TEST_TIMEOUT_MINUTES = "60"
+```
+
+The generated Cowork prompt tells the evaluator that shipped suites can take about 15 minutes. It
+asks the evaluator to run them with a long command timeout, in the background, or by `--group` when
+the runner lists groups with `--list-groups`, and to record the pass and fail totals. It also says a
+tool or sandbox timeout is not a test failure.
 
 The result is:
 
@@ -258,4 +275,4 @@ npm run test:evaluation
 ```
 
 These tests cover argument parsing, HTML normalization, verdict extraction, formatted SHA-256
-matching, and file hashing.
+matching, file hashing, and the from-ZIP shipped-test run (pass, failure and timeout).

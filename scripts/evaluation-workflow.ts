@@ -7,7 +7,7 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -265,8 +265,39 @@ export function relativeToRoot(path: string): string {
 
 const SHIPPED_TEST_RUNNERS = ["run_tests.py", "test_engines.py", "check_shared_copies.py"];
 
+export const TEST_TIMEOUT_ENV = "EVALUATION_TEST_TIMEOUT_MINUTES";
+export const DEFAULT_TEST_TIMEOUT_MINUTES = 30;
+
+/** Resolves the per-runner shipped-test timeout: --test-timeout-minutes, then the environment variable, then 30. */
+export function resolveTestTimeoutMinutes(
+  options: { flag?: string; env?: string } = {},
+): number {
+  const flag = options.flag?.trim();
+  const env = (options.env ?? process.env[TEST_TIMEOUT_ENV])?.trim();
+  const [raw, label] = flag
+    ? [flag, "--test-timeout-minutes"]
+    : env
+      ? [env, TEST_TIMEOUT_ENV]
+      : [undefined, ""];
+  if (raw === undefined) return DEFAULT_TEST_TIMEOUT_MINUTES;
+  const minutes = Number(raw);
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    throw new Error(`${label} must be a positive number of minutes; got "${raw}"`);
+  }
+  return minutes;
+}
+
 // Cowork runs the shipped tests from the ZIP, where source-only files such as metadata.json are absent.
-export function verifyShippedTests(bundlePath: string, slug: string): void {
+export function verifyShippedTests(
+  bundlePath: string,
+  slug: string,
+  options: { timeoutMinutes?: number } = {},
+): void {
+  const timeoutMinutes = options.timeoutMinutes ?? DEFAULT_TEST_TIMEOUT_MINUTES;
+  if (!Number.isFinite(timeoutMinutes) || timeoutMinutes <= 0) {
+    throw new Error(`test timeout must be a positive number of minutes; got ${timeoutMinutes}`);
+  }
+  const timeoutMs = Math.round(timeoutMinutes * 60_000);
   const workDir = mkdtempSync(join(tmpdir(), `bundle-${slug}-`));
   try {
     execFileSync(
@@ -282,14 +313,42 @@ export function verifyShippedTests(bundlePath: string, slug: string): void {
       return;
     }
     for (const runner of runners) {
-      console.log(`Running shipped tests/${runner} from the extracted bundle...`);
-      try {
-        execFileSync("python", [join("tests", runner)], {
-          cwd: pluginRoot,
-          stdio: ["ignore", "ignore", "inherit"],
-          env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1" },
-        });
-      } catch {
+      console.log(
+        `Running shipped tests/${runner} from the extracted bundle ` +
+          `(timeout ${timeoutMinutes} min; output follows)...`,
+      );
+      const started = Date.now();
+      // Output is inherited so long suites show progress; PYTHONUNBUFFERED stops Python batching it.
+      const result = spawnSync("python", [join("tests", runner)], {
+        cwd: pluginRoot,
+        stdio: ["ignore", "inherit", "inherit"],
+        timeout: timeoutMs,
+        windowsHide: true,
+        env: {
+          ...process.env,
+          PYTHONIOENCODING: "utf-8",
+          PYTHONDONTWRITEBYTECODE: "1",
+          PYTHONUNBUFFERED: "1",
+        },
+      });
+      const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+      const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
+      if (errorCode === "ETIMEDOUT") {
+        console.log(`tests/${runner} timed out after ${elapsed} s and was stopped.`);
+        throw new Error(
+          `shipped tests/${runner} did not finish within the ${timeoutMinutes}-minute test timeout ` +
+            "and was stopped; if the suite is just slow, rerun with a longer timeout, for example " +
+            `--test-timeout-minutes 60 (or set ${TEST_TIMEOUT_ENV})`,
+        );
+      }
+      if (result.error) {
+        throw new Error(`could not run shipped tests/${runner} with python: ${result.error.message}`);
+      }
+      console.log(
+        `tests/${runner} finished in ${elapsed} s with exit code ` +
+          `${result.status ?? `null (signal ${result.signal})`}.`,
+      );
+      if (result.status !== 0) {
         throw new Error(
           `shipped tests/${runner} fails when run from the built ZIP; ` +
             "run it from an extracted copy of public\\bundles\\" + `${slug}.zip to see why ` +
@@ -298,6 +357,6 @@ export function verifyShippedTests(bundlePath: string, slug: string): void {
       }
     }
   } finally {
-    rmSync(workDir, { recursive: true, force: true });
+    rmSync(workDir, { recursive: true, force: true, maxRetries: 5 });
   }
 }

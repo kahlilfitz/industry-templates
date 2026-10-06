@@ -36,7 +36,7 @@ Typical elapsed time per iteration:
 | Activity | Time |
 |---|---|
 | Fix, test and commit a remediation | Hours, depending on the findings |
-| `evaluation:prepare` | A minute or two (it rebuilds every bundle) |
+| `evaluation:prepare` | About 5–15 minutes (it rebuilds every bundle, then runs the plugin's shipped tests from the ZIP) |
 | Cowork evaluation | Usually 1–3 hours |
 | Watcher detect and archive | Within about a minute of the reports settling |
 | Human spot check | Depends on reviewer availability; plan for days, not hours |
