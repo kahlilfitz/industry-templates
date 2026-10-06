@@ -399,6 +399,41 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
     - Against the previous code, 8 of the 10 checks fail. The exceptions are the end-to-end control and the object `cluster_id` case, which was already type-checked.
     - Suite 458 → 468 checks. Goldens byte-identical.
 
+- **QA round 18: supplied member names are never repeated (checklist A23, C5; #1.3, #3.3).** An error, warning or hold path now names a JSON member only when its key belongs to the plugin's own vocabulary. The same class (a message or output field that repeats supplied text that is not trusted vocabulary) is swept across the plugin.
+  - *MOB-QA-18-01: untrusted member names were echoed in error messages.*
+    - Defect: `safety_text.check_ids` named any member whose key matched `[A-Za-z0-9_]{1,64}`. It runs while the Closeout and Staffing inputs are adapted, before `screen_upstream` and `screen_keys` screen member names. In the reproducer, scenario B's Closeout record with a top-level `"Atlas_Credit_id": 48213` was refused with nothing written, but stderr read `upstream/closeout.Atlas_Credit_id must be an identifier ... got a number`. The skills quote errors verbatim, so another client's name in a key reached the conversation. Staffing input had the same ordering through `scope_digest.validate_staffing`.
+    - Fix: new `safety_text.UPSTREAM_MEMBERS` (the Closeout and Staffing member names the adapters read or the upstream contracts define) and `trusted_member`/`member_seg`. A member is named only when its key is a property of the bundled contract or in `UPSTREAM_MEMBERS`. Any other key, at any depth, reads `<member>`, and an identifier under it is still checked and refused. `check_ids` uses it, so every stage that reads either input (`scope_digest`, `knowledge_match`, `wall_check`, `access_checklist`, `verify_render`) refuses with the path `upstream/closeout.<member>` and no supplied key text.
+  - *Sweep: messages and output fields that repeated supplied text.*
+    - `safety_text.scan`, `screen_keys`, `screen_other` and `_screen_value`/`screen_holds`: hold paths repeated every member name. The raw Closeout and Staffing inputs are screened before other-client names are known, so a key such as `Atlas_Credit_note` holding an instruction was held at `upstream/closeout...Atlas_Credit_note` and carried in that hold path through every output. Each now uses `member_seg`.
+    - `safety_text.load_json`: the pure-Python JSON scanner quotes the offending input character (`Invalid \escape: 'x'`, `Invalid control character 'x' at`). New `json_error_text` keeps only the parser's fixed wording, plus the line and column.
+    - `scope_digest`: the `HOLD-UNRECOGNISED-STAFFING-VERDICT` path was `upstream/staffing candidate_slate[<person>].eligibility.verdict`. It is now `upstream/staffing candidate_slate (raw/confirmed-roster.csv row N).eligibility.verdict`.
+    - `access_checklist`: the `HOLD-ROLE-NOT-IN-MATRIX` reason repeated the joiner's role, a value outside the role matrix. It now reads `joiner role (not repeated) is not in the role-access matrix; no access is requested`.
+    - Reviewed and unchanged:
+      - CSV header and cell labels (`col_label`, `cell_labels`, `check_csv_ids`, `scan_rows`, `screen_csv_other`) use the plugin's column names, `column N` or `extra column N`.
+      - Missing-column messages list the plugin's required column names.
+      - `contract_validate` messages name contract properties only. Enum, const, pattern and format errors do not repeat the value.
+      - `field`, `duplicate_ids`, `unique_records` and the `x-uniqueKeys` messages use fixed keys and indices.
+      - Read, write, rollback and argument errors use fixed labels.
+      - `same_document` and `check_hold_evidence` give counts and kinds only.
+      - Placeholder binding (`_placeholders`, `bind_withheld`) keeps exact field paths, because it must match hold paths. It runs only on documents an engine has built and validated against its contract, and the unbound-placeholder error names kinds, not paths.
+      - Access reasons interpolate permission names from the allow-list and the role matrix only.
+      - Invalid-row reasons name `DECISION_COLUMNS`.
+      - `Released knowledge asset <ID>` uses a shape-checked, screened identifier.
+      - Escalations and exclusion reasons that name roster people, roles, citations or SOW exclusions carry values the roster and pack render anyway. Every stage screens them for instructions and other clients, and they appear in the goldens.
+  - *Docs.* Confidentiality #1.3 and #3.3 (all 6 copies) now state which member names may appear in error, warning and hold paths, that other keys read `<member>`, and that JSON syntax errors never quote an input character. The five SKILL.md failure-handling lines (identical) tell the model not to look up or repeat a member name, header or value that an error leaves out.
+  - *Behaviour change.* Error and hold paths show `<member>` for every key outside the plugin's vocabulary, where a plain-named key used to be shown. Refusal and hold decisions are unchanged.
+  - Tests: new `qa101zb_checks` (11 checks):
+    - The reproducer is run as a subprocess (real stdout and stderr) and at every stage that reads the Closeout record.
+    - `*_id` and `*_ids` members whose names carry the other client and an instruction are tested at the top level, nested, and under an untrusted parent. They are refused at every stage that reads the Closeout record (4 stages) or re-derives the scope from Staffing (6 stages). The checks assert a non-zero exit, nothing written, and no supplied key text on stdout or stderr.
+    - CSV headers carrying the same text, replacing the roster's `role` or the register's `client_name` column or added beside a malformed register `matter_id` or inventory `workspace_id`, are refused with no header text.
+    - A control shows that trusted member names are still named, including `<member>.asset_id` under an untrusted parent.
+    - An end-to-end run with non-identifier members and a roster column carrying the same text holds at `<member>` and column paths, with no supplied text in any output.
+    - The vocabulary is checked: every member of the shipped inputs and goldens is trusted.
+    - Each sweep fix has its own check.
+    - The four QA round 17 checks whose fixtures nest identifiers under invented members, and the two QA-C4 checks that hold an invented nested string, now expect `<member>` in those positions.
+    - Against the previous code, 10 of the 11 checks fail. The exception is the CSV check, which guards behaviour that already held.
+    - Suite 468 → 479 checks. Goldens byte-identical.
+
 ## 1.0.0 - 2026-10-01
 
 - Initial Wave 1 Scenario 03 plugin with `scope_digest`, `knowledge_match`, `wall_check` and `access_checklist`.

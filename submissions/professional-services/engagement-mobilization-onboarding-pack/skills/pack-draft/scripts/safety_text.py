@@ -49,6 +49,12 @@ def json_depth_ok(text):
             depth += 1
             if depth > MAX_JSON_DEPTH: raise InputError(f"JSON nests deeper than {MAX_JSON_DEPTH} levels; refused before parsing; fail closed")
         elif t in "]}": depth -= 1
+_JSON_MSG_RE = re.compile(r"Expecting (?:value|property name enclosed in double quotes|':' delimiter|',' delimiter)|Extra data|Unterminated string starting at|Invalid control character|Invalid \\escape|Invalid \\uXXXX escape|Illegal trailing comma before end of (?:object|array)")
+def json_error_text(msg):
+    """The parser's description of a JSON syntax error, cut to its fixed wording: the pure-Python scanner quotes the
+    offending input character ("Invalid \\escape: 'x'"), which is input and never repeated (#1.3)."""
+    m = _JSON_MSG_RE.match(msg if isinstance(msg, str) else "")
+    return m.group(0) if m else "invalid JSON syntax"
 def load_json(p, label="JSON input"):
     """NaN, Infinity, -Infinity, overflowing literals (1e999), duplicate member names and nesting deeper than
     MAX_JSON_DEPTH are rejected before anything is derived, never passed on (#1.3). Errors name the position, never
@@ -60,7 +66,7 @@ def load_json(p, label="JSON input"):
     except RecursionError as e: raise InputError(f"JSON in the {label} nests too deeply to parse; fail closed") from None
     except InputError as e: raise InputError(f"{e} ({label})") from e
     except FileNotFoundError as e: raise InputError(f"missing required JSON file: the {label} (path not repeated)") from e
-    except json.JSONDecodeError as e: raise InputError(f"malformed JSON in the {label} (must be UTF-8 JSON): {e.msg} at line {e.lineno} column {e.colno}") from e
+    except json.JSONDecodeError as e: raise InputError(f"malformed JSON in the {label} (must be UTF-8 JSON): {json_error_text(e.msg)} at line {e.lineno} column {e.colno}") from e
     except UnicodeDecodeError as e: raise InputError(f"malformed JSON in the {label} (must be UTF-8 JSON): {e.reason} at byte {e.start}") from e
     except OSError as e: raise InputError(f"cannot read the {label} as a JSON file: {type(e).__name__} (path not repeated)") from e
 _UMASK = os.umask(0o022); os.umask(_UMASK)
@@ -257,17 +263,17 @@ def check_id(v, where):
     need(v is None or isinstance(v, str), f"{where} must be {ID_SHAPE}, given as a JSON string (or null when absent), got {id_type(v)} (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
     need(id_ok(v), f"{where} must be {ID_SHAPE} (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
 def id_member(k): return isinstance(k, str) and (k == "id" or k.endswith("_id") or k.endswith("_ids"))
-_SEG_RE = re.compile(r"[A-Za-z0-9_]{1,64}")
 def check_ids(doc, where):
     """check_id for every identifier member of a supplied JSON document, at any depth. A member named id or *_id holds
     one identifier (a string, or null when absent); a member named *_ids holds one identifier or an array whose every
     item is one. Any other value - a number, true/false, an object, an array under id or *_id, or an array or object
     inside a *_ids array - is refused, never walked into or left to a later type check, so no text sits under an
-    identifier member. The reported path names a member only when its key is a plain name."""
+    identifier member. This runs before member names are screened, so the reported path names a member only when its
+    key is trusted vocabulary (member_seg); any other key reads <member> and is still checked and refused."""
     def walk(v, p):
         if isinstance(v, dict):
             for k, x in v.items():
-                q = p + "." + (k if isinstance(k, str) and _SEG_RE.fullmatch(k) else "<member>")
+                q = p + "." + member_seg(k)
                 if id_member(k):
                     if k.endswith("_ids") and isinstance(x, list):
                         for n, y in enumerate(x): check_id(y, f"{q}[{n}]")
@@ -620,7 +626,7 @@ def scan(v, path="$", key=None, raw=False):
     contiguous run that only trips when joined (#4.5). raw=True for raw input (supplied markers, #4.3)."""
     out = []
     if isinstance(v, dict):
-        for k, x in v.items(): out += scan(x, f"{path}.{k}", k, raw)
+        for k, x in v.items(): out += scan(x, f"{path}.{member_seg(k)}", k, raw)
         if not out:
             h = record_hits(free_text(v))
             if h: out.append(hold(f"{path} (fields joined)", json.dumps(free_text(v), sort_keys=True, ensure_ascii=False), h))
@@ -805,6 +811,25 @@ def contract_vocab():
             for x in s: walk(x)
     walk(_cv.load_contract())
     return frozenset(names), {k: frozenset(v) for k, v in enums.items()}
+# The Closeout and Staffing member names the adapters read or the upstream contracts define. The pipeline documents'
+# own member names come from the bundled contract (contract_vocab). Together they are the only member names an error,
+# warning or hold path ever repeats: any other supplied key is input and reads <member> (#1.3, #3.3, #4.3).
+UPSTREAM_MEMBERS = frozenset({
+    "knowledge_record", "released_assets", "reusable_assets", "lessons", "record_id", "cluster_id", "category",
+    "description", "drafting_guidance", "evidence_citations", "evidence_ids", "tags", "review_required",
+    "rewrite_required", "review_candidate", "reuse_score", "priority_score", "held_assets", "held_assets_summary",
+    "candidate_assets", "content", "count",
+    "bench_candidates", "scored_roles", "candidate_scores", "ranked_roles", "candidate_slate", "governed_roles",
+    "recommended_candidates", "recommendation_status", "candidate_id", "role_id", "eligibility", "gaps", "practice",
+    "reasons", "roles", "stage", "name", "id"})
+MEMBER_PLACEHOLDER = "<member>"
+def trusted_member(k):
+    """True only for a member name the plugin defines: a bundled-contract property or an upstream member name."""
+    return isinstance(k, str) and (k in contract_vocab()[0] or k in UPSTREAM_MEMBERS)
+def member_seg(k):
+    """A member name as an error, warning or hold path may show it: the name itself when it is trusted vocabulary,
+    otherwise <member>. A supplied key can name another client or carry an instruction and is never repeated."""
+    return k if trusted_member(k) else MEMBER_PLACEHOLDER
 def engine_scalar(k, v):
     """True only for a scalar written from the engines' fixed vocabulary: the contract version, an ISO timestamp, an
     engine/version stamp, a known source label, the pack label and sections, a closeout clearance state, or a value
@@ -830,7 +855,7 @@ def screen_keys(v, path, terms, engine, new):
                 h = detect(ks, True)  # a member name is never an engine placeholder (#4.3)
                 if h: new.append(hold(where, ks, h)); continue
                 if names_client(ks, terms): new.append(other_hold(where, ks, engine)); continue
-            out[k] = screen_keys(x, f"{path}.{k}" if path else k, terms, engine, new)
+            out[k] = screen_keys(x, f"{path}.{member_seg(k)}" if path else member_seg(k), terms, engine, new)
         return out
     if isinstance(v, list): return [screen_keys(x, f"{path}[{i}]", terms, engine, new) for i, x in enumerate(v)]
     return v
@@ -869,7 +894,7 @@ def screen_other(doc, terms, engine, prefix=""):
                 if not path and k == "holds": out[k] = x; continue
                 if str(k) not in contract_vocab()[0] and names_client(str(k), terms):
                     holds.append(other_hold(f"{prefix}{path}.{WITHHELD_KEY}" if path else f"{prefix}{WITHHELD_KEY}", str(k), engine)); continue
-                out[k] = walk(x, f"{path}.{k}" if path else k, k)
+                out[k] = walk(x, f"{path}.{member_seg(k)}" if path else member_seg(k), k)
             return out
         if isinstance(v, list): return [walk(x, f"{path}[{i}]", key) for i, x in enumerate(v)]
         if isinstance(v, str) and v not in (WITHHELD, OTHER_WITHHELD) and not engine_scalar(key, v) and names_client(v, terms):
@@ -947,7 +972,7 @@ def engine_text(k, v):
     if k == "citation": return bool(ENGINE_CITATION_RE.fullmatch(v))
     return False
 def _screen_value(v, path, k, terms, engine, new, raw=False):
-    if isinstance(v, dict): return {kk: _screen_value(x, f"{path}.{kk}", kk, terms, engine, new, raw) for kk, x in v.items()}
+    if isinstance(v, dict): return {kk: _screen_value(x, f"{path}.{member_seg(kk)}", kk, terms, engine, new, raw) for kk, x in v.items()}
     if isinstance(v, list): return [_screen_value(x, f"{path}[{i}]", k, terms, engine, new, raw) for i, x in enumerate(v)]
     if not isinstance(v, str) or (not raw and v in (WITHHELD, OTHER_WITHHELD)) or engine_text(k, v): return v
     d = hashlib.sha256(strip_cf(v).encode()).hexdigest()[:12]
@@ -963,7 +988,7 @@ def screen_holds(holds, terms, engine, prefix="holds", raw=False):
     out, new = [], []
     for n, h in enumerate(holds or []):
         if not isinstance(h, dict): out.append(_screen_value(h, f"{prefix}[{n}]", "", terms, engine, new, raw)); continue
-        before = len(new); h = {k: _screen_value(v, f"{prefix}[{n}].{k}", k, terms, engine, new, raw) for k, v in h.items()}
+        before = len(new); h = {k: _screen_value(v, f"{prefix}[{n}].{member_seg(k)}", k, terms, engine, new, raw) for k, v in h.items()}
         ft = {k: v for k, v in free_text(h).items() if not engine_text(k, v)}
         if len(new) == before and len(ft) > 1:
             f = record_hits(ft)

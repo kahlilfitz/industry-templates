@@ -171,7 +171,7 @@ def _derive(p,register,inventory,ts,closeout,staffing,ph=(),blocked=()):
             add_hold(fixed,"HOLD-MALFORMED-WORKSPACE-INVENTORY","raw/workspace-inventory.csv rows "+", ".join(map(str,dup))+" workspace_id","workspace inventory workspace_id "+DUPLICATE_ID_REASON+"; no access is requested","workspace-inventory-rules.md #1.3"); rows=[]
     bad_rows=set(getattr(rows,"malformed",()))
     role=low((p.get("joiner") or {}).get("role")); allowed={canon_id(k):v for k,v in next((v for k,v in M.items() if low(k)==role),{}).items()}
-    if not allowed: add_hold(fixed,"HOLD-ROLE-NOT-IN-MATRIX","scope.joiner.role",f"joiner role {role or '(none)'} is not in the role-access matrix; no access is requested","role-access-matrix.md #4.3")
+    if not allowed: add_hold(fixed,"HOLD-ROLE-NOT-IN-MATRIX","scope.joiner.role","joiner role (not repeated) is not in the role-access matrix; no access is requested","role-access-matrix.md #4.3")
     def build(wall):
         """The checklist for one effective wall decision; returns (items, the access holds it raises)."""
         denied=cset(wall.get("denied_workspace_ids")); held=cset(wall.get("held_workspace_ids")); hidden=cset(wall.get("name_withheld_workspace_ids")); wstat=wall.get("status"); out=[]; ah=[]
