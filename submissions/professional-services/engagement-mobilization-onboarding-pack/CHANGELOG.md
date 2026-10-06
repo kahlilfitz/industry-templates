@@ -434,6 +434,16 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
     - Against the previous code, 10 of the 11 checks fail. The exception is the CSV check, which guards behaviour that already held.
     - Suite 468 → 479 checks. Goldens byte-identical.
 
+- **QA round 19: a `*_ids` member is an array or null (checklist A2, D17; #1.3).**
+  - *MOB-QA-19-01: a single string under `*_ids` was accepted.* `safety_text.check_ids` checked each item of a `*_ids` member only when the value was already an array; any other value went to the single-identifier check, so a shaped string passed. In the reproducer, scenario A's Closeout record with `held_assets[0].evidence_ids` set to `"EV-1"` (a subtree no reader iterates) ran every stage to a verified `draft_internal_only` pack with no holds, although #1.3 requires a `*_ids` member to be an array, or null when absent. A `*_ids` member holding anything other than an array or null (a string, number, `true`/`false` or object) is now refused at any depth by every stage that reads the input, naming the path and the JSON type, never the value, with nothing written.
+  - *MOB-QA-19-02: timestamp paths used a separate placeholder.* `safety_text.check_timestamps` built its own paths and showed `[member]` for any key outside the contract. It now uses `member_seg`, so timestamp and date errors follow the same vocabulary rule and `<member>` placeholder as every other error, warning and hold path.
+  - Tests: new `qa101zc_checks` (4 checks):
+    - the reproducer at all four stages that read the Closeout record, with the chain stopping at `knowledge_match`;
+    - a scalar `*_ids` under an untrusted Staffing member;
+    - unit cases for what a `*_ids` member may hold;
+    - malformed `*_at` and `*_date` values under untrusted keys.
+  - Suite 479 → 483 checks. Goldens byte-identical.
+
 ## 1.0.0 - 2026-10-01
 
 - Initial Wave 1 Scenario 03 plugin with `scope_digest`, `knowledge_match`, `wall_check` and `access_checklist`.

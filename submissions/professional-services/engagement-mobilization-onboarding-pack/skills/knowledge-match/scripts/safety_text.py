@@ -265,18 +265,19 @@ def check_id(v, where):
 def id_member(k): return isinstance(k, str) and (k == "id" or k.endswith("_id") or k.endswith("_ids"))
 def check_ids(doc, where):
     """check_id for every identifier member of a supplied JSON document, at any depth. A member named id or *_id holds
-    one identifier (a string, or null when absent); a member named *_ids holds one identifier or an array whose every
-    item is one. Any other value - a number, true/false, an object, an array under id or *_id, or an array or object
-    inside a *_ids array - is refused, never walked into or left to a later type check, so no text sits under an
-    identifier member. This runs before member names are screened, so the reported path names a member only when its
+    one identifier (a string, or null when absent); a member named *_ids holds an array whose every item is one, or
+    null when absent. Any other value - a number, true/false, an object, an array under id or *_id, a string or other
+    non-array under *_ids, or an array or object inside a *_ids array - is refused, never walked into or left to a
+    later type check, so no text sits under an identifier member. This runs before member names are screened, so the reported path names a member only when its
     key is trusted vocabulary (member_seg); any other key reads <member> and is still checked and refused."""
     def walk(v, p):
         if isinstance(v, dict):
             for k, x in v.items():
                 q = p + "." + member_seg(k)
                 if id_member(k):
-                    if k.endswith("_ids") and isinstance(x, list):
-                        for n, y in enumerate(x): check_id(y, f"{q}[{n}]")
+                    if k.endswith("_ids"):
+                        need(x is None or isinstance(x, list), f"{q} must be an array of identifiers (or null when absent), got {'a string' if isinstance(x, str) else id_type(x)} (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
+                        for n, y in enumerate(x or ()): check_id(y, f"{q}[{n}]")
                     else: check_id(x, q)
                     continue  # a checked identifier member holds only strings or null: nothing below it to walk
                 walk(x, q)
@@ -1024,7 +1025,7 @@ def check_contract(doc, where, stage=None):
 # Carried timestamps are validated at every stage, not only --generated-at (#1.3): in every payload and intermediate,
 # any member named generated_at or *_at must be null or ISO-8601 (date and time, seconds, Z or an offset) and a real
 # instant; any member named date or *_date that holds a string must be YYYY-MM-DD (or such a timestamp) and a real day.
-# Errors name the path (member names outside the contract read "[member]") and never echo the value.
+# Errors name the path (member names outside the plugin's vocabulary read <member>, member_seg) and never echo the value.
 _TS_RE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?(?:Z|[+-]\d\d:\d\d)")
 _DATE_RE = re.compile(r"\d{4}-\d\d-\d\d")
 def timestamp_ok(v):
@@ -1044,7 +1045,7 @@ def check_timestamps(doc, where):
         v, path = stack.pop()
         if isinstance(v, dict):
             for k, x in v.items():
-                ks = str(k); p = f"{path}.{ks if ks in contract_vocab()[0] else '[member]'}"
+                ks = str(k); p = f"{path}.{member_seg(k)}"
                 if ks == "generated_at" or ks.endswith("_at"):
                     need(x is None or timestamp_ok(x), f"{p} is not a valid ISO-8601 timestamp (expected the form 2026-10-01T00:00:00Z; value not repeated); fail closed")
                 elif (ks == "date" or ks.endswith("_date")) and isinstance(x, str):

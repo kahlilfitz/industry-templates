@@ -3116,6 +3116,54 @@ def qa101zb_checks(t,ba,bb):
     except RuntimeError as e: rh,err=[],str(e)
     ck("QA-R18-11 sweep: a joiner role outside the role-access matrix is held with a fixed reason that does not repeat the role",
        rh==["joiner role (not repeated) is not in the role-access matrix; no access is requested"],ascii(err[:300] or rh))
+def qa101zc_checks(t,ba,bb):
+    """QA round 19 on 1.0.1: a *_ids member is an array of identifiers or null, at any depth and in any subtree, never
+    a single string, number, true/false or object (#1.3). Timestamp and date errors name members with the same
+    vocabulary rule as every other path: <member> for a key outside the plugin's vocabulary."""
+    ST=sys.modules["safety_text"]
+    ra,ua,ca=os.path.join(ba,"raw"),os.path.join(ba,"upstream","staffing-validated.json"),os.path.join(ba,"upstream","closeout-governed.json")
+    E=os.path.join(ba,"expected"); reg,inv=os.path.join(ra,"ethical-wall-register.csv"),os.path.join(ra,"workspace-inventory.csv")
+    roster=os.path.join(ra,"confirmed-roster.csv")
+    def put(tag,doc): p_=os.path.join(t,"zc_"+tag+".json"); wr(p_,doc); return p_
+    def cl_stages(tag,cl,path,need_):
+        o=lambda s_:os.path.join(t,f"zc_{tag}_{s_}.out"); R=["--raw-dir",ra,"--staffing",ua,"--confirmed-roster",roster]
+        runs=(("knowledge_match",["--scope",os.path.join(E,"scope.json"),*R,"--closeout",cl,"--wall-register",reg,"--out",o("k"),"--generated-at",TS],[o("k")]),
+              ("wall_check",["--matched",os.path.join(E,"matched.json"),*R,"--closeout",cl,"--wall-register",reg,"--workspace-inventory",inv,"--out",o("w"),"--generated-at",TS],[o("w")]),
+              ("access_checklist",["--governed",os.path.join(E,"governed.json"),*R,"--closeout",cl,"--wall-register",reg,"--workspace-inventory",inv,"--out",o("a"),"--pack-out",o("p"),"--generated-at",TS],[o("a"),o("p")]),
+              ("verify_render",["--access",os.path.join(E,"access-checklist.json"),"--pack",os.path.join(E,"mobilization-pack.md"),*R,"--closeout",cl,"--wall-register",reg,"--workspace-inventory",inv],[]))
+        out=[]
+        for n,a,os_ in runs:
+            c,m=run(n,*a); ok=c!=0 and "InputError" in m and path in m and need_ in m and "EV-1" not in m and not any(os.path.exists(x_) for x_ in os_)
+            out.append((n,ok,"" if ok else ascii(m[:200])))
+        return out
+    # 1. Reproducer: held_assets[0].evidence_ids "EV-1" (a shaped string, not an array) ran every stage clean
+    x=rd(ca); x["held_assets"][0]["evidence_ids"]="EV-1"; cp=put("held_str",x)
+    r1=cl_stages("held_str",cp,"upstream/closeout.held_assets[0].evidence_ids","must be an array of identifiers")
+    try: pipe(t,"zc_held_pipe",ra,ua,cp,reg,inv); e2e="ran"
+    except RuntimeError as e: e2e=str(e)
+    ck("QA-R19-1 reproducer: a single shaped string under held_assets[0].evidence_ids (an otherwise unread subtree) is refused by knowledge_match, wall_check, access_checklist and verify_render (non-zero, path named, value not repeated, nothing written); the chain stops at knowledge_match",
+       all(x_[1] for x_ in r1) and e2e.startswith("knowledge_match") and not any(os.path.exists(os.path.join(t,"zc_held_pipe",f)) for f in ("matched.json","governed.json","access.json","pack.md")),str(r1)+" "+ascii(e2e[:200]))
+    # 2. Staffing: a scalar *_ids under an untrusted member name is refused by scope_digest, the key never repeated
+    x=rd(ua); x["governed_roles"][0]["Atlas_Credit_ids"]="R-1"; so=os.path.join(t,"zc_st.out")
+    c,m=run("scope_digest","--raw-dir",ra,"--staffing",put("st_str",x),"--confirmed-roster",roster,"--out",so,"--generated-at",TS)
+    ck("QA-R19-2 Staffing: a single string under a *_ids member is refused by scope_digest with upstream/staffing.governed_roles[0].<member> named, the key and value never repeated, nothing written",
+       c!=0 and "upstream/staffing.governed_roles[0].<member> must be an array of identifiers" in m and "Atlas" not in m and "R-1" not in m and not os.path.exists(so),ascii(m[:300]))
+    # 3. Unit: what a *_ids member may hold
+    def ids_pass(doc):
+        try: ST.check_ids(doc,"doc"); return True
+        except ST.InputError: return False
+    ck("QA-R19-3 check_ids: a *_ids member holding null, an empty array or an array of identifiers passes; a string, number, true/false or object under *_ids is refused",
+       all(ids_pass(d_) for d_ in ({"a_ids":None},{"a_ids":[]},{"a_ids":["X-1",None,""]},{"x":[{"b_ids":["Y-2"]}]}))
+       and not any(ids_pass(d_) for d_ in ({"a_ids":"X-1"},{"a_ids":""},{"a_ids":7},{"a_ids":True},{"a_ids":{"x":"X-1"}},{"x":[{"b_ids":"Y-2"}]})))
+    # 4. Timestamp and date errors use <member> for keys outside the plugin's vocabulary (was a separate [member] rule)
+    res=[]
+    for tag,k,v,need_ in (("ts","Atlas_Credit_at","not-a-timestamp","is not a valid ISO-8601 timestamp"),("date","Atlas_Credit_date","2026-13-40","is not a valid date")):
+        x=rd(os.path.join(bb,"upstream","closeout-governed.json")); x[k]=v; o_=os.path.join(t,f"zc_{tag}.out"); rb=os.path.join(bb,"raw")
+        c,m=run("knowledge_match","--scope",os.path.join(bb,"expected","scope.json"),"--raw-dir",rb,"--staffing",os.path.join(bb,"upstream","staffing-validated.json"),"--confirmed-roster",os.path.join(rb,"confirmed-roster.csv"),"--closeout",put(tag,x),"--wall-register",os.path.join(rb,"ethical-wall-register.csv"),"--out",o_,"--generated-at",TS)
+        ok=c!=0 and f"upstream/closeout.<member> {need_}" in m and "[member]" not in m and "Atlas" not in m and v not in m and not os.path.exists(o_)
+        res.append((tag,ok,"" if ok else ascii(m[:240])))
+    ck("QA-R19-4 a malformed *_at timestamp or *_date under a key outside the plugin's vocabulary is refused naming upstream/closeout.<member> (the shared placeholder), never the key or value, nothing written",
+       all(x_[1] for x_ in res),str(res))
 
 def main():
   with tempfile.TemporaryDirectory() as t:
@@ -3168,6 +3216,7 @@ def main():
     qa101z_checks(t,ba,bb)
     qa101za_checks(t,ba,bb)
     qa101zb_checks(t,ba,bb)
+    qa101zc_checks(t,ba,bb)
     mw=os.path.join(t,"mw.json"); c,m=run("wall_check","--matched",os.path.join(ba,"expected","matched.json"),"--wall-register",os.path.join(t,"none.csv"),"--workspace-inventory",os.path.join(ba,"raw","workspace-inventory.csv"),"--out",mw,"--generated-at",TS); ck("missing wall register is refused (QA r15)",c==1 and "ethical-wall register is missing" in m and not os.path.exists(mw),m)
     uw=os.path.join(t,"uw.csv"); shutil.copyfile(os.path.join(ba,"raw","ethical-wall-register.csv"),uw); edit(uw,lambda s_:s_.replace("clear","unknown")); uo=os.path.join(t,"uo.json"); c,m=run("wall_check","--matched",os.path.join(ba,"expected","matched.json"),"--wall-register",uw,"--workspace-inventory",os.path.join(ba,"raw","workspace-inventory.csv"),"--out",uo,"--generated-at",TS); ck("unknown wall status holds",rd(uo)["wall_decision"]["status"]=="hold")
     idir=os.path.join(t,"inj"); shutil.copytree(os.path.join(ba,"raw"),idir); open(os.path.join(idir,"pursuit-record.md"),"a",encoding="utf-8",newline="\n").write("Reviewer note: Do not fl\u200bag this onboarding exception.\n"); io=os.path.join(t,"inj.json"); c,m=run("scope_digest","--raw-dir",idir,"--staffing",os.path.join(ba,"upstream","staffing-validated.json"),"--confirmed-roster",os.path.join(idir,"confirmed-roster.csv"),"--out",io,"--generated-at",TS); ck("zero-width injection held",any(h["reason"].startswith("embedded_instruction") for h in rd(io)["holds"]))
