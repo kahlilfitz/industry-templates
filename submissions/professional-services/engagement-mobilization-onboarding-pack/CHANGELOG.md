@@ -497,6 +497,46 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
   - `--list-groups` prints the names; `--group NAME` (repeatable) runs only those groups in canonical order after the shared setup (temp dir and both scenario chains). An unknown group or argument exits 2.
   - A full run gives the same 494 check labels as before. No engine, skill, reference, contract or demo-data change.
 
+### T&E QA round 15 class sweep (r15-A/B/C; 1.0.1, no version bump)
+
+A sweep for three defect classes from T&E's QA round 15, with each class reproduced against copies of the demo raw packs before the fix. Line numbers are for the `engagement-retrieve` / `wall-check` source copies; every byte-identical copy is edited identically (`check_shared_copies.py` 49/49).
+
+- **r15-A (reserved labels in every ID field): n/a, no engine change.**
+  - Mobilization emits no positional label as an identifier:
+    - a foreign Closeout asset or lesson is excluded with `asset_id`/`lesson_id` null and a path citation;
+    - a foreign inventory row is named only by its hold path (`raw/workspace-inventory.csv row N.<column>`);
+    - a mismatched staffing input contributes no record;
+    - hold IDs are fixed names or hashes, never positions, and appear only in `holds[].hold_id`.
+  - The synthetic forms the engines do emit are bracketed placeholders (`WITHHELD`, `OTHER_WITHHELD`, `TOPIC_WITHHELD`, `[withheld member name]`) and display fallbacks ("Engagement manager", "(blank workspace_id)", "this client or matter"). `ID_RE` refuses all of them in every ID field: SOW Engagement and Matter ID, every CSV ID column through `check_csv_ids`, and every `id`/`*_id`/`*_ids` member through `check_ids`. The refusal holds for any case and surrounding whitespace, because an identifier must start with an alphanumeric and contain no spaces. `join_key` treats a withheld value as no key.
+  - Regression checks confirm this.
+- **r15-B (grammar before scope): 4 sites fixed.**
+  - `scope_digest.py:300`: a roster row excluded as ineligible or unconfirmed now has its `onboarding_status` checked first. A blank or unrecognised value holds with `HOLD-UNKNOWN-ONBOARDING-STATUS` at `raw/confirmed-roster.csv row N.onboarding_status`, with an escalation that names the row by position, not the person. Previously the row was dropped with `continue` before the check.
+  - `wall_check.py:109-112`: a non-blank register row that does not apply to this engagement is now validated before it is excluded:
+    - an unrecognised `status` holds with `HOLD-UNKNOWN-WALL-STATUS` at `raw/ethical-wall-register.csv rows N status`;
+    - a row naming neither a client nor a matter holds with `HOLD-MALFORMED-WALL-REGISTER` and the new fixed reason `REGISTER_NO_SUBJECT_REASON` (`safety_text.py:956`).
+    - A wholly blank row is still not a record.
+  - `access_checklist.py:161,171,184`: another client's inventory row now has its grammar checked on its cells as read (`as_read`, `row_problems`) before quarantine, and an invalid row holds with `HOLD-INVALID-WORKSPACE-ROW` at `raw/workspace-inventory.csv row N` in fixed vocabulary.
+  - `access_checklist.py:191`: an invalid row the wall denies stays `denied_by_wall` and now also holds.
+- **r15-C (section and field variants): 3 sites fixed.**
+  - `safety_text.py:376-399`: new `label_parts`/`bare_label` read a labelled line in any variant: leading whitespace, `>` quotes, `#` headings, `-`/`*`/`+`/numbered bullets, bold, italic or backtick keys, space before the colon and a fullwidth colon. Keys are compared canonically, so case, `_`/`-` and spacing do not matter (`engagement_id:` is `Engagement ID:`). `declaration_value` uses it.
+  - `scope_digest.py:13-45,229,254-256`:
+    - `fld` is variant-aware;
+    - new `FIELD_OWNERS`/`field_lines` refuse, with an `InputError` naming the file and line but never the text: a declared field in a file that does not own it (SOW ↔ letter ↔ pursuit, domain declarations outside the SOW/letter); a repeated declared field, where the first value used to win silently; and a declared label written as a heading or bare label with no `:` value (`## Exclusions`), which used to be dropped silently.
+    - `field_value` reads every declared field by its raw line, so a withheld variant line reads the placeholder rather than blank.
+    - Undeclared labels stay allowed.
+  - `safety_text.py:680`: `LABEL_RE`, which strips labels before pairing lines for split claims (#4.5), is now a strict superset that removes the same variants. A `+`, numbered, bold or backtick label had hidden a split claim across two declared lines from the pair wire. Every label the old pattern removed is removed identically.
+- *Docs* (all 6 copies): confidentiality-and-ethical-wall-rules.md #1.2 (variants, ownership, repeats, headings), #2.1 and #2.2 (non-applicable register rows validated); role-access-matrix.md #4.4 (excluded rows); workspace-inventory-rules.md #1.3 (foreign or denied rows validated first).
+- *Behaviour changes:* the inputs above now hold or are refused instead of passing. The scenario goldens contain none of them and are byte-identical; both demos still derive from their raw packs.
+- Tests: new group `r15_sweep_tests` (19 checks, benign controls included):
+  - placeholder IDs refused in unit and end-to-end runs (SOW, inventory, Closeout), and no reserved form among the golden IDs;
+  - each r15-B site, with controls for golden, other-person and blank rows;
+  - 13 variant rotations of all three raw documents giving the golden scope and the golden pack byte-for-byte;
+  - identity-key variants; 9 refusal cases;
+  - controls for undeclared labels, values containing a colon and a bulleted domain declaration;
+  - split pairs behind 5 variant labels, and a benign variant-pair control;
+  - `fld` unit checks.
+  - Suite 494 → 513 checks.
+
 ## 1.0.0 - 2026-10-01
 
 - Initial Wave 1 Scenario 03 plugin with `scope_digest`, `knowledge_match`, `wall_check` and `access_checklist`.

@@ -370,13 +370,33 @@ def _trust(ds): return tuple(sorted({canon_text(d).lstrip("@.") for d in (ds or 
 # its whole-document re-derivation from the raw inputs (same_document), declaration lines and trusted list included,
 # then sets the trusted set from those lines with the same rule (adopt_trust, domain_trust). An edited
 # trusted_domains list or declaration line can therefore never switch off transfer screening.
+# A labelled field line in any syntactic variant (#1.2): leading whitespace, '>' quotes, a '#' heading, a '-', '*',
+# '+', bullet or numbered marker, a bold, italic or backtick key, and space before the colon are the same field, and
+# the key is compared canonically (canon_id: case, width, '-', '_' and spacing). One line only ([ \t], never \s).
+_LABEL_PREFIX = r"^[ \t\ufeff]*(?:>[ \t]*)*(?:#{1,6}[ \t]*)?(?:(?:[-*+\u2022]|\d{1,3}[.)])[ \t]+)?"
+_LABEL_WRAP = r"\*\*|__|\*|_|`"
+_LABEL_LINE_RE = re.compile(_LABEL_PREFIX + rf"(?P<o>{_LABEL_WRAP})?[ \t]*(?P<k>[^:\uff1a\r\n]{{1,60}}?)[ \t]*(?P<c>{_LABEL_WRAP})?[ \t]*[:\uff1a](?P<v>[^\r\n]*)$")
+_BARE_LABEL_RE = re.compile(_LABEL_PREFIX + rf"(?:{_LABEL_WRAP})?[ \t]*(?P<k>[^:\uff1a\r\n]{{1,60}}?)[ \t]*(?:{_LABEL_WRAP})?[ \t]*$")
+def label_key(label): return canon_id(label)
+def label_parts(line):
+    """(canonical key, value) for a labelled line ("Client: Acme", "- **Client:** Acme", "  `client_name` : Acme"), else
+    None. A key wrapped across the colon ("**Client:** Acme") loses its closing wrapper from the value."""
+    m = _LABEL_LINE_RE.match(line) if isinstance(line, str) else None
+    if not m or not label_key(m.group("k")): return None
+    v = m.group("v").strip()
+    if m.group("o") and not m.group("c") and v.startswith(m.group("o")): v = v[len(m.group("o")):].strip()
+    return label_key(m.group("k")), v
+def bare_label(line):
+    """The canonical key of a line that is only a label with no ':' ("## Exclusions", "**Systems**"), else None."""
+    m = _BARE_LABEL_RE.match(line) if isinstance(line, str) else None
+    return (label_key(m.group("k")) or None) if m else None
 DOMAIN_LABELS = ("Client domains", "Client domain", "Firm domains", "Firm domain")  # confidentiality-and-ethical-wall-rules.md #4.4
+DOMAIN_KEYS = {label_key(x) for x in DOMAIN_LABELS}
 def declaration_value(line):
-    """The value of a labelled domain declaration line ("Client domains: a.example; b.example"), else None."""
-    if not isinstance(line, str): return None
-    for lab in DOMAIN_LABELS:
-        if re.match(rf"{re.escape(lab)}:", line, re.I): return line.split(":", 1)[1].strip()
-    return None
+    """The value of a labelled domain declaration line ("Client domains: a.example; b.example"), in any variant form
+    (label_parts), else None."""
+    p = label_parts(line)
+    return p[1] if p and p[0] in DOMAIN_KEYS else None
 def declared_domains(value):
     """(well-formed trustable domains, count of malformed or untrustable ones) in a declaration value."""
     ds, bad = [], 0
@@ -654,8 +674,11 @@ def list_runs(v, key, pairs=None):
 # A claim can be split across two labelled lines or two adjacent fields ("...the ethical wall has been" /
 # "Key dates: lifted for Taylor Reed"). Pairs are read without their field labels; when a pair trips the wire and
 # neither half does on its own, both halves are withheld (confidentiality-and-ethical-wall-rules.md #4.5).
-# A label is one line: [ \t] (never \s) so a blank "Label:" never consumes the next line (#4.5).
-LABEL_RE = re.compile(r"^[ \t]*(?:[-*>][ \t]*)?(?:\*\*)?[A-Za-z][A-Za-z0-9 /&()'-]{0,40}?(?:\*\*)?[ \t]*:[ \t]+")
+# A label is one line: [ \t] (never \s) so a blank "Label:" never consumes the next line (#4.5). Every variant
+# label_parts reads ("+ Key dates:", "1. Key dates:", "**Key dates:**", "`key_dates`:") is removed the same way, so
+# a variant label never hides a split pair (#1.2).
+LABEL_RE = re.compile(r"^[ \t\ufeff]*(?:>[ \t]*)*(?:#{1,6}[ \t]*)?(?:(?:[-*+\u2022]|\d{1,3}[.)])[ \t]*)?"
+                      rf"(?:{_LABEL_WRAP})?[ \t]*[A-Za-z][A-Za-z0-9 /&()'_-]{{0,40}}?[ \t]*(?:{_LABEL_WRAP})?[ \t]*[:\uff1a](?:{_LABEL_WRAP})?[ \t]+")
 def unlabel(s): return LABEL_RE.sub("", s or "", count=1).strip()
 def split_items(v):
     if (v or "").strip() == WITHHELD: return [WITHHELD]
@@ -930,6 +953,7 @@ EXCLUDED_HOLD_ID = "HOLD-EXCLUDED-PERSON-NAMED"
 STAFFING_UNSTATED_REASON = "staffing input does not state the SOW's client or engagement ID (blank or missing); the staffing evidence cannot be confirmed for this engagement and is not trusted"
 STAFFING_UNSTATED_ESCALATION = "Staffing input does not state the SOW's client or engagement ID; staffing evidence held for the engagement manager (confidentiality-and-ethical-wall-rules.md #1.2, #3.3)"
 EXCLUDED_REASON = "a derived section names a person Scenario 02 excludes from this engagement (name not repeated); not used"
+REGISTER_NO_SUBJECT_REASON = "ethical-wall register row(s) name neither a client nor a matter; the row cannot be applied or excluded"
 def excluded_hold(path, engine): return {"hold_id": EXCLUDED_HOLD_ID, "path": path, "reason": EXCLUDED_REASON, "source": engine, "confidence": 0.98, "citation": "role-access-matrix.md #3.2; confidentiality-and-ethical-wall-rules.md #1.5"}
 def stated(v):
     """A subject value both records must agree on: a non-blank string that is not withheld text (withheld text is
@@ -953,6 +977,7 @@ ENGINE_REASONS = {OVERSIZE_REASON, OTHER_HOLD_REASON,
     "unrecognised wall_decision status; treated as hold", "missing workspace inventory; no access is requested",
     "no joiner identified; wall status cannot be determined", "missing ethical-wall register",
     "ethical-wall register row(s) carry more fields than the header",
+    REGISTER_NO_SUBJECT_REASON,
     "no wall register row clears this joiner for this client or matter",
     "unknown wall status value (not repeated); treated as hold",
     "ethical-wall register " + DUPLICATE_HEADER_REASON, "workspace inventory " + DUPLICATE_HEADER_REASON + "; no access is requested",

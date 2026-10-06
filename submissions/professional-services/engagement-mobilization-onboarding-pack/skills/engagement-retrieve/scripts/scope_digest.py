@@ -11,8 +11,36 @@ RANK={"eligible":0,"needs_review":2,"unrecognised":2.5,"ineligible":3,"conflicte
 ONBOARDING={"active","joining","mid-engagement joiner","new_joiner"}; JOINING={"joining","mid-engagement joiner","new_joiner"}  # role-access-matrix.md #4.2,#4.4
 ROSTER_COLUMNS=("person","role","onboarding_status","assignment_status")
 def fld(t,n):
-    # One labelled line: [ \t] and [^\r\n], never \s, so a blank "Client:" reads blank instead of consuming the next line (#1.2).
-    m=re.search(rf"^{re.escape(n)}:[ \t]*([^\r\n]*)$",t,re.I|re.M); return m.group(1).strip() if m else ""
+    # One labelled line in any variant form (label_parts: indentation, quote, heading, bullet or numbered marker, bold
+    # or backtick key, key case and spacing): [ \t] and [^\r\n], never \s, so a blank "Client:" reads blank instead of
+    # consuming the next line (#1.2).
+    k=label_key(n); return next((p[1] for p in map(label_parts,(t or "").splitlines()) if p and p[0]==k),"")
+# The declared labelled fields and the one source file that owns each (#1.2, #4.4).
+SOW_FIELDS=("Engagement ID","Matter ID","Title","Client","Objectives","In scope","Exclusions","Deliverables","Key dates","Systems","First-week")
+LETTER_FIELDS=("Confidentiality","Ethical walls"); PURSUIT_FIELDS=("Sector","Region")
+FIELD_OWNERS=(("raw/sow-extract.md",SOW_FIELDS+DOMAIN_LABELS),("raw/engagement-letter-extract.md",LETTER_FIELDS+DOMAIN_LABELS),("raw/pursuit-record.md",PURSUIT_FIELDS))
+DECLARED={label_key(x) for _,fs in FIELD_OWNERS for x in fs}
+def field_lines(text,where):
+    """{canonical label: 1-based line} for the declared fields in one source file, read in any variant form. A declared
+    field that another file owns, a field repeated in the file, or a declared label with no ':' value (a heading such
+    as "## Exclusions" or a bare "**Systems**") is refused, never ignored or resolved first-wins; errors name the file
+    and line, never the text (#1.2)."""
+    own={label_key(x) for w,fs in FIELD_OWNERS if w==where for x in fs}; out={}
+    for n,l in enumerate((text or "").splitlines(),1):
+        p=label_parts(l); k=p[0] if p else bare_label(l)
+        if k not in DECLARED: continue
+        need(p is not None,f"{where} line {n} is a declared field label with no ':' value (a heading or bare label is not a field; text not repeated); write each field as one 'Label: value' line; nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.2)")
+        need(k in own,f"{where} line {n} declares a field that another source file owns (text not repeated); each declared field is read only from its own file; nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.2)")
+        need(k not in out,f"{where} line {n} repeats a declared field first given on line {out.get(k)} (text not repeated); each field appears once; nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.2)")
+        out[k]=n
+    return out
+def field_value(raw,scanned,lines,n):
+    """Declared field n of a source file: its value on the scanned line, or the placeholder when scanning withheld the
+    line, whatever its variant form (#1.2, #4.3)."""
+    i=lines.get(label_key(n))
+    if i is None: return ""
+    rl,sl=raw.splitlines()[i-1],scanned.splitlines()[i-1]
+    return label_parts(rl)[1] if sl==rl else WITHHELD
 def lst(v): return split_items(v)
 # A demo label only: a short slug, never free text, because it is copied into run_metadata (#1.3).
 SCENARIO_RE=re.compile(r"(?:|[A-Za-z0-9][A-Za-z0-9._-]{0,63})")
@@ -23,7 +51,7 @@ def declarations(docs):
     for di,doc in enumerate(docs):
         ls=doc.splitlines()
         for lab in DOMAIN_LABELS:
-            i=next((n for n,l in enumerate(ls) if re.match(rf"{re.escape(lab)}:",l,re.I)),None)
+            i=next((n for n,l in enumerate(ls) if (label_parts(l) or ("",))[0]==label_key(lab)),None)
             if i is None: continue
             line=declaration_value(ls[i])
             if not line or hits(line): continue
@@ -197,6 +225,8 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
     dup=duplicate_rows(rows,"person")  # the roster is keyed by person: a repeat is refused, never resolved last-wins (#1.3)
     if dup: raise InputError(f"confirmed roster row(s) {', '.join(map(str,dup))} name the same person (name not repeated); each person appears once; fail closed")
     validate_staffing(st)
+    # Declared fields are located on the raw text, in any variant form, before anything is read from them (#1.2).
+    fl=[field_lines(t_,w) for t_,(w,_) in zip((sow,letter,pursuit),FIELD_OWNERS)]; raws=(sow,letter,pursuit)
     for n in ("Engagement ID","Matter ID"): check_id(fld(sow,n),"raw/sow-extract.md "+n)  # the SOW's identifiers have the identifier shape (#1.3)
     # The engagement's own client and firm domains, declared in the signed SOW or engagement letter, are the only
     # trusted e-mail/URL destinations; consumer or malformed domains are never trusted (confidentiality-and-ethical-wall-rules.md #4.4).
@@ -221,13 +251,16 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
         for n in gone: del acc[n]
     decl_lines=[(sow,letter)[decl[n][0]].splitlines()[decl[n][1]].strip() for n in acc]
     sow,letter=s1,l1; h3,pursuit=scan_lines(pursuit,"raw/pursuit-record.md")
+    def sf(n): return field_value(raws[0],sow,fl[0],n)
+    def lf(n): return field_value(raws[1],letter,fl[1],n)
+    def pf(n): return field_value(raws[2],pursuit,fl[2],n)
     st_raw=copy.deepcopy(st)  # identities are harvested from the UNMODIFIED staffing input, before screening redacts them (#3.3)
     st,sth=screen_upstream(st,"upstream/staffing",ENGINE,raw=True)  # every upstream string screened and redacted before use (#4.1, #4.3)
     # Other clients named in the wall register are screened out of the staffing upstream and every raw roster cell
     # before the roster is derived. The trusted own vocabulary is the SOW's own identity only: a roster person or a
     # staffing affiliate never makes another client trusted (#3.3).
-    own=engagement_words(fld(sow,"Client"),fld(sow,"Engagement ID"),fld(sow,"Matter ID"),fld(sow,"Title"))
-    rterms=register_terms(os.path.join(raw_dir,"ethical-wall-register.csv"),{"client_name":fld(sow,"Client"),"matter_id":fld(sow,"Matter ID")},own)
+    own=engagement_words(sf("Client"),sf("Engagement ID"),sf("Matter ID"),sf("Title"))
+    rterms=register_terms(os.path.join(raw_dir,"ethical-wall-register.csv"),{"client_name":sf("Client"),"matter_id":sf("Matter ID")},own)
     # --scenario is copied into run_metadata: a short slug only, and never instruction-like or another client's name (#1.3, #3.3).
     sc=re.sub(r"[._-]+"," ",scenario)
     need(bool(SCENARIO_RE.fullmatch(scenario)) and not hits(sc) and not names_client(sc,rterms),"--scenario must be a short slug (letters, digits, '.', '_' or '-'; at most 64 characters) that is not instruction-like and names no other client (value not repeated); fail closed")
@@ -240,7 +273,7 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
     # of every output (confidentiality-and-ethical-wall-rules.md #3.3). Its identity is read from the raw staffing
     # input (identity_parts: a client_name that also trips the wire still names the client), compared canonically
     # with the SOW; a value the SOW does not declare is unconfirmed and differs (#1.2, #1.3).
-    eng=st.get("engagement") or {}; reng=st_raw.get("engagement") or {}; sow_client=fld(sow,"Client"); sow_eid=fld(sow,"Engagement ID")
+    eng=st.get("engagement") or {}; reng=st_raw.get("engagement") or {}; sow_client=sf("Client"); sow_eid=sf("Engagement ID")
     other={k_:other_parts(reng.get(k_),unwithheld(mine),k_,own) for k_,mine in (("client_name",sow_client),("engagement_id",sow_eid))}
     # A staffing identity that trips the wire and names no usable identity cannot be confirmed: a mismatch (#1.2, #3.3).
     mism=[k_ for k_ in ("client_name","engagement_id") if other[k_] or identity_unreadable(reng.get(k_))]
@@ -261,6 +294,12 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
         # unrecognised: a placeholder is not an identity (confidentiality-and-ethical-wall-rules.md #4.3).
         if is_withheld(name): ss={"verdict":"unrecognised"}
         else: names.add(canon_person(name)); ss=verdict_for(smap.get(canon_person(name),[]),r.get("role",""))
+        # The row's onboarding_status grammar is checked before an ineligible verdict or an unconfirmed assignment
+        # excludes it: an excluded row with a blank or unrecognised status holds, never passes because it was skipped
+        # (role-access-matrix.md #4.4). The escalation does not repeat the excluded row's name.
+        if (ss.get("verdict") in INELIGIBLE or canon_text(r.get("assignment_status"))!="confirmed") and canon_text(r.get("onboarding_status","")) not in ONBOARDING:
+            holds.append({"hold_id":"HOLD-UNKNOWN-ONBOARDING-STATUS","path":f"raw/confirmed-roster.csv row {i}.onboarding_status","reason":"blank or unrecognised onboarding_status; joiner status cannot be determined","source":ENGINE,"confidence":.99,"citation":"role-access-matrix.md #4.4"})
+            esc.append(f"Roster row {i} has a blank or unrecognised onboarding_status; held until the engagement manager confirms the row (role-access-matrix.md #4.4)")
         if ss.get("verdict") in INELIGIBLE:
             excl.append({"person":name,"role":r.get("role",""),"reason":f"{ss.get('verdict')} in Scenario 02 for {ss.get('role_title')}; independence/conflict details stay in the staffing record (need-to-know)","blocking_rule":ss.get("blocking_rule"),"source":"adapter:staffing-slate","confidence":ss.get("confidence",.95),"citation":ss.get("citation","role-access-matrix.md #3.2")}); continue
         if canon_text(r.get("assignment_status"))!="confirmed": unconfirmed.append(name); continue  # role-access-matrix.md #4.1
@@ -288,7 +327,7 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
             r["point_of_contact"]="Engagement manager"; holds.append(excluded_hold(f"raw/confirmed-roster.csv team_roster[{n}].point_of_contact",ENGINE))
             if joiner and canon_person(joiner.get("person"))==canon_person(r.get("person")): joiner["point_of_contact"]="Engagement manager"
     if any(canon_id(h.get("hold_id"))==canon_id(EXCLUDED_HOLD_ID) for h in holds): esc.append("A derived section named a person excluded from this engagement; the name was dropped and held for the engagement manager (role-access-matrix.md #3.2)")
-    exclusions=items(fld(sow,"Exclusions")); pt=canon_text(pursuit)
+    exclusions=items(sf("Exclusions")); pt=canon_text(pursuit)
     for e in exclusions:
         if e!=WITHHELD and canon_text(e).split(" - ")[0] in pt and re.search(r"\b(?:include|included|request|requested|add|added|reuse)\b",pt): esc.append(f"SOW exclusion controls over pursuit conflict: '{e}' (confidentiality-and-ethical-wall-rules.md #1.2)"); break
     for n in unconfirmed: esc.append(f"Roster row for {n} has no confirmed assignment_status; treated as not assigned (role-access-matrix.md #4.1)")
@@ -318,7 +357,7 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
         esc.append(STAFFING_UNSTATED_ESCALATION)
     affiliates=[x for x in (eng.get("affiliates") or []) if x.strip()] if not (mism or unstated) else []
     if any(h.get("source")=="engine:safety_text" for h in holds): esc.append(f"{sum(h.get('source')=='engine:safety_text' for h in holds)} source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)")
-    body={"engagement":{"engagement_id":one(sow_eid),"matter_id":one(fld(sow,"Matter ID")),"title":one(fld(sow,"Title")),"client_name":one(sow_client),"affiliates":affiliates,"sector":one(fld(pursuit,"Sector")),"region":one(fld(pursuit,"Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context",**({"trusted_domains":trusted,"domain_declarations":decl_lines} if trusted else {})},"joiner":joiner,"scope_summary":{"objectives":items(fld(sow,"Objectives")),"in_scope":items(fld(sow,"In scope")),"exclusions":exclusions,"deliverables":items(fld(sow,"Deliverables")),"key_dates":items(fld(sow,"Key dates")),"systems":items(fld(sow,"Systems")),"first_week_focus":items(fld(sow,"First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(fld(letter,"Confidentiality")),"ethical_wall_terms":items(fld(letter,"Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
+    body={"engagement":{"engagement_id":one(sow_eid),"matter_id":one(sf("Matter ID")),"title":one(sf("Title")),"client_name":one(sow_client),"affiliates":affiliates,"sector":one(pf("Sector")),"region":one(pf("Region")),"source":ENGINE,"confidence":.95,"citation":"raw/sow-extract.md header; raw/pursuit-record.md context",**({"trusted_domains":trusted,"domain_declarations":decl_lines} if trusted else {})},"joiner":joiner,"scope_summary":{"objectives":items(sf("Objectives")),"in_scope":items(sf("In scope")),"exclusions":exclusions,"deliverables":items(sf("Deliverables")),"key_dates":items(sf("Key dates")),"systems":items(sf("Systems")),"first_week_focus":items(sf("First-week")),"source":ENGINE,"confidence":.94,"citation":"raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"},"engagement_terms":{"confidentiality_terms":items(lf("Confidentiality")),"ethical_wall_terms":items(lf("Ethical walls")),"source":"raw:engagement-letter-extract.md","confidence":.93,"citation":"raw/engagement-letter-extract.md"},"team_roster":roster,"proposed_staffing":prop,"staffing_exclusions":excl,"escalations":esc}
     body=redact(body)
     # Other clients named in the wall register never reach scope.json either: the same identities and own words every
     # later engine uses, whatever the register's validity for the wall decision (#2.1, #3.3).

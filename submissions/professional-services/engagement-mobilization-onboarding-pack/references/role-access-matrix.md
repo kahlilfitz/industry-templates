@@ -30,4 +30,4 @@ The first joining roster member is the pack subject; additional joiners are esca
 ### 4.3 Unknown roles hold
 A joiner role absent from section 1 requests no access and raises a hold.
 ### 4.4 Unknown onboarding status holds
-`onboarding_status` must be `active`, `joining`, `mid-engagement joiner` or `new_joiner`. A blank or other value raises a hold and an escalation; the person is not treated as the joiner. The roster must have `person`, `role`, `assignment_status` and `onboarding_status` columns, and rows with more fields than the header stop the run.
+`onboarding_status` must be `active`, `joining`, `mid-engagement joiner` or `new_joiner`. A blank or other value raises a hold and an escalation; the person is not treated as the joiner. The roster must have `person`, `role`, `assignment_status` and `onboarding_status` columns, and rows with more fields than the header stop the run. The check runs before any exclusion: a row excluded as ineligible (#3.2) or unconfirmed (#4.1) with a blank or other `onboarding_status` still holds at `raw/confirmed-roster.csv row N.onboarding_status`, and its escalation names the row by position, not the person.

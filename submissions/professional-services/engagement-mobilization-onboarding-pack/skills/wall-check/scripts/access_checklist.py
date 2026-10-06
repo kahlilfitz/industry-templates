@@ -158,6 +158,7 @@ def _derive(p,register,inventory,ts,closeout,staffing,ph=(),blocked=()):
     # Cells are screened from the rows AS READ, before an unusable header or a repeated ID empties the collection the
     # decisions use: an inventory that is not used is still screened and its flagged cells held (#1.3, #3.3, #4.3).
     rows=read_csv(inventory,False,"workspace inventory"); check_csv_ids(rows,"raw/workspace-inventory.csv",("workspace_id",))  # identifier shape (#1.3)
+    as_read=[dict(r) for r in rows or []]  # the cells before screening rewrites them: a quarantined row's grammar is read from these (#1.3)
     bad=wall_check.inventory_problem(rows)  # the one missing/malformed check wall_check applies, on the rows as read (#1.2, #1.3)
     if bad: fixed.append(wall_check.inventory_hold(bad,ENGINE))
     if rows is not None:
@@ -167,18 +168,30 @@ def _derive(p,register,inventory,ts,closeout,staffing,ph=(),blocked=()):
     bad_rows=set(getattr(rows,"malformed",()))
     role=low((p.get("joiner") or {}).get("role")); allowed={canon_id(k):v for k,v in next((v for k,v in M.items() if low(k)==role),{}).items()}
     if not allowed: add_hold(fixed,"HOLD-ROLE-NOT-IN-MATRIX","scope.joiner.role","joiner role (not repeated) is not in the role-access matrix; no access is requested","role-access-matrix.md #4.3")
+    def row_problems(r,n):
+        """The grammar problems of inventory row n, in fixed vocabulary that repeats no cell value (#1.3, #2.3)."""
+        wid=(r.get("workspace_id") or "").strip(); req=low(r.get("requested_permission")) or low(r.get("default_permission")); default=low(r.get("default_permission")) or req
+        withheld=[c for c in DECISION_COLUMNS if is_withheld(r.get(c))]  # a withheld identifier or enum is never a decision key (#3.3, #4.3)
+        return [x for x,bad in (("workspace_id blank",not wid),("withheld field(s): "+", ".join(withheld),bool(withheld)),("row has more fields than the header",n in bad_rows),("no requested or default permission",not req),("unrecognised default_permission",default not in O),("unrecognised data_classification",canon_id(r.get("data_classification")) not in cset(KNOWN_CLASSIFICATIONS)),("unrecognised depends_on_knowledge",low(r.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES)) if bad]
+    def invalid_hold(ah,n,invalid): add_hold(ah,"HOLD-INVALID-WORKSPACE-ROW",f"raw/workspace-inventory.csv row {n}","invalid workspace inventory row: "+"; ".join(invalid),"workspace-inventory-rules.md #1.3,#2.3")
     def build(wall):
         """The checklist for one effective wall decision; returns (items, the access holds it raises)."""
         denied=cset(wall.get("denied_workspace_ids")); held=cset(wall.get("held_workspace_ids")); hidden=cset(wall.get("name_withheld_workspace_ids")); wstat=wall.get("status"); out=[]; ah=[]
         for n,r in enumerate(rows,2):
-            if n in foreign: continue
+            if n in foreign:
+                # Another client's row is quarantined (never listed), but only after its grammar is checked, on its
+                # cells as read: an invalid row holds by position instead of passing because it is excluded (#1.3, #3.3).
+                bad_=row_problems(as_read[n-2],n)
+                if bad_: invalid_hold(ah,n,bad_)
+                continue
             wid=(r.get("workspace_id") or "").strip(); wt=low(r.get("workspace_type")); req=low(r.get("requested_permission")) or low(r.get("default_permission")); default=low(r.get("default_permission")) or req; dep=depends_on_knowledge(r.get("depends_on_knowledge")); conf=client_confidential(r.get("data_classification")); maxp=allowed.get(canon_id(wt)); status="request"; reason="role matrix allows requested workspace access"; perm=req; cit=f"{r.get('citation') or 'raw/workspace-inventory.csv'}; role-access-matrix.md #2.1; workspace-inventory-rules.md #3.1"
-            withheld=[c for c in DECISION_COLUMNS if is_withheld(r.get(c))]  # a withheld identifier or enum is never a decision key (#3.3, #4.3)
-            invalid=[x for x,bad in (("workspace_id blank",not wid),("withheld field(s): "+", ".join(withheld),bool(withheld)),("row has more fields than the header",n in bad_rows),("no requested or default permission",not req),("unrecognised default_permission",default not in O),("unrecognised data_classification",canon_id(r.get("data_classification")) not in cset(KNOWN_CLASSIFICATIONS)),("unrecognised depends_on_knowledge",low(r.get("depends_on_knowledge")) not in TRUE_VALUES|FALSE_VALUES)) if bad]
-            if join_key(wid) in denied: status="denied_by_wall"; reason="workspace denied by wall_check"; perm="none"; cit+="; confidentiality-and-ethical-wall-rules.md #2.3"
+            invalid=row_problems(r,n)
+            if join_key(wid) in denied:
+                status="denied_by_wall"; reason="workspace denied by wall_check"; perm="none"; cit+="; confidentiality-and-ethical-wall-rules.md #2.3"
+                if invalid: invalid_hold(ah,n,invalid)  # denied either way, but an invalid row still holds (#1.3)
             elif invalid:
                 status="not_requested_invalid_row"; reason="invalid inventory row ("+"; ".join(invalid)+"); nothing requested"; perm="none"; cit+="; workspace-inventory-rules.md #1.3,#2.3"
-                add_hold(ah,"HOLD-INVALID-WORKSPACE-ROW",f"raw/workspace-inventory.csv row {n}","invalid workspace inventory row: "+"; ".join(invalid),"workspace-inventory-rules.md #1.3,#2.3")
+                invalid_hold(ah,n,invalid)
             elif join_key(wid) in held or (wstat in {"hold","denied"} and (dep or conf)): status="hold_pending_wall_review"; reason="prior-knowledge dependent access held until wall status is clear" if dep else "client-confidential workspace held pending wall review"; perm="none"; cit+="; workspace-inventory-rules.md #2.1"
             elif not maxp: status="not_requested_role_not_allowed"; reason="role matrix does not allow this workspace type"; perm="none"; cit+="; role-access-matrix.md #1"
             elif req not in O or O[req]>=O["admin"]: status="not_requested_exceeds_role"; reason=f"requested {req} exceeds role ceiling {maxp}; admin rights are never requested" if req in O else f"unrecognised requested permission exceeds role ceiling {maxp}"; perm="none"; cit+="; role-access-matrix.md #2.1,#2.2; workspace-inventory-rules.md #3.2"

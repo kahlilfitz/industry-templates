@@ -103,6 +103,13 @@ def govern(p,register,inventory,closeout,staffing,raised=None):
         if rows.malformed: hold_status("HOLD-MALFORMED-WALL-REGISTER","raw/ethical-wall-register.csv rows "+", ".join(map(str,rows.malformed)),"ethical-wall register row(s) carry more fields than the header","#2.1")
         holds+=scr
         matches=[(i,r) for i,r in enumerate(rows,2) if applies(r,e,j)]
+        # Every data row's grammar is validated before the applicability filter excludes it: a row for another person,
+        # client or matter with a blank or unrecognised status, or a row naming neither a client nor a matter (which
+        # could never apply), holds instead of being skipped. A wholly blank row is not a record (#2.1, #2.2).
+        mi={i for i,_ in matches}; others=[(i,r) for i,r in enumerate(rows,2) if i not in mi and any(isinstance(v,str) and v.strip() for v in r.values())]
+        bad_st=[i for i,r in others if canon_text(r.get("status")) not in RESTRICT|CLEAR]; no_id=[i for i,r in others if not (r.get("client_name") or "").strip() and not (r.get("matter_id") or "").strip()]
+        if bad_st: hold_status("HOLD-UNKNOWN-WALL-STATUS","raw/ethical-wall-register.csv rows "+", ".join(map(str,bad_st))+" status","unknown wall status value (not repeated); treated as hold","#2.2")
+        if no_id: hold_status("HOLD-MALFORMED-WALL-REGISTER","raw/ethical-wall-register.csv rows "+", ".join(map(str,no_id)),REGISTER_NO_SUBJECT_REASON,"#2.1")
         # Every cell of a row that applies to this engagement is screened before it is derived from: its citation and
         # restricted workspaces reach the decision and the briefing. Restriction text is never copied (#3.1) and is the
         # source of the identities; briefing topics have the stricter screen below (#3.2, #3.3).
