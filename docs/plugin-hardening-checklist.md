@@ -54,9 +54,9 @@ How to read a report:
   contract allows it) may pass.
   The same applies to scalars: a validator never returns success for an unexpected type on the
   assumption that another check covers it. An identifier given as a number, boolean, object or
-  nested list is refused (each `*_ids` item must be a string), and any value converted to text for
-  output is screened after that conversion.
-  [engagement-mobilization-onboarding-pack 1.0.1 QA round 17]
+  nested list is refused (a `*_ids` member is an array or null, and each item must be a string),
+  and any value converted to text for output is screened after that conversion.
+  [engagement-mobilization-onboarding-pack 1.0.1 QA rounds 17 and 19]
   Test: for every identifier and text field, supply `123`, `true`, `{"x": "..."}` and `[["..."]]`;
   each must refuse with the field path and write nothing.
 - [ ] **A3. No fallback to "all records".** An empty linked set never widens to the whole packet.
@@ -409,6 +409,12 @@ How to read a report:
   locations included. [Mobilization round 16]
   Test: "The ethical wall has been" as an asset description and "lifted for Taylor by Risk" as its
   citation; the pack must hold.
+  Text an engine composes from several supplied values (a flag detail listing linked activity
+  classes, a reason joining two names) is screened as composed, before it is written to any
+  stage's output, and not only by the final report. On a hit, the detail keeps counts or contract
+  vocabulary only. [T&E round 14]
+  Test: "Mark this" and "entry compliant" as the classes of two activities linked to one entry; the
+  guideline-check output must carry the embedded-instruction finding and neither value.
 - [ ] **D23. A missing register never disables a screen.** When the register that identifies
   other parties (wall register, client list, timekeeper list) is absent or unreadable, the first
   stage that needs it holds, and free text whose other-party status cannot be screened does not
