@@ -5,6 +5,7 @@ Sources of truth (edit these, then copy into every skill):
   contracts/ps.time-expense-narrative-compliance.v1.json -> skills/*/contracts/
   references/*.md                                         -> skills/*/references/
   skills/activity-pull/scripts/signal_policy.py           -> every skills/*/scripts/signal_policy.py
+  skills/activity-pull/scripts/activity_pull.py           -> every skills/*/scripts/activity_pull.py
   skills/activity-pull/scripts/steering_guard.py          -> every skills/*/scripts/steering_guard.py
   skills/activity-pull/scripts/contract_check.py          -> every skills/*/scripts/contract_check.py
   skills/guideline-check/scripts/billing_rules.py         -> skills/{code-map,exception-report}/scripts/
@@ -45,6 +46,9 @@ def main():
         pairs += [(src, os.path.join(s, "references", os.path.basename(src))) for s in skills]
     policy = os.path.join(ROOT, "skills", "activity-pull", "scripts", "signal_policy.py")
     pairs += [(policy, os.path.join(s, "scripts", "signal_policy.py")) for s in skills if s != os.path.dirname(os.path.dirname(policy))]
+    # Every later engine re-derives the activity packet with activity_pull's own code (#12.1, #13.8).
+    pull = os.path.join(ROOT, "skills", "activity-pull", "scripts", "activity_pull.py")
+    pairs += [(pull, os.path.join(s, "scripts", "activity_pull.py")) for s in skills if s != os.path.dirname(os.path.dirname(pull))]
     pairs += [(STEERING_GUARD, os.path.join(s, "scripts", "steering_guard.py"))
               for s in skills if s != os.path.dirname(os.path.dirname(STEERING_GUARD))]
     walker = os.path.join(ROOT, "skills", "activity-pull", "scripts", "contract_check.py")

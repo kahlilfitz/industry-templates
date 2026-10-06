@@ -12,8 +12,13 @@ flag detail, exclusion reason, engagement names) passes the shared embedded-inst
 tripwire; flagged text is replaced by a withheld marker and never printed (#11.2). The engagement
 header fields are screened together as one record, so an instruction split across them is withheld.
 A recorded team view must be confirmed by the raw engagement letter and exports (--raw-dir, default raw/
-next to --activity) or the data is refused. Before writing, the rendered report is screened by table
-column, by row and by run of bullet lines (a hit adds a hold notice), then as a whole (a hit is refused).
+next to --activity) or the data is refused; with --raw-dir, and always for a team view, the activity packet
+must equal activity_pull re-run on those exports. Before writing, the rendered report is screened by table
+column, by row, by run of bullet lines, in reading order within and across every row, bullet and section
+boundary, IDs and citations included, and down the whole report as one sequence of lines (runs of up to 8
+consecutive lines and the whole sequence, across sections, punctuation-only filler skipped); a hit adds a hold
+notice. The report is then screened as a whole (a hit, or a report too long to screen, is refused). Only the
+exact engine lines in FIXED_LINES and TABLE_HEADS, which hold no data, are skipped.
 
 Governed data is never taken on trust (client-billing-guidelines.md #13.8): before rendering, the
 engine re-runs narrative-draft, code-map and guideline-check on the activity packet (--activity) and
@@ -29,7 +34,6 @@ Engagement identity (#13.3): the governed header must equal provenance.engagemen
 activity_pull recorded from the engagement letter, or the data is refused. Signals and time entries scoped
 to another engagement are counted, never named or quoted.
 """
-import argparse
 import datetime
 import os
 import re
@@ -88,6 +92,21 @@ BULLET_SPLIT_RE = re.compile(r": |, | \(|\)|\[|\]|<br>")
 RENDERED_HOLD = ("- **Rendered text withheld:** {n} table cell(s) or line(s) read as an instruction only together with "
                  "the neighbouring rows, cells or lines they are printed with; withheld and never followed - check the "
                  "source records (client-billing-guidelines.md #11.1, #11.2)")
+# D22: the only report lines the rendered-order screen skips are these exact engine strings, which carry no data. Every
+# other line - a table row, a bullet, the engagement header, or any line a later template adds - is data and is
+# screened (an unknown heading or table header is screened like data, never exempted). tests/run_tests.py checks every
+# report the suite renders against this list.
+FIXED_LINES = frozenset({
+    "", "# DRAFT - not sent, not approved", "None.",
+    "## Summary", "## Rejects - rewrite or remove before pre-bill", "## Held for review", "## Needs review",
+    "## Missing time", "## Privacy exclusions", "## Compliant drafts", "## Next steps (human decisions)",
+})
+TABLE_HEADS = frozenset({
+    "| Entry | Person | Date | Hours | Engine flags (verbatim) |", "| Entry | Person | Date | Hours | Flag (verbatim) |",
+    "| Activity | Person | Date | Hours | Subject | Citations |",
+})
+TABLE_RULE_RE = re.compile(r"\|(?:---\|)+")
+HEADER_PREFIX = "**Pre-bill exception packet** - "
 
 
 def _row_cells(line):
@@ -95,20 +114,172 @@ def _row_cells(line):
     return [c.strip() for c in CELL_SPLIT_RE.split(line)[1:-1]]
 
 
+def rendered_blocks(lines):
+    """Every line of the report, in order, as (kind, start, end): "fixed" (one exact FIXED_LINES or table header/rule
+    line, no data), "table" (the data rows under a TABLE_HEADS header and its rule), "bullets" (a run of "- " lines) or
+    "line" (any other line: data, screened on its own and in reading order)."""
+    blocks, n = [], 0
+    while n < len(lines):
+        line = lines[n]
+        if line in TABLE_HEADS and n + 1 < len(lines) and TABLE_RULE_RE.fullmatch(lines[n + 1]):
+            blocks.append(("fixed", n, n + 2))
+            end = n + 2
+            while end < len(lines) and lines[end].startswith("|"):
+                end += 1
+            if end > n + 2:
+                blocks.append(("table", n + 2, end))
+            n = end
+        elif line.startswith("- "):
+            end = n
+            while end < len(lines) and lines[end].startswith("- "):
+                end += 1
+            blocks.append(("bullets", n, end))
+            n = end
+        else:
+            blocks.append(("fixed" if line in FIXED_LINES else "line", n, n + 1))
+            n += 1
+    return blocks
+
+
+def _parts(text):
+    return [p.strip() for p in BULLET_SPLIT_RE.split(text)]
+
+
+def _reading_order(units):
+    """D22: the values of a table or bullet run in the order they are read (row by row, cell by cell, each cell's
+    and bullet's comma, colon, bracket and <br> parts in turn). Runs inside one row or bullet are its own screens
+    above; every run that crosses a row or bullet boundary (one row's last citation and the next row's ID) is
+    screened joined here. units is one [(owner, text)] list per row or bullet; returns the owners to withhold."""
+    return signal_policy.crossing_runs([[(owner, part) for owner, text in unit for part in _parts(text)]
+                                        for unit in units])
+
+
+def _block_values(lines, kind, start, end):
+    """One block's values in reading order, each owned by (line, cell) - cell None for a bullet or line."""
+    if kind == "table":
+        return [((i, c), part) for i in range(start, end) for c, text in enumerate(_row_cells(lines[i]))
+                for part in _parts(text)]
+    return [((i, None), part) for i in range(start, end)
+            for part in _parts(lines[i][2:] if kind == "bullets" else _line_data(lines[i]))]
+
+
+def _line_data(line):
+    """A data line's values without the engine's header label ("client / matter (ID)" for the header line)."""
+    return line[len(HEADER_PREFIX):].replace(" / ", ", ") if line.startswith(HEADER_PREFIX) else line
+
+
+def _withhold(out, owners):
+    """Replace each owned cell, bullet or line with the withheld marker, keeping a bullet's "- " and the header line's
+    engine label; returns how many were replaced."""
+    count = 0
+    for i in sorted({i for i, _ in owners}):
+        cols = {c for j, c in owners if j == i}
+        if out[i].startswith("|") and None not in cols:
+            row = _row_cells(out[i])
+            hit = [c for c in sorted(cols) if c < len(row) and row[c] != signal_policy.WITHHELD_TEXT]
+            for c in hit:
+                row[c] = signal_policy.WITHHELD_TEXT
+            if hit:
+                out[i] = "| " + " | ".join(row) + " |"
+            count += len(hit)
+        else:
+            prefix = "- " if out[i].startswith("- ") else HEADER_PREFIX if out[i].startswith(HEADER_PREFIX) else ""
+            if out[i] != prefix + signal_policy.WITHHELD_TEXT:
+                out[i] = prefix + signal_policy.WITHHELD_TEXT
+                count += 1
+    return count
+
+
+DOC_POSITIONS = 2  # the whole-report line pass reads this many data values from each end of every line
+
+
+def _data_lines(lines):
+    """D18 / D22, the whole report as a sequence of lines: every data line in document order, across section headings
+    and block boundaries, as (block number, its data values [(owner, value)]) - fixed-grammar values (FIXED_VALUE_RE),
+    withheld markers (and their parts) and punctuation-only filler dropped. A line with no data value left (a "- ." or
+    "| - |" filler line, or one already withheld) is skipped, so filler never separates or dilutes the lines around
+    it."""
+    marker = {signal_policy.WITHHELD_TEXT, *_parts(signal_policy.WITHHELD_TEXT)}
+    data = []
+    for block, (kind, start, end) in enumerate(rendered_blocks(lines)):
+        if kind == "fixed":
+            continue
+        for i in range(start, end):
+            row = [v for v in _block_values(lines, kind, i, i + 1)
+                   if signal_policy.has_data(v[1]) and v[1] not in marker
+                   and not signal_policy.FIXED_VALUE_RE.fullmatch(v[1].strip())]
+            if row:
+                data.append((block, row))
+    return data
+
+
+def _project(rows, pick):
+    """The value at position pick (from the start when >= 0, from the end when < 0) of each row; None when too short."""
+    return tuple(row[pick] if -len(row) <= pick < len(row) else None for row in rows)
+
+
+def _document_runs(lines):
+    """Owners to withhold from the whole-report line pass (D18 / D22). The report is read as one sequence of data lines
+    (_data_lines): the value at each of the first and last DOC_POSITIONS positions of every line - an ID, person,
+    subject or narrative, wherever its section puts it - is read down the whole report, every run of 2 to RUN_WINDOW
+    consecutive lines and then the whole sequence (signal_policy._tripping_seq). Because a section's line shape can put
+    the next part of a split in another position (one table's subjects, then a bullet's ID), every run of up to
+    RUN_WINDOW lines that crosses a block boundary is also read with each pair of those positions, one on each side
+    (each distinct run screened once). Last, every data value of the report is read joined in order: when only that
+    whole sequence trips, every data line is withheld. Runs of consecutive values in reading order are
+    signal_policy.crossing_runs."""
+    data = _data_lines(lines)
+    rows = [row for _, row in data]
+    bad = set()
+    picks = [k for k in range(DOC_POSITIONS)] + [-1 - k for k in range(DOC_POSITIONS)]
+    for pick in picks:
+        seq = _project(rows, pick)
+        bad.update(seq[i][0] for i in signal_policy._tripping_seq([v[1] if v else None for v in seq]))
+    groups = []
+    for block, row in data:
+        if not groups or groups[-1][0] != block:
+            groups.append((block, []))
+        groups[-1][1].append(row)
+    width, seen = signal_policy.RUN_WINDOW, set()
+    for (_, left), (_, right) in zip(groups, groups[1:]):
+        left, right = left[-(width - 1):], right[:width - 1]
+        for head in {_project(left, pick) for pick in picks}:
+            for tail in {_project(right, pick) for pick in picks}:
+                seq = head + tail
+                live = [i for i, v in enumerate(seq) if v]
+                for size in range(2, min(width, len(live)) + 1):
+                    for n in range(len(live) - size + 1):
+                        run = live[n:n + size]
+                        key = tuple(seq[i] for i in run)
+                        owners = {owner for owner, _ in key}
+                        if run[0] >= len(head) or run[-1] < len(head) or key in seen or bad.intersection(owners):
+                            continue
+                        seen.add(key)
+                        if signal_policy._scan_record({str(k): seq[i][1] for k, i in enumerate(run)}):
+                            bad.update(owners)
+    values = [v for row in rows for v in row]
+    if not bad and len(rows) > 2 and signal_policy._scan_record({str(k): v for k, (_, v) in enumerate(values)}):
+        bad = {owner for owner, _ in values}
+    return bad
+
+
 def screen_rendered(lines):
     """#11.1 / #11.2 on the report as printed: every cell is screened alone by cell(), but text split across cells or
     lines that end up side by side is screened joined here - each table column (the same cell of neighbouring rows),
-    each table row, each run of bullet lines (whole, and part by part) - and every cell or bullet in a run that trips
-    is withheld. Returns (lines, number withheld). Header and separator rows are the engine's own and are not data."""
+    each table row, each run of bullet lines (whole, and part by part), each other data line, and every value of the
+    report in reading order, citations, IDs and row references included (D22): within each table and bullet run, then
+    across every block boundary (a header line, a bullet run and the next table, read past the engine's fixed
+    headings) - and then the whole report as one sequence of data lines (_document_runs: sliding windows of 2 to
+    RUN_WINDOW consecutive lines and the whole sequence, across sections, punctuation-only filler skipped). Every
+    cell, bullet or line in a run that trips is withheld. Returns (lines, number withheld). Only the exact FIXED_LINES
+    and TABLE_HEADS strings, which hold no data, are skipped (rendered_blocks). A report too long to screen is
+    returned unscreened: main() then refuses it as oversize (the detector's own oversize hold)."""
     out = list(lines)
     withheld = 0
-    n = 0
-    while n < len(out):
-        if out[n].startswith("| ") and n + 1 < len(out) and out[n + 1].startswith("|---"):
-            start = n + 2
-            end = start
-            while end < len(out) and out[end].startswith("|"):
-                end += 1
+    if sum(len(line) + 1 for line in out) > signal_policy.steering_guard.MAX_TOTAL_CHARS:
+        return out, 0
+    for kind, start, end in rendered_blocks(out):
+        if kind == "table":
             rows = [_row_cells(line) for line in out[start:end]]
             bad = set()
             for col in range(max((len(r) for r in rows), default=0)):
@@ -116,33 +287,29 @@ def screen_rendered(lines):
                 bad |= {(i, col) for i in signal_policy._tripping_seq(column)}
             for i, row in enumerate(rows):
                 bad |= {(i, int(k)) for k in signal_policy._tripping_fields({str(c): t for c, t in enumerate(row) if t})}
-            for i, col in bad:
-                if rows[i][col] != signal_policy.WITHHELD_TEXT:
-                    rows[i][col] = signal_policy.WITHHELD_TEXT
-                    withheld += 1
-            if bad:
-                out[start:end] = ["| " + " | ".join(r) + " |" for r in rows]
-            n = end
-        elif out[n].startswith("- "):
-            end = n
-            while end < len(out) and out[end].startswith("- "):
-                end += 1
-            items = [line[2:] for line in out[n:end]]
+            bad |= _reading_order([[((i, col), t) for col, t in enumerate(row)] for i, row in enumerate(rows)])
+            withheld += _withhold(out, {(start + i, col) for i, col in bad})
+        elif kind == "bullets":
+            items = [line[2:] for line in out[start:end]]
             bad = set(signal_policy._tripping_seq(items))
             # A bullet's fixed wording (ID, person, date, hours) would dilute text split across two bullets, so the
             # parts in the same position - counted from the start and from the end - are screened like a column.
-            parts = [[p.strip() for p in BULLET_SPLIT_RE.split(item) if p.strip()] for item in items]
+            parts = [[p for p in _parts(item) if p] for item in items]
             width = max((len(p) for p in parts), default=0)
             for k in range(width):
                 bad.update(signal_policy._tripping_seq([p[k] if k < len(p) else None for p in parts]))
                 bad.update(signal_policy._tripping_seq([p[-1 - k] if k < len(p) else None for p in parts]))
-            for i in sorted(bad):
-                if items[i] != signal_policy.WITHHELD_TEXT:
-                    out[n + i] = "- " + signal_policy.WITHHELD_TEXT
-                    withheld += 1
-            n = end
-        else:
-            n += 1
+            bad |= _reading_order([[(i, item)] for i, item in enumerate(items)])
+            withheld += _withhold(out, {(start + i, None) for i in bad})
+        elif kind == "line" and _line_data(out[start]) != signal_policy.WITHHELD_TEXT:
+            text = _line_data(out[start])
+            parts = {str(k): p for k, p in enumerate(_parts(text)) if p}
+            if signal_policy.screen(text) or signal_policy._tripping_fields(parts):
+                withheld += _withhold(out, {(start, None)})
+    # Reading order across blocks: the last values of one block and the first of the next are read together.
+    units = [_block_values(out, kind, start, end) for kind, start, end in rendered_blocks(out) if kind != "fixed"]
+    withheld += _withhold(out, signal_policy.crossing_runs(units))
+    withheld += _withhold(out, _document_runs(out))
     return out, withheld
 
 
@@ -152,7 +319,7 @@ def flag_lines(flags):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Write a DRAFT pre-bill exception packet (Markdown). Sends nothing.")
+    ap = signal_policy.ArgumentParser(description="Write a DRAFT pre-bill exception packet (Markdown). Sends nothing.")
     ap.add_argument("--governed", required=True, help="governed.json from guideline_check")
     ap.add_argument("--activity", required=True, help="The activity packet the governed packet was derived from (activity_pull's output); "
                     "the governed packet must equal its re-derivation from it (client-billing-guidelines.md #13.8)")
@@ -172,7 +339,8 @@ def main():
             raise InputError("--requested-start is after --requested-end")
         data = deepcopy(load_governed(args.governed))
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        # A team view the activity packet records is honoured only once the raw exports confirm it (#12.1).
+        # A team view the activity packet records is honoured only once the raw exports confirm it (#12.1), and with
+        # --raw-dir or a team view the activity packet must equal activity_pull re-run on them (#13.8).
         activity = signal_policy.load_activity_root(args.activity, InputError, raw_dir=args.raw_dir)
         # #13.8: the whole governed packet, provenance included, must equal narrative-draft, code-map and
         # guideline-check re-run on the activity packet before anything is reconciled or rendered.
@@ -312,7 +480,11 @@ def main():
     if data["missing_time_report"]:
         lines += ["| Activity | Person | Date | Hours | Subject | Citations |", "|---|---|---|---|---|---|"]
         for m in data["missing_time_report"]:
-            lines.append(f"| {cell(m.get('activity_id'))} | {cell(m.get('person'))} | {cell(m.get('date'))} | {cell(m.get('duration_hours'))} | "
+            # An item held for text split across neighbouring items may owe the split to its ID (D22): the ID is
+            # withheld too; its raw-row citation still locates it.
+            split = m.get("embedded_instruction") is True and billing_rules.SPLIT_MISSING_REASON in str(m.get("finding"))
+            shown_id = signal_policy.WITHHELD_TEXT if split else m.get("activity_id")
+            lines.append(f"| {cell(shown_id)} | {cell(m.get('person'))} | {cell(m.get('date'))} | {cell(m.get('duration_hours'))} | "
                          f"{cell(m.get('subject'))} | {cells(m.get('citations', []))} |")
     else:
         lines.append("None.")

@@ -30,6 +30,36 @@
       "pattern": "\\S",
       "description": "A non-empty identifier."
     },
+    "record_id": {
+      "type": "string",
+      "format": "record-id",
+      "description": "A record ID (client-billing-guidelines.md #13.9): 1 to 64 ASCII letters or digits in segments joined by single - _ or . separators. An ID is a key, never prose: no space, punctuation or other character."
+    },
+    "record_id_or_null": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "record-id",
+      "description": "A record ID (client-billing-guidelines.md #13.9): 1 to 64 ASCII letters or digits in segments joined by single - _ or . separators. An ID is a key, never prose: no space, punctuation or other character. Null when absent."
+    },
+    "record_id_or_withheld": {
+      "type": "string",
+      "format": "record-id-or-withheld",
+      "description": "A record ID (client-billing-guidelines.md #13.9): 1 to 64 ASCII letters or digits in segments joined by single - _ or . separators. An ID is a key, never prose: no space, punctuation or other character. An excluded ID that the engines screened out is the exact withheld marker (#11.3)."
+    },
+    "record_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/record_id"
+      }
+    },
+    "record_ids_or_withheld": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/record_id_or_withheld"
+      }
+    },
     "strings": {
       "type": "array",
       "items": {
@@ -192,7 +222,7 @@
       ],
       "properties": {
         "engagement_id": {
-          "$ref": "#/definitions/id"
+          "$ref": "#/definitions/record_id"
         },
         "client_name": {
           "$ref": "#/definitions/text"
@@ -201,7 +231,7 @@
           "$ref": "#/definitions/text"
         },
         "billing_guidelines_id": {
-          "$ref": "#/definitions/text_or_null"
+          "$ref": "#/definitions/record_id_or_null"
         },
         "source": {
           "$ref": "#/definitions/source"
@@ -318,7 +348,7 @@
         ],
         "properties": {
           "activity_id": {
-            "$ref": "#/definitions/id"
+            "$ref": "#/definitions/record_id"
           },
           "person": {
             "$ref": "#/definitions/id"
@@ -343,7 +373,7 @@
             "$ref": "#/definitions/text_or_null"
           },
           "meeting_id": {
-            "$ref": "#/definitions/text_or_null"
+            "$ref": "#/definitions/record_id_or_null"
           },
           "organizer": {
             "$ref": "#/definitions/text_or_null",
@@ -378,7 +408,7 @@
             "$ref": "#/definitions/text"
           },
           "engagement_id": {
-            "$ref": "#/definitions/text",
+            "$ref": "#/definitions/record_id",
             "description": "Optional engagement scope. A signal naming another engagement is excluded and never rendered (client-billing-guidelines.md #13.3)."
           },
           "withheld_fields": {
@@ -408,7 +438,7 @@
         ],
         "properties": {
           "entry_id": {
-            "$ref": "#/definitions/id"
+            "$ref": "#/definitions/record_id"
           },
           "person": {
             "$ref": "#/definitions/id"
@@ -426,13 +456,13 @@
             "$ref": "#/definitions/text_or_null"
           },
           "activity_ids": {
-            "$ref": "#/definitions/strings"
+            "$ref": "#/definitions/record_ids"
           },
           "submitted_phase_code": {
-            "$ref": "#/definitions/text_or_null"
+            "$ref": "#/definitions/record_id_or_null"
           },
           "submitted_task_code": {
-            "$ref": "#/definitions/text_or_null"
+            "$ref": "#/definitions/record_id_or_null"
           },
           "draft": {
             "type": "object",
@@ -480,13 +510,13 @@
                 "$ref": "#/definitions/text"
               },
               "linked_activity_ids": {
-                "$ref": "#/definitions/strings"
+                "$ref": "#/definitions/record_ids"
               },
               "covered_activity_ids": {
-                "$ref": "#/definitions/strings"
+                "$ref": "#/definitions/record_ids"
               },
               "excluded_activity_ids": {
-                "$ref": "#/definitions/strings"
+                "$ref": "#/definitions/record_ids_or_withheld"
               },
               "suggested_rewrites": {
                 "type": "array",
@@ -517,7 +547,7 @@
                       "$ref": "#/definitions/strings"
                     },
                     "linked_activity_ids": {
-                      "$ref": "#/definitions/strings"
+                      "$ref": "#/definitions/record_ids"
                     },
                     "confidence": {
                       "$ref": "#/definitions/confidence"
@@ -558,19 +588,19 @@
             ],
             "properties": {
               "recommended_phase_code": {
-                "$ref": "#/definitions/id"
+                "$ref": "#/definitions/record_id"
               },
               "recommended_task_code": {
-                "$ref": "#/definitions/id"
+                "$ref": "#/definitions/record_id"
               },
               "recommended_label": {
                 "$ref": "#/definitions/text_or_null"
               },
               "submitted_phase_code": {
-                "$ref": "#/definitions/text_or_null"
+                "$ref": "#/definitions/record_id_or_null"
               },
               "submitted_task_code": {
-                "$ref": "#/definitions/text_or_null"
+                "$ref": "#/definitions/record_id_or_null"
               },
               "basis": {
                 "enum": [
@@ -667,11 +697,11 @@
             "$ref": "#/definitions/strings"
           },
           "excluded_activity_ids": {
-            "$ref": "#/definitions/strings",
+            "$ref": "#/definitions/record_ids_or_withheld",
             "description": "Links removed because the signal came from a disabled, unknown or unresolvable source (client-billing-guidelines.md #10.1). Always present once activity-pull has run (empty when none); every copy of an entry's link state is reconciled exactly at every later stage (client-billing-guidelines.md #13.4)."
           },
           "cross_person_activity_ids": {
-            "$ref": "#/definitions/strings",
+            "$ref": "#/definitions/record_ids",
             "description": "Links to an activity recorded for another timekeeper; never evidence, and the entry is held (client-billing-guidelines.md #12.2). Always present once activity-pull has run (empty when none); every copy of an entry's link state is reconciled exactly at every later stage (client-billing-guidelines.md #13.4)."
           },
           "embedded_instruction": {
@@ -679,7 +709,7 @@
             "description": "True when the existing narrative or notes trip the embedded-instruction tripwire or are too long to screen (client-billing-guidelines.md #11.1)."
           },
           "engagement_id": {
-            "$ref": "#/definitions/text",
+            "$ref": "#/definitions/record_id",
             "description": "Optional engagement scope. An entry naming another engagement is excluded and recorded in provenance.excluded_entries (client-billing-guidelines.md #13.3)."
           },
           "withheld_fields": {
@@ -692,7 +722,7 @@
       "type": "object",
       "properties": {
         "code_set_id": {
-          "$ref": "#/definitions/text"
+          "$ref": "#/definitions/record_id"
         },
         "source": {
           "$ref": "#/definitions/source"
@@ -715,7 +745,7 @@
       "type": "object",
       "properties": {
         "guidelines_id": {
-          "$ref": "#/definitions/text_or_null"
+          "$ref": "#/definitions/record_id_or_null"
         },
         "summary": {
           "$ref": "#/definitions/text"
@@ -757,7 +787,7 @@
         ],
         "properties": {
           "activity_id": {
-            "$ref": "#/definitions/id"
+            "$ref": "#/definitions/record_id"
           },
           "person": {
             "$ref": "#/definitions/id"
@@ -810,7 +840,7 @@
         ],
         "properties": {
           "entry_id": {
-            "$ref": "#/definitions/text_or_null"
+            "$ref": "#/definitions/record_id_or_null"
           },
           "person": {
             "$ref": "#/definitions/text"
@@ -864,7 +894,7 @@
             ]
           },
           "excluded_activity_ids": {
-            "$ref": "#/definitions/strings"
+            "$ref": "#/definitions/record_ids_or_withheld"
           },
           "source": {
             "$ref": "#/definitions/source"
@@ -941,7 +971,7 @@
           "minimum": 0
         },
         "excluded_signal_ids": {
-          "$ref": "#/definitions/strings"
+          "$ref": "#/definitions/record_ids_or_withheld"
         },
         "source": {
           "$ref": "#/definitions/source"
@@ -997,7 +1027,7 @@
           ],
           "properties": {
             "engagement_id": {
-              "$ref": "#/definitions/id"
+              "$ref": "#/definitions/record_id"
             },
             "client_name": {
               "$ref": "#/definitions/text"
@@ -1031,7 +1061,7 @@
             ],
             "properties": {
               "activity_id": {
-                "$ref": "#/definitions/id"
+                "$ref": "#/definitions/record_id_or_withheld"
               },
               "source": {
                 "$ref": "#/definitions/text_or_null"
@@ -1070,7 +1100,7 @@
             ],
             "properties": {
               "entry_id": {
-                "$ref": "#/definitions/id"
+                "$ref": "#/definitions/record_id_or_withheld"
               },
               "reason": {
                 "enum": [
@@ -1155,7 +1185,7 @@
             "type": "object",
             "properties": {
               "activity_id": {
-                "$ref": "#/definitions/id"
+                "$ref": "#/definitions/record_id"
               },
               "reason": {
                 "$ref": "#/definitions/text"

@@ -9,7 +9,8 @@ v1.0.4 rules (billing_rules.govern):
 - Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1); an
   entry that linked one gets a hold_for_review flag and the signal never counts as evidence.
 - Rows outside the recorded timekeeper scope are withheld before any check (#12.1). A recorded team view
-  must be confirmed by the raw engagement letter and exports (--raw-dir) or the packet is refused.
+  must be confirmed by the raw engagement letter and exports (--raw-dir) or the packet is refused; with
+  --raw-dir, and always for a team view, the activity packet must equal activity_pull re-run on them.
 - #13.1 every entry's code mapping is recomputed from the code-map rules; a supplied code_mapping
   that disagrees (a forged recommendation, cleared flags) is discarded, the recomputed mapping and
   its flags are used, and the entry gets a code_mapping_mismatch hold.
@@ -32,7 +33,6 @@ v1.0.4 rules (billing_rules.govern):
 - #13.8 the coded packet must equal narrative-draft and code-map re-run on the activity packet
   (--activity) in every engine-owned field, provenance included, or nothing is written.
 """
-import argparse
 import datetime
 import os
 import sys
@@ -72,7 +72,7 @@ def load_packet(path):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Govern time-entry narratives against client billing guidelines.")
+    ap = signal_policy.ArgumentParser(description="Govern time-entry narratives against client billing guidelines.")
     ap.add_argument("--coded", required=True, help="Input coded contract JSON")
     ap.add_argument("--activity", required=True, help="The activity packet the coded packet was derived from (activity_pull's output); "
                     "the coded packet must equal its re-derivation from it (client-billing-guidelines.md #13.8)")

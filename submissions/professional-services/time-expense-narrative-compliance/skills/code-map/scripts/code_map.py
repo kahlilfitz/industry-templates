@@ -9,7 +9,8 @@ an entry whose supplied code_mapping disagrees (client-billing-guidelines.md #13
 v1.0.4 rules:
 - Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1), and rows
   outside the recorded timekeeper scope are withheld (#12.1). A recorded team view must be confirmed
-  by the raw engagement letter and exports (--raw-dir) or the packet is refused.
+  by the raw engagement letter and exports (--raw-dir) or the packet is refused; with --raw-dir, and
+  always for a team view, the activity packet must equal activity_pull re-run on those exports.
 - Activity-class text that trips the embedded-instruction tripwire is never echoed in a flag (#11.2).
 - Linked signals whose activity classes point to more than one task code are CONFLICTING:
   they map to UNMAPPED at 0.40 and are held for review (task-phase-codes.md #5.3). The engine
@@ -19,7 +20,6 @@ v1.0.4 rules:
 - The drafted packet must equal narrative-draft re-run on the activity packet (--activity) in every
   engine-owned field, provenance included, or nothing is written (#13.8).
 """
-import argparse
 import datetime
 import os
 import sys
@@ -57,7 +57,7 @@ def load_packet(path):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Map drafted time entries to phase/task codes.")
+    ap = signal_policy.ArgumentParser(description="Map drafted time entries to phase/task codes.")
     ap.add_argument("--drafted", required=True, help="Input drafted contract JSON")
     ap.add_argument("--activity", required=True, help="The activity packet the drafted packet was drafted from (activity_pull's output); "
                     "the drafted packet must equal its re-derivation from it (client-billing-guidelines.md #13.8)")

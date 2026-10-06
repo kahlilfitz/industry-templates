@@ -15,6 +15,9 @@
    token "engagement-manager:<engagement_id>" was supplied. Role is never inferred from text, and a
    team view is never taken from the packet that records it: every engine re-reads the raw exports
    (verify_scope_source) and covers only the timekeepers they name - people: null is never everyone.
+   Whenever --raw-dir is given, and always for a team view, the whole activity packet must also equal
+   activity_pull re-run on those raw exports with its recorded run parameters (verify_activity_source,
+   which imports activity_pull.py itself); without either, only the requester's rows are honoured.
 3. Strict input validation. validate_packet() checks every field an engine reads: wrong JSON types
    (a "true" string for a boolean, {} or 123 in a list of strings, null where a value is required)
    and unrecognised enum values raise SchemaError - nothing is coerced through truthiness, and a
@@ -57,15 +60,18 @@
    shared function (draft_stage here; code_stage and govern_stage in billing_rules.py) that the engine and every
    later stage's re-derivation both run. A later stage re-runs every upstream stage on the activity packet
    (load_activity_root) and refuses a carried document that differs from the result in any field outside
-   NOT_ENGINE_OWNED (document_differences), provenance included.
+   NOT_ENGINE_OWNED (document_differences), provenance included. The activity packet itself is checked the same way
+   against activity_pull re-run on the raw exports (verify_activity_root, item 2).
 
 This file ships as identical copies next to each engine (skills are self-contained);
 tests/check_shared_copies.py fails when the copies drift.
 """
+import argparse
 import csv
 import datetime
 import functools
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -95,7 +101,7 @@ OTHER_ENGAGEMENT_ENTRY_REASON = "engagement scope names another engagement; excl
 SIGNAL_POLICY_VERSION = "signal_policy/1.0.4"
 TEAM_VIEW_PREFIX = "engagement-manager:"
 TEAM_VIEW_TOKEN_RE = re.compile(r"engagement-manager:[A-Za-z0-9._-]+")
-WITHHELD_TEXT = "[withheld: flagged as embedded_instruction - client-billing-guidelines.md #11.2]"
+WITHHELD_TEXT = contract_check.WITHHELD_MARKER  # "[withheld: flagged as embedded_instruction - client-billing-guidelines.md #11.2]"
 # D20: only the engines write markers. Input text shaped like one - exact or embedded, in any spelling that NFKC and
 # case folding bring to "[withheld" - is refused at activity_pull (supplied_marker). A later stage accepts only the
 # exact markers the engines emit, and every record that carries one is held (sweep_packet). is_withheld() is the one
@@ -186,9 +192,15 @@ def engagement_identity(engagement, citations):
 
 
 def other_engagement_ids(packet):
-    """Activity IDs excluded because they belong to another engagement (never rendered, #13.3)."""
-    return {e.get("activity_id") for e in (packet.get("provenance") or {}).get("excluded_signals", [])
-            if isinstance(e, dict) and e.get("reason") == OTHER_ENGAGEMENT_REASON}
+    """Activity IDs that belong to another engagement (never rendered, #13.3): every stage applies the same set, from
+    both identity sources - the records a stage excluded for naming another engagement, and the raw-export rows
+    activity_pull read as another engagement's (provenance.out_of_scope_rows), so a timesheet link to such a row is
+    counted, never named."""
+    provenance = packet.get("provenance") or {}
+    ids = {e.get("activity_id") for e in provenance.get("excluded_signals") or []
+           if isinstance(e, dict) and e.get("reason") == OTHER_ENGAGEMENT_REASON}
+    ids |= {r.get("activity_id") for r in provenance.get("out_of_scope_rows") or [] if isinstance(r, dict)}
+    return {i for i in ids if isinstance(i, str)}
 
 
 def describe_excluded(links, packet):
@@ -307,6 +319,28 @@ def write_output(path, text):
         raise
 
 
+# r18: an argparse error repeats supplied command-line text ("unrecognized arguments: ...", "ambiguous option: ...",
+# "ignored explicit argument '...'"). Only messages built from the engine's own option names are kept; any other is
+# replaced by a fixed message, so stderr never repeats what was supplied.
+_FLAG = r"-{1,2}[a-z][a-z-]*(?:/-{1,2}[a-z][a-z-]*)?"
+SAFE_ARG_ERROR_RE = re.compile(rf"the following arguments are required: {_FLAG}(?:, {_FLAG})*"
+                               rf"|argument {_FLAG}: expected one argument"
+                               rf"|argument {_FLAG}: not allowed with argument {_FLAG}"
+                               rf"|one of the arguments {_FLAG}(?: {_FLAG})* is required")
+ARG_ERROR = ("an unrecognised, ambiguous or malformed command-line option or value (the supplied text is not repeated); "
+             "run with --help for the options")
+
+
+class ArgumentParser(argparse.ArgumentParser):
+    """argparse.ArgumentParser whose errors never repeat supplied command-line text (every engine uses it)."""
+
+    def error(self, message):
+        if not SAFE_ARG_ERROR_RE.fullmatch(message):
+            message = ARG_ERROR
+        self.print_usage(sys.stderr)
+        self.exit(2, f"{self.prog}: error: {message}\n")
+
+
 def load_policy_file(path, label):
     """label is fixed by the caller ("config/signal-sources.json" or "--signal-config"), never the file name."""
     data = read_json(path, PolicyError, label=f"signal policy {label}")
@@ -314,6 +348,18 @@ def load_policy_file(path, label):
     if not isinstance(sources, dict):
         raise PolicyError(f"signal policy {label} has no 'sources' object")
     check_sources(sources, f"signal policy {label} sources")
+    # Every other member is typed too, never assumed checked elsewhere: each source entry by the contract's source
+    # schema (the plugin config is also carried as the packet's signal_config), and an ID-like member anywhere in the
+    # file by the #13.9 ID rule (contract_check.check_undeclared). The error names the position, never the value.
+    try:
+        root = contract_check.load_contract(contract_check.contract_path(os.path.dirname(os.path.abspath(__file__))))
+        contract_check.validate(sources, root["properties"]["signal_config"]["properties"]["sources"], root,
+                                f"signal policy {label} sources")
+        for n, (key, value) in enumerate(data.items(), start=1):
+            if key != "sources":
+                contract_check.check_undeclared(key, value, f"signal policy {label}", n, contract_check.vocabulary(root))
+    except contract_check.ContractError as exc:
+        raise PolicyError(str(exc)) from None
     return sources
 
 
@@ -498,8 +544,11 @@ def team_view_token(engagement_id):
 # A team view is an authority claim, so no engine takes it from the packet that records it. activity_pull grants it
 # from the engagement letter; every later engine re-reads the same raw exports (--raw-dir, by default the raw/ folder
 # next to the activity packet) and honours the recorded view only when the letter gives the same engagement ID and
-# engagement manager. people: null then means the timekeepers the engagement's raw exports name, never everyone, and a
+# engagement manager (the letter's values with surrounding whitespace trimmed, then compared exactly: case and internal
+# spacing count). people: null then means the timekeepers the engagement's raw exports name, never everyone, and a
 # listed person is allowed only when the raw exports name them. A missing or unreadable raw export is a refusal.
+# Rows are never taken on trust either (A23): whenever --raw-dir is given, and always for a team view, the whole
+# activity packet must equal activity_pull re-run on those raw exports (verify_activity_source).
 
 ENGAGEMENT_FILE = "engagement-letter-extract.md"
 RAW_LETTER = "raw/" + ENGAGEMENT_FILE
@@ -528,9 +577,10 @@ TEAM_SCOPE_WITHHELD = ("rows for timekeepers the engagement's raw exports do not
                        "everyone)")
 SELF_SCOPE_WITHHELD = "rows for other timekeepers withheld: no valid engagement-manager team view"
 _RAW_SCOPE = {}  # the team view the running engine re-derived from the raw exports; empty = none (fail closed)
-RAW_DIR_HELP = ("The raw/ folder the activity packet was pulled from (default: raw/ next to --activity). Read only when "
-                "the packet records an engagement-manager team view, which is honoured only when the engagement letter "
-                "and exports there confirm it (client-billing-guidelines.md #12.1)")
+RAW_DIR_HELP = ("The raw/ folder the activity packet was pulled from (default: raw/ next to --activity). When given, and "
+                "always when the packet records an engagement-manager team view, the activity packet must equal "
+                "activity_pull re-run on it with the packet's recorded run parameters, and a team view is honoured only "
+                "when the engagement letter and exports there confirm it (client-billing-guidelines.md #12.1)")
 
 
 def read_raw_csv(path, required, error=PolicyError):
@@ -568,7 +618,9 @@ def read_raw_csv(path, required, error=PolicyError):
 
 
 def read_engagement(path, error=PolicyError):
-    """The engagement letter's labelled fields (activity_pull and the team-view check share it)."""
+    """The engagement letter's labelled fields (activity_pull and the team-view check share it). Each value is the text
+    after the label's colon with surrounding whitespace trimmed (str.strip); nothing else is folded, so case and
+    internal spacing are kept and every comparison with a packet value is otherwise exact."""
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
@@ -593,6 +645,10 @@ def read_engagement(path, error=PolicyError):
     if not canon_id(fields["engagement_id"]):
         raise error(f"{ENGAGEMENT_FILE} gives a blank engagement_id (only separators or format "
                     "characters); a blank key never matches")
+    # #13.9: the letter's IDs are keys, never prose; the value is not echoed.
+    for key in ("engagement_id", "billing_guidelines_id"):
+        if key in fields and not contract_check.valid_record_id(fields[key]):
+            raise error(f"{ENGAGEMENT_FILE} {key} is not {contract_check.ID_RULE}")
     return fields
 
 
@@ -623,9 +679,10 @@ def raw_dir_for(activity_path, raw_dir=None):
 def verify_scope_source(packet, raw_dir, error=PolicyError, script_dir=None):
     """Re-derive a recorded engagement-manager team view from the raw exports before any engine honours it (#12.1,
     A15, A19). A packet that records no team view needs nothing here (its rows are the requester's only). A team view
-    is honoured only when the engagement letter in raw_dir gives exactly the packet's engagement ID and engagement
-    manager (so the requester, already required to be the packet's manager, is the letter's manager and the
-    confirmation token is the letter's engagement's); the timekeepers it may cover are those the raw timesheet and the
+    is honoured only when the engagement letter in raw_dir gives the packet's engagement ID and engagement manager
+    (letter values trimmed of surrounding whitespace, then compared exactly: case and internal spacing count), so the
+    requester, already required to be the packet's manager, is the letter's manager and the
+    confirmation token is the letter's engagement's; the timekeepers it may cover are those the raw timesheet and the
     enabled activity exports name for the engagement. A missing or unreadable export, or a letter that differs, is
     refused: error(...) names no path or value. Returns True when a team view was verified."""
     reset_scope_source()
@@ -657,9 +714,68 @@ def verify_scope_source(packet, raw_dir, error=PolicyError, script_dir=None):
     return True
 
 
+_PULL_MODULE = {}
+
+
+def _activity_pull(error):
+    """activity_pull.py itself, loaded from this file's folder (every engine ships an identical copy), so a re-derivation
+    runs the first stage's own code, never a re-implementation. Missing or unloadable: refused (fail closed)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "activity_pull.py")
+    if path not in _PULL_MODULE:
+        try:
+            spec = importlib.util.spec_from_file_location("tenc_activity_pull_rederive", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        except (OSError, ImportError, SyntaxError, AttributeError) as exc:
+            raise error("invalid input: activity_pull.py is missing next to the engine or cannot be loaded, so the "
+                        f"activity packet cannot be re-derived from the raw exports ({SCOPE_CITATION}); reinstall the "
+                        "skill - no output was written") from exc
+        _PULL_MODULE[path] = module
+    return _PULL_MODULE[path]
+
+
+def verify_activity_source(packet, raw_dir, error=PolicyError, script_dir=None):
+    """Re-run activity_pull (its own pull(), imported) on the raw exports in raw_dir with the packet's recorded run
+    parameters (activity_pull.RUN_PARAMETERS) and refuse an activity packet that is not exactly the result (#12.1,
+    #13.8, A23). The comparison is document_differences: canonical JSON, exact strings, every field but
+    NOT_ENGINE_OWNED, so a row added, removed or edited, a citation changed, or a raw folder the packet was not pulled
+    from is a refusal. error(...) gives a count only and names no path, value or timekeeper."""
+    pull = _activity_pull(error)
+    try:
+        derived = pull.rederive(packet, raw_dir, script_dir or os.path.dirname(os.path.abspath(__file__)))
+    except (ValueError, OSError, TypeError, KeyError, AttributeError) as exc:  # error(...) and InputError are ValueErrors
+        raise error("invalid input: activity_pull cannot re-run on the raw exports (--raw-dir) with the activity "
+                    f"packet's recorded run parameters ({SCOPE_CITATION}, client-billing-guidelines.md #13.8); re-run "
+                    f"the chain from activity_pull - no output was written ({error_text(exc)})") from exc
+    differing = document_differences(derived, packet)
+    if differing:
+        raise error(f"invalid input: the activity packet does not equal activity_pull re-run on the raw exports "
+                    f"(--raw-dir) with its recorded run parameters ({differing} top-level section(s) differ; "
+                    f"{SCOPE_CITATION}, client-billing-guidelines.md #13.8); re-run the chain from activity_pull - no "
+                    "output was written")
+    return True
+
+
+def verify_activity_root(packet, activity_path, raw_dir=None, error=PolicyError, script_dir=None):
+    """Every engine's raw check on the activity packet it reads (#12.1, #13.8). A recorded team view must be confirmed
+    by the engagement letter (verify_scope_source). Then, whenever --raw-dir was given and always when the packet
+    records a team view (raw_dir, else raw/ next to the packet), the whole packet must equal activity_pull re-run on
+    those raw exports (verify_activity_source). Without either, the packet is self-scoped and only the requester's rows
+    are ever honoured (enforce_timekeeper_scope). Any failure leaves no team view in force."""
+    folder = raw_dir_for(activity_path, raw_dir)
+    try:
+        verify_scope_source(packet, folder, error, script_dir)
+        if raw_dir or _claims_team_view(packet):
+            verify_activity_source(packet, folder, error, script_dir)
+    except BaseException:
+        reset_scope_source()
+        raise
+
+
 def team_view_valid(packet):
     """True only for an engagement-manager team view recorded by activity_pull AND re-derived from the raw exports by
-    the running engine (verify_scope_source); the packet's own record is never enough."""
+    the running engine (verify_scope_source, then verify_activity_source in verify_activity_root); the packet's own
+    record is never enough."""
     if not _claims_team_view(packet) or not _RAW_SCOPE:
         return False
     engagement = packet["engagement"]
@@ -983,15 +1099,17 @@ def supplied_marker(packet, exact_ok):
     """The path (never the text) of the first member name or string shaped like a withheld marker, or None (D20).
     exact_ok accepts the exact markers the engines emit (WITHHELD_TEXT as a value, MEMBER_MARKER as a member name);
     activity_pull passes False, since raw input never carries an engine's marker."""
+    # r18: only a contract member name is written into the path; any other name - even a plain one such as another
+    # client's name - is written by position, so the refusal never repeats supplied text.
+    names = contract_check.vocabulary(_contract_root())
     stack = [(packet, "packet")]
     while stack:
         value, where = stack.pop()
         if isinstance(value, dict):
             for n, (key, item) in enumerate(value.items(), start=1):
-                plain = isinstance(key, str) and PLAIN_KEY_RE.fullmatch(key)
                 if marker_shaped(key) and not (exact_ok and MEMBER_MARKER_RE.fullmatch(key)):
                     return f"{where} member #{n} name"
-                stack.append((item, f"{where}.{key}" if plain else f"{where}.<member #{n}>"))
+                stack.append((item, f"{where}.{key}" if key in names else f"{where}.<member #{n}>"))
         elif isinstance(value, list):
             stack += [(item, f"{where}[{i}]") for i, item in enumerate(value)]
         elif marker_shaped(value) and not (exact_ok and is_withheld(value)):
@@ -1084,12 +1202,19 @@ def _member_texts(key, value):
 RUN_WINDOW = 8  # contiguous runs of up to this many entries are screened on their own (D18)
 
 
+def has_data(text):
+    """A value that can carry words: a string with at least one letter or digit. Punctuation-only filler ("." or
+    "-") cannot, and is skipped by every sequence screen so that it neither dilutes a split nor uses up a window."""
+    return isinstance(text, str) and any(ch.isalnum() for ch in text)
+
+
 def _tripping_seq(texts):
     """Indices to withhold in a sequence of strings: each alone, then every contiguous run of 2 to RUN_WINDOW
     entries, shortest first (an instruction split across neighbouring array entries, which the rest of a long array
     would dilute), then the whole sequence (every index when only the whole trips). Every entry of a run that trips
-    is withheld; a run that holds an entry already withheld is not screened again."""
-    live = [i for i, t in enumerate(texts) if isinstance(t, str) and t.strip()]
+    is withheld; a run that holds an entry already withheld is not screened again. Entries with no letter or digit
+    are filler (has_data) and are skipped, so a run is counted in data entries."""
+    live = [i for i, t in enumerate(texts) if has_data(t)]
     bad = {i for i in live if _scan_text(texts[i])}
     for size in range(2, min(RUN_WINDOW, len(live)) + 1):
         for start in range(len(live) - size + 1):
@@ -1103,6 +1228,43 @@ def _tripping_seq(texts):
 
 
 PAIR_LIMIT = 40  # more strings than this in one object are withheld whole: too many to pair-screen (fail closed)
+# Values with a fixed grammar and no free words (a date, a number, a row of a named raw export, a section of the
+# plugin's own references). They cannot carry an instruction but would dilute one split around them, so crossing_runs
+# also screens the sequence without them.
+FIXED_VALUE_RE = re.compile(r"raw/(?:timesheet|engagement-workplan|calendar-export|document-activity-log)\.csv row \d+"
+                            r"|raw/engagement-letter-extract\.md #engagement"
+                            r"|(?:client-billing-guidelines|task-phase-codes)\.md #\d+(?:\.\d+)*"
+                            r"|\d{4}-\d{2}-\d{2}|\d+(?:\.\d+)?")
+
+
+def crossing_runs(units):
+    """D22, rendered order: units are the rows, bullets or items a document prints one after another, each a list of
+    (owner, value) in the order it prints - IDs, citations and row references included. Every run of 2 to RUN_WINDOW
+    consecutive values that spans two or more units is screened joined, shortest first (runs inside one unit are that
+    unit's own record screen), once with every value and once without the fixed-grammar values (FIXED_VALUE_RE) that
+    would dilute a split around them; returns the owners of every value in a run that trips. A withheld marker and a
+    punctuation-only value (has_data) are not data, and a run already holding a tripping value is not screened
+    again."""
+    found = set()
+    for data_only in (False, True):
+        texts, owners, unit = [], [], []
+        for n, values in enumerate(units):
+            for owner, value in values:
+                if (has_data(value) and value != WITHHELD_TEXT
+                        and not (data_only and FIXED_VALUE_RE.fullmatch(value.strip()))):
+                    texts.append(value)
+                    owners.append(owner)
+                    unit.append(n)
+        bad = set()
+        for size in range(2, RUN_WINDOW + 1):
+            for start in range(len(texts) - size + 1):
+                run = range(start, start + size)
+                if unit[start] == unit[run[-1]] or bad.intersection(run):
+                    continue
+                if _scan_record({str(k): texts[i] for k, i in enumerate(run)}):
+                    bad.update(run)
+        found |= {owners[i] for i in bad}
+    return found
 
 
 def _tripping_fields(fields):
@@ -2340,22 +2502,41 @@ SPLIT_REASON = ("linked activity text flagged as embedded_instruction when the l
                 "(text split across signals one draft would join)")
 
 
-def split_activities(linked):
+def clause_values(activity, person):
+    """The activity values one clause prints, in printed order: subject, the other attendees, then purpose and
+    deliverable in clause()'s order (shared with clause(), so the split screen reads what renders)."""
+    subject, purpose, deliverable = (activity.get(k).strip() if isinstance(activity.get(k), str) else ""
+                                     for k in ("subject", "purpose", "deliverable"))
+    attendees = activity.get("attendees") if isinstance(activity.get("attendees"), list) else []
+    others = [a for a in attendees if isinstance(a, str) and a.strip() and not same_person(a, person)]
+    # Avoid "... for client decision for the X": put the deliverable first when the purpose has "for".
+    deliverable_first = bool(deliverable and purpose and " for " in f" {purpose.lower()} ")
+    return subject, others, purpose, deliverable, deliverable_first
+
+
+def split_activities(linked, person=None):
     """IDs of linked activities whose prose trips only when read with the other linked activities' prose, in the
     order a draft joins them (client meeting first): an instruction split across signals that one narrative or one
-    entry's rewrites would put side by side (#11.1). Activities that trip on their own are flagged_activities()'."""
+    entry's rewrites would put side by side (#11.1). Two sequences are screened: the prose fields (SPLIT_PROSE_KEYS)
+    and every value a clause prints for the entry's person, in printed order (D22: attendees included).
+    Activities that trip on their own are flagged_activities()'."""
     if len(linked) < 2:
         return []
     ordered = sorted(linked, key=lambda a: 0 if class_in(a.get("activity_class"), ("client_meeting",)) else 1)
-    texts, owners = [], []
-    for activity in ordered:
-        for key in SPLIT_PROSE_KEYS:
-            value = activity.get(key)
-            if isinstance(value, str) and value.strip():
-                texts.append(value)
-                owners.append(activity.get("activity_id"))
-    bad = _tripping_seq(texts)
-    tripped = {owners[i] for i in bad}
+    tripped = set()
+    for rendered in (False, True):
+        texts, owners = [], []
+        for activity in ordered:
+            if rendered:
+                subject, others, purpose, deliverable, first = clause_values(activity, person)
+                values = [subject, *others] + ([deliverable, purpose] if first else [purpose, deliverable])
+            else:
+                values = [activity.get(key) for key in SPLIT_PROSE_KEYS]
+            for value in values:
+                if isinstance(value, str) and value.strip():
+                    texts.append(value)
+                    owners.append(activity.get("activity_id"))
+        tripped |= {owners[i] for i in _tripping_seq(texts)}
     if len(tripped) < 2:
         return []  # inside one activity: that activity's own record screen decides it
     return [a.get("activity_id") for a in ordered if a.get("activity_id") in tripped]
@@ -2369,15 +2550,10 @@ def clause(entry, activity):
         verb = "Led" if activity.get("organizer") and same_person(activity.get("organizer"), person) else "Attended"
     else:
         verb = next((v for c, v in VERB_BY_CLASS if class_in(activity.get("activity_class"), (c,))), "Prepared")
-    subject, purpose, deliverable = (activity.get(k).strip() if isinstance(activity.get(k), str) else ""
-                                     for k in ("subject", "purpose", "deliverable"))
-    attendees = activity.get("attendees") if isinstance(activity.get("attendees"), list) else []
-    others = [a for a in attendees if isinstance(a, str) and a.strip() and not same_person(a, person)]
+    subject, others, purpose, deliverable, deliverable_first = clause_values(activity, person)
     text = f"{verb} {subject}"
     if others:
         text += f" with {join_names(others)}"
-    # Avoid "... for client decision for the X": put the deliverable first when the purpose has "for".
-    deliverable_first = bool(deliverable and purpose and " for " in f" {purpose.lower()} ")
     if deliverable_first:
         text += f" for the {deliverable}"
     if purpose:
@@ -2395,7 +2571,7 @@ def grounded_narrative(entry, linked):
         return ("", "needs_activity_evidence", NO_EVIDENCE_CONFIDENCE,
                 ["no cited activity signal from an enabled source is linked; nothing to draft from"], [])
     flagged, hits = flagged_activities(linked)
-    split = [] if flagged else split_activities(linked)
+    split = [] if flagged else split_activities(linked, entry.get("person"))
     if flagged or split:
         why = hold_reason(hits, "linked activity text flagged as embedded_instruction") if flagged else SPLIT_REASON
         flagged = flagged or split
@@ -2448,7 +2624,7 @@ def build_narrative(entry, linked):
                        "(client-billing-guidelines.md #11.1, #11.2)")
     suggestions = []
     # One entry's rewrites sit side by side: activities whose text trips only together get no rewrite (#11.1).
-    split = split_activities(linked)
+    split = split_activities(linked, entry.get("person"))
     if split:
         reasons.append(f"{SPLIT_REASON} ({', '.join(split)}); treated as data and withheld - no rewrite drafted "
                        "from it (client-billing-guidelines.md #11.1, #11.2)")
@@ -2719,7 +2895,7 @@ def load_activity_root(path, error, raw_dir=None, script_dir=None):
             or any(isinstance(e, dict) and any(k in e for k in RECORD_DERIVED) for e in payload["time_entries"]):
         raise SchemaError("invalid input: --activity must be the activity packet activity_pull wrote, before any later "
                           f"stage ({REDERIVE_CITATION}) - no output was written")
-    verify_scope_source(payload, raw_dir_for(path, raw_dir), error, script_dir)
+    verify_activity_root(payload, path, raw_dir, error, script_dir)
     return payload
 
 

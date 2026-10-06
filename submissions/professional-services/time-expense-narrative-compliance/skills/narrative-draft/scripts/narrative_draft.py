@@ -11,7 +11,9 @@ v1.0.4 rules:
   client-billing-guidelines.md #10.1); an entry that linked one is marked needs_review.
 - Rows outside the recorded timekeeper scope are withheld before drafting (#12.1). A recorded team view is
   honoured only when the raw engagement letter and exports (--raw-dir, default raw/ next to --activity)
-  confirm it, and covers only the timekeepers those exports name; otherwise the packet is refused.
+  confirm it, and covers only the timekeepers those exports name; otherwise the packet is refused. With
+  --raw-dir, and always for a team view, the whole activity packet must equal activity_pull re-run on
+  those raw exports with its recorded run parameters, or nothing is written.
 - Every free-text field of a linked signal (subject, deliverable, purpose, attendees, organizer,
   file name, citations) and of the entry (narrative, notes, citations) passes the shared
   embedded-instruction tripwire first (#11.1). Flagged text is never copied into a narrative, a suggested rewrite or the draft's
@@ -32,7 +34,6 @@ v1.0.4 rules:
 - Existing narratives are preserved for compliance review. Separately labeled suggested
   rewrites are generated only from cited enabled-source activity and never replace them.
 """
-import argparse
 import datetime
 import os
 import sys
@@ -66,13 +67,14 @@ def load_packet(path, raw_dir=None):
     if payload.get("contract_version") != CONTRACT:
         raise InputError(f"expected a {CONTRACT} object (contract_version must be the contract constant)")
     signal_policy.validate_packet(payload, "activity")
-    # #12.1: a recorded team view is honoured only when the raw exports re-derive it (never from the packet alone).
-    signal_policy.verify_scope_source(payload, signal_policy.raw_dir_for(path, raw_dir), InputError)
+    # #12.1, #13.8: a recorded team view is honoured only when the raw exports re-derive it (never from the packet
+    # alone), and with --raw-dir or a team view the whole packet must equal activity_pull re-run on those exports.
+    signal_policy.verify_activity_root(payload, path, raw_dir, InputError)
     return payload
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Draft deterministic narrative candidates from activity signals.")
+    ap = signal_policy.ArgumentParser(description="Draft deterministic narrative candidates from activity signals.")
     ap.add_argument("--activity", required=True, help="Input contract JSON from activity-pull")
     ap.add_argument("--out", required=True, help="Output drafted contract JSON")
     ap.add_argument("--raw-dir", help=signal_policy.RAW_DIR_HELP)

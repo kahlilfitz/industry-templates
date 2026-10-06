@@ -352,17 +352,31 @@ SPLIT_MISSING_REASON = ("activity text flagged as embedded_instruction when read
                         "items (text split across items that are listed side by side)")
 
 
+def _rendered_row(item):
+    """A missing-time item's values as the report's table prints them, in order (D22): ID, person, date, hours,
+    subject and each citation."""
+    values = [item.get("activity_id"), item.get("person"), item.get("date"), item.get("duration_hours"),
+              item.get("subject")] + list(item.get("citations") or [])
+    return [v if isinstance(v, str) else (None if v is None else str(v)) for v in values]
+
+
 def withhold_missing_runs(items):
-    """#11.1 / #11.2 across items: missing-time subjects are listed side by side, so an instruction split across
-    neighbouring items is screened joined (the detector's run screen) and each item in a tripping run is withheld
-    and held like a flagged one."""
+    """#11.1 / #11.2 across items: missing-time items are listed side by side, so an instruction split across
+    neighbouring items is screened joined (the detector's run screen) - their subjects alone, and every run of the
+    values the rows print, in reading order, that crosses from one item to the next, IDs and citations included
+    (D22) - and each item in a tripping run is withheld and held like a flagged one."""
     texts = [None if item.get("embedded_instruction") else item.get("subject") for item in items]
-    for i in sorted(signal_policy._tripping_seq(texts)):
+    bad = set(signal_policy._tripping_seq(texts))
+    bad |= signal_policy.crossing_runs([[(i, v) for v in _rendered_row(item)] for i, item in enumerate(items)])
+    for i in sorted(bad):
         item = items[i]
+        if item.get("embedded_instruction"):
+            continue  # already withheld and held (missing_time_item)
         item["subject"] = signal_policy.WITHHELD_TEXT
         item["embedded_instruction"] = True
         item["finding"] += "; " + SPLIT_MISSING_REASON + "; withheld"
-        item["citations"] += [signal_policy.INJECTION_CITATION, signal_policy.WITHHOLD_CITATION]
+        item["citations"] = signal_policy.safe_citations(item["citations"], True)[0] + [
+            signal_policy.INJECTION_CITATION, signal_policy.WITHHOLD_CITATION]
 
 
 def govern(out):
@@ -485,7 +499,7 @@ def govern(out):
         reasons = list(draft.get("review_reasons") or []) + [x for r in rewrites for x in r.get("review_reasons") or []]
         marked = (any_withheld or entry.get("embedded_instruction") is True
                   or any(a.get("embedded_instruction") is True for a in linked)
-                  or bool(signal_policy.split_activities(linked))
+                  or bool(signal_policy.split_activities(linked, entry.get("person")))
                   or any(r.get("status") == "withheld_embedded_instruction" for r in rewrites)
                   or signal_policy.WITHHELD_TEXT in reasons)
         if marked or hits or packet_hold:

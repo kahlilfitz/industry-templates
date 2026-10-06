@@ -26,8 +26,16 @@ engine re-reads the same raw exports (--raw-dir, by default raw/ next to the act
 the same parsers (signal_policy.read_engagement / read_raw_csv) and honours a recorded team view
 only when they confirm it; people: null then covers only the timekeepers the raw exports name.
 
+Re-derivation (#12.1, #13.8): the whole derivation is pull(). Whenever a later engine is given
+--raw-dir, and always when the packet records a team view, it imports this file (shipped as
+identical copies next to every engine) and re-runs pull() on the raw exports with the packet's
+recorded run parameters (rederive, RUN_PARAMETERS); an activity packet that differs from the
+result in any field but provenance.generated_at is refused with no output.
+
 Free text is data (#11.1): a signal or entry whose text trips the shared embedded-instruction
 tripwire is marked embedded_instruction / needs_review so no later step drafts from it.
+IDs are keys (#13.9): every ID and code cell, timesheet link and letter ID must be a bounded record ID
+(contract_check.valid_record_id), checked as written; prose in an ID is refused, never echoed.
 A requested period with no rows for the requester produces a period_check warning.
 
 Engagement identity (#13.3): only rows whose engagement_id is the engagement letter's are read, and the
@@ -63,6 +71,7 @@ SOURCE_FILES = (
     ("mailbox_content", "mailbox-summary.txt", "connector:mailbox-content"),
 )
 PARSERS_AVAILABLE = ("calendar", "document_activity")
+NO_CONFIRMATION = "no engagement-manager team-view confirmation was supplied"
 
 
 class InputError(ValueError):
@@ -118,6 +127,19 @@ def cell_id(row, key, cite):
     # A21: a value that folds to nothing ("-", "_", a format character) is blank and never a key.
     if not signal_policy.canon_id(value):
         raise InputError(f"{cite} {key} must not be empty (or only separators or format characters)")
+    return value
+
+
+def record_id(value, cite, key, optional=False):
+    """#13.9: a raw ID cell (or one activity_ids link) holds a record ID of the documented, bounded shape exactly as
+    written - never prose, never padded. optional: a blank cell is no ID (None). The error cites the row, never the
+    value."""
+    if optional and not value.strip():
+        return None
+    if not signal_policy.canon_id(value):
+        raise InputError(f"{cite} {key} must not be empty (or only separators or format characters)")
+    if not signal_policy.contract_check.valid_record_id(value):
+        raise InputError(f"{cite} {key} is not {signal_policy.contract_check.ID_RULE}")
     return value
 
 
@@ -196,7 +218,7 @@ def resolve_scope(args, engagement):
         }})
         return (None if people is None else {signal_policy.person_key(p) for p in people}), scope
     if not token:
-        reason = "no engagement-manager team-view confirmation was supplied"
+        reason = NO_CONFIRMATION
     elif not manager:
         reason = "raw/engagement-letter-extract.md records no engagement_manager, so no team view can be granted"
     else:
@@ -227,8 +249,8 @@ def period_check(period, dates_available, dates_in_period):
     return check
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Build a cited activity packet from engagement-scoped raw exports.")
+def build_parser():
+    ap = signal_policy.ArgumentParser(description="Build a cited activity packet from engagement-scoped raw exports.")
     ap.add_argument("--raw-dir", required=True, help="Folder holding the raw exports")
     ap.add_argument("--out", required=True, help="Output activity packet JSON")
     ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
@@ -243,40 +265,44 @@ def main():
     ap.add_argument("--period-end", help="YYYY-MM-DD (inclusive)")
     ap.add_argument("--scenario", help="Demo scenario label recorded in provenance")
     ap.add_argument("--generated-at", help="Fixed ISO-8601 UTC timestamp for reproducible golden files")
-    args = ap.parse_args()
+    return ap
 
-    try:
-        stamp = generated_at(args.generated_at)
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        plugin_config_path = signal_policy.find_plugin_config(script_dir)
-        if plugin_config_path:
-            config = signal_policy.read_json(plugin_config_path, InputError, label="config/signal-sources.json")
+
+def pull(args, script_dir=None, extra_sources=None):
+    """activity_pull's whole derivation: the activity packet for the run parameters in args (the parsed command line).
+    Returns (packet, signals read, time entries read); raises InputError or signal_policy.PolicyError and writes
+    nothing. main() and every later engine's re-derivation (rederive, #12.1, #13.8) run this one function.
+    extra_sources is a recorded --signal-config (signal_policy.stage_policy), applied in that file's place."""
+    script_dir = script_dir or os.path.dirname(os.path.abspath(__file__))
+    stamp = generated_at(args.generated_at)
+    plugin_config_path = signal_policy.find_plugin_config(script_dir)
+    if plugin_config_path:
+        config = signal_policy.read_json(plugin_config_path, InputError, label="config/signal-sources.json")
+    else:
+        config = {"sources": signal_policy.NARROW_DEFAULT,
+                  "note": "plugin config/signal-sources.json not found; documented narrow default applied"}
+    if not isinstance(config, dict) or not isinstance(config.get("sources"), dict):
+        raise InputError("config/signal-sources.json has no 'sources' object")
+    # The plugin config (or narrow default) is always applied; --signal-config may only narrow it.
+    enabled, _ = signal_policy.effective_sources({}, config_path=args.signal_config, script_dir=script_dir,
+                                                 extra_sources=extra_sources)
+    config = json.loads(json.dumps(config))
+    for key, value in enabled.items():
+        entry = config["sources"].get(key)
+        if isinstance(entry, dict):
+            entry["enabled"] = value
         else:
-            config = {"sources": signal_policy.NARROW_DEFAULT,
-                      "note": "plugin config/signal-sources.json not found; documented narrow default applied"}
-        if not isinstance(config, dict) or not isinstance(config.get("sources"), dict):
-            raise InputError("config/signal-sources.json has no 'sources' object")
-        # The plugin config (or narrow default) is always applied; --signal-config may only narrow it.
-        enabled, _ = signal_policy.effective_sources({}, config_path=args.signal_config, script_dir=script_dir)
-        config = json.loads(json.dumps(config))
-        for key, value in enabled.items():
-            entry = config["sources"].get(key)
-            if isinstance(entry, dict):
-                entry["enabled"] = value
-            else:
-                config["sources"][key] = {"enabled": value}
-        engagement = read_engagement(os.path.join(args.raw_dir, "engagement-letter-extract.md"))
-        workplan_rows = read_csv(os.path.join(args.raw_dir, "engagement-workplan.csv"),
-                                 signal_policy.RAW_EXPORTS["workplan"][1])
-        timesheet_rows = read_csv(os.path.join(args.raw_dir, "timesheet.csv"),
-                                  signal_policy.RAW_EXPORTS["timesheet"][1])
-        people, timekeeper_scope = resolve_scope(args, engagement)
-        cli_date(args.period_start, "--period-start")
-        cli_date(args.period_end, "--period-end")
-        if args.period_start and args.period_end and args.period_start > args.period_end:
-            raise InputError("--period-start is after --period-end")
-    except (InputError, signal_policy.PolicyError, OSError, UnicodeError, json.JSONDecodeError) as exc:
-        sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
+            config["sources"][key] = {"enabled": value}
+    engagement = read_engagement(os.path.join(args.raw_dir, "engagement-letter-extract.md"))
+    workplan_rows = read_csv(os.path.join(args.raw_dir, "engagement-workplan.csv"),
+                             signal_policy.RAW_EXPORTS["workplan"][1])
+    timesheet_rows = read_csv(os.path.join(args.raw_dir, "timesheet.csv"),
+                              signal_policy.RAW_EXPORTS["timesheet"][1])
+    people, timekeeper_scope = resolve_scope(args, engagement)
+    cli_date(args.period_start, "--period-start")
+    cli_date(args.period_end, "--period-end")
+    if args.period_start and args.period_end and args.period_start > args.period_end:
+        raise InputError("--period-start is after --period-end")
 
     eng_id = engagement["engagement_id"]
     eng_key = signal_policy.canon_id(eng_id)
@@ -290,16 +316,14 @@ def main():
     workplan, workplan_ids = {}, {}
     for idx, row in enumerate(workplan_rows, start=2):
         cite = f"raw/engagement-workplan.csv row {idx}"
-        try:
-            unique(workplan_ids, signal_policy.canon_id(cell_id(row, "workplan_id", cite)), cite, "workplan_id")
-            # Engagement IDs, item types and match keys compare in canonical form (A13): a variant spelling of a
-            # workplan key is the same key, never a missed match that drops the row's activity class. A21: a row
-            # with a blank item type or match key is never indexed, so it can never join a blank event ID or file.
-            key = (signal_policy.canon_id(row["item_type"]), signal_policy.canon_id(row["match_key"]))
-            if signal_policy.canon_id(row["engagement_id"]) == eng_key and all(key):
-                unique(workplan, key, cite, "item_type and match_key", value=(idx, row))
-        except InputError as exc:
-            sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
+        unique(workplan_ids, signal_policy.canon_id(record_id(row["workplan_id"], cite, "workplan_id")), cite, "workplan_id")
+        record_id(row["engagement_id"], cite, "engagement_id", optional=True)
+        # Engagement IDs, item types and match keys compare in canonical form (A13): a variant spelling of a
+        # workplan key is the same key, never a missed match that drops the row's activity class. A21: a row
+        # with a blank item type or match key is never indexed, so it can never join a blank event ID or file.
+        key = (signal_policy.canon_id(row["item_type"]), signal_policy.canon_id(row["match_key"]))
+        if signal_policy.canon_id(row["engagement_id"]) == eng_key and all(key):
+            unique(workplan, key, cite, "item_type and match_key", value=(idx, row))
 
     signals, skipped_sources, out_of_scope = [], [], []
     activity_rows = {}
@@ -316,24 +340,21 @@ def main():
                                     "reason": "enabled but no approved parser in this version; not read", "citations": [POLICY_CITATION]})
             continue
         read_keys.add(key)
-        try:
-            if key == "calendar":
-                rows = read_csv(path, signal_policy.RAW_EXPORTS["calendar"][1])
-            else:
-                rows = read_csv(path, signal_policy.RAW_EXPORTS["document_activity"][1])
-        except InputError as exc:
-            sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
+        if key == "calendar":
+            rows = read_csv(path, signal_policy.RAW_EXPORTS["calendar"][1])
+        else:
+            rows = read_csv(path, signal_policy.RAW_EXPORTS["document_activity"][1])
         for idx, row in enumerate(rows, start=2):
             cite = f"raw/{filename} row {idx}"
             if not allowed(row["person"]):
                 continue  # #12.1: other timekeepers' rows are never read into the packet
-            try:
-                cell_id(row, "activity_id", cite)
-                unique(activity_rows, signal_policy.canon_id(row["activity_id"]), cite, "activity_id")
-                cell_id(row, "person", cite)
-                row["date"] = cell_date(row, "date", cite)
-            except InputError as exc:
-                sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
+            record_id(row["activity_id"], cite, "activity_id")
+            record_id(row["engagement_id"], cite, "engagement_id", optional=True)
+            if key == "calendar":
+                record_id(row["event_id"], cite, "event_id", optional=True)
+            unique(activity_rows, signal_policy.canon_id(row["activity_id"]), cite, "activity_id")
+            cell_id(row, "person", cite)
+            row["date"] = cell_date(row, "date", cite)
             if signal_policy.canon_id(row["engagement_id"]) != eng_key:
                 out_of_scope.append({"activity_id": row["activity_id"], "reason": "outside engagement scope", "citations": [cite]})
                 continue
@@ -345,11 +366,8 @@ def main():
                 match = workplan.get((signal_policy.canon_id("calendar_event"), signal_policy.canon_id(row["event_id"])))
                 activity_class = (match[1]["activity_class"] if match else "") or "unclassified_meeting"
                 subject = row["subject"].strip()
-                try:
-                    duration = hours_between(row["start"], row["end"], cite)
-                except InputError as exc:
-                    sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
-                meeting_id = row["event_id"]
+                duration = hours_between(row["start"], row["end"], cite)
+                meeting_id = record_id(row["event_id"], cite, "event_id", optional=True)
                 extra = {"organizer": row["organizer"].strip() or None,
                          "attendees": [a.strip() for a in row["attendees"].split(";") if a.strip()]}
             else:
@@ -359,10 +377,7 @@ def main():
                          workplan.get((signal_policy.canon_id("document"), signal_policy.canon_id(row["file_name"]))))
                 activity_class = DOCUMENT_CLASS.get(signal_policy.canon_id(row["activity_type"]), "unclassified_document_activity")
                 subject = subject_from_file(row["file_name"])
-                try:
-                    duration = round(cell_hours(row, "duration_hours", cite), 2)
-                except InputError as exc:
-                    sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
+                duration = round(cell_hours(row, "duration_hours", cite), 2)
                 meeting_id = None
                 extra = {"file_name": row["file_name"]}
             citations = [cite]
@@ -418,21 +433,19 @@ def main():
         if not allowed(row["person"]):
             continue
         cite = f"raw/timesheet.csv row {idx}"
-        try:
-            cell_id(row, "entry_id", cite)
-            unique(entry_rows, signal_policy.canon_id(row["entry_id"]), cite, "entry_id")
-            cell_id(row, "person", cite)
-            row["date"] = cell_date(row, "date", cite)
-            hours = cell_hours(row, "hours", cite)
-            links = [a.strip() for a in (row["activity_ids"] or "").split(";") if a.strip()]
-            linked = {}
-            for link in links:
-                if not signal_policy.canon_id(link):
-                    raise InputError(f"{cite} activity_ids has a blank link (only separators or format characters); "
-                                     "a blank key never matches an activity")
-                unique(linked, signal_policy.canon_id(link), cite, "activity_ids link")
-        except InputError as exc:
-            sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
+        record_id(row["entry_id"], cite, "entry_id")
+        unique(entry_rows, signal_policy.canon_id(row["entry_id"]), cite, "entry_id")
+        cell_id(row, "person", cite)
+        row["date"] = cell_date(row, "date", cite)
+        hours = cell_hours(row, "hours", cite)
+        links = [a.strip() for a in (row["activity_ids"] or "").split(";") if a.strip()]
+        linked = {}
+        for link in links:
+            if not signal_policy.canon_id(link):
+                raise InputError(f"{cite} activity_ids has a blank link (only separators or format characters); "
+                                 "a blank key never matches an activity")
+            record_id(link, cite, "activity_ids link")
+            unique(linked, signal_policy.canon_id(link), cite, "activity_ids link")
         dates_available.add(row["date"])
         if not in_period(row["date"], period):
             continue
@@ -464,8 +477,8 @@ def main():
             "duration_hours": hours,
             "narrative": row["narrative"],
             "activity_ids": kept_links,
-            "submitted_phase_code": row["phase_code"] or None,
-            "submitted_task_code": row["task_code"] or None,
+            "submitted_phase_code": record_id(row["phase_code"], cite, "phase_code", optional=True),
+            "submitted_task_code": record_id(row["task_code"], cite, "task_code", optional=True),
             "source": "connector:timesheet",
             "confidence": TIMESHEET_CONFIDENCE,
             "citations": [cite],
@@ -529,20 +542,81 @@ def main():
     }
     if not args.scenario:
         packet["provenance"].pop("demo_scenario")
+    signal_policy.refuse_supplied_markers(packet, exact_ok=False)  # D20: raw input never carries a marker
+    signal_policy.filter_packet(packet, config_path=args.signal_config, script_dir=script_dir, engine=ENGINE,
+                                extra_sources=extra_sources)
+    signal_policy.validate_packet(packet, "activity")  # never emit a packet the next engine would reject
+    return packet, len(signals), len(entries)
+
+
+# --- Re-derivation by every later engine (client-billing-guidelines.md #12.1, #13.8; hardening checklist A23, C6) ---
+# The activity packet fields that no raw export determines: activity_pull's run parameters. rederive() reads them back
+# from the packet and re-runs pull() on the raw exports with them; the result must still equal the whole packet, so
+# each of these is compared like every other field, and a value activity_pull would not have written is a difference.
+# Every other field is derived from the raw exports, the plugin's config/signal-sources.json or this engine's
+# constants. tests/run_tests.py (qa13_tests) fails when the contract gains a top-level or provenance field that is
+# neither derived nor listed here.
+RUN_PARAMETERS = {
+    ("period",): "--period-start and --period-end: the requested period, which selects rows but is not in any export",
+    ("provenance", "demo_scenario"): "--scenario: a demo label recorded as given; it decides nothing",
+    ("provenance", "generated_at"): "--generated-at or the clock: the run's own timestamp (signal_policy.NOT_ENGINE_OWNED)",
+    ("provenance", "timekeeper_scope"): "--requester, --person or --all-timekeepers and --team-view-confirmation: who "
+                                        "asked and which view; the letter and exports decide what that grants",
+    ("provenance", "signal_policy"): "--signal-config: an additional policy (signal_policy.stage_policy), which can only "
+                                     "narrow the plugin's config/signal-sources.json",
+}
+
+
+def run_parameters(packet, raw_dir):
+    """The command line that would have written packet from raw_dir, read back from the fields in RUN_PARAMETERS. A
+    value activity_pull could not have written gives a command line that fails or writes another packet."""
+    provenance = packet["provenance"]
+    scope = provenance["timekeeper_scope"]
+    args = argparse.Namespace(raw_dir=raw_dir, signal_config=None, requester=scope["requester"], person=None,
+                              all_timekeepers=False, team_view_confirmation=None,
+                              period_start=packet["period"]["start"], period_end=packet["period"]["end"],
+                              scenario=provenance.get("demo_scenario"), generated_at=provenance["generated_at"])
+    withheld = scope.get("withheld")
+    if scope.get("mode") == "team":
+        if scope.get("people") is None:
+            args.all_timekeepers = True
+        else:
+            args.person = list(scope["people"])
+        args.team_view_confirmation = (scope.get("team_view") or {}).get("confirmation")
+    elif isinstance(withheld, dict):
+        if withheld.get("requested") == "all timekeepers":
+            args.all_timekeepers = True
+        else:
+            args.person = list(withheld.get("requested") or [])
+        # A confirmation that was supplied leaves only the withheld reason behind; activity_pull accepts no other token
+        # than the engagement's own.
+        if NO_CONFIRMATION not in str(withheld.get("reason")):
+            args.team_view_confirmation = signal_policy.team_view_token(packet["engagement"]["engagement_id"])
+    return args
+
+
+def rederive(packet, raw_dir, script_dir=None):
+    """activity_pull re-run on raw_dir with the packet's recorded run parameters: the activity packet it would write
+    (as written, a JSON round trip), for a later engine to compare with the whole carried packet. Writes nothing."""
+    args = run_parameters(packet, raw_dir)
+    derived, _, _ = pull(args, script_dir=script_dir,
+                         extra_sources=signal_policy.stage_policy(packet, "activity", writer=True))
+    return json.loads(signal_policy.dump_json(derived))
+
+
+def main():
+    args = build_parser().parse_args()
     try:
-        signal_policy.refuse_supplied_markers(packet, exact_ok=False)  # D20: raw input never carries a marker
-    except signal_policy.SchemaError as exc:
-        sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
-    try:
-        signal_policy.filter_packet(packet, config_path=args.signal_config, script_dir=script_dir, engine=ENGINE)
-        signal_policy.validate_packet(packet, "activity")  # never emit a packet the next engine would reject
-    except signal_policy.PolicyError as exc:  # SchemaError included; a missing contract is one (no traceback)
+        packet, signal_count, entry_count = pull(args)
+    except (InputError, signal_policy.PolicyError, OSError, UnicodeError, json.JSONDecodeError) as exc:
+        # PolicyError covers SchemaError and a missing contract (no traceback).
         sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
     try:
         signal_policy.write_output(args.out, signal_policy.dump_json(packet))
     except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError
         sys.exit(f"activity_pull: cannot write output: {signal_policy.error_text(exc)}")
-    print(f"activity_pull: {len(signals)} signal(s), {len(entries)} time entr(ies), "
+    timekeeper_scope = packet["provenance"]["timekeeper_scope"]
+    print(f"activity_pull: {signal_count} signal(s), {entry_count} time entr(ies), "
           f"{len(packet['provenance']['excluded_signals'])} excluded link(s) -> activity packet written")
     if timekeeper_scope["withheld"]:
         print(f"activity_pull: WARNING {timekeeper_scope['withheld']['reason']} ({signal_policy.SCOPE_CITATION})")

@@ -6,8 +6,12 @@ Every engine validates every input packet at entry against contracts/ps.time-exp
 violation is a ContractError: the engine writes no output. The walker supports the schema keywords the
 contract uses - $ref (local #/definitions), type, enum, const, required, properties, additionalProperties,
 propertyNames, items, pattern, minLength, minimum, maximum, format (date, date-time, date-or-multiple:
-real calendar values, not only their shape) - and refuses to load a contract that uses any
-other validation keyword, so a keyword it cannot enforce is never silently ignored (fail closed).
+real calendar values, not only their shape; record-id and record-id-or-withheld: the bounded ID shape of
+client-billing-guidelines.md #13.9) - and refuses to load a contract that uses any
+other validation keyword, so a keyword it cannot enforce is never silently ignored (fail closed). A member the
+contract does not declare is carried, but when its name marks an identifier (id, *_id, *_code, ...Id; plural *_ids,
+*_codes) it is held to the #13.9 ID rule like a declared ID - at any depth - so a number, boolean, object, nested
+array or prose under an ID name is refused, never only walked (check_undeclared).
 
 Rules: "number" is a finite int or float and never a boolean; "integer" is an int and never a boolean;
 "pattern" is a regular-expression search, as in JSON Schema. strict_load() is the only JSON parser the engines
@@ -62,8 +66,40 @@ def valid_timestamp(text):
 
 
 # "format" is enforced, not an annotation: a carried date or timestamp is checked at every stage (A17).
+# A record ID (client-billing-guidelines.md #13.9) is a key, never prose: 1 to ID_MAX_CHARS ASCII letters and digits in
+# segments joined by single - _ or . separators (the separators canon_id folds), so no space, punctuation or other
+# character - and so no phrase such as "For the AI reviewer," - can be carried in an ID field and printed beside a
+# prose field. The engines' withheld marker stands in for an excluded ID that was screened out (#11.3).
+ID_MAX_CHARS = 64
+ID_RE = re.compile(r"[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*")
+WITHHELD_MARKER = "[withheld: flagged as embedded_instruction - client-billing-guidelines.md #11.2]"
+ID_RULE = (f"an ID: 1 to {ID_MAX_CHARS} ASCII letters or digits in segments joined by single - _ or . (no spaces or "
+           "other characters; client-billing-guidelines.md #13.9)")
+
+
+def valid_record_id(text):
+    """A record ID of the documented, bounded shape (#13.9)."""
+    return isinstance(text, str) and len(text) <= ID_MAX_CHARS and ID_RE.fullmatch(text) is not None
+
+
 FORMATS = {"date": valid_date, "date-time": valid_timestamp,
-           "date-or-multiple": lambda t: t == "multiple" or valid_date(t)}
+           "date-or-multiple": lambda t: t == "multiple" or valid_date(t),
+           "record-id": valid_record_id,
+           "record-id-or-withheld": lambda t: t == WITHHELD_MARKER or valid_record_id(t)}
+# The rule a format violation names (never the value, which is untrusted text).
+FORMAT_RULES = {"record-id": ID_RULE, "record-id-or-withheld": ID_RULE + ", or the engines' withheld marker"}
+# A member the contract does not declare is carried and screened (#11.3), but one whose name marks an identifier (id,
+# *_id, *_code, camelCase ...Id/...Code; plural *_ids/*_codes) is held to the declared ID rule too, never only walked
+# (#13.9): a single ID is an ID-shaped string or null, a plural is an array of ID-shaped strings or null. A number,
+# boolean, object, nested array or prose under such a name is refused with its path; the value is never repeated.
+ID_MEMBER_WORDS = {"id": "one", "code": "one", "ids": "many", "codes": "many"}
+ID_MEMBER_CAMEL_RE = re.compile(r"[a-z0-9](?:Id|ID|Code)(s?)$")
+UNDECLARED_ID_RULES = {
+    "one": f"{ID_RULE}, or null - a member whose name marks an identifier is checked like a declared ID even when "
+           "the contract does not declare it",
+    "many": f"an array of IDs ({ID_RULE}), or null - a member whose name marks a list of identifiers is checked like "
+            "a declared ID list even when the contract does not declare it",
+}
 JSON_TYPES = {bool: "boolean", str: "string", int: "integer", float: "number", dict: "object", list: "array",
               type(None): "null"}
 
@@ -213,6 +249,70 @@ def _fail(where, rule, value):
                         "(the contract is enforced in full; nothing is coerced)")
 
 
+def id_member(key):
+    """'one' or 'many' when a member name marks an identifier (or a list of them), else None."""
+    if not isinstance(key, str):
+        return None
+    words = _canon_member(key).split()
+    if words and words[-1] in ID_MEMBER_WORDS:
+        return ID_MEMBER_WORDS[words[-1]]
+    camel = ID_MEMBER_CAMEL_RE.search(unicodedata.normalize("NFKC", key))
+    return ("many" if camel.group(1) else "one") if camel else None
+
+
+_VOCABULARY = {}
+
+
+def vocabulary(root):
+    """Every member name the contract declares anywhere (trusted vocabulary). A supplied member name is written into an
+    error path only when it is one of these; any other name - even one of ID shape, such as another client's name
+    followed by _id - is written by position (<member #n>), so no message repeats supplied text (r18)."""
+    cached = _VOCABULARY.get(id(root))
+    if cached is None or cached[0] is not root:
+        names, stack = set(), [root]
+        while stack:
+            schema = stack.pop()
+            if isinstance(schema, dict):
+                names.update(k for k in (schema.get("properties") or {}) if isinstance(k, str))
+                stack += [v for k, v in schema.items() if isinstance(v, dict)]
+        cached = _VOCABULARY[id(root)] = (root, frozenset(names))
+    return cached[1]
+
+
+def _member_path(where, key, n, names):
+    return f"{where}.{key}" if key in names else f"{where}.<member #{n}>"
+
+
+def _id_value(value):
+    return isinstance(value, str) and FORMATS["record-id-or-withheld"](value)
+
+
+def check_undeclared(key, value, where, n, names=frozenset()):
+    """A member the contract does not declare (and everything nested in it): ID-like names are type- and
+    shape-checked (fail closed), every other value is only walked. Raise ContractError at the first violation.
+    names is the contract vocabulary (vocabulary(root)): only those names are ever written into a path."""
+    path = _member_path(where, key, n, names)
+    kind = id_member(key)
+    if kind == "one" and not (value is None or _id_value(value)):
+        _fail(path, UNDECLARED_ID_RULES["one"], value)
+    if kind == "many":
+        if not (value is None or isinstance(value, list)):
+            _fail(path, UNDECLARED_ID_RULES["many"], value)
+        for i, item in enumerate(value or []):
+            if not _id_value(item):
+                _fail(f"{path}[{i}]", ID_RULE, item)
+    _walk_undeclared(value, path, names)
+
+
+def _walk_undeclared(value, where, names):
+    if isinstance(value, dict):
+        for m, (inner, item) in enumerate(value.items(), start=1):
+            check_undeclared(inner, item, where, m, names)
+    elif isinstance(value, list):
+        for i, item in enumerate(value):
+            _walk_undeclared(item, f"{where}[{i}]", names)
+
+
 def validate(value, schema, root, where="packet"):
     """Raise ContractError at the first violation of schema (resolved against root) by value."""
     schema = _resolve(schema, root)
@@ -234,7 +334,7 @@ def validate(value, schema, root, where="packet"):
         if "pattern" in schema and not re.search(schema["pattern"], value):
             _fail(where, f"a string matching the contract pattern {schema['pattern']}", value)
         if "format" in schema and not FORMATS.get(schema["format"], lambda _: False)(value):
-            _fail(where, f"a valid {schema['format']} value", value)
+            _fail(where, FORMAT_RULES.get(schema["format"], f"a valid {schema['format']} value"), value)
     if _is(value, "number"):
         if "minimum" in schema and value < schema["minimum"]:
             _fail(where, f"a number >= {schema['minimum']}", value)
@@ -257,6 +357,8 @@ def validate(value, schema, root, where="packet"):
             elif isinstance(extra, dict):
                 # A map key is input text: the path names its position, never the key itself.
                 validate(item, extra, root, f"{where}.<member #{n}>")
+            else:
+                check_undeclared(key, item, where, n, vocabulary(root))
     if isinstance(value, list) and "items" in schema:
         for i, item in enumerate(value):
             validate(item, schema["items"], root, f"{where}[{i}]")
