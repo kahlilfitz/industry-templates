@@ -20,6 +20,10 @@ must appear as a standalone number in that paragraph or in a linked evidence ent
 description (never in an ID, type, source or confidence), and every evidence ID must be indexed.
 In a known register section every record-shaped line (a list item, or a line carrying one of that
 register's field labels) must parse; one that does not is an error, never silently dropped.
+Missing is not empty: a raw file that is missing (release-registers.md excepted: a missing
+registers file or section is a register that was not supplied, which the engines hold), zero
+bytes, or only blank lines and headings, and a known register section with a heading and no
+lines, are errors, never parsed as a list with no entries.
 Classification fields (class, label, hedging_present, limitation_present, stated_basis,
 scope_aligned), prior-finding detail and extraction confidence are ingest judgements: they are
 listed in JUDGEMENT_KEYS and are not re-derived, but each is type- and range-checked by
@@ -140,9 +144,17 @@ def position(text, where):
     return value
 
 
-def read_text(path):
+def read_text(path, label):
+    """A raw-pack file's text. Missing is not empty: a missing file, and one that is zero bytes or holds only blank
+    lines or headings, states nothing, so it is a PackError naming the file by its fixed `label`, never parsed as a
+    file with no records (which would derive an explicit, clean empty list)."""
+    if not os.path.isfile(path):
+        raise PackError(f"{label} is missing; a missing raw file is never read as an empty one")
     with open(path, encoding="utf-8") as fh:
-        return fh.read()
+        text = fh.read()
+    if not any(line.strip() and not line.lstrip().startswith("#") for line in text.splitlines()):
+        raise PackError(f"{label} is empty (zero bytes, or only blank lines or headings); an empty file is not an empty register - list its entries or state that there are none")
+    return text
 
 
 def section_name(heading):
@@ -223,9 +235,17 @@ def register_sections(text):
     return sections
 
 
+REGISTER_SECTIONS = ("Client-data handling register", "Brand and formatting checks", "Licensed and third-party content register")
+
+
 def parse_registers(path):
-    """Return client_data_handling, brand_checks and licensed_content; a missing register is unknown/None."""
-    sections = register_sections(read_text(path)) if os.path.exists(path) else {}
+    """Return client_data_handling, brand_checks and licensed_content. A missing file or section is a register that was
+    not supplied (unknown/None), which the engines hold; a file that is present but empty, or a known section heading
+    with no line under it, states nothing and is a PackError, never an explicit empty register."""
+    sections = register_sections(read_text(path, "release-registers.md")) if os.path.exists(path) else {}
+    for section_label in REGISTER_SECTIONS:
+        if section_label in sections and not sections[section_label]:
+            raise PackError(f"release-registers.md section {section_label} has a heading and no lines; list its entries or state that there are none")
     handling, seen = "unknown", False
     for number, line in enumerate(sections.get("Client-data handling register", []), 1):
         if not HANDLING_LINE.match(line):
@@ -293,7 +313,7 @@ def derive(scenario_dir):
     """Rebuild every source-derived field of review-input.json from scenario_dir/raw."""
     scenario = os.path.basename(os.path.normpath(scenario_dir))
     raw = os.path.join(scenario_dir, "raw")
-    title, cover, blocks, disclaimers = parse_draft(read_text(os.path.join(raw, "draft-deliverable.md")))
+    title, cover, blocks, disclaimers = parse_draft(read_text(os.path.join(raw, "draft-deliverable.md"), "draft-deliverable.md"))
     client = cover.get("Client")
     recipients = [item.strip() for item in cover["Distribution"].split(";")] if cover.get("Distribution") else None
     third_party = any(client is None or rules.canonical_name(client) not in rules.canonical_name(item) for item in recipients or [])
@@ -322,16 +342,16 @@ def derive(scenario_dir):
     }
     if cover.get("Client aliases"):
         deliverable["client_aliases"] = [item.strip() for item in cover["Client aliases"].split(";")]
-    extract = read_text(os.path.join(raw, "qrm-gate-criteria-extract.md"))
+    extract = read_text(os.path.join(raw, "qrm-gate-criteria-extract.md"), "qrm-gate-criteria-extract.md")
     set_id = CRITERIA_SET_ID.search(extract)
-    evidence, evidence_lines = parse_evidence(read_text(os.path.join(raw, "supporting-evidence-index.md")))
+    evidence, evidence_lines = parse_evidence(read_text(os.path.join(raw, "supporting-evidence-index.md"), "supporting-evidence-index.md"))
     return {
         "contract_version": CONTRACT_VERSION, "engagement_id": cover.get("Engagement", MISSING), "scenario_id": scenario,
         "deliverable": deliverable,
         "criteria": {"criteria_set_id": set_id.group(1) if set_id and set_id.group(1) else MISSING, "criteria_sections": CRITERIA_FLOOR,
                      "source": "skill:criteria-retrieve", "citation": f"demo-data/{scenario}/raw/qrm-gate-criteria-extract.md"},
         "evidence_set": evidence,
-        "prior_findings": parse_prior(read_text(os.path.join(raw, "prior-review-findings.md"))),
+        "prior_findings": parse_prior(read_text(os.path.join(raw, "prior-review-findings.md"), "prior-review-findings.md")),
         "findings": [], "escalations": [],
         "provenance": {"engines": [], "demo_scenario": scenario},
         "_blocks": blocks, "_evidence_lines": evidence_lines,

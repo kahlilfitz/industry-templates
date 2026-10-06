@@ -613,6 +613,9 @@ def assertion_map_stage(payload, generated_at=None):
     # Flagged text is withheld before mapping, so no mapping, finding or later stage repeats it
     # (quality-gate-criteria.md #8.7); gate_check raises the G8 hold for every marker.
     withhold_untrusted(payload, raw_input=True)
+    # A record of another engagement or deliverable is replaced by its fixed, positional stand-in before anything reads
+    # it, so none of its supplied fields reaches any output (quality-gate-criteria.md #8.15).
+    sanitise_foreign_records(payload)
     evidence_by_id = evidence_index(payload["evidence_set"])
     escalations = list(payload.get("escalations", []))
     mappings, recomputed = [], []
@@ -922,6 +925,96 @@ def foreign_subject(record, subject):
                 or not keys_match(value, own)):
             fields.append(key)
     return fields
+
+
+# Linked records that may carry their own subject (#8.15): (path segments, ID member, the contract's required members
+# with the fixed values a foreign record's stand-in takes).
+SUBJECT_RECORDS = (
+    (("evidence_set",), "evidence_id", ()),
+    (("deliverable", "brand_checks"), "check_id", (("legal_or_release_control", False),)),
+    (("deliverable", "licensed_content"), "content_id", (("attribution_present", False),)),
+    (("prior_findings",), "finding_id", (("claimed_closed", False), ("document_fix_present", False))),
+)
+# Engine text a foreign record's stand-in carries. Neither is an identifier token (#8.11), so no review-input ID can
+# equal one, and FOREIGN_SUBJECT never matches the review's own subject, so the stand-in stays foreign at every stage.
+FOREIGN_SUBJECT = "[another engagement or deliverable]"
+
+
+def foreign_record_id(path):
+    """The stand-in ID of the foreign record at `path` (for example `deliverable.brand_checks[0]`): positional only."""
+    return f"[record of another engagement or deliverable: {path}]"
+
+
+def _markers_only(value):
+    """The engine markers a string carries, joined, with no supplied text; None when it carries none."""
+    markers = list(dict.fromkeys(marker_texts(value)))
+    return " ".join(markers) if markers else None
+
+
+def foreign_record_stand_in(item, subject, path, id_key, fixed):
+    """The fixed stand-in of a record that names another engagement or deliverable (foreign_subject), else None. Only
+    engine text survives: the ID becomes foreign_record_id(path) and each foreign subject field FOREIGN_SUBJECT, the
+    contract's required members take `fixed` values, and every other member is dropped. Text the screen already
+    withheld keeps only its engine marker, in its own member (a location keeps a fixed section and label), so its G8
+    hold and #8.13 handling stand; an ID or subject that is exactly a marker stays that marker."""
+    fields = foreign_subject(item, subject)
+    if not fields:
+        return None
+    record_id = item.get(id_key)
+    stand_in = {id_key: record_id if is_withheld(record_id) else foreign_record_id(path)}
+    for key in fields:
+        stand_in[key] = item[key] if is_withheld(item[key]) else FOREIGN_SUBJECT
+    stand_in.update(fixed)
+    for key, value in item.items():
+        if key in stand_in:
+            continue
+        if contains_withheld(key):
+            stand_in[key] = (_markers_only(value) if isinstance(value, str) else None) or FOREIGN_SUBJECT
+        elif isinstance(value, str) and _markers_only(value):
+            stand_in[key] = _markers_only(value)
+        elif key == "location" and isinstance(value, dict):
+            kept = {member: _markers_only(value.get(member)) for member in ("section", "label")}
+            if any(kept.values()):
+                stand_in[key] = {"section": kept["section"] or FOREIGN_SUBJECT, "page": None, "paragraph": None,
+                                 "label": kept["label"] or FOREIGN_SUBJECT}
+    return stand_in
+
+
+def sanitise_foreign_records(payload):
+    """Replace, in place, every linked record that names another engagement or deliverable (#8.15) by its fixed
+    stand-in (foreign_record_stand_in), so none of its supplied ID, title, detail, citation, location or other field
+    reaches any output, finding, escalation or the review packet; a shape-valid ID is not trusted once the record is
+    foreign (quality-gate-criteria.md #8.15). An evidence_ids entry or best_evidence_id that named a replaced evidence
+    item names its stand-in instead, so the assertion still resolves it as foreign. A stand-in is its own stand-in, so
+    every stage that re-derives the document reproduces it exactly (#8.21). Returns the replaced paths."""
+    subject = review_subject(payload)
+    replaced, renamed = [], {}
+    for segments, id_key, fixed in SUBJECT_RECORDS:
+        records = payload
+        for part in segments:
+            records = records.get(part) if isinstance(records, dict) else None
+        if not isinstance(records, list):
+            continue
+        for index, item in enumerate(records):
+            path = f"{'.'.join(segments)}[{index}]"
+            stand_in = foreign_record_stand_in(item, subject, path, id_key, fixed) if isinstance(item, dict) else None
+            if stand_in is None or stand_in == item:
+                continue
+            if segments == ("evidence_set",) and key_of(item.get(id_key)) is not None and not contains_withheld(item.get(id_key)):
+                renamed[key_of(item[id_key])] = stand_in[id_key]
+            records[index] = stand_in
+            replaced.append(path)
+    if renamed:
+        for section in EVIDENCE_REFERENCE_SECTIONS:
+            for record in payload.get(section) or [] if isinstance(payload.get(section), list) else []:
+                if not isinstance(record, dict):
+                    continue
+                if isinstance(record.get("evidence_ids"), list):
+                    record["evidence_ids"] = [renamed.get(key_of(entry), entry) if not contains_withheld(entry) else entry
+                                              for entry in record["evidence_ids"]]
+                if key_of(record.get("best_evidence_id")) in renamed and not contains_withheld(record["best_evidence_id"]):
+                    record["best_evidence_id"] = renamed[key_of(record["best_evidence_id"])]
+    return replaced
 
 
 _CONTRACT_SCHEMA = []

@@ -636,6 +636,58 @@ The structural patterns described at the top of this entry are replaced, not sup
 
   Goldens are byte-identical.
 
+### QA round 16 on 1.0.4 (a foreign record's supplied text reached every output; 1 reproduced defect, plus the foreign-record sweep)
+
+- **DRQG-QA16-01 (blocking): a foreign record's ID and text reached the outputs and the packet.** In the reproducer, scenario A's first brand check is replaced by a row with `check_id` "Atlas-Credit-Partners", another party's title and detail, and `deliverable_id` "OTHER-DELIVERABLE". With `legal_or_release_control` added, every stage passed. The mapped, gated and ranked JSON kept the whole row. The packet read "Brand check Atlas-Credit-Partners gives a deliverable_id that differs from this review's ...". (The row exactly as reported has no `legal_or_release_control`, so the contract refuses it at the first stage with no output.) Cause:
+  - `safe_token` trusted any ID-shaped value that passed the screen;
+  - `gate_check.foreign_entry_hold` put the supplied ID into the finding ID, location label, detail and escalation, even after `foreign_subject` had shown the record belongs elsewhere;
+  - no stage removed the record's other members.
+- Fix (quality-gate-criteria.md #8.15):
+  - New `assertion_rules.sanitise_foreign_records` runs in `assertion_map_stage` straight after the screen, so every re-deriving stage and `severity_rank --verify` reproduce it (#8.21). It applies to every record that `foreign_subject` classifies as another subject's (`SUBJECT_RECORDS`: `evidence_set`, `deliverable.brand_checks`, `deliverable.licensed_content`, `prior_findings`). Each is replaced by a fixed stand-in:
+    - ID `[record of another engagement or deliverable: <path>]` (not an identifier token, so no review ID can equal it);
+    - subject `[another engagement or deliverable]`;
+    - the gate's fixed control values;
+    - no title, detail, citation, location or other member, except that a withheld marker is kept so its G8 hold at the field path stands. A withheld ID keeps its marker and the withheld-ID hold.
+  - An assertion's or mapping's reference to a foreign evidence ID is rewritten to the stand-in, so the assertion is still unsupported (AM- release blocker under G1).
+  - `gate_check.foreign_entry_hold` names a foreign record by position only: finding `GC-G5-brand-check-1`, `GC-G6-licensed-content-N` or `GC-G7-prior-finding-N` at "Brand check 1 (deliverable.brand_checks[0])", with fixed detail and escalation text. A shape-valid ID is not trusted once the record is foreign. Only the review's own entries go through `safe_token`. `evaluate_once` also sanitises a payload it is handed directly (defence in depth).
+  - The verdict is unchanged: the reproducer's mapped, gated and ranked outputs equal those of a clean foreign-hold case (`not_ready_for_release`).
+- **Foreign-record sweep (every path that classifies a record as another subject's):**
+  - Fixed: brand checks, licensed content and prior findings (`gate_check.py` `foreign_entry_hold`, `REGISTER_PATHS`, the G5, G6 and G7 loops); evidence items and their references (`assertion_rules.py` `sanitise_foreign_records`); `location_for_scan_path`, which now sees only the stand-in.
+  - Already fixed text, reviewed: `linked_evidence_citation`, `foreign_rationale` (counts only), `map_assertion`, and `find_prior_location` (skips foreign records).
+  - Already positional, reviewed: recipients, client identities and aliases (field paths) and the required-language fallback.
+- Behaviour change, by design: TE8-2 now expects the positional IDs `GC-G7-prior-finding-1`, `GC-G7-prior-finding-2`, `GC-G5-brand-check-1` and `GC-G6-licensed-content-1` in place of the supplied IDs.
+- Not changed (backlog): DRQG-QA16-02, the ranked-findings template has no citation column.
+- Docs: quality-gate-criteria.md #8.15 (all six copies), and the gate-check and deliverable-ingest SKILL.md files.
+- Tests: 18 new checks in `qa104_round16_tests`. They cover:
+  - the reproducer through every stage and `--verify`: the foreign row's ID, title, detail and subject appear in no output file, log or packet line; the hold is `GC-G5-brand-check-1` with a positional label; and the verdict and outputs equal the clean foreign-hold case;
+  - the reported row's refusal by the contract;
+  - idempotent re-runs, and `--verify` refusing a pre-fix ranked output;
+  - a same-deliverable control that still shows its own ID, title and location;
+  - one check per sweep path: foreign evidence (2), licensed content, a prior finding, withheld text inside a foreign record, a withheld foreign ID, direct gate_check input, idempotence of the stand-in, and the stand-in labels' shape.
+
+  Goldens are byte-identical.
+
+### Mobilization QA round 20 class sweep (missing is not empty)
+
+- In Mobilization, a missing or zero-byte workspace inventory was read as None, so all validation was skipped and the stage gave a clean decision. Every input, register and raw file that each stage reads or re-derives was checked for five states: absent file, zero-byte file, null or absent section, empty-but-present section, and missing required field.
+- Found and fixed in the raw-pack verifier, `tests/derive_review_input.py` (checklist G4b):
+  - A zero-byte `prior-review-findings.md` or `supporting-evidence-index.md` derived an explicit empty register (`[]`). That matched an empty fixture and passed. `read_text` now refuses a missing file ("is missing; a missing raw file is never read as an empty one"). It also refuses a file that is empty: zero bytes, or only blank lines or headings. All five raw files are covered.
+  - A known `release-registers.md` section heading with no lines was read as "checked, no entries". `parse_registers` now refuses it, and also a present but empty `release-registers.md`. A section that states it has no entries (scenario A's licensed-content line) is still an explicit empty register. A missing `release-registers.md` still derives registers that were not supplied (null), as documented. The engines hold on these, and the verifier reports the mismatch.
+- Reviewed and already compliant (engines):
+  - `load_json_file` refuses an absent, zero-byte, whitespace-only or non-object file at every argument (`assertion_map --input`, `gate_check --mapped/--input`, `severity_rank --gates/--input/--verify`), with no output written;
+  - `require_review_input` and the contract refuse an absent or null required section (`deliverable`, `criteria`, `criteria.criteria_sections`, `evidence_set`, `assertions`);
+  - `gate_check` `check_missing_registers`, `register` and `check_client_data_value` hold an absent or null register (`client_data_handling`, `brand_checks`, `licensed_content`, `prior_findings`, `required_language`) at every stage. `recipient_list_problem` holds absent, null or empty recipients. Only an explicit `[]` means "checked, no entries" (#8.17);
+  - `severity_rank` with neither `--gates` nor `--verify` is a usage error.
+
+  Every re-deriving stage behaves like the first, because each one re-runs `assertion_map_stage` and the gate check from `--input`.
+- Tests: 1564 checks (were 1509): 18 in `qa104_round16_tests` and 37 new in `mobilization_round20_sweep_tests`. They cover:
+  - zero-byte and missing raw files (each by name), whitespace-only and heading-only files, and a section heading with no lines, plus the explicit-empty control;
+  - every engine argument absent, zero-byte, whitespace-only and null;
+  - each register absent and null, held at every stage with `--verify` agreeing;
+  - each required section absent and null, refused by every stage and `--verify`.
+
+  Goldens are byte-identical.
+
 ## 1.0.3 - 2026-10-01
 
 Fixes every FAIL, WEAK and should-fix item in the Cowork 1.0.2 evaluation (42/50, Blocked).
