@@ -235,31 +235,44 @@ def esc_text(e, where):
 # id, *_id or *_ids in the staffing and Closeout inputs, the SOW's Engagement ID and Matter ID lines, the wall
 # register's matter_id and restricted_workspaces items and the inventory's workspace_id - is 1-64 ASCII letters,
 # digits, '.', '_' or '-' starting with a letter or digit, read in NFKC with format characters removed and the ends
-# trimmed. A blank identifier is absent (it joins nothing, join_key). Anything else - spaces, prose, punctuation,
-# a marker - is refused with an error that names the location and never repeats the value: an identifier renders
-# beside prose ("Engagement: title (ID)", "- title (ID) ... Source: citation") and must not carry text.
+# trimmed. A blank or null identifier is absent (it joins nothing, join_key). An identifier is a JSON string: a
+# number, true/false, an object or an array where one identifier belongs is refused, never left to a later type check
+# (fail closed). Anything else - spaces, prose, punctuation, a marker - is refused with an error that names the
+# location and never repeats the value: an identifier renders beside prose ("Engagement: title (ID)", "- title (ID)
+# ... Source: citation") and must not carry text.
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 ID_SHAPE = "an identifier: 1-64 ASCII letters, digits, '.', '_' or '-', starting with a letter or digit, with no spaces"
+_ID_TYPES = ((bool, "true or false"), (dict, "an object"), (list, "an array"), ((int, float), "a number"))
+def id_type(v):
+    """The JSON type of a present non-string identifier value, as an error names it (never the value)."""
+    return next((d for t, d in _ID_TYPES if isinstance(v, t)), type(v).__name__)
 def id_ok(v):
-    """True for a non-string (field() type-checks it), a blank (absent) identifier, or one of the documented shape."""
-    if not isinstance(v, str): return True
+    """True for an absent identifier (null or a blank string) or a string of the documented shape. Any other value -
+    a number, true/false, an object or an array - is not an identifier and is refused (fail closed)."""
+    if v is None: return True
+    if not isinstance(v, str): return False
     t = strip_cf(unicodedata.normalize("NFKC", strip_cf(v))).strip()
     return not t or bool(ID_RE.fullmatch(t))
 def check_id(v, where):
+    need(v is None or isinstance(v, str), f"{where} must be {ID_SHAPE}, given as a JSON string (or null when absent), got {id_type(v)} (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
     need(id_ok(v), f"{where} must be {ID_SHAPE} (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
 def id_member(k): return isinstance(k, str) and (k == "id" or k.endswith("_id") or k.endswith("_ids"))
 _SEG_RE = re.compile(r"[A-Za-z0-9_]{1,64}")
 def check_ids(doc, where):
-    """check_id for every identifier member of a supplied JSON document, at any depth: a member named id, *_id or
-    *_ids (a string, or each string of an array). The reported path names a member only when its key is a plain name."""
+    """check_id for every identifier member of a supplied JSON document, at any depth. A member named id or *_id holds
+    one identifier (a string, or null when absent); a member named *_ids holds one identifier or an array whose every
+    item is one. Any other value - a number, true/false, an object, an array under id or *_id, or an array or object
+    inside a *_ids array - is refused, never walked into or left to a later type check, so no text sits under an
+    identifier member. The reported path names a member only when its key is a plain name."""
     def walk(v, p):
         if isinstance(v, dict):
             for k, x in v.items():
                 q = p + "." + (k if isinstance(k, str) and _SEG_RE.fullmatch(k) else "<member>")
                 if id_member(k):
-                    if isinstance(x, list):
+                    if k.endswith("_ids") and isinstance(x, list):
                         for n, y in enumerate(x): check_id(y, f"{q}[{n}]")
                     else: check_id(x, q)
+                    continue  # a checked identifier member holds only strings or null: nothing below it to walk
                 walk(x, q)
         elif isinstance(v, list):
             for n, x in enumerate(v): walk(x, f"{p}[{n}]")

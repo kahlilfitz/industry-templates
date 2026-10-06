@@ -10,10 +10,11 @@ def review_status(*xs):  # knowledge-reuse-rules.md #2.3: only an explicit false
     return "pending_practice_review" if any(x.get("review_required") is not False for x in xs if isinstance(x,dict)) else "cleared_for_internal_reuse"
 def check_asset(a,w,released=False):  # knowledge-reuse-rules.md #1.4
     for k in ("asset_id","title","description","category","confidentiality_permission","citation","engagement_id","client_name","matter_id")+(("clearance_state",) if released else ()): field(a,k,"str",w,nullable=True)
-    field(a,"tags","strlist",w,nullable=True); field(a,"review_required","bool",w,nullable=True); field(a,"confidence","num01",w)
+    field(a,"tags","strlist",w,nullable=True); field(a,"evidence_ids","list",w,nullable=True); field(a,"review_required","bool",w,nullable=True); field(a,"confidence","num01",w)  # evidence_ids is read as a list (unattributed_names); its items are identifiers (check_ids)
 def check_lesson(l,w):
     for k in ("cluster_id","category","drafting_guidance","confidentiality_permission","citation","engagement_id","client_name","matter_id"): field(l,k,"str",w,nullable=True)
     for k in ("tags","evidence_citations"): field(l,k,"strlist",w,nullable=True)
+    field(l,"evidence_ids","list",w,nullable=True)  # read as a list (unattributed_names); its items are identifiers (check_ids)
     for k in ("rewrite_required","review_candidate"): field(l,k,"bool",w,nullable=True)
     field(l,"confidence","num01",w)
 def adapt(p):
@@ -27,7 +28,8 @@ def adapt(p):
     for key in ("reusable_assets","lessons"):
         if key not in kr or not isinstance(kr[key],list) or any(not isinstance(r,dict) for r in kr[key]): raise InputError(f"closeout adapter requires knowledge_record.{key}[] of objects (an absent member is not an empty list); fail closed")
     W="upstream/closeout"; check_timestamps(x,W)  # carried timestamps are format-checked (confidentiality-and-ethical-wall-rules.md #1.3)
-    check_ids(x,W)  # every identifier member (asset_id, cluster_id, record_id, evidence_ids, engagement_id, matter_id ...) has the identifier shape (#1.3)
+    check_ids(x,W)  # every identifier member (asset_id, cluster_id, record_id, evidence_ids, engagement_id, matter_id ...) is a string or null of the identifier shape (#1.3)
+    field(kr,"record_id","str",W+".knowledge_record",nullable=True)  # read by unattributed_names: type-checked like every field a reader uses (#1.3)
     for i,r in enumerate(ra): check_asset(r,f"{W}.released_assets[{i}]",True)
     for i,r in enumerate(kr["reusable_assets"]): check_asset(r,f"{W}.knowledge_record.reusable_assets[{i}]")
     for i,r in enumerate(kr["lessons"]): check_lesson(r,f"{W}.knowledge_record.lessons[{i}]")

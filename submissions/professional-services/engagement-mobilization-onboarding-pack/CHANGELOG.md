@@ -371,6 +371,34 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
   - *Behaviour change.* A split with filler lines between its parts, or one that only the whole sequence shows beside an already-held run, now holds. An over-long rendered or source sequence is held as oversize without window holds alongside it.
   - Tests: new `qa101z_checks` (9 checks). They cover 3-, 4- and 5-line runs (plain, with filler, with filler and blank lines) in rendered output, sources and prose arrays, and runs placed across pack sections. They also cover the scope view, the end-to-end reproducer (SOW first-week item plus staffing escalations across the Escalations heading, with `verify_render` accepting), the whole-sequence read after a flagged run, and the bounded read count and oversize fallback. Benign controls cover 60 benign lines interleaved with filler, both golden packs and scope views, and an ordinary multi-line end-to-end run. With filler skipping disabled, the five filler-dependent checks fail. Suite 449 → 458 checks. Goldens byte-identical.
 
+- **QA round 17: identifier members must be JSON strings (checklist C5, D23; #1.3; knowledge-reuse #1.4).** An identifier given as a number, `true`/`false`, an object or an array is now refused like any other malformed identifier. The same class (a check that passes a value of an unexpected type on the assumption that another check covers it) is swept across the plugin.
+  - *MOB-QA-17-01: a non-string identifier passed the identifier-shape check.*
+    - Defect: `safety_text.id_ok` returned true for any non-string, on the assumption that a field type check would follow, but `knowledge_record.record_id` had no type check. In the reproducer, scenario A with `"record_id": 123` ran `knowledge_match`, `wall_check`, `access_checklist` and `verify_render` with exit 0, knowledge status `ready`, no holds and a `draft_internal_only` pack. An object under an identifier member (`"record_id": {"x": "..."}`) was walked like any other object, so its text was never shape-checked.
+    - Fix: an identifier is a JSON string. `id_ok` is false for any non-string other than null. `check_id` refuses a number, `true`/`false`, an object or an array with an `InputError` that names the path and the JSON type found, never the value. `check_ids` checks an `id`/`*_id` member as one identifier (an array there is refused), checks each item of a `*_ids` array the same way (each item must be a string, null or blank), and never walks into an identifier member. Null and blank are still absent. Every stage that reads Staffing or Closeout input refuses with nothing written: `scope_digest`, `knowledge_match`, `wall_check`, `access_checklist` and `verify_render`.
+  - *Sweep (checklist C5): validators that passed unexpected types.*
+    - `safety_text.check_ids`: an array under a singular `id`/`*_id` member was accepted item by item, and an object, number or `true`/`false` item in a `*_ids` array was accepted or walked. Each is now refused (above).
+    - `knowledge_match.check_asset` and `check_lesson`: `evidence_ids` was not type-checked, while `unattributed_names` iterates it for every record (a string would have been read character by character). It must now be an array or null.
+    - `knowledge_match.adapt`: `knowledge_record.record_id` is now type-checked (string or null) like every other field a reader uses.
+    - Reviewed and unchanged:
+      - `structured_identity` and `identity_unreadable` treat a non-string as usable, but every caller type-checks the field first.
+      - `check_timestamps` skips non-string `date`/`*_date` members by design. A numeric `actual_billed_to_date` is a valid Closeout value, and dates are never rendered.
+      - `esc_text` serialises an object escalation, which is then screened as text.
+      - `hits` coerces with `str()`, but it only receives CSV cells and text.
+      - Pack and scope renderers format members that the contract types as strings, and every output is contract-checked before it is written.
+      - `contract_validate` applies a pattern or format only to strings, and every patterned field is also typed.
+      - CSV identifier columns are always strings.
+  - *Docs.* Confidentiality #1.3 and knowledge-reuse #1.4 (all 6 copies) now state that an identifier is a JSON string, that a non-string identifier or `*_ids` item is refused naming the path and type, and that `evidence_ids` is an array and `record_id` a string or null.
+  - *Behaviour change.* A number, `true`/`false`, object or array under an `id`/`*_id` member, a non-string item in a `*_ids` array, and `evidence_ids` given as a string are refused instead of run. Null and blank identifiers, and null or blank `*_ids` items, behave as before.
+  - Tests: new `qa101za_checks` (10 checks):
+    - The reproducer is refused at every stage, and the chain stops at `knowledge_match`.
+    - Closeout identifiers given as `true`/`false`, an object, a nested array or a number, from the top level to four levels deep, are refused, and an object identifier is also refused at every later stage. Staffing identifiers are covered the same way, including at every stage that re-derives the scope.
+    - Non-string items in a `*_ids` array are refused with the item's path.
+    - Unit checks cover `id_ok` and `check_ids`.
+    - The sweep cases are refused.
+    - A control runs scenario A end to end with a null `record_id` and null or blank `evidence_ids`, and it still produces the golden pack.
+    - Against the previous code, 8 of the 10 checks fail. The exceptions are the end-to-end control and the object `cluster_id` case, which was already type-checked.
+    - Suite 458 → 468 checks. Goldens byte-identical.
+
 ## 1.0.0 - 2026-10-01
 
 - Initial Wave 1 Scenario 03 plugin with `scope_digest`, `knowledge_match`, `wall_check` and `access_checklist`.
