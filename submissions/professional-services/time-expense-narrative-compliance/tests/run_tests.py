@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """Regression tests for the five engines (python3 stdlib only).
 
-  python3 tests/run_tests.py
+  python3 tests/run_tests.py                       # every group
+  python3 tests/run_tests.py --list-groups         # the group names, one per line
+  python3 tests/run_tests.py --group NAME [...]    # only these groups (repeatable), plus any group they need
+
+Each result prints as it is recorded (`PASS <label>` or `FAIL <label>  (detail)`, ASCII-escaped, flushed) under an
+`== group <name>` header. Failures are repeated under `== failures`, and the last line is always `N/M checks passed`.
+An unknown group or argument exits 2.
 
 1. Golden files: re-running the full chain on both demo scenarios with the fixed
    --generated-at timestamp reproduces activity.json and expected/* byte for byte.
@@ -46,6 +52,7 @@ SCENARIOS = {
     "scenario-b-drama": TEAM_VIEW,
 }
 RESULTS = []
+STREAM = None
 
 
 def load_engine(name):
@@ -197,6 +204,8 @@ def run(name, *argv):
 
 def check(label, condition, detail=""):
     RESULTS.append((label, bool(condition), detail))
+    if STREAM is not None:  # set by main(): the real stdout, so a group that redirects stdout does not swallow it
+        print(ascii_line(result_line(label, condition, detail)), file=STREAM, flush=True)
 
 
 # QA13 (#12.1, #13.8): every stage refuses an activity packet that is not activity_pull re-run on its raw exports, so a
@@ -230,6 +239,12 @@ def ascii_line(text):
     """The whole printed line backslash-escaped to ASCII, so a label or detail with any character prints on a cp1252
     or ASCII stdout (PYTHONIOENCODING unset, output piped) without a UnicodeEncodeError (TENC-QA12-02)."""
     return str(text).encode("ascii", "backslashreplace").decode("ascii")
+
+
+def result_line(label, ok, detail=""):
+    """One result as printed (pass it through ascii_line): `PASS <label>` or `FAIL <label>  (detail)`."""
+    detail = str(detail) if detail else ""
+    return ("PASS " if ok else "FAIL ") + str(label) + (f"  ({detail})" if detail and not ok else "")
 
 
 def chain(raw_dir, who, workdir):
@@ -5736,6 +5751,7 @@ def qa12_tests(tmp):
         check(f"qa12-02 print_results() writes a label and detail with non-{encoding} characters to a strict "
               f"{encoding} stdout without an error; every line backslash-escaped, the summary line last",
               code == 1 and not err and "\\u2192" in text and "\\u2603" in text and "caf\\xe9" in text
+              and "== failures\nFAIL label \\u2192" in text and "plain label" not in text
               and text.rstrip("\n").split("\n")[-1] == "1/2 checks passed", err or text)
     env = {k: v for k, v in os.environ.items() if k not in ("PYTHONIOENCODING", "PYTHONUTF8")}
     env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -8281,62 +8297,141 @@ def drqg17_tests(tmp):
           code == 0 and packet == baseline_b and not DRQG16_LEAK_RE.search(json.dumps(packet)), msg[:160])
 
 
-def main():
-    with tempfile.TemporaryDirectory() as tmp:
-        golden_tests(tmp)
-        with defence_in_depth():
-            fixture_tests(tmp)
-            hardening_tests(tmp)
-            validation_tests(tmp)
-        qa_tests(tmp)
-        with defence_in_depth():
-            steering_tests(tmp)
-        integrity_tests(tmp)
-        with defence_in_depth():
-            integrity2_tests(tmp)
-        integrity3_tests(tmp)
-        inventory_tests(tmp)
-        json_io_tests(tmp)
-        qa5_tests(tmp)
-        r5_tests(tmp)
-        r6_tests(tmp)
-        with defence_in_depth():
-            a13_tests(tmp)
-            r7_tests(tmp)
-            r8_tests(tmp)
-            r9_tests(tmp)
-        r8qa_tests(tmp)
-        r9qa_tests(tmp)
-        with defence_in_depth():
-            r11_tests(tmp)
-            r12_tests(tmp)
-            r10qa_tests(tmp)
-        r13_tests(tmp)
-        qa11_tests(tmp)
-        qa12_tests(tmp)
-        qa13_tests(tmp)
-        qa16_tests(tmp)
-        drqg14_tests(tmp)
-        drqg15_tests(tmp)
-        mob17_tests(tmp)
-        r18_tests(tmp)
-        qa14_tests(tmp)
-        mob19_tests(tmp)
-        mob20_tests(tmp)
-        drqg16_tests(tmp)
-        drqg17_tests(tmp)
-    return print_results(RESULTS)
+# Every group in canonical order: (function, runs inside defence_in_depth()). A group's name is its function's name.
+GROUPS = (
+    (golden_tests, False),
+    (fixture_tests, True),
+    (hardening_tests, True),
+    (validation_tests, True),
+    (qa_tests, False),
+    (steering_tests, True),
+    (integrity_tests, False),
+    (integrity2_tests, True),
+    (integrity3_tests, False),
+    (inventory_tests, False),
+    (json_io_tests, False),
+    (qa5_tests, False),
+    (r5_tests, False),
+    (r6_tests, False),
+    (a13_tests, True),
+    (r7_tests, True),
+    (r8_tests, True),
+    (r9_tests, True),
+    (r8qa_tests, False),
+    (r9qa_tests, False),
+    (r11_tests, True),
+    (r12_tests, True),
+    (r10qa_tests, True),
+    (r13_tests, False),
+    (qa11_tests, False),
+    (qa12_tests, False),
+    (qa13_tests, False),
+    (qa16_tests, False),
+    (drqg14_tests, False),
+    (drqg15_tests, False),
+    (mob17_tests, False),
+    (r18_tests, False),
+    (qa14_tests, False),
+    (mob19_tests, False),
+    (mob20_tests, False),
+    (drqg16_tests, False),
+    (drqg17_tests, False),
+)
+GROUP_NAMES = tuple(fn.__name__ for fn, _ in GROUPS)
+# Groups that read state an earlier group leaves behind; --group runs these first. qa13_tests requires the real gate to
+# refuse every edited packet recorded inside defence_in_depth() (DEFENCE_IN_DEPTH): by the groups run inside it and by
+# qa12_tests, which enters it itself.
+# drqg14_tests screens every report earlier groups rendered into tmp and needs at least 50: these five render 51.
+PREREQUISITES = {
+    "qa13_tests": tuple(fn.__name__ for fn, defence in GROUPS if defence) + ("qa12_tests",),
+    "drqg14_tests": ("qa_tests", "integrity2_tests", "integrity3_tests", "qa5_tests", "r5_tests"),
+}
+USAGE = "usage: python3 tests/run_tests.py [--list-groups] [--group NAME ...]"
+
+
+def parse_args(argv):
+    """(groups named by --group, --list-groups given, --help given), or None for an unknown or incomplete argument."""
+    names, list_groups, i = [], False, 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--list-groups":
+            list_groups = True
+        elif arg == "--group" and i + 1 < len(argv):
+            i += 1
+            names.append(argv[i])
+        elif arg.startswith("--group=") and len(arg) > len("--group="):
+            names.append(arg[len("--group="):])
+        elif arg in ("-h", "--help"):
+            return names, list_groups, True
+        else:
+            return None
+        i += 1
+    return names, list_groups, False
+
+
+def select_groups(names):
+    """The groups to run, in canonical order: all of them, or those named plus their prerequisites (transitively)."""
+    selected, pending = set(names or GROUP_NAMES), list(names)
+    while pending:
+        for name in PREREQUISITES.get(pending.pop(), ()):
+            if name not in selected:
+                selected.add(name)
+                pending.append(name)
+    return [name for name in GROUP_NAMES if name in selected]
+
+
+def main(argv=None):
+    global STREAM
+    parsed = parse_args(sys.argv[1:] if argv is None else argv)
+    if parsed is None:
+        print(ascii_line(f"unknown argument\n{USAGE}"), file=sys.stderr)
+        return 2
+    names, list_groups, wants_help = parsed
+    if wants_help:
+        print(ascii_line(USAGE + "\n  --list-groups  print the group names, one per line\n"
+                         "  --group NAME   run only this group (repeatable), plus any group it needs"))
+        return 0
+    unknown = [name for name in names if name not in GROUP_NAMES]
+    if unknown:
+        for name in unknown:
+            print(ascii_line(f"unknown group: {name} (see --list-groups)"), file=sys.stderr)
+        return 2
+    if list_groups:
+        for name in GROUP_NAMES:
+            print(ascii_line(name))
+        return 0
+    selected = select_groups(names)
+    STREAM = sys.stdout
+    try:
+        added = [name for name in selected if names and name not in names]
+        if added:
+            print(ascii_line("== prerequisite groups (state the named groups read): " + ", ".join(added)), file=STREAM,
+                  flush=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            for fn, defence in GROUPS:
+                if fn.__name__ not in selected:
+                    continue
+                print(ascii_line(f"== group {fn.__name__}"), file=STREAM, flush=True)
+                if defence:
+                    with defence_in_depth():
+                        fn(tmp)
+                else:
+                    fn(tmp)
+        return print_results(RESULTS, STREAM)
+    finally:
+        STREAM = None
 
 
 def print_results(results, out=None):
-    """Print every check and the summary line, each line ASCII-escaped (ascii_line); 1 when any check failed."""
+    """The end-of-run recap; check() has already printed each line as it ran. When any check failed, `== failures` and
+    every FAIL line again; then the summary line, always last. Each line ASCII-escaped (ascii_line); 1 when any failed."""
     out = out or sys.stdout
     failed = [r for r in results if not r[1]]
-    for label, ok, detail in results:
-        detail = str(detail) if detail else ""
-        print(ascii_line(("PASS " if ok else "FAIL ") + str(label) + (f"  ({detail})" if detail and not ok else "")),
-              file=out)
-    print(ascii_line(f"\n{len(results) - len(failed)}/{len(results)} checks passed"), file=out)
+    if failed:
+        print(ascii_line("== failures"), file=out)
+        for label, ok, detail in failed:
+            print(ascii_line(result_line(label, ok, detail)), file=out)
+    print(ascii_line(f"\n{len(results) - len(failed)}/{len(results)} checks passed"), file=out, flush=True)
     return 1 if failed else 0
 
 

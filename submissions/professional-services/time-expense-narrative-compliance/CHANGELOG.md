@@ -727,6 +727,12 @@ All five classes reproduced before the fix. New guidelines are client-billing-gu
 
   Goldens are byte-identical: no demo file holds an unrecognised line.
 
+### Test harness (1.0.4, no version bump; hardening checklist G7)
+- Test harness: results stream as they run; `--list-groups` and `--group`; summary line unchanged. `tests/run_tests.py` prints `== group <name>` before each group and each `PASS <label>` or `FAIL <label>  (detail)` line as the check is recorded (ASCII-escaped, flushed, written to the real stdout even while a group redirects it), so a suite cut off by a sandbox timeout still leaves evidence. Failures are repeated under `== failures` before the last line, which is still `N/M checks passed`; exit 1 on any failure, else 0.
+  - The 37 groups are the check functions (`golden_tests` … `drqg17_tests`), each still run inside `defence_in_depth()` exactly where it was before. `--list-groups` prints them one per line. `--group NAME` (repeatable) runs only those groups, in canonical order, in the shared temporary folder. An unknown group or argument exits 2.
+  - Each group was run alone and compared with the full run. 35 give the same checks and pass. Two read state that earlier groups leave behind, so `--group` also runs their prerequisites. `qa13_tests` needs the edited packets recorded inside `defence_in_depth()`: by the 12 groups run inside it and by `qa12_tests`, which enters it itself (33 packets, the same as a full run). `drqg14_tests` needs the reports earlier groups render: its coverage check scans at least 50, so it also runs `qa_tests`, `integrity2_tests`, `integrity3_tests`, `qa5_tests` and `r5_tests` (51 reports). Run that way, the coverage check's label shows 54 reports instead of the full run's 103.
+  - `print_results()` now prints the end-of-run recap only, not every line. Its qa12-02 self-test also requires the `== failures` block and that no PASS line is repeated. A full run gives the same 1263 check labels as before. No engine, skill, reference, contract or demo-data change.
+
 ### Tests and goldens
 - DRQG QA round 17 class sweep: 1252 to 1263 checks (`drqg17_tests`, 11 checks; see the DRQG round 17 section). Goldens are byte-identical.
 - DRQG QA round 16 class sweep: 1239 to 1252 checks (`drqg16_tests`, 13 checks; see the DRQG round 16 section). Goldens are byte-identical.
