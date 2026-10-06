@@ -52,6 +52,13 @@ How to read a report:
   coerce with `x or []` or `dict.get(k, [])` on a required register.
   Test: for every required register, run absent, `null`, `""`, `{}` and `[]`; only `[]` (where the
   contract allows it) may pass.
+  The same applies to scalars: a validator never returns success for an unexpected type on the
+  assumption that another check covers it. An identifier given as a number, boolean, object or
+  nested list is refused (each `*_ids` item must be a string), and any value converted to text for
+  output is screened after that conversion.
+  [engagement-mobilization-onboarding-pack 1.0.1 QA round 17]
+  Test: for every identifier and text field, supply `123`, `true`, `{"x": "..."}` and `[["..."]]`;
+  each must refuse with the field path and write nothing.
 - [ ] **A3. No fallback to "all records".** An empty linked set never widens to the whole packet.
   Zero linked evidence on a billed or assessed item is a hold, never compliant.
   [time-expense-narrative-compliance 1.0.3 B2]
