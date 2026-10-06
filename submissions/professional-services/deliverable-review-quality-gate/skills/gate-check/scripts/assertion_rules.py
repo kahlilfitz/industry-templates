@@ -455,19 +455,65 @@ def _id_values(value, parts=()):
             yield from _id_values(child, parts + (index,))
 
 
+# The label forms the engines write for records they name themselves (quality-gate-criteria.md #8.11): the positional
+# slugs of a register entry, assertion or required-language item with no usable ID, or of another party's record
+# (brand-check-2, licensed-content-1, prior-finding-3, assertion-4, scope-assertion-4, language-2, with claim_finding_id's
+# -2, -3 suffixes), severity_rank's withheld-finding-N, and gate_check's bare "assertion" fallback. Compared in
+# canonical_id form, so case, surrounding whitespace and separator variants (Brand_Check.1) are the same label.
+POSITIONAL_LABEL = re.compile(r"(?:brand check|licensed content|prior finding|scope assertion|assertion|language|withheld finding)(?: [0-9]+)+|assertion")
+RESERVED_LABEL_RULE = ("the engines reserve the AM-, GC- and SR- finding-ID namespace and the positional labels they write for records "
+                       "they name themselves (brand-check-N, licensed-content-N, prior-finding-N, assertion-N, scope-assertion-N, "
+                       "language-N, withheld-finding-N, in any case or separator spelling); give the record its own identifier")
+
+
+def reserved_label(value, engine_namespace=True):
+    """True when value is, after canonical_id folding, a label the engines write themselves (quality-gate-criteria.md
+    #8.11): a positional label (POSITIONAL_LABEL) or, when engine_namespace, an ID in the AM-, GC- or SR- finding
+    namespace (engine_id_owner, #8.4). Such a value can never be accepted as an input ID or match key: it would be
+    indistinguishable from the engines' own label for another record in every output. The one shared check for the
+    engines and the raw-pack parser. A non-string is not a label (the shape checks refuse it)."""
+    if not isinstance(value, str):
+        return False
+    key = canonical_id(value)
+    return bool(POSITIONAL_LABEL.fullmatch(key)) or (engine_namespace and engine_id_owner(value) is not None)
+
+
+# Finding IDs in these sections are engine-owned when they carry an engine prefix: recomputation, the #8.4 spoof hold
+# and --verify govern them, and a re-run legitimately carries the engines' own findings. Only the positional labels are
+# refused there.
+ENGINE_FINDING_SECTIONS = ("findings", "ranked_findings")
+# The deliverable key lists that are identifier-like match keys: a required_language entry is written into a finding ID
+# (GC-G2-missing-<key>) and title. client_aliases are client names, not identifiers, and are never written into an ID.
+RESERVED_CHECKED_KEY_LISTS = ("required_language", "present_language", "present_disclaimer_types")
+
+
+def require_unreserved(value, path, engine_namespace=True):
+    if reserved_label(value, engine_namespace):
+        raise InputError(f"{path} is in a label form the engines write themselves: {RESERVED_LABEL_RULE} (quality-gate-criteria.md #8.11)")
+
+
 def validate_id_shapes(payload):
     """Refuse the review input when any ID is not an ID_TOKEN string (quality-gate-criteria.md #8.11): a number,
     boolean, object or array under a *_id member, a *_ids member that is not an array, and a *_ids entry that is not a
     string are refused like a malformed string, whether or not the contract declares the member, never passed on to a
-    later check. The message names the field path, the type and the rule, never the value (#8.9)."""
+    later check. Every ID and every entry of an identifier-like key list (RESERVED_CHECKED_KEY_LISTS) must also not be
+    in a label form the engines write themselves (reserved_label); a finding's own finding_id may carry an engine prefix
+    (ENGINE_FINDING_SECTIONS). The message names the field path, the type and the rule, never the value (#8.9)."""
     for parts, value in _id_values(payload):
         if is_id_field(parts) and isinstance(value, str):
             if not ID_TOKEN.fullmatch(value):
                 raise InputError(f"{format_path(parts)} is not an identifier: IDs are {ID_TOKEN_RULE} (quality-gate-criteria.md #8.11)")
+            engine_finding = len(parts) == 3 and parts[0] in ENGINE_FINDING_SECTIONS and parts[2] == "finding_id"
+            require_unreserved(value, format_path(parts), engine_namespace=not engine_finding)
         elif is_id_field(parts):
             raise InputError(f"{format_path(parts)} is not an identifier: IDs are strings of {ID_TOKEN_RULE}, got {describe(value)} (quality-gate-criteria.md #8.11)")
         else:
             raise InputError(f"{format_path(parts)} must be an array of identifier strings, got {describe(value)} (quality-gate-criteria.md #8.11)")
+    deliverable = payload.get("deliverable") if isinstance(payload, dict) else None
+    for field in RESERVED_CHECKED_KEY_LISTS:
+        entries = deliverable.get(field) if isinstance(deliverable, dict) else None
+        for index, entry in enumerate(entries if isinstance(entries, list) else []):
+            require_unreserved(entry, format_path(("deliverable", field, index)))
 
 
 def _check_encodable_text(text, path):

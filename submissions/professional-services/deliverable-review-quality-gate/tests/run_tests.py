@@ -2605,23 +2605,30 @@ def qa104_round6_tests(tmp):
     licensed = review_b["deliverable"]["licensed_content"][0]
     prior = dict(review_a["prior_findings"][0], claimed_closed=True, document_fix_present=False)
     sweeps = (
-        ("required_language fallback vs a real item", "GC-G2-missing-language-4",
-         lambda p: p["deliverable"].__setitem__("required_language", list(p["deliverable"]["required_language"]) + ["language-4", long_1])),
-        ("brand_checks fallback vs a real check_id", "GC-G5-brand-check-3",
-         lambda p: p["deliverable"]["brand_checks"].extend([dict(brand, check_id="brand-check-3"), dict(brand, check_id=ID_ATTACK)])),
-        ("licensed_content fallback vs a real content_id", "GC-G6-licensed-content-2",
-         lambda p: p["deliverable"].__setitem__("licensed_content", [dict(licensed, content_id="licensed-content-2"), dict(licensed, content_id=ID_ATTACK)])),
-        ("prior_findings fallback vs a real finding_id", "GC-G7-prior-finding-4",
-         lambda p: p["prior_findings"].extend([dict(prior, finding_id="prior-finding-4"), dict(prior, finding_id=ID_ATTACK)])),
+        ("required_language fallback vs a real item", "GC-G2-missing-language-4", "language-4",
+         lambda p, real: p["deliverable"].__setitem__("required_language", list(p["deliverable"]["required_language"]) + [real, long_1])),
+        ("brand_checks fallback vs a real check_id", "GC-G5-brand-check-3", "brand-check-3",
+         lambda p, real: p["deliverable"]["brand_checks"].extend([dict(brand, check_id=real), dict(brand, check_id=ID_ATTACK)])),
+        ("licensed_content fallback vs a real content_id", "GC-G6-licensed-content-2", "licensed-content-2",
+         lambda p, real: p["deliverable"].__setitem__("licensed_content", [dict(licensed, content_id=real), dict(licensed, content_id=ID_ATTACK)])),
+        ("prior_findings fallback vs a real finding_id", "GC-G7-prior-finding-4", "prior-finding-4",
+         lambda p, real: p["prior_findings"].extend([dict(prior, finding_id=real), dict(prior, finding_id=ID_ATTACK)])),
     )
-    for label, base, mutate in sweeps:
+    for label, base, real, mutate in sweeps:
+        # T&E r15-A: a real item in the fallback's own label form is refused at the first stage, so it can never share
+        # the fallback's finding ID; a real item one character off keeps its own finding beside the fallback's.
         packet = copy.deepcopy(review_a)
-        mutate(packet)
+        mutate(packet, real)
+        engine, message = chain_error(packet, tmp, f"qr6-sweep-{base}-reserved")
+        packet = copy.deepcopy(review_a)
+        mutate(packet, real + "a")
         try:
             ids = id_list(read(chain_packet(packet, tmp, f"qr6-sweep-{base}")["gated"]))
         except RuntimeError as exc:
             ids = [str(exc)[:200]]
-        check(f"QR6-3 {label} no longer merges two items into one finding", base in ids and f"{base}-2" in ids, ids)
+        check(f"QR6-3 {label} no longer merges two items into one finding (a real item in the fallback's label form is refused)",
+              engine == "assertion_map" and "label form the engines write themselves" in message
+              and base in ids and f"{base}a" in ids and f"{base}-2" not in ids, (engine, message[:200], ids))
 
     claim = MODULES["gate_check"].claim_finding_id
     owners, taken = {}, [{"finding_id": "GC-G3-scope-Z-2"}]
@@ -7324,6 +7331,245 @@ def mobilization_round20_sweep_tests(tmp):
                   [(code, stderr.strip()[:120]) for code, _, stderr in results if code != 1][:2])
 
 
+def r15_sweep_tests(tmp):
+    """Class sweep from T&E QA round 15 (DRQG 1.0.4, no version bump). r15-A: no ID-bearing input field (every *_id
+    member and *_ids entry at any depth, and the identifier-like key lists required_language, present_language and
+    present_disclaimer_types) and no raw-pack ID may be in a label form the engines write themselves - the AM-/GC-/SR-
+    finding namespace or a positional label (brand-check-N, licensed-content-N, prior-finding-N, assertion-N,
+    scope-assertion-N, language-N, withheld-finding-N), in any case or separator spelling - one shared check
+    (assertion_rules.reserved_label). r15-B: a foreign record's grammar is validated before it is excluded by scope.
+    r15-C: the raw-pack verifier recognises declared fields in every syntactic variant (bullets, emphasis, case,
+    separators, headings) and refuses one in the wrong section instead of silently ignoring it."""
+    import derive_review_input as dri
+    rules = MODULES["severity_rank"].rules
+    work = os.path.join(tmp, "r15")
+    os.makedirs(work, exist_ok=True)
+    demo_a = os.path.join(ROOT, "demo-data", "scenario-a-happy")
+    demo_b = os.path.join(ROOT, "demo-data", "scenario-b-drama")
+    review_a = read(os.path.join(demo_a, "review-input.json"))
+    review_b = read(os.path.join(demo_b, "review-input.json"))
+    reserved = ("AM-G8-foreign-finding-1", "am_g8_FOREIGN.escalation-2", "SR-G8-engine-id-spoof", "gc_g5_BRAND_CHECK_1", "GC-G2-missing-language-3",
+                "brand-check-2", "Licensed.Content.3", "PRIOR_FINDING_1", "assertion-4", "scope-assertion-1", "Language-2",
+                "withheld-finding-1", "brand-check-1-2", "Assertion")
+    phrase = "label form the engines write themselves"
+
+    def refusal(engine_argv, label):
+        out = os.path.join(work, f"{label}-never.json")
+        code, stdout, stderr = run(*engine_argv, "--out", out, "--generated-at", FIXED_TS)
+        return code, stdout + stderr, os.path.exists(out)
+
+    def am_refuses(packet, label, value):
+        path = os.path.join(work, f"{label}-in.json")
+        write(path, packet)
+        code, output, exists = refusal(("assertion_map", "--input", path), label)
+        # The engine name and the rule text both contain the bare label "assertion"; test the echo outside them.
+        echoed = value in output.replace(rules.RESERVED_LABEL_RULE, "").replace("assertion_map", "")
+        return code == 1 and phrase in output and not exists and "Traceback" not in output and not echoed, output.strip()[:200]
+
+    # r15-A 1. Every ID-bearing field of the review input refuses every reserved form (the T&E reproducer: a reserved
+    # engagement_id used to flow into every output with a clean verdict).
+    fields = (
+        ("engagement_id", review_a, lambda p, v: p.__setitem__("engagement_id", v)),
+        ("scenario_id", review_a, lambda p, v: p.__setitem__("scenario_id", v)),
+        ("deliverable.deliverable_id", review_a, lambda p, v: p["deliverable"].__setitem__("deliverable_id", v)),
+        ("criteria.criteria_set_id", review_a, lambda p, v: p["criteria"].__setitem__("criteria_set_id", v)),
+        ("assertions[].assertion_id", review_a, lambda p, v: p["assertions"][0].__setitem__("assertion_id", v)),
+        ("assertions[].evidence_ids[]", review_a, lambda p, v: p["assertions"][0]["evidence_ids"].append(v)),
+        ("evidence_set[].evidence_id", review_a, lambda p, v: p["evidence_set"][3].__setitem__("evidence_id", v)),
+        ("brand_checks[].check_id", review_a, lambda p, v: p["deliverable"]["brand_checks"][0].__setitem__("check_id", v)),
+        ("licensed_content[].content_id", review_b, lambda p, v: p["deliverable"]["licensed_content"][0].__setitem__("content_id", v)),
+        ("prior_findings[].finding_id", review_a, lambda p, v: p["prior_findings"][0].__setitem__("finding_id", v)),
+        ("a record's nested engagement_id", review_a, lambda p, v: p["deliverable"]["brand_checks"][0].__setitem__("engagement_id", v)),
+        ("a record's nested deliverable_id", review_a, lambda p, v: p["evidence_set"][0].__setitem__("deliverable_id", v)),
+        ("deliverable.required_language[]", review_a, lambda p, v: p["deliverable"]["required_language"].append(v)),
+        ("deliverable.present_language[]", review_a, lambda p, v: p["deliverable"]["present_language"].append(" " + v + " ")),
+        ("deliverable.present_disclaimer_types[]", review_a, lambda p, v: p["deliverable"]["present_disclaimer_types"].append(v)),
+    )
+    for index, (label, base, mutate) in enumerate(fields):
+        failures = []
+        for position, value in enumerate(reserved):
+            packet = copy.deepcopy(base)
+            mutate(packet, value)
+            ok, output = am_refuses(packet, f"a-{index}-{position}", value)
+            if not ok:
+                failures.append((value, output))
+        check(f"R15-A {label} refuses every engine-namespace and positional label form, in any case or separator spelling, with no output and no echo",
+              not failures, failures[:2])
+    positional = ("withheld-finding-1", "Brand_Check_2", "language-4", "assertion")
+    failures = []
+    for index, value in enumerate(positional):
+        packet = copy.deepcopy(review_a)
+        packet["findings"].append({"finding_id": value, "gate_id": "G5", "severity": "advisory", "title": "Reviewer note", "detail": "Footer spacing.",
+                                   "location": {"section": "Appendix", "page": 14, "paragraph": 1, "label": "Footer"}, "criteria_section": "quality-gate-criteria.md #5.2",
+                                   "confidence": 0.8, "source": "skill:deliverable-ingest", "citation": "reviewer note"})
+        ok, output = am_refuses(packet, f"a-reviewer-{index}", value)
+        if not ok:
+            failures.append((value, output))
+    check("R15-A a reviewer finding's finding_id in a positional label form (withheld-finding-N, brand-check-N, language-N, assertion) is refused",
+          not failures, failures[:2])
+
+    # r15-A 2. The check is in the shared first stage, so every entry point refuses: gate_check --input, severity_rank
+    # --input and --verify (with the genuine goldens).
+    expected_a = os.path.join(demo_a, "expected")
+    packet = copy.deepcopy(review_a)
+    packet["engagement_id"] = "AM-G8-foreign-finding-1"
+    path = os.path.join(work, "entry-points-in.json")
+    write(path, packet)
+    results = [refusal(("gate_check", "--mapped", os.path.join(expected_a, "assertion-mapped.json"), "--input", path), "entry-gc"),
+               refusal(("severity_rank", "--gates", os.path.join(expected_a, "gate-checked.json"), "--input", path), "entry-sr")]
+    code, stdout, stderr = run("severity_rank", "--verify", os.path.join(expected_a, "severity-ranked.json"), "--input", path)
+    results.append((code, stdout + stderr, False))
+    check("R15-A gate_check --input, severity_rank --input and severity_rank --verify refuse a reserved engagement_id with no output",
+          all(code == 1 and phrase in output and not exists for code, output, exists in results), [(code, output.strip()[:120]) for code, output, _ in results])
+
+    # r15-A 3. The shared predicate, and its benign controls.
+    near = ("brand-check", "brand-check-1a", "ENG-BRAND-CHECK", "SRX-1", "GCX-G5-1", "A-001", "EV-B1", "PR-A1", "language", "no_assurance",
+            "assertion-one", "PS-DRQG-A-001", "withheld-finding", "fig-4-benchmark", "general_advice")
+    check("R15-A reserved_label is one shared predicate: every reserved form (any case, separator or surrounding whitespace) is reserved and no near miss is",
+          all(rules.reserved_label(value) and rules.reserved_label(f"  {value.upper()}  ") for value in reserved)
+          and not any(rules.reserved_label(value) for value in near)
+          and rules.reserved_label("GC-G5-x") and not rules.reserved_label("GC-G5-x", engine_namespace=False),
+          [value for value in near if rules.reserved_label(value)])
+    packet = copy.deepcopy(review_a)
+    packet["engagement_id"] = "ENG-BRAND-CHECK"
+    packet["deliverable"]["brand_checks"][0]["check_id"] = "brand-check-1a"
+    packet["prior_findings"][0]["finding_id"] = "PR-prior-finding-1"
+    packet["criteria"]["criteria_set_id"] = "SRX-assertion-1"
+    packet["deliverable"]["required_language"].append("language")
+    workdir = os.path.join(work, "near-miss")
+    os.makedirs(workdir, exist_ok=True)
+    try:
+        paths = chain_packet(packet, workdir, "near")
+        ranked = read(paths["ranked"])
+        code, _, verify_err = run("severity_rank", "--verify", paths["ranked"], "--input", os.path.join(workdir, "near-input.json"))
+        ids = sorted(finding_ids(ranked))
+    except RuntimeError as exc:
+        code, ids, verify_err = None, [], str(exc)
+    check("R15-A control: near-miss IDs (ENG-BRAND-CHECK, brand-check-1a, PR-prior-finding-1, SRX-assertion-1, a bare 'language' key) run the whole chain and --verify",
+          code == 0 and "GC-G5-brand-check-1a" in ids and "GC-G2-missing-language" in ids, (code, ids, verify_err.strip()[:200]))
+    mapped_b = os.path.join(demo_b, "expected", "assertion-mapped.json")
+    rerun = os.path.join(work, "rerun-mapped.json")
+    code, stdout, stderr = run("assertion_map", "--input", mapped_b, "--out", rerun, "--generated-at", FIXED_TS)
+    check("R15-A control: an engine-owned finding_id (AM-B-001) in findings[] is still governed by recomputation (#8.4), not refused: assertion_map re-runs its own output",
+          code == 0 and os.path.exists(rerun) and read_text(rerun) == read_text(mapped_b), (code, (stdout + stderr).strip()[:200]))
+
+    # r15-B. Grammar before scope: a foreign record (another deliverable) with invalid grammar is refused at the first
+    # stage, before it could be quarantined; a valid foreign record is still held.
+    brand, prior, evidence = review_a["deliverable"]["brand_checks"][0], review_a["prior_findings"][0], review_a["evidence_set"][0]
+    foreign = {"deliverable_id": "OTHER-DELIVERABLE"}
+    bad_foreign = (
+        ("duplicate check_id", lambda p: p["deliverable"]["brand_checks"].append(dict(brand, **foreign))),
+        ("legal_or_release_control 'yes'", lambda p: p["deliverable"]["brand_checks"].append(dict(brand, check_id="x-1", legal_or_release_control="yes", **foreign))),
+        ("location.page 0", lambda p: p["deliverable"]["brand_checks"].append(dict(brand, check_id="x-1", location=dict(brand["location"], page=0), **foreign))),
+        ("blank-after-fold check_id", lambda p: p["deliverable"]["brand_checks"].append(dict(brand, check_id="-", **foreign))),
+        ("reserved check_id", lambda p: p["deliverable"]["brand_checks"].append(dict(brand, check_id="brand-check-2", **foreign))),
+        ("licensed entry missing attribution_present", lambda p: p["deliverable"].__setitem__("licensed_content", [{"content_id": "c-1", **foreign}])),
+        ("prior claimed_closed 'true'", lambda p: p["prior_findings"].append(dict(prior, finding_id="PR-X", claimed_closed="true", **foreign))),
+        ("evidence confidence 5", lambda p: p["evidence_set"].append(dict(evidence, evidence_id="EV-X", confidence=5, **foreign))),
+        ("evidence ID with a space", lambda p: p["evidence_set"].append(dict(evidence, evidence_id="EV X", **foreign))),
+        ("assertion class 'opinion'", lambda p: p["assertions"].append(dict(p["assertions"][0], assertion_id="A-X", **{"class": "opinion"}, **foreign))),
+        ("escalation object without note", lambda p: p["escalations"].append({"gate_id": "G5", **foreign})),
+    )
+    failures = []
+    for index, (label, mutate) in enumerate(bad_foreign):
+        packet = copy.deepcopy(review_a)
+        mutate(packet)
+        path = os.path.join(work, f"b-{index}-in.json")
+        write(path, packet)
+        code, output, exists = refusal(("assertion_map", "--input", path), f"b-{index}")
+        if not (code == 1 and not exists and "input error" in output and "Traceback" not in output):
+            failures.append((label, code, output.strip()[:160]))
+    check("R15-B a foreign record (another deliverable) whose grammar is invalid is refused at the first stage before any scope exclusion, for every register",
+          not failures, failures[:2])
+    packet = copy.deepcopy(review_a)
+    packet["deliverable"]["brand_checks"].append(dict(brand, check_id="x-1", **foreign))
+    workdir = os.path.join(work, "b-control")
+    os.makedirs(workdir, exist_ok=True)
+    ranked = read(chain_packet(packet, workdir, "b-control")["ranked"])
+    hold = next((item for item in ranked["findings"] if item["finding_id"] == "GC-G5-brand-check-2"), {})
+    check("R15-B control: a valid foreign brand check is still quarantined by position (GC-G5-brand-check-2, release blocker) and its ID is not shown",
+          hold.get("severity") == "release_blocker" and status(ranked) == "not_ready_for_release" and "x-1" not in json.dumps(hold), hold.get("detail", "")[:200])
+
+    # r15-C (and r15-A for raw IDs): the raw-pack verifier.
+    def derive_with(label, scenario_dir, edits, edit_input=None):
+        scenario = os.path.join(work, label, os.path.basename(scenario_dir))
+        shutil.copytree(scenario_dir, scenario, ignore=shutil.ignore_patterns("expected"))
+        for name, old, new in edits:
+            path = os.path.join(scenario, "raw", name)
+            text = read_text(path)
+            assert old in text, (label, old)
+            with open(path, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(text.replace(old, new, 1))
+        if edit_input:
+            payload = read(os.path.join(scenario, "review-input.json"))
+            edit_input(payload)
+            write(os.path.join(scenario, "review-input.json"), payload)
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            code = dri.main([scenario])
+        return code, buffer.getvalue()
+
+    pre = "Each section is a register; a section that is missing means the register was not supplied.\n"
+    handling = "Handling status: ok\n"
+    set_line = "Criteria set ID: PS-QRM-DG-2026-demo\n"
+    raw_ids = (
+        ("a brand-check ID", demo_b, ("release-registers.md", "- cover-brand: pass.", "- Brand_Check_1: pass."), "Brand_Check_1", "brand check entry 1"),
+        ("a licensed-content ID", demo_b, ("release-registers.md", "- fig-4-benchmark:", "- GC-G6-fig-4-benchmark:"), "GC-G6-fig-4-benchmark", "licensed-content entry 1"),
+        ("a client-data entry ID", demo_a, ("release-registers.md", "- CD-A1:", "- withheld-finding-1:"), "withheld-finding-1", "client-data handling register entry 2"),
+        ("the cover Engagement", demo_a, ("draft-deliverable.md", "Engagement: PS-DRQG-A-001", "Engagement: AM-G8-foreign-finding-1"), "AM-G8-foreign-finding-1", "draft cover field Engagement"),
+        ("the cover Document ID", demo_a, ("draft-deliverable.md", "Document ID: DELIV-ASTER-ORION-V0.8", "Document ID: sr_g8_engine_id_spoof"), "sr_g8_engine_id_spoof", "draft cover field Document ID"),
+        ("the criteria set ID", demo_a, ("qrm-gate-criteria-extract.md", set_line, "Criteria set ID: Language-2\n"), "Language-2", "criteria set ID"),
+        ("a disclaimer type", demo_a, ("draft-deliverable.md", "## Disclaimer - general advice", "## Disclaimer - language 2"), "language_2", "disclaimer type"),
+    )
+    for index, (label, scenario_dir, edit, value, where) in enumerate(raw_ids):
+        code, output = derive_with(f"c-id-{index}", scenario_dir, [edit])
+        check(f"R15-A the raw-pack verifier refuses {label} in a reserved label form, naming its position only",
+              code == 1 and phrase in output and where in output and value not in output, output.strip()[:300])
+    code, output = derive_with("c-id-control", demo_a, [("qrm-gate-criteria-extract.md", set_line, "Criteria set ID: brand-check-x\n")],
+                               lambda payload: payload["criteria"].__setitem__("criteria_set_id", "brand-check-x"))
+    check("R15-A control: a near-miss raw ID (criteria set ID brand-check-x) still derives", code == 0 and "derives from its raw pack" in output, output.strip()[:300])
+
+    variants = (
+        ("a bold Handling status before the first register section", demo_b, [("release-registers.md", pre, pre + "**Handling status:** breach\n")], "before the first register section"),
+        ("a backtick Check basis before the first register section", demo_b, [("release-registers.md", pre, pre + "`Check basis`: none\n")], "before the first register section"),
+        ("a lower-case Check basis before the first register section", demo_b, [("release-registers.md", pre, pre + "check basis: none\n")], "before the first register section"),
+        ("an underscore Handling_status before the first register section", demo_b, [("release-registers.md", pre, pre + "Handling_status: breach\n")], "before the first register section"),
+        ("a lower-case brand field label before the first register section", demo_b, [("release-registers.md", pre, pre + "legal or release control: yes\n")], "before the first register section"),
+        ("an indented '+' bullet before the first register section", demo_b, [("release-registers.md", pre, pre + "   + Handling status: breach\n")], "before the first register section"),
+        ("'- Handling_status: breach' read as a client-data entry", demo_b, [("release-registers.md", handling, handling + "- Handling_status: breach\n")], "register field written as a client-data entry"),
+        ("'- check-basis: none' read as a client-data entry", demo_b, [("release-registers.md", handling, handling + "- check-basis: none\n")], "register field written as a client-data entry"),
+        ("a brand record inside the client-data section", demo_b, [("release-registers.md", handling, handling + "- extra-brand: fail. Footer. Missing. Legal or release control: yes. Location: Cover, page 1, paragraph 1, Brand. Confidence: 0.9. Criteria: quality-gate-criteria.md #5.1.\n")], "carries a field label of another register"),
+        ("a client-data entry carrying 'Handling status:'", demo_b, [("release-registers.md", handling, handling + "- CD-B9: Handling status: breach\n")], "carries a field label of another register"),
+        ("a lower-case 'confidence:' in the evidence index preamble", demo_b, [("supporting-evidence-index.md", "engagement team.\n", "engagement team.\nconfidence: 0.99\n")], "supporting-evidence-index.md line 3 is a record line"),
+        ("a backtick Tracker status in the prior-findings preamble", demo_b, [("prior-review-findings.md", "current draft.\n", "current draft.\n`Tracker status`: closed\n")], "prior-review-findings.md line 3 is a record line"),
+        ("'- Criteria set ID:' beside the real line", demo_b, [("qrm-gate-criteria-extract.md", set_line, set_line + "- Criteria set ID: OTHER\n")], "names the criteria set ID but does not follow"),
+        ("'**Criteria set ID:**' beside the real line", demo_b, [("qrm-gate-criteria-extract.md", set_line, set_line + "**Criteria set ID:** OTHER\n")], "names the criteria set ID but does not follow"),
+        ("'Criteria_set_ID:' beside the real line", demo_b, [("qrm-gate-criteria-extract.md", set_line, set_line + "Criteria_set_ID: OTHER\n")], "names the criteria set ID but does not follow"),
+        ("the criteria set ID under a criteria section", demo_b, [("qrm-gate-criteria-extract.md", set_line, ""), ("qrm-gate-criteria-extract.md", "## 7. Prior-findings closure\n", "## 7. Prior-findings closure\n" + set_line)], "under a criteria section"),
+        ("a cover field in a body paragraph", demo_b, [("draft-deliverable.md", "## 3. Recommendation\n", "## 3. Recommendation\nEngagement: PS-OTHER\n\n")], "outside the cover block"),
+        ("a cover field in a second cover block", demo_b, [("draft-deliverable.md", "Synthetic demo document.", "- Confidentiality marking: none\n\nSynthetic demo document.")], "outside the cover block"),
+        ("a cover field as a later part of a body line", demo_a, [("draft-deliverable.md", "Footer: Orion Programme Benefits Review | Version 0.8", "Footer: Orion Programme Benefits Review | Version: 0.7")], "outside the cover block"),
+        ("a lower-case disclaimer heading", demo_b, [("draft-deliverable.md", "## Disclaimer - general advice", "## disclaimer - general advice")], "disclaimer heading that does not follow"),
+        ("an en-dash disclaimer heading", demo_b, [("draft-deliverable.md", "## Disclaimer - general advice", "## Disclaimer \u2013 general advice")], "disclaimer heading that does not follow"),
+        ("a colon disclaimer heading", demo_b, [("draft-deliverable.md", "## Disclaimer - general advice", "## Disclaimer: general advice")], "disclaimer heading that does not follow"),
+        ("a lower-case page marker", demo_b, [("draft-deliverable.md", "[Page 12]", "[page 12]")], "page marker that does not follow"),
+    )
+    for index, (label, scenario_dir, edits, expected) in enumerate(variants):
+        code, output = derive_with(f"c-{index}", scenario_dir, edits)
+        check(f"R15-C the raw-pack verifier refuses {label} instead of silently ignoring it", code == 1 and "raw pack is malformed" in output and expected in output
+              and "OTHER" not in output and "breach" not in output, output.strip()[:300])
+    controls = (
+        ("an indented Handling status line inside its own section", demo_b, [("release-registers.md", handling, "  " + handling)]),
+        ("a numbered disclaimer heading", demo_a, [("draft-deliverable.md", "## Disclaimer - general advice", "## 5. Disclaimer - general advice")]),
+        ("body prose naming a cover field without a colon", demo_a, [("draft-deliverable.md", "Figure 2 summarizes", "Client confidential: Figure 2 summarizes")]),
+    )
+    for index, (label, scenario_dir, edits) in enumerate(controls):
+        code, output = derive_with(f"c-control-{index}", scenario_dir, edits)
+        check(f"R15-C control: {label} is handled consistently and still derives", code == 0 and "derives from its raw pack" in output, output.strip()[:300])
+    demos = [dri.check_scenario(demo) for demo in (demo_a, demo_b)]
+    check("R15-C control: both shipped demo packs still derive from their raw packs", demos == [[], []], demos)
+
+
 def seed_inputs():
     """The demo goldens map to their scenario's review input, so a test that edits a golden is compared with it."""
     for scenario in ("scenario-a-happy", "scenario-b-drama"):
@@ -7341,7 +7587,8 @@ TMP_GROUPS = (golden_tests, negative_tests, register_tests, page_label_tests, g8
               mobilization_round11_sweep_tests, mobilization_round12_sweep_tests,
               tne_round10_sweep_tests, mobilization_round13_sweep_tests, qa104_round12_tests,
               qa104_round13_tests, qa104_round13_sweep_tests, qa104_round14_tests, qa104_round15_tests, mobilization_round17_sweep_tests,
-              mobilization_round18_sweep_tests, qa104_round16_tests, mobilization_round20_sweep_tests, qa104_round17_tests)
+              mobilization_round18_sweep_tests, qa104_round16_tests, mobilization_round20_sweep_tests, qa104_round17_tests,
+              r15_sweep_tests)
 PLAIN_GROUPS = (recipient_classifier_tests, tripwire_tests, packet_template_tests, skill_doc_tests,
                 skill_trigger_tests, version_tests, shared_copy_tests)
 GROUP_NAMES = [group.__name__ for group in TMP_GROUPS + PLAIN_GROUPS]

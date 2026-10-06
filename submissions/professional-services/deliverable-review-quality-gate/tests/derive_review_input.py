@@ -30,6 +30,13 @@ and in the evidence index and prior-findings export a heading after the `# ` tit
 the first entry or a file with no entry are errors too. Every draft cover part must be a
 documented 'Field: value' pair (COVER_FIELDS), and the criteria extract must give its set ID on one
 'Criteria set ID: <ID>' line.
+Fields are recognised in any syntactic variant (leading whitespace, a `-`, `*`, `+` or numbered
+bullet, bold or backtick emphasis, key case, separators and spacing before the colon): a register
+field written as a client-data entry, an entry or Check basis line that carries another register
+field label, a set-ID line under a criteria section, a cover field outside the cover block, and a
+disclaimer heading or page marker in a variant form are refused, never silently ignored. Every raw
+ID that reaches the review input (register entry IDs, cover Engagement and Document ID, criteria
+set ID, disclaimer types) is refused in a label form the engines write themselves (#8.11).
 Missing is not empty: a raw file that is missing (release-registers.md excepted: a missing
 registers file or section is a register that was not supplied, which the engines hold), zero
 bytes, or only blank lines and headings, and a known register section with a heading and no
@@ -93,9 +100,21 @@ CHECK_BASIS = re.compile(r"^Check basis: [^\r\n]*[^ \t\r\n][^\r\n]*$")
 # The only documented explicit "none" statement: the licensed-content register's opening sentence, alone in its section.
 LICENSED_NONE = re.compile(r"^No licensed or third-party content\.(?:[ \t][^\r\n]*)?$")
 CRITERIA_SET_LINE = re.compile(r"^[ \t]*criteria[ \t]+set[ \t]+id\b", re.IGNORECASE)
+# r15-C: a declared field is recognised in every syntactic variant, never only in its documented spelling: leading
+# whitespace, one list bullet (-, *, + or a number), bold, italic or backtick emphasis, any case and any spacing or
+# separator (-, _, .) between its words, with optional space before the colon. field_key gives a line's (or a cover
+# part's) leading key in that folded form; label_pattern finds a field label anywhere in a line in any of those forms.
+LEADING_BULLET = re.compile(r"^[ \t]*(?:[-*+]|[0-9]{1,9}[.)])[ \t]+")
+EMPHASIS = re.compile(r"[*`]")
+# A typed disclaimer heading ('Disclaimer - <type>') in any other case, dash or separator, and a [Page N] marker in any
+# other spelling, would otherwise be read as an ordinary section or as body text.
+DISCLAIMER_HEADING = re.compile(r"^Disclaimer - (.+)$")
+DISCLAIMER_LIKE = re.compile(r"^Disclaimer[ \t]*[-\u2010-\u2015\u2212:|]")
+PAGE_MARKER_LIKE = re.compile(r"^\[[ \t]*page\b[^\]]*\]$", re.IGNORECASE)
 # Documented cover fields (deliverable-ingest step 5); Status is recorded on the cover but not derived.
 COVER_FIELDS = ("Status", "Document type", "Client", "Client aliases", "Engagement", "Document ID", "Version",
                 "Confidentiality marking", "Distribution")
+COVER_KEYS = {rules.canonical_id(field) for field in COVER_FIELDS}
 RECORD_LABELS = {
     "brand-check register": ("Legal or release control:", "Criteria:"),
     "licensed-content register": ("Attribution present:", "License status:", "Register:"),
@@ -125,15 +144,58 @@ def emit(line=""):
     print(str(line).encode("ascii", "backslashreplace").decode("ascii"))
 
 
+def field_key(text):
+    """The folded key of a 'key: value' line or cover part in any variant form (r15-C): leading whitespace and one list
+    bullet removed, emphasis (*, `) removed, then rules.canonical_id (case, spacing and -, _, . separators folded).
+    None when the text has no colon, or its key is blank or longer than any field name."""
+    body = EMPHASIS.sub("", LEADING_BULLET.sub("", text, count=1))
+    key, sep, _ = body.partition(":")
+    if not sep or len(key) > 60:
+        return None
+    return rules.canonical_id(key) or None
+
+
+def label_pattern(labels):
+    """One regex finding any of `labels` ('Field name:') anywhere in an emphasis-stripped line, in any case and with any
+    spacing or -, _, . separator between its words and before the colon (r15-C)."""
+    alternatives = ["[ \t_.-]+".join(map(re.escape, label.rstrip(":").split())) for label in labels]
+    return re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(alternatives) + r")[ \t]*:", re.IGNORECASE)
+
+
+def declares(line, pattern):
+    return pattern.search(EMPHASIS.sub("", line)) is not None
+
+
+def unreserved(value, where):
+    """r15-A: a raw-pack ID or key in a label form the engines write themselves (rules.reserved_label: the AM-, GC- or
+    SR- finding namespace, or a positional label such as brand-check-2 or withheld-finding-1, in any case or separator
+    spelling) is refused naming its position only, exactly as the engines refuse it (quality-gate-criteria.md #8.11)."""
+    if rules.reserved_label(value):
+        raise PackError(f"{where} gives an ID in a label form the engines write themselves ({rules.RESERVED_LABEL_RULE})")
+    return value
+
+
+RECORD_LABEL_PATTERNS = {kind: label_pattern(labels) for kind, labels in RECORD_LABELS.items()}
+# The field labels of the release registers' documented lines: none may appear before the first section, and a
+# client-data entry or check basis may not carry one (it would be another line's or register's field, silently ignored).
+REGISTER_FIELD_LABELS = (("Handling status:", "Check basis:") + RECORD_LABELS["brand-check register"]
+                         + RECORD_LABELS["licensed-content register"])
+PREAMBLE_REGISTER_LABELS = label_pattern(REGISTER_FIELD_LABELS)
+REGISTER_FIELD_KEYS = {rules.canonical_id(label.rstrip(":")) for label in REGISTER_FIELD_LABELS}
+
+
 def record_match(pattern, line, kind, where):
     """Parse one line of a known register section. A record-shaped line (a list item, or one carrying a field label of
-    that register) that the pattern does not match raises PackError naming only its position; prose lines return None."""
+    that register in any case, spacing or emphasis variant) that the pattern does not match raises PackError naming only
+    its position; prose lines return None. A record ID blank after the fold, or in a reserved label form, is refused."""
     match = pattern.match(line)
-    if match is None and (RECORD_ITEM.match(line) or any(label in line for label in RECORD_LABELS[kind])):
+    if match is None and (RECORD_ITEM.match(line) or declares(line, RECORD_LABEL_PATTERNS[kind])):
         raise PackError(f"{where} is a record line of the {kind} that does not follow the documented line format; fix or remove it")
     if match is not None and "id" in pattern.groupindex and rules.key_of(match["id"]) is None:
         # An ID blank after the fold (for example "-" or "_") names nothing and must never match another (#8.17).
         raise PackError(f"{where} is a record line of the {kind} whose ID is blank after Unicode, case and separator folding; IDs must state a value")
+    if match is not None and "id" in pattern.groupindex:
+        unreserved(match["id"], where)
     return match
 
 
@@ -212,9 +274,14 @@ def parse_draft(text):
         elif line.startswith("#"):
             flush()
             section = section_name(line.lstrip("#"))
-            clause = re.match(r"^Disclaimer - (.+)$", section)
+            clause = DISCLAIMER_HEADING.match(section)
+            if (section[:10].lower() == "disclaimer" and not section.startswith("Disclaimer")) or (DISCLAIMER_LIKE.match(section) and not clause):
+                raise PackError(f"draft line {number} is a disclaimer heading that does not follow '## Disclaimer - <type>' (case, dash or separator); "
+                                "it would be read as an ordinary section and its disclaimer type dropped - fix it")
             if clause:
-                disclaimers.append(clause.group(1).strip().lower().replace(" ", "_"))
+                disclaimers.append(unreserved(clause.group(1).strip().lower().replace(" ", "_"), f"draft line {number} disclaimer type"))
+        elif PAGE_MARKER_LIKE.match(line):
+            raise PackError(f"draft line {number} is a page marker that does not follow '[Page N]'; it would be read as body text and shift paragraph numbering - fix it")
         elif not line:
             flush()
         else:
@@ -238,6 +305,18 @@ def parse_draft(text):
             cover[key.strip()] = value.strip()
     if any(key not in COVER_FIELDS for key in set(cover) | blank):
         raise PackError(f"draft cover gives a field that is not a documented cover field ({', '.join(COVER_FIELDS)}); a cover field is never skipped - fix or remove it")
+    # A cover field belongs to the first Cover block only. One written anywhere else (a second cover block, or a body
+    # line), in any spelling (field_key), would be silently ignored, so it is refused by page and paragraph (r15-C).
+    for index, (_, block) in enumerate(sorted(blocks.items()), 1):
+        if block is first:
+            continue
+        for line in block["lines"]:
+            if any(field_key(part) in COVER_KEYS for part in line.split("|")):
+                raise PackError(f"draft paragraph {index} (counting every paragraph from the top) gives a cover field ({', '.join(COVER_FIELDS)}) "
+                                "outside the cover block; it would be silently ignored - move it into the cover block or remove it")
+    for field in ("Engagement", "Document ID"):
+        if cover.get(field):
+            unreserved(cover[field], f"draft cover field {field}")
     return title, cover, blocks, disclaimers
 
 
@@ -253,7 +332,7 @@ def register_sections(text):
     and description: a record-shaped line there (a list item, a Handling status line or a register field label) belongs
     to no register and is a PackError, never skipped."""
     sections, name, first = {}, None, True
-    labels = [label for kind in ("brand-check register", "licensed-content register") for label in RECORD_LABELS[kind]] + ["Check basis:"]
+    labels = PREAMBLE_REGISTER_LABELS
     for number, line in enumerate(text.splitlines(), 1):
         if line.startswith("## "):
             name = line[3:].strip()
@@ -264,7 +343,7 @@ def register_sections(text):
             sections[name].append(line.strip())
         elif line.strip():
             stripped = line.strip()
-            if (RECORD_ITEM.match(stripped) or HANDLING_LINE.match(stripped) or any(label in stripped for label in labels)
+            if (RECORD_ITEM.match(stripped) or HANDLING_LINE.match(EMPHASIS.sub("", stripped)) or declares(stripped, labels)
                     or (stripped.startswith("#") and not (first and line.startswith("# ")))):
                 raise PackError(f"release-registers.md line {number} is a record or heading line before the first register section; it belongs to no register - move it under its section heading or remove it")
             first = False
@@ -296,9 +375,21 @@ def parse_registers(path):
     handling, seen = "unknown", False
     for number, line in enumerate(sections.get("Client-data handling register", []), 1):
         if not HANDLING_LINE.match(line):
-            if CLIENT_DATA_ENTRY.match(line) or CHECK_BASIS.match(line):
-                continue
-            raise unrecognised("Client-data handling register", number, "'Handling status: <status>', '- <ID>: <description>' or 'Check basis: <text>'")
+            entry, basis = CLIENT_DATA_ENTRY.match(line), CHECK_BASIS.match(line)
+            if entry is None and basis is None:
+                raise unrecognised("Client-data handling register", number, "'Handling status: <status>', '- <ID>: <description>' or 'Check basis: <text>'")
+            where = f"client-data handling register entry {number}"
+            if entry is not None:
+                if field_key(line) in REGISTER_FIELD_KEYS:
+                    raise PackError(f"{where} is a register field written as a client-data entry ('- <field>: ...' in a variant spelling); "
+                                    "a declared field is never read as an entry - write it in its documented form or remove it")
+                if rules.key_of(entry["id"]) is None:
+                    raise PackError(f"{where} is a client-data entry whose ID is blank after Unicode, case and separator folding; IDs must state a value")
+                unreserved(entry["id"], where)
+            if declares(line.split(":", 1)[1], PREAMBLE_REGISTER_LABELS):
+                raise PackError(f"{where} carries a field label of another register line or register (in any spelling); "
+                                "it would be silently ignored here - move it to its own line or section, or remove it")
+            continue
         match = HANDLING.match(line)
         if match is None:
             raise PackError(f"client-data handling register entry {number} is a Handling status line that does not follow 'Handling status: <status>'")
@@ -388,20 +479,26 @@ def parse_prior(text):
 
 
 def criteria_set_id(text):
-    """The criteria set ID from the extract's single 'Criteria set ID: <ID>' line (blank value: MISSING). The rest of
-    the extract is the criteria prose itself and is not derived (criteria_sections is the fixed CRITERIA_FLOOR). A
-    second set-ID line, or a line naming the set ID in another form, is a PackError, never ignored."""
-    found = None
+    """The criteria set ID from the extract's single 'Criteria set ID: <ID>' line (blank value: MISSING), which belongs
+    to the extract's header, before the first section heading. The rest of the extract is the criteria prose itself
+    and is not derived (criteria_sections is the fixed CRITERIA_FLOOR). A second set-ID line, a set-ID line under a
+    criteria section, or a line naming the set ID in another form (a bullet, emphasis, another case or separator:
+    field_key) is a PackError, never ignored. A set ID in a reserved label form is refused (unreserved)."""
+    found, header = None, True
     for number, line in enumerate(text.splitlines(), 1):
-        if not CRITERIA_SET_LINE.match(line):
+        if line.lstrip().startswith("##"):
+            header = False
+        if not (CRITERIA_SET_LINE.match(line) or field_key(line) == "criteria set id"):
             continue
         match = CRITERIA_SET_ID.match(line)
         if match is None:
             raise PackError(f"qrm-gate-criteria-extract.md line {number} names the criteria set ID but does not follow 'Criteria set ID: <ID>'")
+        if not header:
+            raise PackError(f"qrm-gate-criteria-extract.md line {number} gives the criteria set ID under a criteria section; it belongs in the extract's header, before the first section heading")
         if found is not None:
             raise PackError(f"qrm-gate-criteria-extract.md repeats the criteria set ID line (line {number}); a later value would be ignored")
         found = match
-    return found.group(1) if found and found.group(1) else MISSING
+    return unreserved(found.group(1), "qrm-gate-criteria-extract.md criteria set ID") if found and found.group(1) else MISSING
 
 
 def derive(scenario_dir):

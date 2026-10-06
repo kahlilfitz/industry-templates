@@ -732,6 +732,48 @@ The structural patterns described at the top of this entry are replaced, not sup
 
   Goldens are byte-identical.
 
+### T&E QA round 15 class sweep (r15-A/B/C; 1.0.4, no version bump)
+
+Three defect classes from T&E QA round 15, swept across every DRQG engine and raw parser. Each one was reproduced against copies of the demo raw packs before the fix.
+
+- **r15-A: the reserved-label namespace is now enforced in every ID-bearing field.** Before the fix, every reserved form passed every stage with a clean verdict and flowed into every output. The reserved forms are an `AM-`/`GC-`/`SR-` finding ID or a positional label the engines write (`brand-check-N`, `withheld-finding-N`, `language-N`, `assertion`, and others). The fields tested were `engagement_id`, `deliverable_id`, `scenario_id`, `criteria_set_id`, a `check_id` `brand-check-1`, a prior `Prior_Finding_2`, an evidence `withheld-finding-1`, an `assertion-1`, a `required_language` `language-4`, and a reviewer finding `withheld-finding-1`.
+  - **Engines** (`assertion_rules.py`, byte-identical in assertion-map and gate-check):
+    - One shared helper, `reserved_label` and `require_unreserved` (lines 463-492), folds case, Unicode, whitespace and separators through `canonical_id`.
+    - `validate_id_shapes` (lines 495-516) applies it to every `*_id` member and every `*_ids` entry at any depth, and to every `deliverable.required_language`, `present_language` and `present_disclaimer_types` entry. Those entries become `missing-language-<item>` and `G4` keys.
+    - A supplied `findings[]`/`ranked_findings[]` `finding_id` keeps the #8.4 engine-namespace handling (a spoof hold) but now refuses a positional label.
+    - The refusal names the field path and the rule, never the value (#8.9).
+    - gate_check, severity_rank and `--verify` refuse the same way, because they re-derive (#8.21).
+    - `client_aliases` and recipients are names, never written into an ID, so they are not checked.
+  - **Raw parser** (`tests/derive_review_input.py`): new `unreserved` helper (line 169), which delegates to `rules.reserved_label`. It is applied to:
+    - register entry IDs via `record_match` (line 198);
+    - client-data entry IDs (line 388);
+    - the cover `Engagement` and `Document ID` (line 319);
+    - the criteria set ID (line 501);
+    - disclaimer types (line 282).
+  - CLI ID arguments: n/a. No engine takes an ID-bearing argument.
+- **r15-B: grammar before scope: n/a.** The reproducer gave each foreign or other-deliverable record an invalid enum, a blank ID or a non-ID shape. Every one was already refused at the first stage, because `assertion_map_stage` runs contract validation, `validate_id_shapes`, unique IDs and `validate_assertions` before `withhold`, `sanitise_foreign_records` and `quarantine_foreign_upstream`. gate_check and severity_rank re-derive through the same stage. The raw parser has no scope filter, since raw records carry no subject. A valid foreign record still holds (control).
+- **r15-C: section and field recognition normalises syntactic variants** (`tests/derive_review_input.py`). Before the fix, each variant below derived cleanly and was silently ignored. The variants were an indented, `*`/`+`/numbered-bullet, bold, backtick or case- and spacing-variant field outside its section, a set-ID line under a criteria section, a cover field in the body, and a variant disclaimer heading or page marker.
+  - New `field_key`, `label_pattern` and `declares` helpers (lines 147-167) strip leading whitespace, bullets and emphasis, and fold key case, separators and spacing before the colon.
+  - `record_match` (line 192) and `register_sections` (line 346) recognise record and register-field labels in any of these variants.
+  - `parse_registers`:
+    - refuses a register field written as a client-data entry (line 383);
+    - refuses an entry or Check basis line that carries another register field label (line 389);
+    - accepts an indented `Handling status` line inside its own section.
+  - `criteria_set_id` recognises the variant forms (line 491) and refuses a set-ID line after the first section heading (line 497).
+  - `parse_draft`:
+    - refuses a case, dash or separator variant of `## Disclaimer - <type>` (line 278) and a variant `[Page N]` marker (line 283);
+    - accepts a numbered `## 5. Disclaimer - <type>` as before;
+    - refuses a cover field outside the first cover block (line 314).
+  - Engines: n/a. They parse JSON only, with no markdown parser.
+- Test change: QR6-3 (`qa104_round6_tests`) used the reserved IDs `brand-check-1` and `language-4` as input to show suffix handling. It now expects them to be refused, and shows the same `-2`-free suffix handling with `brand-check-1a`/`language-4a`. The check count is unchanged.
+- Docs: quality-gate-criteria.md #8.11 (all six copies) and the `tests/derive_review_input.py` docstring.
+- Tests: 1664 checks (were 1607). The 57 new checks are in the new `r15_sweep_tests` group, which `--list-groups` now lists as the 45th group.
+  - r15-A: 14 reserved forms against each of 15 ID fields and reviewer findings; gate_check, severity_rank and `--verify` entry points; the predicate; near-miss chain controls; and 7 raw-pack ID sites plus a control.
+  - r15-B: the reproducer and its control.
+  - r15-C: 23 variant refusals and 3 benign controls (an indented Handling status in its own section, a numbered disclaimer heading, and body prose with a cover-field word).
+  - A check that both demos still derive.
+  - Goldens and demo data are byte-identical.
+
 ### Test harness
 
 - Test harness: results stream as they run; `--list-groups` and `--group`; summary line unchanged. `tests/run_tests.py` prints `== group <name>` before each group and each `PASS <label>` or `FAIL <label>  (detail)` line as the check is recorded (ASCII-safe, flushed), so a suite cut off by a sandbox timeout still leaves evidence (checklist G7). Failures are repeated under `== failures` before the last line, which is still `N/M checks passed`. `--list-groups` prints the 44 group names; `--group NAME` (repeatable) runs only those groups, in canonical order, with the same shared setup. Every group runs alone with the same checks it has in a full run, so none needs another as a prerequisite. An unknown group or argument exits 2. Check labels and the count (1607) are unchanged; engines, skills, references, contracts and demo data are untouched.
