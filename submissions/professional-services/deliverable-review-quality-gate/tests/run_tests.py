@@ -6925,6 +6925,263 @@ def qa104_round16_tests(tmp):
           and not rules.screen_text(rules.foreign_record_id("deliverable.licensed_content[12]")) and not rules.screen_text(rules.FOREIGN_SUBJECT))
 
 
+def qa104_round17_tests(tmp):
+    """QA round 17 on 1.0.4 (DRQG-QA17-01, DRQG-QA17-02) and their class sweeps. Sweep A: every record list or object in
+    the review input that carries a subject (engagement, deliverable or client, in any key spelling or nested member) is
+    quarantined at the first stage - a fixed positional placeholder and a positional hold - or refused there; none of
+    its supplied fields reach mapped, gated or ranked JSON, the log, stderr or the packet (#8.15). Sweep B: the raw-pack
+    verifier refuses every non-blank line it does not recognise, by file, section and position, never skipping it."""
+    import derive_review_input as dri
+    sr = MODULES["severity_rank"]
+    rules = sr.rules
+    work = os.path.join(tmp, "qa17")
+    os.makedirs(work, exist_ok=True)
+    demo_a = os.path.join(ROOT, "demo-data", "scenario-a-happy")
+    base = read(os.path.join(demo_a, "review-input.json"))
+    secrets = ("Atlas", "ENG-ATLAS", "OTHER-DELIVERABLE", "REV-FOREIGN", "confidential review row", "internal release note")
+    reported = {"finding_id": "REV-FOREIGN-1", "gate_id": "G5", "severity": "advisory", "title": "Atlas Credit Partners confidential review row",
+                "detail": "Atlas Credit Partners internal release note", "location": {"section": "Atlas appendix", "page": 2, "paragraph": 1, "label": "Atlas footer"},
+                "criteria_section": "quality-gate-criteria.md #5.1", "confidence": 0.9, "source": "skill:deliverable-ingest", "citation": "Atlas tracker",
+                "engagement_id": "ENG-ATLAS", "deliverable_id": "OTHER-DELIVERABLE"}
+
+    def run_chain(packet, label):
+        workdir = os.path.join(work, label)
+        os.makedirs(workdir, exist_ok=True)
+        input_path = os.path.join(workdir, f"{label}-input.json")
+        write(input_path, packet)
+        paths = {stage: os.path.join(workdir, f"{stage}.json") for stage in ("mapped", "gated", "ranked")}
+        console, codes = [], []
+        for engine, argv in (("assertion_map", ["--input", input_path, "--out", paths["mapped"]]),
+                             ("gate_check", ["--mapped", paths["mapped"], "--input", input_path, "--out", paths["gated"]]),
+                             ("severity_rank", ["--gates", paths["gated"], "--input", input_path, "--out", paths["ranked"]])):
+            code, stdout, stderr = run(engine, *argv, "--generated-at", FIXED_TS)
+            codes.append(code)
+            console.append(stdout + stderr)
+            if code:
+                return codes, console, {}, None, ""
+        code, stdout, stderr = run("severity_rank", "--verify", paths["ranked"], "--input", input_path)
+        codes.append(code)
+        console.append(stdout + stderr)
+        ranked = read(paths["ranked"])
+        outputs = {stage: read_text(path) for stage, path in paths.items()}
+        return codes, console, outputs, ranked, packet_text(rules, ranked)
+
+    def leaked(texts, words=secrets):
+        return sorted({word for text in texts for word in words if word in text})
+
+    def holds(ranked, prefix="AM-G8-foreign-"):
+        return {item["finding_id"]: item for item in ranked["findings"] if item["finding_id"].startswith(prefix)}
+
+    # 1. The reproducer: a supplied reviewer finding of another engagement and deliverable.
+    packet = copy.deepcopy(base)
+    packet["findings"].append(dict(reported))
+    codes, console, outputs, ranked, packet_lines = run_chain(packet, "repro")
+    texts = list(outputs.values()) + console + [packet_lines]
+    check("QA17-1 the foreign reviewer finding's ID, title, detail, location, citation and subject reach no mapped, gated or ranked JSON, console line or packet line",
+          codes == [0, 0, 0, 0] and not leaked(texts), [codes, leaked(texts)])
+    hold = holds(ranked or {"findings": []}).get("AM-G8-foreign-finding-1", {}) if ranked else {}
+    check("QA17-1 it is quarantined positionally at the first stage: AM-G8-foreign-finding-1, G8 release blocker (#8.15) at 'Reviewer finding 1 (findings[0])', page and paragraph null, with an escalation",
+          hold.get("severity") == "release_blocker" and hold.get("gate_id") == "G8" and "#8.15" in hold.get("criteria_section", "")
+          and hold.get("location") == {"section": "Upstream findings", "page": None, "paragraph": None, "label": "Reviewer finding 1 (findings[0])"}
+          and hold.get("source") == "engine:assertion_map" and hold.get("title") == "Reviewer finding belongs to another engagement or deliverable"
+          and any(entry.startswith("G8: reviewer finding 1 (findings[0]) names another engagement, deliverable or client - release blocker") for entry in ranked["escalations"]),
+          hold)
+    mapped = json.loads(outputs.get("mapped") or "{}")
+    check("QA17-1 the mapped output already holds the placeholder in the finding's own position, never the supplied record",
+          [item.get("finding_id") for item in mapped.get("findings", [])][len(base["findings"]):len(base["findings"]) + 1] == ["AM-G8-foreign-finding-1"]
+          and "REV-FOREIGN-1" not in outputs.get("mapped", "REV-FOREIGN-1"),
+          [item.get("finding_id") for item in mapped.get("findings", [])])
+    check("QA17-1 the verdict is at least as strict as the existing foreign-record hold (not_ready_for_release, not partner_review_required_advisories_only), and --verify passes",
+          status(ranked or {}) == "not_ready_for_release" and codes[-1:] == [0] and "matches its re-derivation" in console[-1], [status(ranked or {}), console[-1:]])
+    other = copy.deepcopy(base)
+    other["findings"].append(dict(reported, finding_id="REV-OTHER-77", title="Different words", detail="Different detail", client="Somebody Else",
+                                  location={"section": "Elsewhere", "page": 9, "paragraph": 4, "label": "x"}, deliverable_id="DELIV-ANOTHER"))
+    other_codes, _, other_outputs, other_ranked, other_packet = run_chain(other, "repro-other")
+    check("QA17-1 a foreign finding decides the same whatever it says: outputs and packet equal those of a different foreign finding at the same position",
+          codes == other_codes == [0, 0, 0, 0] and all(outputs[stage] == other_outputs[stage] for stage in ("mapped", "gated", "ranked")) and packet_lines == other_packet,
+          [codes, other_codes])
+    repro_input = os.path.join(work, "repro", "repro-input.json")
+    code, stdout, stderr = run("gate_check", "--mapped", os.path.join(work, "repro", "gated.json"), "--input", repro_input,
+                               "--out", os.path.join(work, "repro-again.json"), "--generated-at", FIXED_TS)
+    check("QA17-1 gate_check is idempotent on the quarantined output",
+          code == 0 and read_text(os.path.join(work, "repro-again.json")) == outputs["gated"] and "AM-G8-foreign-finding-1" in outputs["gated"], stderr.strip()[:300])
+    tampered = read(os.path.join(work, "repro", "ranked.json"))
+    tampered["findings"].append(dict(reported))
+    tampered_path = os.path.join(work, "repro-tampered.json")
+    write(tampered_path, tampered)
+    code, stdout, stderr = run("severity_rank", "--verify", tampered_path, "--input", repro_input)
+    check("QA17-1 --verify refuses a ranked output that carries the supplied foreign finding (the pre-fix output) without echoing it",
+          code == 1 and not leaked([stdout, stderr]) and "AM-G8-foreign-finding-1" in outputs["ranked"], (stdout + stderr).strip()[:300])
+
+    # 2. Sweep A: subject variants and nesting on findings, escalation objects and assertions; controls ride in the same input.
+    own = {"engagement_id": base["engagement_id"], "deliverable_id": base["deliverable"]["deliverable_id"]}
+    variants = (
+        ("camelCase key", {"engagementId": "ENG-ATLAS"}),
+        ("spaced key", {"Deliverable ID": "OTHER-DELIVERABLE"}),
+        ("another client", {"client": "Atlas Credit Partners"}),
+        ("client_id", {"client_id": "ATLAS-001"}),
+        ("nested in location", {"location": {"section": "Atlas appendix", "page": 2, "paragraph": 1, "label": "Atlas footer", "engagement_id": "ENG-ATLAS"}}),
+        ("non-string client reference", {"client_reference": {"name": "Atlas"}}),
+    )
+    for label, subject in variants:
+        packet = copy.deepcopy(base)
+        finding = {key: value for key, value in reported.items() if key not in ("engagement_id", "deliverable_id")}
+        packet["findings"] = [dict(finding, finding_id="REV-OWN-1", title="Own review row", detail="Own row", location={"section": "Appendix", "page": 14, "paragraph": 1, "label": "Own"},
+                                   citation="own tracker", **own),
+                              dict(finding, **subject)]
+        codes, console, outputs, ranked, packet_lines = run_chain(packet, f"variant-{label.replace(' ', '-')}")
+        texts = list(outputs.values()) + console + [packet_lines]
+        found = holds(ranked) if ranked else {}
+        check(f"QA17-A1 a reviewer finding whose subject differs by {label} is quarantined as AM-G8-foreign-finding-2 at findings[1] (its position), leaking nothing, while a same-subject finding in the same input keeps its ID and text",
+              codes == [0, 0, 0, 0] and not leaked(texts) and set(found) == {"AM-G8-foreign-finding-2"}
+              and found["AM-G8-foreign-finding-2"]["location"]["label"] == "Reviewer finding 2 (findings[1])"
+              and "REV-OWN-1" in finding_ids(ranked) and "Own review row" in packet_lines and status(ranked) == "not_ready_for_release",
+              [codes, leaked(texts), sorted(found), console[0][:200]])
+    packet = copy.deepcopy(base)
+    packet["findings"] = [dict(reported), dict(reported, finding_id="REV-FOREIGN-2"),
+                          dict({key: value for key, value in reported.items() if key not in ("engagement_id", "deliverable_id")}, finding_id="REV-NULL-1",
+                               title="Null-subject review row", detail="kept", citation="own tracker", location={"section": "Appendix", "page": 14, "paragraph": 1, "label": "Own"},
+                               engagement_id=None, client=base["deliverable"]["client_name"].upper())]
+    codes, console, outputs, ranked, packet_lines = run_chain(packet, "two-foreign")
+    found = holds(ranked) if ranked else {}
+    check("QA17-A1 two foreign findings hold as AM-G8-foreign-finding-1 and -2 by position; a null subject and the review's own client name (case-folded) are not foreign",
+          codes == [0, 0, 0, 0] and set(found) == {"AM-G8-foreign-finding-1", "AM-G8-foreign-finding-2"} and "REV-NULL-1" in finding_ids(ranked)
+          and not leaked(list(outputs.values()) + console + [packet_lines]), [codes, sorted(found)])
+    packet = copy.deepcopy(base)
+    packet["escalations"] = ["G5: own escalation text", {"gate_id": "G5", "note": "Atlas Credit Partners release note", "engagement_id": "ENG-ATLAS"}]
+    codes, console, outputs, ranked, packet_lines = run_chain(packet, "escalation")
+    found = holds(ranked) if ranked else {}
+    check("QA17-A2 a supplied escalation object naming another engagement is replaced by a fixed escalation line and held as AM-G8-foreign-escalation-2 at escalations[1] (its position); nothing it says is kept",
+          codes == [0, 0, 0, 0] and set(found) == {"AM-G8-foreign-escalation-2"} and found["AM-G8-foreign-escalation-2"]["location"]["label"] == "Escalation entry 2 (escalations[1])"
+          and "G5: own escalation text" in ranked["escalations"] and not leaked(list(outputs.values()) + console + [packet_lines]),
+          [codes, sorted(found), console[0][:200]])
+    packet = copy.deepcopy(base)
+    packet["assertions"][0].update({"engagement_id": "ENG-ATLAS", "text": "Atlas Credit Partners revenue grew 40%", "citation": "Atlas data room"})
+    codes, console, outputs, ranked, packet_lines = run_chain(packet, "assertion")
+    label = "[record of another engagement or deliverable: assertions[0]]"
+    check("QA17-A3 an assertion naming another engagement is a positional stand-in from the first stage: unsupported release blocker (#8.15), not_ready, no supplied text anywhere, --verify passes",
+          codes == [0, 0, 0, 0] and not leaked(list(outputs.values()) + console + [packet_lines]) and ranked["assertions"][0]["assertion_id"] == label
+          and ranked["assertion_mappings"][0]["support_status"] == "unsupported" and f"AM-{label}" in finding_ids(ranked)
+          and next(item for item in ranked["findings"] if item["finding_id"] == f"AM-{label}")["severity"] == "release_blocker" and status(ranked) == "not_ready_for_release",
+          [codes, console[0][:200]])
+    packet = copy.deepcopy(base)
+    packet["evidence_set"][0].update({"client": "Atlas Credit Partners", "title": "Atlas Credit Partners ledger"})
+    packet["deliverable"]["brand_checks"][0].update({"client": "Atlas Credit Partners", "title": "Atlas Credit Partners brand row"})
+    codes, console, outputs, ranked, packet_lines = run_chain(packet, "client-and-variant")
+    check("QA17-A4 evidence naming another client and a brand check naming another client take the round-16 stand-ins and positional holds (GC-G5-brand-check-1); nothing leaks",
+          codes == [0, 0, 0, 0] and not leaked(list(outputs.values()) + console + [packet_lines]) and "GC-G5-brand-check-1" in finding_ids(ranked)
+          and ranked["evidence_set"][0]["evidence_id"] == "[record of another engagement or deliverable: evidence_set[0]]", [codes, console[0][:200]])
+
+    # 3. Every other subject-bearing member is refused at the first stage, naming only its section.
+    refusals = (
+        ("criteria", lambda p: p["criteria"].update(engagement_id="ENG-ATLAS")),
+        ("provenance", lambda p: p["provenance"].update(client="Atlas Credit Partners")),
+        ("an unknown top-level list", lambda p: p.__setitem__("atlas_rows", [{"deliverable_id": "OTHER-DELIVERABLE", "note": "Atlas"}])),
+        ("a deliverable member", lambda p: p["deliverable"].update(notes={"client": "Atlas Credit Partners"})),
+        ("a top-level client", lambda p: p.__setitem__("client", "Atlas Credit Partners")),
+        ("deliverable.engagement_id", lambda p: p["deliverable"].update(engagement_id="ENG-ATLAS")),
+        ("supplied gate_results", lambda p: p.__setitem__("gate_results", [dict(read(os.path.join(demo_a, "expected", "gate-checked.json"))["gate_results"][0], engagement_id="ENG-ATLAS")])),
+    )
+    for label, edit in refusals:
+        packet = copy.deepcopy(base)
+        edit(packet)
+        path = os.path.join(work, f"refuse-{label.replace(' ', '-')}.json")
+        out = os.path.join(work, "never-written.json")
+        write(path, packet)
+        code, stdout, stderr = run("assertion_map", "--input", path, "--out", out, "--generated-at", FIXED_TS)
+        check(f"QA17-A5 {label} naming another engagement, deliverable or client is refused at assertion_map (exit 1, no output) naming only its section, never echoing it",
+              code == 1 and not os.path.exists(out) and "another engagement, deliverable or client" in stderr and not leaked([stdout, stderr]) and "Traceback" not in stderr,
+              stderr.strip()[:300])
+    packet = copy.deepcopy(base)
+    packet["assertions"][0]["assertion_id"] = "G8-foreign-finding-1"
+    path = os.path.join(work, "reserved-assertion.json")
+    write(path, packet)
+    code, stdout, stderr = run("assertion_map", "--input", path, "--out", os.path.join(work, "never-written.json"), "--generated-at", FIXED_TS)
+    check("QA17-A6 an assertion ID that would collide with a foreign-record hold (AM-G8-foreign-finding-N) is refused as reserved",
+          code == 1 and "reserved" in stderr and not os.path.exists(os.path.join(work, "never-written.json")), stderr.strip()[:300])
+    packet = copy.deepcopy(base)
+    packet["findings"] = [dict(reported), dict({key: value for key, value in reported.items() if key not in ("engagement_id", "deliverable_id")},
+                                               finding_id="AM-G8-foreign-finding-1", gate_id="G8", severity="advisory", title="Forged hold", detail="forged", **own)]
+    codes, console, outputs, ranked, packet_lines = run_chain(packet, "forged-hold")
+    genuine = holds(ranked).get("AM-G8-foreign-finding-1", {}) if ranked else {}
+    check("QA17-A6 beside a real foreign finding, a supplied finding that forges its hold ID is an engine-ID spoof (removed and held); the genuine hold stands as a release blocker and nothing leaks",
+          codes == [0, 0, 0, 0] and any("spoof" in item for item in finding_ids(ranked)) and genuine.get("severity") == "release_blocker"
+          and genuine.get("title") == "Reviewer finding belongs to another engagement or deliverable" and "Forged hold" not in packet_lines
+          and not leaked(list(outputs.values()) + console + [packet_lines]) and status(ranked) == "not_ready_for_release",
+          [codes, sorted(finding_ids(ranked) if ranked else [])])
+
+    # 4. Sweep B: the raw-pack verifier refuses every unrecognised line by name and position, never skipping it.
+    def derive_with(label, name, edit, edit_input=None):
+        scenario = os.path.join(work, "derive", label, "scenario-a-happy")
+        shutil.copytree(demo_a, scenario, ignore=shutil.ignore_patterns("expected"))
+        path = os.path.join(scenario, "raw", name)
+        text = read_text(path)
+        changed = edit(text)
+        if changed == text:
+            raise AssertionError(f"fixture edit changed nothing in {name}")
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(changed)
+        if edit_input:
+            payload = read(os.path.join(scenario, "review-input.json"))
+            edit_input(payload)
+            write(os.path.join(scenario, "review-input.json"), payload)
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            code = dri.main([scenario])
+        return code, buffer.getvalue()
+
+    def section_body(heading, body):
+        return lambda text: re.sub(rf"(## {re.escape(heading)}\n)(?:[^\n#][^\n]*\n|\n)*", lambda m: m.group(1) + body, text, count=1)
+
+    no_brand = lambda payload: payload["deliverable"].__setitem__("brand_checks", [])
+    cases = (
+        ("brand section holding only TBD (the reproducer)", "release-registers.md", section_body("Brand and formatting checks", "TBD\n\n"), no_brand,
+         "section Brand and formatting checks entry 1 is not a recognised line"),
+        ("licensed section holding only TBD", "release-registers.md", section_body("Licensed and third-party content register", "TBD\n"), None,
+         "section Licensed and third-party content register entry 1 is not a recognised line"),
+        ("licensed none statement plus prose", "release-registers.md",
+         lambda text: text.replace("No licensed or third-party content.", "Pending legal review.\nNo licensed or third-party content."), None,
+         "section Licensed and third-party content register entry 1 is not a recognised line"),
+        ("client-data prose line", "release-registers.md", lambda text: text.replace("Handling status: ok\n", "Handling status: ok\nTBD\n"), None,
+         "section Client-data handling register entry 2 is not a recognised line"),
+        ("brand prose after a record", "release-registers.md", lambda text: text.replace("\n\n## Licensed", "\nTBD - more checks to follow\n\n## Licensed"), None,
+         "section Brand and formatting checks entry 2 is not a recognised line"),
+        ("unknown register section", "release-registers.md", lambda text: text.replace("## Brand and formatting checks", "## Brand checks"),
+         lambda payload: payload["deliverable"].pop("brand_checks"), "has a section heading that is not a known register"),
+        ("record before the first section", "release-registers.md",
+         lambda text: text.replace("\n## Client-data", "\n- legal-mark: fail. Footer missing. Legal footer omitted. Legal or release control: yes. Location: Cover, page 1, paragraph 1, Footer. Confidence: 0.99. Criteria: quality-gate-criteria.md #5.1.\n\n## Client-data", 1),
+         None, "release-registers.md line 4 is a record or heading line before the first register section"),
+        ("evidence prose after the entries", "supporting-evidence-index.md", lambda text: text.rstrip("\n") + "\nTBD: more evidence to follow\n", None,
+         "supporting-evidence-index.md line 8 is not a record of the evidence index"),
+        ("evidence subheading", "supporting-evidence-index.md", lambda text: text.replace("- EV-A4:", "## Benchmarks\n- EV-A4:"), None,
+         "supporting-evidence-index.md line 7 is not a record of the evidence index"),
+        ("prior prose after the entries", "prior-review-findings.md", lambda text: text.rstrip("\n") + "\nTBD\n", None,
+         "prior-review-findings.md line 6 is not a record of the prior-review findings"),
+        ("prior file with only its description", "prior-review-findings.md", lambda text: text.split("\n- PR-")[0] + "\n",
+         lambda payload: payload.__setitem__("prior_findings", []), "prior-review-findings.md lists no entries"),
+        ("evidence file with only a placeholder", "supporting-evidence-index.md", lambda text: "# Supporting evidence index - Scenario A\nTBD\n",
+         lambda payload: payload.__setitem__("evidence_set", []), "supporting-evidence-index.md lists no entries"),
+        ("cover part without a field name", "draft-deliverable.md", lambda text: text.replace("Status: Draft for partner review |", "Status: Draft for partner review | Draft only |"), None,
+         "draft cover line 1 has a part that is not a 'Field: value' pair"),
+        ("undocumented cover field", "draft-deliverable.md", lambda text: text.replace("Confidentiality marking:", "Client alias: Atlas Credit Partners | Confidentiality marking:"), None,
+         "draft cover gives a field that is not a documented cover field"),
+        ("repeated criteria set ID", "qrm-gate-criteria-extract.md", lambda text: text.replace("Criteria set ID: PS-QRM-DG-2026-demo\n", "Criteria set ID: PS-QRM-DG-2026-demo\nCriteria set ID: ATLAS-SET\n"), None,
+         "repeats the criteria set ID line (line 4)"),
+        ("malformed criteria set ID", "qrm-gate-criteria-extract.md", lambda text: text.replace("Criteria set ID: PS-QRM-DG-2026-demo\n", "Criteria set ID: PS-QRM-DG-2026-demo\ncriteria set id - ATLAS-SET\n"), None,
+         "line 4 names the criteria set ID but does not follow"),
+    )
+    for label, name, edit, edit_input, expected in cases:
+        code, output = derive_with(label.replace(" ", "-"), name, edit, edit_input)
+        check(f"QA17-B the raw-pack verifier refuses {label} by name and position with a non-zero exit, never echoing it",
+              code == 1 and "raw pack is malformed:" in output and expected in output
+              and not any(word in output for word in ("TBD", "Atlas", "ATLAS-SET", "Pending legal", "Benchmarks", "legal-mark", "Draft only")),
+              output.strip()[:300])
+    demos = [dri.check_scenario(os.path.join(ROOT, "demo-data", demo)) for demo in ("scenario-a-happy", "scenario-b-drama")]
+    code, output = derive_with("tbd-control", "release-registers.md", section_body("Brand and formatting checks", "TBD\n\n"), no_brand)
+    check("QA17-B both demo packs (with scenario A's licensed 'none' statement and client-data entries) still derive, while the same pack with a TBD brand section and brand_checks [] is refused",
+          demos == [[], []] and code == 1 and "Brand and formatting checks" in output, [demos, output.strip()[:200]])
+
+
 def mobilization_round20_sweep_tests(tmp):
     """Class sweep from Mobilization QA round 20 (missing is not empty): an absent, zero-byte or whitespace-only file, a
     null or absent section and a register heading with nothing under it never yield a clean result. The engines refuse
@@ -7078,7 +7335,7 @@ def run_all():
                       mobilization_round11_sweep_tests, mobilization_round12_sweep_tests,
                       tne_round10_sweep_tests, mobilization_round13_sweep_tests, qa104_round12_tests,
                       qa104_round13_tests, qa104_round13_sweep_tests, qa104_round14_tests, qa104_round15_tests, mobilization_round17_sweep_tests,
-                      mobilization_round18_sweep_tests, qa104_round16_tests, mobilization_round20_sweep_tests):
+                      mobilization_round18_sweep_tests, qa104_round16_tests, mobilization_round20_sweep_tests, qa104_round17_tests):
             run_group(group, tmp)
     for group in (recipient_classifier_tests, tripwire_tests, packet_template_tests, skill_doc_tests,
                   skill_trigger_tests, version_tests, shared_copy_tests):

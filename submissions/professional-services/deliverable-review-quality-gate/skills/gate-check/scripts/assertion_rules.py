@@ -339,16 +339,17 @@ def is_am_spoof_id(finding_id):
     return isinstance(finding_id, str) and canonical_id(finding_id) == canonical_id(AM_SPOOF_ID)
 
 
-def merge_recomputed_findings(supplied, raw_supplied, recomputed):
+def merge_recomputed_findings(supplied, raw_supplied, recomputed, holds=()):
     """Combine supplied findings with the AM- findings assertion_map recomputes (quality-gate-criteria.md #8.4).
 
     IDs are compared in canonical form (canonical_id). A supplied finding whose raw ID is assertion_map-owned and
-    collides with a recomputed finding (or with the AM spoof hold) stands only when it is exactly that finding; any
-    other copy is dropped, so the genuine finding replaces it and the ID is never duplicated. Every other supplied
-    finding passes through for gate_check to screen. Missing recomputed findings are appended in assertion order, so a
-    re-run on assertion_map's own output reproduces it. `raw_supplied[i]` is findings[i] before withholding, so a
-    flagged ID keeps its owner. Returns (findings, number of supplied findings dropped as spoofed)."""
-    reserved = {canonical_id(item["finding_id"]): item for item in recomputed}
+    collides with a recomputed finding (or with the AM spoof hold or a foreign-entry hold in `holds`) stands only when
+    it is exactly that finding; any other copy is dropped, so the genuine finding replaces it and the ID is never
+    duplicated. Every other supplied finding passes through for gate_check to screen. Missing recomputed findings and
+    `holds` are appended in order, so a re-run on assertion_map's own output reproduces it. `raw_supplied[i]` is
+    findings[i] before withholding, so a flagged ID keeps its owner. Returns (findings, number of supplied findings
+    dropped as spoofed)."""
+    reserved = {canonical_id(item["finding_id"]): item for item in list(recomputed) + list(holds)}
     reserved[canonical_id(AM_SPOOF_ID)] = am_spoof_finding()
     kept, spoofed = [], 0
     for index, item in enumerate(supplied):
@@ -360,9 +361,10 @@ def merge_recomputed_findings(supplied, raw_supplied, recomputed):
             continue
         kept.append(item)
     present = {canonical_id(item["finding_id"]) for item in kept if isinstance(item, dict) and isinstance(item.get("finding_id"), str)}
-    for item in recomputed:
+    for item in list(recomputed) + list(holds):
         if canonical_id(item["finding_id"]) not in present:
             kept.append(item)
+            present.add(canonical_id(item["finding_id"]))
     if spoofed and canonical_id(AM_SPOOF_ID) not in present:
         kept.append(am_spoof_finding())
     return kept, spoofed
@@ -616,6 +618,10 @@ def assertion_map_stage(payload, generated_at=None):
     # A record of another engagement or deliverable is replaced by its fixed, positional stand-in before anything reads
     # it, so none of its supplied fields reaches any output (quality-gate-criteria.md #8.15).
     sanitise_foreign_records(payload)
+    # A reviewer finding or escalation object of another engagement, deliverable or client is replaced by assertion_map's
+    # fixed, positional hold, and any other member naming one is refused (quality-gate-criteria.md #8.15).
+    foreign_holds = quarantine_foreign_upstream(payload, raw_findings)
+    require_no_foreign_subject(payload)
     evidence_by_id = evidence_index(payload["evidence_set"])
     escalations = list(payload.get("escalations", []))
     mappings, recomputed = [], []
@@ -629,7 +635,7 @@ def assertion_map_stage(payload, generated_at=None):
                 escalations.append(escalation)
     # A supplied finding colliding with a recomputed one (canonical ID) is replaced by the genuine finding and held
     # as a spoof under G8, never duplicated (quality-gate-criteria.md #8.4).
-    findings, spoofed = merge_recomputed_findings(list(payload.get("findings", [])), raw_findings, recomputed)
+    findings, spoofed = merge_recomputed_findings(list(payload.get("findings", [])), raw_findings, recomputed, foreign_holds)
     if spoofed and AM_SPOOF_ESCALATION not in escalations:
         escalations.append(AM_SPOOF_ESCALATION)
     payload["assertion_mappings"], payload["findings"], payload["escalations"] = mappings, findings, escalations
@@ -837,6 +843,8 @@ def validate_assertion(assertion, index):
     require_text(assertion, "assertion_id", label)
     if is_am_spoof_id(f"AM-{assertion['assertion_id']}"):
         raise InputError(f"{label}.assertion_id is reserved: its assertion_map finding ID would be the engine's own spoof hold ({AM_SPOOF_ID}); choose another assertion ID")
+    if FOREIGN_HOLD_KEY.fullmatch(canonical_id(f"AM-{assertion['assertion_id']}")):
+        raise InputError(f"{label}.assertion_id is reserved: its assertion_map finding ID would be one of the engine's own foreign-entry holds (AM-G8-foreign-...); choose another assertion ID")
     require_text(assertion, "class", label)
     require_text(assertion, "text", label, allow_blank=True)
     require_text(assertion, "citation", label, allow_blank=True)
@@ -896,45 +904,86 @@ def evidence_for(evidence_by_id, evidence_id):
     return evidence_by_id.get(key) if key is not None else None
 
 
-SUBJECT_FIELDS = ("engagement_id", "deliverable_id")
+# The subject a record can name (#8.15), by the engine's constant member name: the engagement, the deliverable and the
+# client. A member names one when its name, in canonical form with separators removed (field_name_key), is the subject
+# word followed by one of SUBJECT_SUFFIXES, so `engagement_id`, `Engagement-ID`, `engagementRef`, `client_name` and
+# `client` all count. `client` with no suffix or `name` is compared with the review's client_name and client_aliases;
+# any other client suffix (an ID, reference, code or number) has nothing in the review to compare with, so it is never
+# verified and always counts as foreign.
+SUBJECT_FIELDS = ("engagement_id", "deliverable_id", "client")
+SUBJECT_WORDS = (("engagement", "engagement_id"), ("deliverable", "deliverable_id"), ("client", "client"))
+SUBJECT_SUFFIXES = ("", "id", "ids", "ref", "reference", "code", "number", "no", "key", "name")
+CLIENT_NAME_SUFFIXES = ("", "name")
+
+
+def subject_member(name):
+    """(the SUBJECT_FIELDS constant, compared by name) when member `name` names a subject, else None. `compared` is
+    False for a client member that states an identifier rather than a name (nothing to compare it with)."""
+    if not isinstance(name, str):
+        return None
+    compact = field_name_key(name).replace(" ", "")
+    for word, constant in SUBJECT_WORDS:
+        if compact.startswith(word) and compact[len(word):] in SUBJECT_SUFFIXES:
+            return constant, constant != "client" or compact[len(word):] in CLIENT_NAME_SUFFIXES
+    return None
 
 
 def review_subject(payload):
-    """The subject every linked record must share: the review's engagement_id and deliverable.deliverable_id, as given
-    (quality-gate-criteria.md #8.15)."""
+    """The subject every linked record must share: the review's engagement_id, deliverable.deliverable_id and client
+    (deliverable.client_name and every client_aliases entry), as given (quality-gate-criteria.md #8.15)."""
     payload = payload if isinstance(payload, dict) else {}
     deliverable = payload.get("deliverable") if isinstance(payload.get("deliverable"), dict) else {}
-    return {"engagement_id": payload.get("engagement_id"), "deliverable_id": deliverable.get("deliverable_id")}
+    aliases = deliverable.get("client_aliases") if isinstance(deliverable.get("client_aliases"), list) else []
+    clients = [name for name in [deliverable.get("client_name")] + aliases if isinstance(name, str)]
+    return {"engagement_id": payload.get("engagement_id"), "deliverable_id": deliverable.get("deliverable_id"), "client": clients}
+
+
+def _subject_matches(value, own):
+    """True when a stated subject value equals the review's own (`own` is a string, or a list of client names). A
+    non-string, blank or withheld value on either side never matches (#8.13, #8.17)."""
+    if not isinstance(value, str) or contains_withheld(value):
+        return False
+    owned = own if isinstance(own, list) else [own]
+    return any(isinstance(item, str) and not contains_withheld(item) and keys_match(value, item) for item in owned)
+
+
+def _subject_members(value, depth=0):
+    """(constant, compared, member value) for every member of `value` that names a subject, at any depth (a location or
+    any other nested object of the record counts as the record's own)."""
+    if depth > MAX_INPUT_DEPTH:
+        return
+    if isinstance(value, dict):
+        for key, child in value.items():
+            named = subject_member(key)
+            if named is not None:
+                yield named[0], named[1], child
+            elif isinstance(child, (dict, list)):
+                yield from _subject_members(child, depth + 1)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _subject_members(child, depth + 1)
 
 
 def foreign_subject(record, subject):
-    """The subject fields (engagement_id, deliverable_id) on which a linked record names another engagement or
-    deliverable than the review (#8.15); [] when it shares the subject. An absent or null field names no subject, so the
-    record is the review's own. Values are compared by keys_match (#8.11): a value blank after the fold on either side
-    states no subject to compare, so it never matches and counts as foreign (#8.17). A value that is withheld on either side
-    cannot be verified, and every copy of one flagged text carries the same marker, so a withheld value never matches:
-    it counts as foreign and holds (#8.13)."""
+    """The subjects (SUBJECT_FIELDS constants, in that order) on which a record names another engagement, deliverable
+    or client than the review (#8.15); [] when it shares the subject. Every member that names a subject (subject_member)
+    counts, at any depth of the record and in any spelling. An absent or null member names no subject, so the record is
+    the review's own. Values are compared by keys_match (#8.11): a value blank after the fold on either side states no
+    subject to compare, so it never matches and counts as foreign (#8.17); a non-string value (an object, array, number
+    or boolean) states no comparable subject and counts as foreign. A value that is withheld on either side cannot be
+    verified, and every copy of one flagged text carries the same marker, so a withheld value never matches: it counts
+    as foreign and holds (#8.13). A client identifier (not a name) has nothing to compare with and counts as foreign."""
     if not isinstance(record, dict) or not isinstance(subject, dict):
         return []
-    fields = []
-    for key in SUBJECT_FIELDS:
-        value, own = record.get(key), subject.get(key)
+    found = set()
+    for constant, compared, value in _subject_members(record):
         if value is None:
             continue
-        if (not isinstance(value, str) or not isinstance(own, str) or contains_withheld(value) or contains_withheld(own)
-                or not keys_match(value, own)):
-            fields.append(key)
-    return fields
+        if not compared or not _subject_matches(value, subject.get(constant)):
+            found.add(constant)
+    return [key for key in SUBJECT_FIELDS if key in found]
 
 
-# Linked records that may carry their own subject (#8.15): (path segments, ID member, the contract's required members
-# with the fixed values a foreign record's stand-in takes).
-SUBJECT_RECORDS = (
-    (("evidence_set",), "evidence_id", ()),
-    (("deliverable", "brand_checks"), "check_id", (("legal_or_release_control", False),)),
-    (("deliverable", "licensed_content"), "content_id", (("attribution_present", False),)),
-    (("prior_findings",), "finding_id", (("claimed_closed", False), ("document_fix_present", False))),
-)
 # Engine text a foreign record's stand-in carries. Neither is an identifier token (#8.11), so no review-input ID can
 # equal one, and FOREIGN_SUBJECT never matches the review's own subject, so the stand-in stays foreign at every stage.
 FOREIGN_SUBJECT = "[another engagement or deliverable]"
@@ -945,16 +994,39 @@ def foreign_record_id(path):
     return f"[record of another engagement or deliverable: {path}]"
 
 
+def _positional_location(path):
+    return {"section": FOREIGN_SUBJECT, "page": None, "paragraph": None, "label": foreign_record_id(path)}
+
+
+# Record lists whose entries may carry their own subject and are quarantined by a stand-in (#8.15): (path segments, ID
+# member, the contract's required members with the fixed values a foreign record's stand-in takes; a callable takes the
+# record's path). A foreign assertion keeps the contract's required members with fixed values that can never support it
+# or clear a gate: no evidence, scope_aligned false, confidence 0, and map_assertion holds it (#8.15). findings[] and
+# escalations[] entries are replaced by assertion_map's fixed hold instead (quarantine_foreign_upstream).
+SUBJECT_RECORDS = (
+    (("evidence_set",), "evidence_id", ()),
+    (("deliverable", "brand_checks"), "check_id", (("legal_or_release_control", False),)),
+    (("deliverable", "licensed_content"), "content_id", (("attribution_present", False),)),
+    (("prior_findings",), "finding_id", (("claimed_closed", False), ("document_fix_present", False))),
+    (("assertions",), "assertion_id", (("class", "factual"), ("text", FOREIGN_SUBJECT), ("location", _positional_location),
+                                       ("evidence_ids", []), ("scope_aligned", False), ("confidence", 0.0),
+                                       ("source", AM_ENGINE), ("citation", FOREIGN_SUBJECT))),
+)
+
+
 def _markers_only(value):
     """The engine markers a string carries, joined, with no supplied text; None when it carries none."""
+    if not isinstance(value, str):
+        return None
     markers = list(dict.fromkeys(marker_texts(value)))
     return " ".join(markers) if markers else None
 
 
 def foreign_record_stand_in(item, subject, path, id_key, fixed):
-    """The fixed stand-in of a record that names another engagement or deliverable (foreign_subject), else None. Only
-    engine text survives: the ID becomes foreign_record_id(path) and each foreign subject field FOREIGN_SUBJECT, the
-    contract's required members take `fixed` values, and every other member is dropped. Text the screen already
+    """The fixed stand-in of a record that names another engagement, deliverable or client (foreign_subject), else
+    None. Only engine text survives: the ID becomes foreign_record_id(path) and each foreign subject FOREIGN_SUBJECT
+    under the engine's constant member name (SUBJECT_FIELDS, never the supplied spelling), the contract's required
+    members take `fixed` values, and every other member is dropped, nested objects included. Text the screen already
     withheld keeps only its engine marker, in its own member (a location keeps a fixed section and label), so its G8
     hold and #8.13 handling stand; an ID or subject that is exactly a marker stays that marker."""
     fields = foreign_subject(item, subject)
@@ -962,21 +1034,24 @@ def foreign_record_stand_in(item, subject, path, id_key, fixed):
         return None
     record_id = item.get(id_key)
     stand_in = {id_key: record_id if is_withheld(record_id) else foreign_record_id(path)}
-    for key in fields:
-        stand_in[key] = item[key] if is_withheld(item[key]) else FOREIGN_SUBJECT
-    stand_in.update(fixed)
+    for constant in fields:
+        stated = [value for key, value in item.items() if (subject_member(key) or (None,))[0] == constant]
+        stand_in[constant] = next((_markers_only(value) for value in stated if _markers_only(value)), FOREIGN_SUBJECT)
+    stand_in.update({key: copy.deepcopy(value(path) if callable(value) else value) for key, value in fixed})
+    replaceable = {key for key, value in fixed if isinstance(value, str) or callable(value)}
     for key, value in item.items():
-        if key in stand_in:
+        if (key in stand_in and key not in replaceable) or subject_member(key) is not None:
             continue
         if contains_withheld(key):
-            stand_in[key] = (_markers_only(value) if isinstance(value, str) else None) or FOREIGN_SUBJECT
+            stand_in[key] = _markers_only(value) or FOREIGN_SUBJECT
         elif isinstance(value, str) and _markers_only(value):
             stand_in[key] = _markers_only(value)
         elif key == "location" and isinstance(value, dict):
             kept = {member: _markers_only(value.get(member)) for member in ("section", "label")}
+            base = stand_in.get("location") if isinstance(stand_in.get("location"), dict) else {}
             if any(kept.values()):
                 stand_in[key] = {"section": kept["section"] or FOREIGN_SUBJECT, "page": None, "paragraph": None,
-                                 "label": kept["label"] or FOREIGN_SUBJECT}
+                                 "label": kept["label"] or base.get("label") or FOREIGN_SUBJECT}
     return stand_in
 
 
@@ -1015,6 +1090,104 @@ def sanitise_foreign_records(payload):
                 if key_of(record.get("best_evidence_id")) in renamed and not contains_withheld(record["best_evidence_id"]):
                     record["best_evidence_id"] = renamed[key_of(record["best_evidence_id"])]
     return replaced
+
+
+# Upstream entries assertion_map replaces by a fixed hold when they name another engagement, deliverable or client
+# (#8.15): kind -> (label, field path, location section). Only the kind and the position vary, so gate_check and
+# severity_rank verify a hold exactly (am_foreign_hold_for) and a re-run reproduces it.
+FOREIGN_HOLD_KINDS = {
+    "finding": ("Reviewer finding", "findings", "Upstream findings"),
+    "escalation": ("Escalation entry", "escalations", "Escalations"),
+}
+FOREIGN_HOLD_ID = re.compile(r"AM-G8-foreign-(finding|escalation)-([1-9][0-9]{0,8})")
+FOREIGN_HOLD_KEY = re.compile(r"am g8 foreign (?:finding|escalation) [0-9]+")
+
+
+def _foreign_where(kind, index):
+    label, field, _ = FOREIGN_HOLD_KINDS[kind]
+    return f"{label} {index + 1} ({field}[{index}])"
+
+
+def am_foreign_hold(kind, index):
+    """assertion_map's fixed G8 release blocker for the `kind` entry at `index` that names another engagement,
+    deliverable or client (#8.15): positional only, with none of the entry's supplied fields."""
+    where = _foreign_where(kind, index)
+    return {"finding_id": f"AM-G8-foreign-{kind}-{index + 1}", "gate_id": "G8", "severity": "release_blocker",
+            "title": f"{FOREIGN_HOLD_KINDS[kind][0]} belongs to another engagement or deliverable",
+            "detail": f"{where}, supplied with the review input, names another engagement, deliverable or client than this review's (or one that cannot be verified), so it was replaced by this hold and none of its identifier, title, detail, location or other fields are shown; the reviewing partner/QRM must confirm or remove it before release.",
+            "location": {"section": FOREIGN_HOLD_KINDS[kind][2], "page": None, "paragraph": None, "label": where},
+            "criteria_section": "quality-gate-criteria.md #8.15", "confidence": 0.97, "source": AM_ENGINE,
+            "citation": "quality-gate-criteria.md #8.15; severity-rules.md #1.1"}
+
+
+def am_foreign_escalation(kind, index):
+    where = _foreign_where(kind, index)
+    return (f"G8: {where[0].lower()}{where[1:]} names another engagement, deliverable or client - release blocker; hold "
+            "for reviewing partner/QRM (quality-gate-criteria.md #8.15)")
+
+
+def am_foreign_hold_for(finding_id):
+    """The fixed foreign-entry hold a finding ID names exactly (am_foreign_hold), else None."""
+    match = FOREIGN_HOLD_ID.fullmatch(finding_id) if isinstance(finding_id, str) else None
+    return am_foreign_hold(match.group(1), int(match.group(2)) - 1) if match else None
+
+
+def quarantine_foreign_upstream(payload, raw_findings):
+    """Replace, in place, every findings[] entry and every escalations[] object that names another engagement,
+    deliverable or client (foreign_subject, any member at any depth) by assertion_map's fixed, positional hold, so none
+    of its supplied ID, title, detail, location, citation or other field reaches any output, log or the review packet
+    (quality-gate-criteria.md #8.15). A finding is replaced by its hold (am_foreign_hold) and its escalation is added;
+    an escalation object is replaced by its fixed escalation (am_foreign_escalation). Returns every hold, for
+    merge_recomputed_findings to reserve and, for an escalation, add. `raw_findings[i]` becomes the hold too, so
+    ownership is read from the hold."""
+    subject = review_subject(payload)
+    findings = payload.get("findings") if isinstance(payload.get("findings"), list) else []
+    escalations = payload.get("escalations") if isinstance(payload.get("escalations"), list) else []
+    added = []
+    for index, item in enumerate(findings):
+        if isinstance(item, dict) and foreign_subject(item, subject):
+            findings[index] = am_foreign_hold("finding", index)
+            if index < len(raw_findings):
+                raw_findings[index] = am_foreign_hold("finding", index)
+            added.append(am_foreign_hold("finding", index))
+            note = am_foreign_escalation("finding", index)
+            if note not in escalations:
+                escalations.append(note)
+    for index, entry in enumerate(list(escalations)):
+        if isinstance(entry, dict) and foreign_subject(entry, subject):
+            escalations[index] = am_foreign_escalation("escalation", index)
+            added.append(am_foreign_hold("escalation", index))
+    return added
+
+
+# Sections whose entries are quarantined above (SUBJECT_RECORDS, quarantine_foreign_upstream), and the members that
+# define the review's own subject; require_no_foreign_subject checks every other member of the review input.
+QUARANTINED_SECTIONS = {(): ("engagement_id", "deliverable", "evidence_set", "assertions", "prior_findings", "findings", "escalations"),
+                        ("deliverable",): ("deliverable_id", "client_name", "client_aliases", "brand_checks", "licensed_content")}
+
+
+def require_no_foreign_subject(payload):
+    """Refuse the review input when a member outside the quarantined record lists names another engagement,
+    deliverable or client (foreign_subject): the criteria object, provenance, a supplied derived section, the
+    deliverable's other members, any top-level member or section outside the contract, at any depth. None of those is
+    a record list whose entries may carry their own subject, so nothing can stand in for it; refusing at the first stage
+    writes no output. The message names a contract section, or a fixed phrase, never the member or its value (#8.9,
+    #8.15)."""
+    subject = review_subject(payload)
+    for scope, skipped in QUARANTINED_SECTIONS.items():
+        container = payload.get(scope[0]) if scope else payload
+        if not isinstance(container, dict):
+            continue
+        for key, value in container.items():
+            if key in skipped or not foreign_subject({key: value}, subject):
+                continue
+            # The message names the engine's own constant for a contract section, never the supplied member name.
+            where = ("deliverable" if scope else COMPARED_SECTIONS[COMPARED_SECTIONS.index(key)] if key in COMPARED_SECTIONS and isinstance(value, (dict, list))
+                     else "a top-level member" if subject_member(key) is not None else "a section outside the contract")
+            raise InputError(f"{where} names another engagement, deliverable or client than this review's, or one that "
+                             "cannot be verified. Only the record lists of quality-gate-criteria.md #8.15 may carry their "
+                             "own subject, and a foreign record there is quarantined; remove it from the review input "
+                             "(quality-gate-criteria.md #8.15)")
 
 
 _CONTRACT_SCHEMA = []
@@ -1362,11 +1535,15 @@ def is_definitive_conclusion(assertion):
 
 
 FOREIGN_SUPPORT_SECTION = "quality-gate-criteria.md #1.1; quality-gate-criteria.md #8.15"
+FOREIGN_ASSERTION_SECTION = "quality-gate-criteria.md #8.15"
+FOREIGN_ASSERTION_RATIONALE = ("The assertion names another engagement, deliverable or client than this review's (or one that "
+                               "cannot be verified), so it was replaced by a positional stand-in, is not reviewed against "
+                               "this deliverable's evidence and its text is not shown; hold for reviewing partner/QRM")
 
 
 def foreign_rationale(foreign_ids):
-    return (f"{len(foreign_ids)} linked evidence item(s) name another engagement or deliverable (engagement_id or "
-            "deliverable_id differs from this review's, or cannot be verified), so they are not used and the declared "
+    return (f"{len(foreign_ids)} linked evidence item(s) name another engagement or deliverable (engagement_id, "
+            "deliverable_id or client differs from this review's, or cannot be verified), so they are not used and the declared "
             "support cannot be verified; hold for reviewing partner/QRM")
 
 
@@ -1439,6 +1616,12 @@ def map_assertion(assertion, evidence_by_id, subject=None):
     foreign_ids = foreign_references(assertion, evidence_by_id, subject)
     missing_ids = [eid for eid in assertion.get("evidence_ids") or [] if evidence_for(evidence_by_id, eid) is None and not is_withheld_reference(evidence_by_id, eid)]
     status, support_score, rationale, criteria_section = classify(assertion, evidence, missing_ids, withheld_ids, foreign_ids)
+    # An assertion of another engagement, deliverable or client (its stand-in, sanitise_foreign_records) is never
+    # reviewed as this deliverable's claim: it is unsupported and holds the release (quality-gate-criteria.md #8.15).
+    foreign_assertion = bool(foreign_subject(assertion, subject))
+    if foreign_assertion:
+        evidence, status, support_score = None, "unsupported", 0.0
+        rationale, criteria_section = FOREIGN_ASSERTION_RATIONALE, FOREIGN_ASSERTION_SECTION
     mapping = {
         "assertion_id": assertion["assertion_id"], "class": assertion["class"], "text": assertion["text"],
         "location": assertion["location"], "evidence_ids": assertion.get("evidence_ids") or [],
@@ -1449,7 +1632,7 @@ def map_assertion(assertion, evidence_by_id, subject=None):
     }
     if status not in {"unsupported", "limited"}:
         return mapping, None, None
-    severity = "release_blocker" if foreign_ids or (
+    severity = "release_blocker" if foreign_ids or foreign_assertion or (
         status == "unsupported"
         and (assertion["class"] == "quantified" or is_definitive_conclusion(assertion))
     ) else "must_fix" if status == "unsupported" else "advisory"

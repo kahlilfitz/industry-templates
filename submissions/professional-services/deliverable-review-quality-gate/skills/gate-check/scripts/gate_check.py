@@ -161,10 +161,14 @@ def expected_assertion_outputs(payload, evidence_set):
 
 def genuine_am_finding(item, expected_am):
     """True when an AM- finding is exactly what assertion_map emits for the current assertions and evidence
-    (`expected_am`, keyed by finding ID), or exactly assertion_map's fixed spoof hold (rules.am_spoof_finding), which
-    can only hold the run (quality-gate-criteria.md #8.4)."""
+    (`expected_am`, keyed by finding ID), exactly assertion_map's fixed spoof hold (rules.am_spoof_finding), or exactly
+    one of its fixed foreign-entry holds (rules.am_foreign_hold_for), each of which can only hold the run
+    (quality-gate-criteria.md #8.4, #8.15)."""
     if rules.is_am_spoof_id(item.get("finding_id")):
         return item == rules.am_spoof_finding()
+    foreign_hold = rules.am_foreign_hold_for(item.get("finding_id"))
+    if foreign_hold is not None:
+        return item == foreign_hold
     return expected_am is not None and expected_am.get(item.get("finding_id")) == item
 
 def screen_upstream_findings(upstream, expected, raw_upstream=None):

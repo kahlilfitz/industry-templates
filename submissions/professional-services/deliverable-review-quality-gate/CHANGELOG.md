@@ -688,6 +688,50 @@ The structural patterns described at the top of this entry are replaced, not sup
 
   Goldens are byte-identical.
 
+### QA round 17 on 1.0.4 (a foreign reviewer finding was carried through; prose read as an empty register; 2 reproduced defects, plus both class sweeps)
+
+- **DRQG-QA17-01 (blocking): a supplied reviewer finding of another engagement and deliverable reached every output.** In the reproducer, scenario A's `findings` gets `REV-FOREIGN-1` with another party's title, detail, location and citation, `engagement_id` "ENG-ATLAS" and `deliverable_id` "OTHER-DELIVERABLE". Every stage and `--verify` passed. "Atlas", "ENG-ATLAS" and "OTHER-DELIVERABLE" were in the mapped, gated and ranked JSON, and the ranked title was the foreign text. The status was `partner_review_required_advisories_only`. Cause: `SUBJECT_RECORDS` (`assertion_rules.py`) covered only evidence, brand checks, licensed content and prior findings, and compared only the exact keys `engagement_id` and `deliverable_id`.
+- Fix (quality-gate-criteria.md #8.15). Every check runs in `assertion_map_stage` straight after `sanitise_foreign_records`, so every re-deriving stage and `--verify` reproduce it (#8.21):
+  - **Subject detection.** `foreign_subject` reads every member that names an engagement, deliverable or client, at any depth (for example `location.engagement_id`) and in any key spelling (`engagementId`, `Deliverable ID`, `client_ref`). A client name must equal `deliverable.client_name` or a `client_aliases` entry (canonical comparison). A client identifier, or a subject that is not a string, cannot be compared and counts as foreign.
+  - **Reviewer findings and escalation objects.** New `quarantine_foreign_upstream` replaces a foreign entry in place by a fixed, positional G8 release-blocker hold: `AM-G8-foreign-finding-N` at "Reviewer finding N (findings[N-1])", or `AM-G8-foreign-escalation-N` at "Escalation entry N (escalations[N-1])". A fixed escalation line is recorded with it. `gate_check.genuine_am_finding` accepts only the exact hold template. A supplied finding that copies a hold ID is an engine-ID spoof, and an assertion ID that would collide with a hold ID is reserved.
+  - **Assertions.** Added to `SUBJECT_RECORDS`. A foreign assertion becomes a positional stand-in with fixed values. `map_assertion` makes it an unsupported release blocker that is never reviewed against this deliverable.
+  - **Every other member.** New `require_no_foreign_subject` refuses the input at the first stage when another subject appears anywhere else: `criteria`, `provenance`, another `deliverable` member (including a differing `deliverable.engagement_id`), a top-level member, a supplied derived section or a section outside the contract. Nothing can stand in for these. The message names only the section, and no output is written.
+  - The reproducer now ends `not_ready_for_release` with no supplied text in any output, the log, stderr or the packet. Its outputs equal those of any other foreign finding at the same position.
+- **Sweep A (every record list or object in the review input that carries a subject):**
+
+  | List or object | Status |
+  |---|---|
+  | `findings[]` | Fixed: positional hold `AM-G8-foreign-finding-N` and escalation |
+  | `escalations[]` objects | Fixed: fixed line and `AM-G8-foreign-escalation-N` (string entries have no members) |
+  | `assertions[]` | Fixed: positional stand-in, unsupported G1 release blocker |
+  | `evidence_set[]`, `deliverable.brand_checks[]`, `deliverable.licensed_content[]`, `prior_findings[]` | Round-16 stand-ins, now also for client subjects, variant keys and nested members |
+  | `criteria`, `provenance`, supplied `assertion_mappings` / `gate_results` / `ranked_findings` / `release_readiness`, other `deliverable` members, top-level members, sections outside the contract | Fixed: refused at the first stage |
+  | `intended_recipients`, `client_aliases`, `required_language`, `present_language`, `present_disclaimer_types`, `criteria.criteria_sections`, `provenance.engines` | String lists with no members, so none can carry a subject. Recipients are already screened by the G2 recipient checks |
+
+- **DRQG-QA17-02 (blocking): prose in a raw register section was read as an empty register.** In `tests/derive_review_input.py`, `record_match()` returned None for a line that was not record-shaped, and `parse_registers()` had already set the section to `[]`. A `## Brand and formatting checks` section whose only line was "TBD", paired with `brand_checks: []`, derived cleanly, and the brand advisory disappeared. Fix: every non-blank line of a known register section must be a record or one of that register's documented fixed lines. Anything else is refused by file, section and entry number, with a non-zero exit and the line never echoed. The only documented explicit "none" statement is the licensed-content register's `No licensed or third-party content.`, as the section's only line. The brand-check register defines none.
+- **Sweep B (every raw, markdown or CSV parser):**
+
+  | Parser | Before | Now |
+  |---|---|---|
+  | `parse_registers`, client-data section | Lines other than `Handling status` were skipped | Only `Handling status: <status>`, `- <ID>: <description>` and `Check basis: <text>` are recognised; anything else is refused |
+  | `parse_registers`, brand and licensed sections | Prose was skipped | Refused, except the licensed "none" statement when it is the section's only line |
+  | `register_sections` | Unknown `## ` sections and lines before the first section were ignored | An unknown section heading is refused, and so is a record or heading line before the first section. The `# ` title and description are recognised |
+  | `parse_evidence`, `parse_prior` (new `record_lines`) | Any line that was not record-shaped was skipped | Only the `# ` title and description may precede the first entry. A later heading or prose line, or a file with no entry, is refused |
+  | `parse_draft` cover | A part without `: ` and an unknown field were skipped | A part that is not `Field: value` (a blank `Field:` stays missing) and a field outside `COVER_FIELDS` are refused |
+  | Criteria extract (new `criteria_set_id`) | First match only | A repeated or malformed `Criteria set ID` line is refused. The rest of the extract is criteria prose and is not derived (`criteria_sections` is the fixed floor) |
+  | `parse_draft` body, `parse_location` | Already consumed every line, or refused | Unchanged |
+  | Engines | No markdown or CSV parser (JSON only, through `load_json_file`) | Unchanged |
+
+- Message check: `require_no_foreign_subject` names a contract section through the `COMPARED_SECTIONS` constant, never the supplied member name, so `tests/check_messages.py` passes.
+- Behaviour change, by design: the evidence `foreign_rationale` now reads "engagement_id, deliverable_id or client differs". No existing test expectation changed.
+- Docs: quality-gate-criteria.md #8.15 (all six copies), and the assertion-map, gate-check and deliverable-ingest SKILL.md files. The deliverable-ingest SKILL.md now says that a `TBD` register is not supplied, never `[]`. The `tests/derive_review_input.py` docstring is updated too.
+- Tests: 1607 checks (were 1564), with 43 new in `qa104_round17_tests`. Every new check fails against the round-16 code. They cover:
+  - the reproducer through every stage and `--verify`: no supplied text in any output, console line or packet line; the positional hold and its escalation; the placeholder already in mapped output; `not_ready_for_release`; outputs equal to another foreign finding's; gate_check idempotent; and `--verify` refusing the pre-fix ranked output;
+  - Sweep A: six subject variants, each beside a same-subject control finding; two foreign findings next to null-subject and own-client controls; an escalation object; an assertion; client-named evidence and brand checks; seven refused sections; the reserved assertion ID; and a forged hold ID;
+  - Sweep B: 16 raw-pack refusals, including the TBD reproducer, plus a control showing that both demos still derive.
+
+  Goldens are byte-identical.
+
 ## 1.0.3 - 2026-10-01
 
 Fixes every FAIL, WEAK and should-fix item in the Cowork 1.0.2 evaluation (42/50, Blocked).

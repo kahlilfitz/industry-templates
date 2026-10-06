@@ -19,7 +19,17 @@ quoted from the located paragraph under the stated section and page, sample and 
 must appear as a standalone number in that paragraph or in a linked evidence entry's title or
 description (never in an ID, type, source or confidence), and every evidence ID must be indexed.
 In a known register section every record-shaped line (a list item, or a line carrying one of that
-register's field labels) must parse; one that does not is an error, never silently dropped.
+register's field labels) must parse; one that does not is an error, never silently dropped. Every
+other non-blank line must be one of the documented fixed lines, or it is refused by file, section
+and position (never echoed): the client-data register's 'Handling status: <status>', '- <ID>:
+<description>' and 'Check basis: <text>' lines, and the licensed-content register's explicit none
+statement 'No licensed or third-party content.' as the section's only line (the brand-check
+register defines no none statement). Prose such as "TBD" is never read as an empty register. A
+section heading that is not a known register, a record or heading line before the first section,
+and in the evidence index and prior-findings export a heading after the `# ` title, prose after
+the first entry or a file with no entry are errors too. Every draft cover part must be a
+documented 'Field: value' pair (COVER_FIELDS), and the criteria extract must give its set ID on one
+'Criteria set ID: <ID>' line.
 Missing is not empty: a raw file that is missing (release-registers.md excepted: a missing
 registers file or section is a register that was not supplied, which the engines hold), zero
 bytes, or only blank lines and headings, and a known register section with a heading and no
@@ -77,6 +87,15 @@ NUMBER = re.compile(r"(?<![\w.])[0-9][0-9,]*(?:\.[0-9]+)?(?!\w|\.\w)")
 RECORD_ITEM = re.compile(r"^(?:[-*+]|[0-9]{1,9}[.)])[ \t]")
 HANDLING_LINE = re.compile(r"^handling[ \t]+status\b", re.IGNORECASE)
 HANDLING = re.compile(r"^Handling status: (\w+)$")
+# The client-data register's other documented lines: one entry per client extract used, and the check basis.
+CLIENT_DATA_ENTRY = re.compile(r"^- (?P<id>[\w-]+): [^\r\n]*[^ \t\r\n][^\r\n]*$")
+CHECK_BASIS = re.compile(r"^Check basis: [^\r\n]*[^ \t\r\n][^\r\n]*$")
+# The only documented explicit "none" statement: the licensed-content register's opening sentence, alone in its section.
+LICENSED_NONE = re.compile(r"^No licensed or third-party content\.(?:[ \t][^\r\n]*)?$")
+CRITERIA_SET_LINE = re.compile(r"^[ \t]*criteria[ \t]+set[ \t]+id\b", re.IGNORECASE)
+# Documented cover fields (deliverable-ingest step 5); Status is recorded on the cover but not derived.
+COVER_FIELDS = ("Status", "Document type", "Client", "Client aliases", "Engagement", "Document ID", "Version",
+                "Confidentiality marking", "Distribution")
 RECORD_LABELS = {
     "brand-check register": ("Legal or release control:", "Criteria:"),
     "licensed-content register": ("Attribution present:", "License status:", "Register:"),
@@ -203,15 +222,22 @@ def parse_draft(text):
     flush()
     if not paginated and any(key[0] != 1 for key in blocks):
         raise PackError("unpaginated draft produced a page other than 1")
-    cover = {}
+    cover, blank = {}, set()
     first = next((block for key, block in sorted(blocks.items()) if block["section"] == "Cover"), None)
-    for line in first["lines"] if first else []:
+    for number, line in enumerate(first["lines"] if first else [], 1):
         for part in line.split(" | "):
             key, sep, value = part.partition(": ")
-            if sep:
-                if key.strip() in cover:
-                    raise PackError(f"draft cover repeats a field name ({show(key.strip())}); a later value would overwrite the earlier")
-                cover[key.strip()] = value.strip()
+            if not sep:
+                # "Field:" with nothing after it is a blank field (missing); anything else is not a cover field at all.
+                if part.strip().endswith(":") and part.strip()[:-1].strip():
+                    blank.add(part.strip()[:-1].strip())
+                    continue
+                raise PackError(f"draft cover line {number} has a part that is not a 'Field: value' pair; a cover part is never skipped - fix or remove it")
+            if key.strip() in cover:
+                raise PackError(f"draft cover repeats a field name ({show(key.strip())}); a later value would overwrite the earlier")
+            cover[key.strip()] = value.strip()
+    if any(key not in COVER_FIELDS for key in set(cover) | blank):
+        raise PackError(f"draft cover gives a field that is not a documented cover field ({', '.join(COVER_FIELDS)}); a cover field is never skipped - fix or remove it")
     return title, cover, blocks, disclaimers
 
 
@@ -223,7 +249,11 @@ def parse_location(text, where):
 
 
 def register_sections(text):
-    sections, name = {}, None
+    """Split release-registers.md into its sections. Before the first section heading the file holds only its title
+    and description: a record-shaped line there (a list item, a Handling status line or a register field label) belongs
+    to no register and is a PackError, never skipped."""
+    sections, name, first = {}, None, True
+    labels = [label for kind in ("brand-check register", "licensed-content register") for label in RECORD_LABELS[kind]] + ["Check basis:"]
     for number, line in enumerate(text.splitlines(), 1):
         if line.startswith("## "):
             name = line[3:].strip()
@@ -232,24 +262,43 @@ def register_sections(text):
             sections[name] = []
         elif name and line.strip():
             sections[name].append(line.strip())
+        elif line.strip():
+            stripped = line.strip()
+            if (RECORD_ITEM.match(stripped) or HANDLING_LINE.match(stripped) or any(label in stripped for label in labels)
+                    or (stripped.startswith("#") and not (first and line.startswith("# ")))):
+                raise PackError(f"release-registers.md line {number} is a record or heading line before the first register section; it belongs to no register - move it under its section heading or remove it")
+            first = False
     return sections
 
 
 REGISTER_SECTIONS = ("Client-data handling register", "Brand and formatting checks", "Licensed and third-party content register")
 
 
+def unrecognised(section_label, number, expected):
+    """A non-blank line of a known register section that is neither a record nor a documented fixed line. It is
+    refused by section name and position (never echoed): prose such as "TBD" is never read as an empty register."""
+    return PackError(f"release-registers.md section {section_label} entry {number} is not a recognised line of that register "
+                     f"(expected {expected}); a placeholder or prose line is never read as an empty register - fix or remove it")
+
+
 def parse_registers(path):
     """Return client_data_handling, brand_checks and licensed_content. A missing file or section is a register that was
     not supplied (unknown/None), which the engines hold; a file that is present but empty, or a known section heading
-    with no line under it, states nothing and is a PackError, never an explicit empty register."""
+    with no line under it, states nothing and is a PackError, never an explicit empty register. Every non-blank line of
+    a known section must be one of its documented lines (unrecognised() otherwise), and a section heading that is not
+    one of REGISTER_SECTIONS is refused rather than ignored."""
     sections = register_sections(read_text(path, "release-registers.md")) if os.path.exists(path) else {}
+    if any(name not in REGISTER_SECTIONS for name in sections):
+        raise PackError(f"release-registers.md has a section heading that is not a known register ({'; '.join(REGISTER_SECTIONS)}); its lines would be skipped - rename or remove it")
     for section_label in REGISTER_SECTIONS:
         if section_label in sections and not sections[section_label]:
             raise PackError(f"release-registers.md section {section_label} has a heading and no lines; list its entries or state that there are none")
     handling, seen = "unknown", False
     for number, line in enumerate(sections.get("Client-data handling register", []), 1):
         if not HANDLING_LINE.match(line):
-            continue
+            if CLIENT_DATA_ENTRY.match(line) or CHECK_BASIS.match(line):
+                continue
+            raise unrecognised("Client-data handling register", number, "'Handling status: <status>', '- <ID>: <description>' or 'Check basis: <text>'")
         match = HANDLING.match(line)
         if match is None:
             raise PackError(f"client-data handling register entry {number} is a Handling status line that does not follow 'Handling status: <status>'")
@@ -261,20 +310,49 @@ def parse_registers(path):
         brand = []
         for number, line in enumerate(sections["Brand and formatting checks"], 1):
             match = record_match(BRAND, line, "brand-check register", f"brand check entry {number}")
-            if match:
-                brand.append({"check_id": match["id"], "status": match["status"], "legal_or_release_control": match["legal"] == "yes",
-                              "title": match["title"], "detail": match["detail"], "location": parse_location(match["loc"], f"brand check entry {number}"),
-                              "confidence": float(match["conf"]), "citation": match["crit"]})
+            if match is None:
+                raise unrecognised("Brand and formatting checks", number, "a brand-check record; this register has no 'none' statement")
+            brand.append({"check_id": match["id"], "status": match["status"], "legal_or_release_control": match["legal"] == "yes",
+                          "title": match["title"], "detail": match["detail"], "location": parse_location(match["loc"], f"brand check entry {number}"),
+                          "confidence": float(match["conf"]), "citation": match["crit"]})
     licensed = None
     if "Licensed and third-party content register" in sections:
-        licensed = []
-        for number, line in enumerate(sections["Licensed and third-party content register"], 1):
+        licensed, lines = [], sections["Licensed and third-party content register"]
+        for number, line in enumerate(lines, 1):
             match = record_match(LICENSED, line, "licensed-content register", f"licensed-content entry {number}")
-            if match:
-                licensed.append({"content_id": match["id"], "attribution_present": match["attr"] == "yes", "license_status": match["status"],
-                                 "detail": match["detail"], "location": parse_location(match["loc"], f"licensed-content entry {number}"), "confidence": float(match["conf"]),
-                                 "citation": f"{match['register']}; {match['crit']}"})
+            if match is None:
+                if LICENSED_NONE.match(line) and len(lines) == 1:
+                    continue
+                raise unrecognised("Licensed and third-party content register", number,
+                                   "a licensed-content record, or 'No licensed or third-party content.' as the section's only line")
+            licensed.append({"content_id": match["id"], "attribution_present": match["attr"] == "yes", "license_status": match["status"],
+                             "detail": match["detail"], "location": parse_location(match["loc"], f"licensed-content entry {number}"), "confidence": float(match["conf"]),
+                             "citation": f"{match['register']}; {match['crit']}"})
     return handling, brand, licensed
+
+
+def record_lines(text, pattern, kind, label):
+    """The match for each line of an evidence index or prior-findings export, by line (None for a blank, title or
+    description line), so callers number lines with enumerate. The file opens with its `# ` title and description
+    prose; from the first record on every non-blank line must be a record of `kind`. A heading after the title, prose
+    after the first entry, or a file with no entry is a PackError naming the file and line, never skipped: prose is
+    never read as an empty register."""
+    matches, started, first = [], False, True
+    for number, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        match = record_match(pattern, line, kind, f"{label} line {number}") if line else None
+        matches.append(match)
+        if not line:
+            continue
+        if match is not None:
+            started = True
+        elif started or (line.startswith("#") and not (first and raw.startswith("# "))):
+            raise PackError(f"{label} line {number} is not a record of the {kind} (a heading after the title, or prose after the first entry); "
+                            "a placeholder or prose line is never skipped - fix or remove it")
+        first = False
+    if not started:
+        raise PackError(f"{label} lists no entries; its prose is never read as an empty register - list its entries")
+    return matches
 
 
 def parse_evidence(text):
@@ -282,31 +360,48 @@ def parse_evidence(text):
     (rules.canonical_id). Only the title and description are kept for the size check: a number in the evidence ID,
     type, source or confidence is metadata and never substantiates a sample or population size."""
     items, lines = [], {}
-    for number, line in enumerate(text.splitlines(), 1):
-        match = record_match(EVIDENCE, line.strip(), "evidence index", f"supporting-evidence-index.md line {number}")
-        if match:
-            items.append({"evidence_id": match["id"], "type": match["type"], "title": match["title"], "confidence": float(match["conf"]),
-                          "source": "connector:" + match["source"].strip().lower().replace(" ", "-"),
-                          "citation": f"supporting-evidence-index.md {match['id']}"})
-            if rules.key_of(match["id"]) in lines:
-                raise PackError(f"supporting evidence index repeats an evidence ID (line {number}, equal exactly or after folding); evidence IDs must be unique")
-            lines[rules.key_of(match["id"])] = f"{match['title']}. {match['desc']}"
+    for number, match in enumerate(record_lines(text, EVIDENCE, "evidence index", "supporting-evidence-index.md"), 1):
+        if match is None:
+            continue
+        items.append({"evidence_id": match["id"], "type": match["type"], "title": match["title"], "confidence": float(match["conf"]),
+                      "source": "connector:" + match["source"].strip().lower().replace(" ", "-"),
+                      "citation": f"supporting-evidence-index.md {match['id']}"})
+        if rules.key_of(match["id"]) in lines:
+            raise PackError(f"supporting evidence index repeats an evidence ID (line {number}, equal exactly or after folding); evidence IDs must be unique")
+        lines[rules.key_of(match["id"])] = f"{match['title']}. {match['desc']}"
     return items, lines
 
 
 def parse_prior(text):
     items = []
-    for number, line in enumerate(text.splitlines(), 1):
-        match = record_match(PRIOR, line.strip(), "prior-review findings", f"prior-review-findings.md line {number}")
-        if match:
-            closed, fixed = match["status"] == "closed", match["fix"] == "present"
-            citation = f"prior-review-findings.md {match['id']}"
-            if closed and not fixed:
-                citation += "; quality-gate-criteria.md #7.1-#7.2"
-            items.append({"finding_id": match["id"], "claimed_closed": closed, "document_fix_present": fixed,
-                          "location": parse_location(match["loc"], f"prior-review-findings.md line {number}"), "confidence": float(match["conf"]),
-                          "source": "skill:criteria-retrieve", "citation": citation})
+    for number, match in enumerate(record_lines(text, PRIOR, "prior-review findings", "prior-review-findings.md"), 1):
+        if match is None:
+            continue
+        closed, fixed = match["status"] == "closed", match["fix"] == "present"
+        citation = f"prior-review-findings.md {match['id']}"
+        if closed and not fixed:
+            citation += "; quality-gate-criteria.md #7.1-#7.2"
+        items.append({"finding_id": match["id"], "claimed_closed": closed, "document_fix_present": fixed,
+                      "location": parse_location(match["loc"], f"prior-review-findings.md line {number}"), "confidence": float(match["conf"]),
+                      "source": "skill:criteria-retrieve", "citation": citation})
     return items
+
+
+def criteria_set_id(text):
+    """The criteria set ID from the extract's single 'Criteria set ID: <ID>' line (blank value: MISSING). The rest of
+    the extract is the criteria prose itself and is not derived (criteria_sections is the fixed CRITERIA_FLOOR). A
+    second set-ID line, or a line naming the set ID in another form, is a PackError, never ignored."""
+    found = None
+    for number, line in enumerate(text.splitlines(), 1):
+        if not CRITERIA_SET_LINE.match(line):
+            continue
+        match = CRITERIA_SET_ID.match(line)
+        if match is None:
+            raise PackError(f"qrm-gate-criteria-extract.md line {number} names the criteria set ID but does not follow 'Criteria set ID: <ID>'")
+        if found is not None:
+            raise PackError(f"qrm-gate-criteria-extract.md repeats the criteria set ID line (line {number}); a later value would be ignored")
+        found = match
+    return found.group(1) if found and found.group(1) else MISSING
 
 
 def derive(scenario_dir):
@@ -343,12 +438,11 @@ def derive(scenario_dir):
     if cover.get("Client aliases"):
         deliverable["client_aliases"] = [item.strip() for item in cover["Client aliases"].split(";")]
     extract = read_text(os.path.join(raw, "qrm-gate-criteria-extract.md"), "qrm-gate-criteria-extract.md")
-    set_id = CRITERIA_SET_ID.search(extract)
     evidence, evidence_lines = parse_evidence(read_text(os.path.join(raw, "supporting-evidence-index.md"), "supporting-evidence-index.md"))
     return {
         "contract_version": CONTRACT_VERSION, "engagement_id": cover.get("Engagement", MISSING), "scenario_id": scenario,
         "deliverable": deliverable,
-        "criteria": {"criteria_set_id": set_id.group(1) if set_id and set_id.group(1) else MISSING, "criteria_sections": CRITERIA_FLOOR,
+        "criteria": {"criteria_set_id": criteria_set_id(extract), "criteria_sections": CRITERIA_FLOOR,
                      "source": "skill:criteria-retrieve", "citation": f"demo-data/{scenario}/raw/qrm-gate-criteria-extract.md"},
         "evidence_set": evidence,
         "prior_findings": parse_prior(read_text(os.path.join(raw, "prior-review-findings.md"), "prior-review-findings.md")),
