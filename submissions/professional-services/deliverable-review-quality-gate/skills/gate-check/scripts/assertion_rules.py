@@ -158,13 +158,50 @@ def describe(value):
     return f"a {type(value).__name__} value"
 
 
-FIELD_NAME = re.compile(r"[a-z][a-z0-9_]{0,40}")
+_CONTRACT_FIELD_NAMES = []
+
+
+def contract_field_names():
+    """Every member name the shipped contract declares (any `properties` block, at any depth): the only member names a
+    message, finding or G8 path repeats (quality-gate-criteria.md #8.9). Any other name is supplied text, however
+    plain it looks (`atlas_credit_id` can name another client). Empty if the contract cannot be loaded, so every name is
+    then a placeholder."""
+    if not _CONTRACT_FIELD_NAMES:
+        names = set()
+        try:
+            stack = [contract_schema()]
+        except InputError:
+            stack = []
+        while stack:
+            node = stack.pop()
+            if isinstance(node, dict):
+                if isinstance(node.get("properties"), dict):
+                    names.update(node["properties"])
+                stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
+        _CONTRACT_FIELD_NAMES.append(frozenset(names))
+    return _CONTRACT_FIELD_NAMES[0]
 
 
 def path_key(key):
-    """A field name shown in an error path only when it is a plain snake_case name that passes the screen; anything
-    else is shown as <field>, so an untrusted member name is never echoed."""
-    return key if isinstance(key, str) and FIELD_NAME.fullmatch(key) and not suspicious_instruction(key) else "<field>"
+    """A member name in an error path: a contract field name as is; any other name is shown as <field>, so a supplied
+    member name is never echoed (quality-gate-criteria.md #8.9)."""
+    return key if isinstance(key, str) and key in contract_field_names() else "<field>"
+
+
+def labelled_members(mapping):
+    """(label, key, child) per member of `mapping` for a G8 screen path: a contract field name as is, any other name as
+    `<field N>`, the Nth member of that object the contract does not declare. N ignores contract sections, so it is the
+    same at every stage, whichever sections a stage adds or removes, and a path names one member without repeating
+    supplied text (quality-gate-criteria.md #8.9)."""
+    names, undeclared = contract_field_names(), 0
+    for key, child in mapping.items():
+        if isinstance(key, str) and key in names:
+            yield key, key, child
+        else:
+            undeclared += 1
+            yield f"<field {undeclared}>", key, child
 
 
 def format_path(parts):
@@ -397,23 +434,38 @@ ID_TOKEN_RULE = "1 to 80 ASCII letters, digits, '.', '_' or '-', with no spaces 
 
 
 def _id_values(value, parts=()):
-    """(path parts, string) for every ID value in `value`, in document order (is_id_field)."""
-    if isinstance(value, dict):
+    """(path parts, value) for every ID value in `value`, in document order: the value of a member named *_id and each
+    and each entry of a member named *_ids (is_id_field), whatever its type, plus (path parts, value) for a *_ids member
+    whose value is not an array. An ID value is never walked into, so text nested under an identifier member cannot
+    pass as a container. A null *_id member names nothing (key_of) and is not yielded; a null *_ids entry is. The
+    contract types each declared ID."""
+    if parts and is_id_field(parts):
+        if value is not None or isinstance(parts[-1], int):
+            yield parts, value
+    elif parts and isinstance(parts[-1], str) and canonical_id(parts[-1]).endswith(" ids") and not isinstance(value, list):
+        if value is not None:
+            yield parts, value
+    elif isinstance(value, dict):
         for key, child in value.items():
             yield from _id_values(child, parts + (key,))
     elif isinstance(value, list):
         for index, child in enumerate(value):
             yield from _id_values(child, parts + (index,))
-    elif isinstance(value, str) and is_id_field(parts):
-        yield parts, value
 
 
 def validate_id_shapes(payload):
-    """Refuse the review input when any ID is not an ID_TOKEN (quality-gate-criteria.md #8.11). The message names the
-    field path and the rule, never the value (#8.9)."""
+    """Refuse the review input when any ID is not an ID_TOKEN string (quality-gate-criteria.md #8.11): a number,
+    boolean, object or array under a *_id member, a *_ids member that is not an array, and a *_ids entry that is not a
+    string are refused like a malformed string, whether or not the contract declares the member, never passed on to a
+    later check. The message names the field path, the type and the rule, never the value (#8.9)."""
     for parts, value in _id_values(payload):
-        if not ID_TOKEN.fullmatch(value):
-            raise InputError(f"{format_path(parts)} is not an identifier: IDs are {ID_TOKEN_RULE} (quality-gate-criteria.md #8.11)")
+        if is_id_field(parts) and isinstance(value, str):
+            if not ID_TOKEN.fullmatch(value):
+                raise InputError(f"{format_path(parts)} is not an identifier: IDs are {ID_TOKEN_RULE} (quality-gate-criteria.md #8.11)")
+        elif is_id_field(parts):
+            raise InputError(f"{format_path(parts)} is not an identifier: IDs are strings of {ID_TOKEN_RULE}, got {describe(value)} (quality-gate-criteria.md #8.11)")
+        else:
+            raise InputError(f"{format_path(parts)} must be an array of identifier strings, got {describe(value)} (quality-gate-criteria.md #8.11)")
 
 
 def _check_encodable_text(text, path):
@@ -1334,7 +1386,6 @@ INSTRUCTION = "instruction"
 # provenance) is derived from them and is scanned only for text that is not a copy of a primary field.
 PRIMARY_SECTIONS = ("deliverable", "criteria", "assertions", "evidence_set", "prior_findings")
 UNSCANNED_KEYS = {"contract_version"}  # validated against the contract version before any scan
-SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_.:#/ -]{1,80}$")
 AGGREGATE_LABEL = "(combined ID, text, evidence IDs, citation, evidence titles, location section and label)"
 RECORD_LABEL = "(combined fields)"
 # Every other record whose free text travels to an output is screened with its fields joined, as an assertion is
@@ -1441,8 +1492,10 @@ def suspicious_instruction(value):
 
 
 def safe_token(value, fallback):
+    """A value named in engine-composed text: only an identifier of the documented shape (ID_TOKEN, #8.11) that passes
+    the screen; anything else is named by `fallback`, a fixed or positional label (quality-gate-criteria.md #8.9)."""
     text = str(value)
-    return text if SAFE_TOKEN.match(text) and not suspicious_instruction(text) else fallback
+    return text if ID_TOKEN.fullmatch(text) and not suspicious_instruction(text) else fallback
 
 
 KEY_SUFFIX = " (field name)"
@@ -1454,8 +1507,8 @@ def iter_strings(value, path):
     (quality-gate-criteria.md #8.5). Nothing below the top level is skipped, whatever its key (metadata, provenance or a
     nested contract_version alike)."""
     if isinstance(value, dict):
-        for key, child in value.items():
-            child_path = f"{path}.{safe_token(key, '<field>')}"
+        for label, key, child in labelled_members(value):
+            child_path = f"{path}.{label}"
             yield child_path + KEY_SUFFIX, key
             yield from iter_strings(child, child_path)
     elif isinstance(value, list):
@@ -1468,8 +1521,8 @@ def iter_strings(value, path):
 def iter_arrays(value, path):
     """Yield (path, list) for every array in value, at any depth."""
     if isinstance(value, dict):
-        for key, child in value.items():
-            yield from iter_arrays(child, f"{path}.{safe_token(key, '<field>')}")
+        for label, key, child in labelled_members(value):
+            yield from iter_arrays(child, f"{path}.{label}")
     elif isinstance(value, list):
         yield path, value
         for index, child in enumerate(value):
@@ -1478,10 +1531,10 @@ def iter_arrays(value, path):
 
 def top_level_sections(payload):
     """Yield (key, path, child, derived) for each top-level member except the validated contract_version."""
-    for key, child in payload.items():
+    for label, key, child in labelled_members(payload):
         if key in UNSCANNED_KEYS:
             continue
-        yield key, f"$.{safe_token(key, '<field>')}", child, not (key in PRIMARY_SECTIONS or not isinstance(child, (dict, list)))
+        yield key, f"$.{label}", child, not (key in PRIMARY_SECTIONS or not isinstance(child, (dict, list)))
 
 
 def scan_sections(payload):
@@ -1819,15 +1872,18 @@ def placeholder_paths(payload, engine_finding, engine_escalation):
     for index, item in enumerate(payload.get("findings") or []):
         if not engine_finding(index, item):
             # A record's split marker is bound by the hold on the record (other_records), which is where the note is, or,
-            # when the record also holds text flagged on its own, by that field's hold (withhold_untrusted).
+            # when the record also holds text flagged on its own, by that field's hold (withhold_untrusted). A split marker
+            # in only one field is not a record withheld whole (_record_hits): it is bound by that field's own hold, the
+            # run or rendered text it was withheld with (quality-gate-criteria.md #8.22).
             base = f"$.findings[{index}]"
             refs = record_refs(item, members, base) if isinstance(item, dict) else {}
             slots = [(path, slot_value(container, key)) for entries in refs.values() for container, key, path in entries]
             split = {path for path, value in slots if withheld_kind(value) == SPLIT}
             alone = [path for path, value in slots if contains_withheld(value) and withheld_kind(value) != SPLIT]
+            whole = f"{base} {RECORD_LABEL}" if len(split) > 1 else None
             for found, text in iter_strings(item, base):
                 if contains_withheld(text):
-                    paths.append((alone[0] if alone else f"{base} {RECORD_LABEL}") if found in split else found)
+                    paths.append((alone[0] if alone else whole or found) if found in split else found)
     for index, entry in enumerate(payload.get("escalations") or []):
         if not engine_escalation(entry):
             collect(entry, f"$.escalations[{index}]")
@@ -1929,10 +1985,12 @@ def _replace_withheld(value, exact, embedded):
 # review status, each ranked finding as one row (location section, the label when page or paragraph is null, title,
 # detail, criteria section), the gate checklist, each unsupported or limited assertion mapping (assertion ID, text,
 # evidence IDs, citation), each escalation as a list line and the provenance line, in that order (RENDERED_LINES).
-# Text from two records, or an ID beside prose, can therefore be read as one sentence even when every value passes on
-# its own. gate_check predicts the ranked order (rank_order, the order severity_rank uses) and screens every pair of
-# values within a row and across two consecutive rows, and each two consecutive rows joined whole; severity_rank and
-# --verify refuse a ranked output in which any such pair or join still trips.
+# Text from several records, or an ID beside prose, can therefore be read as one sentence even when every value passes
+# on its own. gate_check predicts the ranked order (rank_order, the order severity_rank uses) and screens the packet as
+# one sequence of lines across every block (rendered_screen): every pair of values within a row and across two
+# consecutive rows, sliding windows of consecutive lines and the whole sequence in order, both as the values read and as
+# the template renders them (with its separators and line text). severity_rank and --verify refuse a ranked output in
+# which any of these still trips, or that is too long to screen whole.
 RANK_SEVERITY = {"release_blocker": 0, "must_fix": 1, "advisory": 2}
 # Members whose values are identifiers, closed enums or tags: never read as rendered prose and never withheld as one.
 NON_PROSE_KEYS = {"status", "severity", "gate_id", "support_status", "class", "type", "license_status", "client_data_handling",
@@ -2008,11 +2066,9 @@ def _rendered_value(item, field):
     return list(value) if isinstance(value, list) else [value]
 
 
-def rendered_rows(payload, ranked):
-    """The rendered text, as one sequence of rows per RENDERED_LINES entry (each row a list of the values on that
-    packet line, in reading order): the heading, the review status, ranked findings, the gate checklist, unsupported or
-    limited assertion mappings, escalations and the provenance line. A ranked finding's location label renders only
-    when its page or paragraph is null."""
+def _rendered_items(payload, ranked):
+    """For each RENDERED_LINES entry, the records it renders a line for, in packet order, each with whether its location
+    renders at register level (a ranked finding whose page or paragraph is null renders its label instead)."""
     sources = {
         None: [payload],
         "ranked_finding": ranked,
@@ -2021,46 +2077,253 @@ def rendered_rows(payload, ranked):
                               if isinstance(item, dict) and item.get("support_status") != "supported"],
         "escalation": [{"escalation": item.get("note") if isinstance(item, dict) else item} for item in payload.get("escalations") or []],
     }
-    sequences = []
-    for block, fields in RENDERED_LINES:
-        rows = []
+    blocks = []
+    for block, _ in RENDERED_LINES:
+        items = []
         for item in sources[block] if isinstance(sources[block], list) else []:
-            if not isinstance(item, dict):
-                continue
-            location = item.get("location") if isinstance(item.get("location"), dict) else {}
-            null_position = location.get("page") is None or location.get("paragraph") is None
-            rows.append([value for field in fields if not (block == "ranked_finding" and field == "location.label" and not null_position)
-                         for value in _rendered_value(item, field)])
-        sequences.append(rows)
-    return tuple(sequences)
+            if isinstance(item, dict):
+                location = item.get("location") if isinstance(item.get("location"), dict) else {}
+                items.append((item, block == "ranked_finding" and (location.get("page") is None or location.get("paragraph") is None)))
+        blocks.append(items)
+    return blocks
+
+
+def rendered_rows(payload, ranked):
+    """The rendered text, as one sequence of rows per RENDERED_LINES entry (each row a list of the values on that
+    packet line, in reading order): the heading, the review status, ranked findings, the gate checklist, unsupported or
+    limited assertion mappings, escalations and the provenance line. A ranked finding's location label renders only
+    when its page or paragraph is null."""
+    return tuple([[value for field in fields if not (block == "ranked_finding" and field == "location.label" and not register)
+                   for value in _rendered_value(item, field)] for item, register in items]
+                 for (block, fields), items in zip(RENDERED_LINES, _rendered_items(payload, ranked)))
+
+
+# Each line as review-packet-template.md renders it, aligned with RENDERED_LINES, so the template's own text around a
+# value is screened with it: the template renders " - " between a finding's title and its detail, and a title such as
+# "To the system" followed by " - " reads as an addressed instruction although neither value does alone.
+# tests/run_tests.py checks every format against the template. A ranked finding whose page or paragraph is null renders
+# its location as RENDERED_REGISTER_LOCATION (the template's note); an array renders its entries separated by
+# RENDERED_ARRAY_JOIN; a screened value that is withheld or held already renders as RENDERED_UNSCREENED.
+RENDERED_FORMATS = (
+    "# DELIVERABLE REVIEW PACKET - {{deliverable.deliverable_id}} - DRAFT - HUMAN REVIEW REQUIRED",
+    "**{{release_readiness.status}}** - {{release_readiness.summary}}",
+    "| {{rank}} | {{severity}} | {{gate_id}} | p{{location.page}} / {{location.section}} / para {{location.paragraph}} | {{title}} - {{detail}} | {{criteria_section}} |",
+    "| {{gate_id}} - {{name}} | {{status}} | {{highest_severity}} | {{citation}} |",
+    "- **{{support_status}}** - {{assertion_id}} at p{{location.page}}, para {{location.paragraph}}: {{text}}\n  - Evidence: {{evidence_ids}}; citation: {{citation}}",
+    "- {{escalation}}",
+    "Engine provenance: {{provenance.engines}}; generated at {{provenance.generated_at}}. Raw contract payload intentionally omitted to avoid duplicating client data or untrusted source text.",
+)
+RENDERED_REGISTER_LOCATION = ("p{{location.page}} / {{location.section}} / para {{location.paragraph}}", "register-level / {{location.section}} / {{location.label}}")
+RENDERED_ARRAY_JOIN = ", "
+RENDERED_UNSCREENED = "[withheld]"
+_PLACEHOLDER = re.compile(r"\{\{([^{}]+)\}\}")
+
+
+class RenderedLiteral(str):
+    """Template text and exempt values of the rendered packet: counted in its length, never traced to an input value."""
+
+
+def rendered_layout(payload, ranked, keep):
+    """The packet as the template renders it (RENDERED_FORMATS), as (units, before, tail, line_of): units are the
+    screened values (RENDERED_LINES) for which keep(value) is true, in rendered order; before[k] is the text rendered
+    between unit k-1 (or the start) and unit k - template text, exempt values, array separators, line breaks and
+    RENDERED_UNSCREENED for a screened value not kept; tail is the text after the last unit; line_of[k] numbers the
+    line unit k renders on."""
+    units, before, line_of = [], [], []
+    text, line = "", 0
+    for (block, fields), template, items in zip(RENDERED_LINES, RENDERED_FORMATS, _rendered_items(payload, ranked)):
+        for position, (item, register) in enumerate(items):
+            text += "\n" if units or text else ""
+            for index, piece in enumerate(_PLACEHOLDER.split(template.replace(*RENDERED_REGISTER_LOCATION) if register else template)):
+                if index % 2 == 0:
+                    text += piece
+                    continue
+                if piece == "rank":
+                    text += str(position + 1)
+                    continue
+                for number, value in enumerate(_rendered_value(item, piece)):
+                    text += RENDERED_ARRAY_JOIN if number else ""
+                    if piece in fields and keep(value):
+                        units.append(value)
+                        before.append(text)
+                        line_of.append(line)
+                        text = ""
+                    elif piece in fields and isinstance(value, str):
+                        text += RENDERED_UNSCREENED if value.strip() else ""
+                    else:
+                        # An exempt value, or a screened value that is not a string (the contract refuses one at every
+                        # stage), is rendered as str() renders it and screened as part of the template text.
+                        text += "" if value is None else str(value)
+            line += 1
+    return units, before, text, line_of
 
 
 def _joined_trips(texts):
     return bool(screen_text(" ".join(texts)))
 
 
-def rendered_hits(payload, ranked):
-    """Groups of rendered strings that trip the detector only when read together (quality-gate-criteria.md #8.22): each
-    pair of fields within a row and across two consecutive rows, in reading order, and each row or pair of consecutive
-    rows joined whole when no pair in it trips. Text already withheld or tripping on its own is left out (it holds
-    already). Returns a list of tuples of strings, in rendering order."""
-    def usable(value):
-        return isinstance(value, str) and value.strip() and not contains_withheld(value) and not screen_text(value)
+# Sliding windows over the rendered lines (quality-gate-criteria.md #8.22, checklist D18), in two views of the packet:
+# - the values as read, space-joined, with punctuation-only values left out (_wordless): a window starts at every line
+#   and takes up to RENDERED_WINDOW_LINES lines (ARRAY_WINDOW, the bound used for adjacent array entries), stopping early
+#   once it reaches RENDERED_REACH characters past its first line. RENDERED_REACH is the detector's own window overlap,
+#   the longest reach of any of its rules (characters consumed plus look-ahead), so a window holds every rule match
+#   that starts in its first line and fits in eight lines. Table syntax and filler rows between the values are left
+#   out, so a sentence spread over consecutive rows reads as one;
+# - the packet as the template renders it (rendered_layout): a window is a line and the next line
+#   (RENDERED_LAYOUT_LINES) with the template text up to RENDERED_REACH characters either side, so the template's own
+#   text beside a value (a separator, the start of the next line) is screened with it. Sentences across more rows are
+#   the first view's. Headings and fixed notes between blocks are not part of it: they carry no input value and stand
+#   between the blocks in the packet, so leaving them out only brings two blocks' lines closer.
+# Each window's length is bounded by its lines plus RENDERED_REACH and by its line count, so the windows add at most
+# RENDERED_WINDOW_LINES + RENDERED_LAYOUT_LINES times the packet's text plus context, linear in the number of lines. A
+# composition spread over more lines than a window is caught by the whole sequence, screened once in each view.
+RENDERED_WINDOW_LINES = ARRAY_WINDOW
+RENDERED_LAYOUT_LINES = 2
+RENDERED_REACH = sg.WINDOW_OVERLAP
 
-    groups = []
-    for sequence in rendered_rows(payload, ranked):
-        rows = [list(dict.fromkeys(value for value in row if usable(value))) for row in sequence]
-        for index, row in enumerate(rows):
-            scopes = [(row, [(a, b) for position, a in enumerate(row) for b in row[position + 1:]])]
-            if index + 1 < len(rows):
-                following = rows[index + 1]
-                scopes.append((row + [value for value in following if value not in row], [(a, b) for a in row for b in following if a != b]))
-            for joined, pairs in scopes:
-                found = [pair for pair in pairs if _joined_trips(pair)]
-                if not found and len(joined) > 1 and _joined_trips(joined):
-                    found = [tuple(joined)]
-                groups.extend(tuple(group) for group in found if tuple(group) not in groups)
+
+def _wordless(text):
+    """True for rendered text with no letter or digit (punctuation or symbols only). It carries no words, so it is left
+    out of the space-joined view: a row of '.' between two halves would otherwise end the sentence for the detector,
+    and filler rows would push the halves out of one window. The template view keeps it, as rendered."""
+    return not any(char.isalnum() for char in text)
+
+
+def _trips(text):
+    """True when text trips the detector. An oversize result is not a trip here: a window never reaches the limit
+    unless the whole sequence does, and that is the oversize hold (rendered_screen)."""
+    found = screen_text(text)
+    return bool(found) and hit_reason(found) != OVERSIZE
+
+
+def _narrowed(trips, first, last):
+    """For a tripping span first..last (trips(first, last) is true), the shortest tripping prefix of it, then the
+    shortest tripping suffix of that prefix, each found by bisection (a logarithmic number of screens, never one screen
+    per unit). Each bound is kept only where the span still trips, so the result always trips. Returns (first, last)."""
+    low, high = first - 1, last
+    while high - low > 1:
+        middle = (low + high) // 2
+        if trips(first, middle):
+            high = middle
+        else:
+            low = middle
+    end = high
+    low, high = first, end + 1
+    while high - low > 1:
+        middle = (low + high) // 2
+        if trips(middle, end):
+            low = middle
+        else:
+            high = middle
+    return low, end
+
+
+def _window_groups(units, line_of, sizes, trips, lines_per_window, single):
+    """Groups of units that trip within a sliding window of consecutive lines (at most lines_per_window lines, stopping
+    once RENDERED_REACH characters past the first line are reached), each narrowed to the units the hit needs. sizes[k]
+    is the rendered length of unit k; trips(first, last) screens units first..last. A window of one unit is screened
+    only when `single` (the template view, where the template text beside a value is screened with it). After a hit,
+    sliding resumes after the line where the narrowed group ends; the gates are re-run with the group withheld, so a
+    second hit overlapping it is found on the next pass."""
+    lines = []  # [first unit, last unit, size]
+    for index, number in enumerate(line_of):
+        if lines and line_of[lines[-1][0]] == number:
+            lines[-1][1] = index
+            lines[-1][2] += sizes[index]
+        else:
+            lines.append([index, index, sizes[index]])
+    line_index = {line_of[first]: position for position, (first, _, _) in enumerate(lines)}
+    groups, index = [], 0
+    while index < len(lines):
+        stop, size = index + 1, lines[index][2]
+        while stop < len(lines) and stop - index < lines_per_window and size < lines[index][2] + RENDERED_REACH:
+            size += lines[stop][2]
+            stop += 1
+        first, last = lines[index][0], lines[stop - 1][1]
+        if size <= sg.MAX_TOTAL_CHARS and (single or last > first) and trips(first, last):
+            low, high = _narrowed(trips, first, last)
+            groups.append(tuple(units[low:high + 1]))
+            index = line_index[line_of[high]] + 1
+            continue
+        index += 1
     return groups
+
+
+def _sequence_group(units, trips, single):
+    """The whole sequence screened once, in order; when it trips, the narrowed group of units the hit needs, else None."""
+    if (len(units) > 1 or single and units) and trips(0, len(units) - 1):
+        low, high = _narrowed(trips, 0, len(units) - 1)
+        return tuple(units[low:high + 1])
+    return None
+
+
+def rendered_screen(payload, ranked):
+    """Screen the packet as it renders (quality-gate-criteria.md #8.22; checklist D18, D22): every RENDERED_LINES block,
+    in packet order, read as one sequence of lines, so text can compose within a row, across rows and across the
+    boundary between two blocks. Text already withheld or tripping on its own is left out (it holds already). Screened:
+
+    - each pair of values within a row and across two consecutive rows of one block, in reading order;
+    - with the values a pair already claimed left out, as they will be once withheld, sliding windows of consecutive
+      lines across the whole sequence in two views (_window_groups): the values space-joined with punctuation-only
+      values left out (_wordless), and the packet as the template renders it (rendered_layout);
+    - when no window trips, the whole sequence in order, in the same two views, so neither filler rows nor a value that
+      needs the punctuation or template text beside it can hide a hit.
+
+    Returns (groups, oversize). groups lists tuples of rendered strings that trip together, in rendering order. When the
+    packet as rendered is longer than the detector can screen (sg.MAX_TOTAL_CHARS, raw or after Unicode normalisation),
+    nothing else is screened: groups is empty and oversize is the tuple of every screened value in the sequence followed
+    by the template text as one RenderedLiteral, the detector's oversize result, which is a hold (#8.6), never a pass.
+    gate_check withholds the longest values under an oversize marker and screens again, so the shorter packet is
+    screened in full. Otherwise oversize is ()."""
+    screened = {}
+
+    def usable(value):
+        if value not in screened:
+            screened[value] = isinstance(value, str) and bool(value.strip()) and not contains_withheld(value) and not screen_text(value)
+        return screened[value]
+
+    units, before, tail, _ = rendered_layout(payload, ranked, lambda value: isinstance(value, str) and usable(value))
+    literal = RenderedLiteral("".join(before) + tail)
+    whole = "".join(text + value for text, value in zip(before, units)) + tail
+    if len(whole) > sg.MAX_TOTAL_CHARS or any(hit.family == OVERSIZE for hit in screen_text(whole)):
+        return [], tuple(units) + ((literal,) if literal else ())
+    groups = []
+    for rows in rendered_rows(payload, ranked):
+        distinct = [list(dict.fromkeys(value for value in row if isinstance(value, str) and usable(value))) for row in rows]
+        for index, row in enumerate(distinct):
+            pairs = [(a, b) for position, a in enumerate(row) for b in row[position + 1:]]
+            if index + 1 < len(distinct):
+                pairs.extend((a, b) for a in row for b in distinct[index + 1] if a != b)
+            groups.extend(pair for pair in pairs if _joined_trips(pair) and pair not in groups)
+    claimed = {value for group in groups for value in group}
+    units, before, tail, line_of = rendered_layout(payload, ranked, lambda value: isinstance(value, str) and usable(value) and value not in claimed)
+    worded = [index for index, value in enumerate(units) if not _wordless(value)]
+    words, word_lines = [units[index] for index in worded], [line_of[index] for index in worded]
+
+    def spoken(first, last):
+        return _trips(" ".join(words[first:last + 1]))
+
+    def shown(first, last):
+        after = before[last + 1] if last + 1 < len(units) else tail
+        return _trips(before[first][-RENDERED_REACH:] + "".join((before[index] if index > first else "") + units[index] for index in range(first, last + 1))
+                      + after[:RENDERED_REACH])
+
+    found = _window_groups(words, word_lines, [len(value) + 1 for value in words], spoken, RENDERED_WINDOW_LINES, False)
+    found += [group for group in _window_groups(units, line_of, [len(text) + len(value) for text, value in zip(before, units)], shown, RENDERED_LAYOUT_LINES, True)
+              if group not in found]
+    if not found:
+        whole_group = _sequence_group(words, spoken, False) or _sequence_group(units, shown, True)
+        found = [whole_group] if whole_group else []
+    groups.extend(group for group in found if group not in groups)
+    return groups, ()
+
+
+def rendered_hits(payload, ranked):
+    """Groups of rendered strings that trip the detector only when read together or with the template text beside them
+    (rendered_screen), plus, when the rendered packet is too long to screen whole, one group of every rendered string:
+    severity_rank and --verify refuse a ranked output for which this is non-empty (quality-gate-criteria.md #8.22)."""
+    groups, oversize = rendered_screen(payload, ranked)
+    return groups + ([oversize] if oversize else [])
 
 
 def _free_text_slots(node, name=None):
@@ -2098,7 +2361,31 @@ def rendered_sources(payload, groups):
     return sources
 
 
-def withhold_untrusted(payload, raw_input=False, rendered=frozenset()):
+def oversize_sources(payload, texts, exclude=frozenset()):
+    """The free-text values of `payload` to withhold under an oversize marker when the rendered sequence `texts`
+    (rendered_screen's oversize result) is too long to screen whole (quality-gate-criteria.md #8.6, #8.22): the values
+    behind the longest rendered strings first (rendered order on a tie), until what is left fits the detector's limit,
+    and always at least one value not in `exclude`, so each pass of gate_check withholds more and the loop ends. A
+    rendered string's values are found as in rendered_sources; engine-only text (a RenderedLiteral, the template text
+    and exempt values) has none and is never withheld, but counts toward the length."""
+    if not texts:
+        return frozenset()
+    values = {container[key] for container, key in _free_text_slots(payload) if not contains_withheld(container[key])}
+    remaining, chosen = sum(len(text) for text in texts), set()
+    for text in sorted(texts, key=len, reverse=True):
+        if chosen and remaining <= sg.MAX_TOTAL_CHARS:
+            break
+        if isinstance(text, RenderedLiteral):
+            continue
+        found = {text} if text in values else {value for value in values if len(value.strip()) >= MIN_RENDERED_SOURCE and value in text}
+        found -= exclude
+        if found:
+            chosen |= found
+            remaining -= len(text) - len(RENDERED_UNSCREENED)
+    return frozenset(chosen)
+
+
+def withhold_untrusted(payload, raw_input=False, rendered=frozenset(), oversize=frozenset()):
     """Screen the whole payload and replace every string that trips the detector with a numbered withheld marker,
     everywhere that text appears, so no stage, output or review packet repeats it (quality-gate-criteria.md #8.7).
 
@@ -2114,6 +2401,8 @@ def withhold_untrusted(payload, raw_input=False, rendered=frozenset()):
       not already flagged or claimed (every entry of a list member) gets a split marker wherever it appears exactly;
     - every free-text value in `rendered` (gate_check's rendered_sources, quality-gate-criteria.md #8.22) gets a split
       marker wherever it appears exactly;
+    - every free-text value in `oversize` (gate_check's oversize_sources: the review packet would be too long to screen
+      whole, #8.6, #8.22) gets an oversize marker wherever it appears, exactly or embedded;
     - member names are screened like values, and a flagged name is replaced by its marker in place (order kept).
     Engine markers already present are left alone and are not new hits. The payload is updated in place. Returns
     (path, reason, derived) for each newly withheld hit, in the order instruction_hits reports them."""
@@ -2208,6 +2497,10 @@ def withhold_untrusted(payload, raw_input=False, rendered=frozenset()):
                 record_hits.append((path, hit_reason(found), is_derived))
     combined = [hit for hit in record_hits if not hit[2]] + combined + [hit for hit in record_hits if hit[2]] + run_hits
     # Text the review packet would render beside other text so that they trip together (#8.22).
+    if oversize:
+        for container, key in _free_text_slots(payload):
+            if container[key] in oversize and not is_withheld(container[key]):
+                mark(container[key], OVERSIZE)
     if rendered:
         split_refs.extend((container, key) for container, key in _free_text_slots(payload) if container[key] in rendered)
     split_exact = {}

@@ -232,11 +232,6 @@ def claim_finding_id(findings, owners, base, owner):
     owners[rules.canonical_id(candidate)] = owner
     return candidate
 
-def language_excerpt(text, limit=120):
-    """Identify one required-language item in a finding: the text itself (or its withheld marker), shortened."""
-    text = re.sub(r"\s+", " ", text).strip()
-    return text if len(text) <= limit or rules.is_withheld(text) else text[:limit].rstrip() + "..."
-
 def reconcile_assertion_outputs(payload, expected, kept, escalations):
     """Restore assertion_map output that was removed or altered upstream. Returns the assertion IDs that differed.
 
@@ -303,7 +298,8 @@ def client_identities(deliverable):
     return [phrase for _, _, phrase in client_identity_entries(deliverable) if not has_external_vocabulary(phrase)]
 
 def invalid_client_identities(deliverable):
-    return [(label, safe_token(value.strip(), label)) for label, value, phrase in client_identity_entries(deliverable) if has_external_vocabulary(phrase)]
+    """Field paths (never the text) of the client name and aliases that carry external-party vocabulary (#2.5, #8.9)."""
+    return [f"deliverable.{label}" for label, value, phrase in client_identity_entries(deliverable) if has_external_vocabulary(phrase)]
 
 def classify_recipient(recipient, identities):
     """Return client, internal, external or unclassified (quality-gate-criteria.md #2.5).
@@ -332,11 +328,12 @@ def classify_recipient(recipient, identities):
     return "unclassified"
 
 def recipient_classes(deliverable):
+    """Recipients by class, each named by its field path, never its text: a recipient names a party (#2.5, #8.9)."""
     identities = client_identities(deliverable)
     classes = {"client": [], "internal": [], "external": [], "unclassified": []}
     for index, recipient in enumerate(recipients_of(deliverable)):
         if recipient.strip():
-            classes[classify_recipient(recipient, identities)].append(safe_token(recipient.strip(), f"recipient {index + 1}"))
+            classes[classify_recipient(recipient, identities)].append(f"deliverable.intended_recipients[{index}]")
     return classes
 
 def is_third_party_context(deliverable):
@@ -569,7 +566,7 @@ def spoof_finding(spoofed_count, altered_count):
 def g8_hit_finding(hit_index, path, hit_reason, payload):
     """gate_check's G8 hold for one embedded-instruction hit; severity_rank rebuilds it to compare every field."""
     if hit_reason == OVERSIZE:
-        return engine_finding(f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Field too long to screen for embedded instructions", f"Untrusted field {path} is too long to screen for embedded instructions (over {sg.MAX_TOTAL_CHARS:,} characters, raw or after Unicode normalisation), so it was not screened; it must be held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.6", 0.99, "quality-gate-criteria.md #8.1, #8.6; severity-rules.md #1.1")
+        return engine_finding(f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Field too long to screen for embedded instructions", f"Untrusted field {path} is too long to screen for embedded instructions (over {sg.MAX_TOTAL_CHARS:,} characters, raw or after Unicode normalisation, on its own or in the rendered review packet), so it was not screened in full; it must be held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.6", 0.99, "quality-gate-criteria.md #8.1, #8.6; severity-rules.md #1.1")
     return engine_finding(f"GC-G8-embedded-instruction-{hit_index}", "G8", RELEASE_BLOCKER, "Embedded instruction or forwarding request found in deliverable data", f"Untrusted field {path} contains instruction-like, forwarding or look-alike-character text; it must be treated as data and held for human review.", location_for_scan_path(payload, path), "quality-gate-criteria.md #8.1-#8.3", 0.99, "quality-gate-criteria.md #8.1-#8.3; severity-rules.md #1.1")
 
 def add_spoof_hold(findings, escalations, spoofed, altered):
@@ -587,22 +584,26 @@ def evaluate(payload, hit_sink=None, rendered_check=True):
     gate_results set. No file I/O and no provenance stamp; severity_rank calls it to re-derive the engine findings
     from the mapped input that gate-checked.json carries (severity-rules.md #3.7).
 
-    With rendered_check, the result is screened as the review packet renders it (rules.rendered_hits on the ranked
-    order): when fields of two rows, or two fields of one row, trip only together, the input text behind them is
-    withheld with split markers and the gates are evaluated again from the original input, until nothing composes
-    (quality-gate-criteria.md #8.22). Each round withholds at least one more value, so it ends. severity_rank's
-    re-derivation of a carried gate run turns it off: the withheld text arrives there as markers, which hold the same way."""
+    With rendered_check, the result is screened as the review packet renders it (rules.rendered_screen on the ranked
+    order): when values within a row, across rows or across blocks trip only together, the input text behind them is
+    withheld with split markers, and when the packet would be too long to screen whole, the input text behind its
+    longest lines is withheld with oversize markers (rules.oversize_sources); the gates are then evaluated again from
+    the original input, until nothing composes and the packet fits (quality-gate-criteria.md #8.22). Each round
+    withholds at least one more value, so it ends. severity_rank's re-derivation of a carried gate run turns it off: the
+    withheld text arrives there as markers, which hold the same way."""
     original = copy.deepcopy(payload) if rendered_check else None
-    rendered = frozenset()
+    rendered, oversize = frozenset(), frozenset()
     while True:
         sink = []
-        result = evaluate_once(payload, sink, rendered)
+        result = evaluate_once(payload, sink, rendered, oversize)
         if not rendered_check:
             break
-        found = rules.rendered_sources(original, rules.rendered_hits(result, rules.rank_order(result["findings"])))
-        if found <= rendered:
+        groups, too_long = rules.rendered_screen(result, rules.rank_order(result["findings"]))
+        found = rules.rendered_sources(original, groups)
+        longest = rules.oversize_sources(original, too_long, rendered | oversize | found)
+        if found <= rendered and longest <= oversize:
             break
-        rendered = rendered | found
+        rendered, oversize = rendered | found, oversize | longest
         payload.clear()
         payload.update(copy.deepcopy(original))
     if hit_sink is not None:
@@ -610,8 +611,8 @@ def evaluate(payload, hit_sink=None, rendered_check=True):
     return result
 
 
-def evaluate_once(payload, hit_sink=None, rendered=frozenset()):
-    """One evaluation of every gate (evaluate), with the `rendered` input values also withheld."""
+def evaluate_once(payload, hit_sink=None, rendered=frozenset(), oversize=frozenset()):
+    """One evaluation of every gate (evaluate), with the `rendered` and `oversize` input values also withheld."""
     require_contract(payload)
     raw = copy.deepcopy(payload)
     # Every section and nested record is checked against the contract before any reader touches it, so a wrongly typed
@@ -619,7 +620,7 @@ def evaluate_once(payload, hit_sink=None, rendered=frozenset()):
     rules.validate_contract(raw, "gate_check")
     # Withhold flagged text before any computation, so every derived field, finding and output carries the numbered
     # marker instead of the text (quality-gate-criteria.md #8.7). The contract is still checked on the raw input.
-    rules.withhold_untrusted(payload, rendered=rendered)
+    rules.withhold_untrusted(payload, rendered=rendered, oversize=oversize)
     # Hits are also taken before any upstream engine output is restored from recomputation, so a flagged field inside
     # a restored entry (for example a member name added to assertion_mappings[]) is still reported, not just dropped.
     screened_hits = instruction_hits(payload) if EMBEDDED_INSTRUCTION_HOLD else []
@@ -652,7 +653,7 @@ def evaluate_once(payload, hit_sink=None, rendered=frozenset()):
     recipients = recipient_classes(deliverable)
     invalid_identities = invalid_client_identities(deliverable)
     if invalid_identities:
-        names = ", ".join(f"{label}={value}" for label, value in invalid_identities)
+        names = ", ".join(invalid_identities)
         add_finding(findings, "GC-G2-client-identity-external", "G2", MUST_FIX, "Client name or alias contains external-party vocabulary", f"{names} contains external-party vocabulary (counsel, lender, bank, investor, regulator, auditor, buyer, outside or third party), so it is not trusted to identify the client; recipients naming it are treated as external.", disclaimer_location(payload), "quality-gate-criteria.md #2.5", 0.9, "quality-gate-criteria.md #2.5; severity-rules.md #1.2")
         escalations.append(f"G2: confirm client aliases {names} - contains external-party vocabulary and is not trusted as the client identity; reviewing partner/QRM must confirm the client name, aliases and recipients (quality-gate-criteria.md #2.5)")
     if recipients["external"] and deliverable["third_party_recipient_named"] is False:
@@ -697,9 +698,11 @@ def evaluate_once(payload, hit_sink=None, rendered=frozenset()):
             if token:
                 title, detail = f"Missing required language: {token}", f"Required language `{token}` is not present in the deliverable."
             else:
-                # Long, unsafe or withheld items are named by position and excerpt, so each missing item is identifiable.
+                # An item that is not an identifier-shaped key is named by position only, never quoted; an item that is
+                # exactly a withheld marker (engine text) also names that marker (#8.9).
                 title = f"Missing required language: item {index + 1}"
-                detail = f"Required language item {index + 1} (deliverable.required_language[{index}]: \"{language_excerpt(required)}\") is not present in the deliverable."
+                shown = f"; it is {required}" if rules.is_withheld(required) else ""
+                detail = f"Required language item {index + 1} (deliverable.required_language[{index}]) is not present in the deliverable{shown}."
             add_finding(findings, finding_id, "G2", severity, title, detail, disclaimer_location(payload), "quality-gate-criteria.md #2.1-#2.3", 0.94, "quality-gate-criteria.md #2.1-#2.3")
     if CONFIDENTIALITY_MARK_REQUIRED and rules.canonical_id(deliverable.get("confidentiality_marking") or "") != "client confidential":
         add_finding(findings, "GC-G4-confidentiality", "G4", RELEASE_BLOCKER, "Missing client-confidential marking", "Required client-confidential marking is absent from cover/footer.", loc("Cover", 1, 1, "Confidentiality mark"), "quality-gate-criteria.md #4.1", 0.97, "quality-gate-criteria.md #4.1; severity-rules.md #1.1")
@@ -717,7 +720,7 @@ def evaluate_once(payload, hit_sink=None, rendered=frozenset()):
             add_finding(findings, finding_id, "G5", MUST_FIX if legal else ADVISORY, check.get("title") or "Brand or formatting defect", check.get("detail") or "Brand check failed", location, "quality-gate-criteria.md #5.1-#5.2", check.get("confidence", 0.9), check.get("citation") or "quality-gate-criteria.md #5.1-#5.2")
         elif status_value not in BRAND_CHECK_STATUSES:
             severity = RELEASE_BLOCKER if legal else MUST_FIX
-            add_finding(findings, finding_id, "G5", severity, "Brand or release-control check not verified", f"Brand check {check_id} has status {safe_token(status_value, 'blank/unrecognised') if status_value else 'blank/missing'}; only pass or fail are recognised, so the check is treated as not verified{' for a legal, confidentiality or release-control mark' if legal else ''}.", location, "quality-gate-criteria.md #5.2-#5.3", 0.95, "quality-gate-criteria.md #5.2-#5.3")
+            add_finding(findings, finding_id, "G5", severity, "Brand or release-control check not verified", f"Brand check {check_id} has {'an unrecognised status' if status_value else 'a blank or missing status'}; only pass or fail are recognised, so the check is treated as not verified{' for a legal, confidentiality or release-control mark' if legal else ''}.", location, "quality-gate-criteria.md #5.2-#5.3", 0.95, "quality-gate-criteria.md #5.2-#5.3")
             escalations.append(f"G5: brand check {check_id} status is not pass or fail - {severity}; hold for reviewing partner/QRM (quality-gate-criteria.md #5.3)")
     for index, item in enumerate(licensed_content):
         content_id = safe_token(item["content_id"], f"licensed-content-{index + 1}")
