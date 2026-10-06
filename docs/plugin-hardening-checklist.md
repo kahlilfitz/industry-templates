@@ -426,6 +426,18 @@ How to read a report:
   identity cannot release its free text. [Mobilization round 16]
   Test: a Closeout client name absent from the wall register used as a workspace name; a Closeout
   record with no `engagement` whose asset title names another client. Both must hold.
+  The same applies to every gating input at every stage that reads it: a missing, zero-byte or
+  headerless inventory, roster or register holds at each stage, not only at the stage that
+  first documents it. [Mobilization round 20]
+  Test: run each later stage directly with a nonexistent and a zero-byte copy of each gating
+  input; none may report a clear or ready state.
+- [ ] **D24. A foreign record is quarantined, not quoted.** Once a record is classified as
+  belonging to another client, deliverable, engagement or timekeeper, its hold or exclusion labels
+  it by position or with a fixed label (`brand_checks[0]`, `calendar row 4`). Its supplied ID,
+  name and text never reach any output, intermediate JSON included, even when the ID is shape-valid.
+  [Wave 1 pre-freeze QA, DRQG round 16]
+  Test: a brand check for another deliverable whose ID, title and detail name another client; no
+  output file or packet line may contain any of them.
 
 ## E. Draft-first and grounding (`SKILL.md`)
 
