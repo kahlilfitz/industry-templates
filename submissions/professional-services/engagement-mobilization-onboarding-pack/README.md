@@ -40,7 +40,7 @@ SOW extract, engagement-letter extract, pursuit record, confirmed roster CSV, et
 
 ## Run the demo and tests
 
-From the plugin root: `python3 tests/run_tests.py` reproduces both scenarios byte-for-byte (`--generated-at 2026-10-01T00:00:00Z`) and runs the negative fixtures; `python3 tests/check_shared_copies.py` confirms every skill carries identical contracts, references, `safety_text.py`, `contract_validate.py` and the pinned `steering_guard.py`. The engine chain is in each skill's `SKILL.md`.
+From the plugin root: `python3 tests/run_tests.py` reproduces both scenarios byte-for-byte (`--generated-at 2026-10-01T00:00:00Z`) and runs the negative fixtures. Each check prints `PASS <label>` or `FAIL <label> (detail)` as soon as it runs, under a `== group <name>` header; any failures are repeated under `== failures`, and the last line is `N/M checks passed` (exit 1 on any failure). `--list-groups` prints the group names; `--group NAME` (repeatable) runs only those groups, in suite order, after the shared scenario chain setup (for example `python3 tests/run_tests.py --group core` for the goldens). An unknown group or argument exits 2. `python3 tests/check_shared_copies.py` confirms every skill carries identical contracts, references, `safety_text.py`, `contract_validate.py` and the pinned `steering_guard.py`. The engine chain is in each skill's `SKILL.md`.
 
 ## Value
 

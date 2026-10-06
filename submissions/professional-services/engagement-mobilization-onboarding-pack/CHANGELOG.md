@@ -492,6 +492,10 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
   - Eight earlier checks whose fixtures exercise the changed behaviour were updated: 1.0.1 briefing, QA-1, QA-H2, QA-J, QA-M3, QA-N1, QA-P2 and MOB-QA-16-04. They now expect quarantine in place of the old ID-carrying rows; the qa101j helper was also made safe when a row is absent.
   - Against the previous code, 9 of the 11 checks fail. The exceptions are the two header-only controls, which guard behaviour that already held.
   - Suite 483 → 494 checks. Goldens byte-identical.
+- **Test harness: results stream as they run; `--list-groups` and `--group`; summary line unchanged.** `tests/run_tests.py` prints each ASCII-escaped `PASS`/`FAIL` line as soon as the check is recorded (flushed), under a `== group <name>` header, so a run killed by a sandbox timeout still leaves evidence. Failures are repeated under `== failures` before the unchanged final `N/M checks passed` line; exit 1 on any failure, else 0.
+  - Groups are named after their check functions (`extra_checks` … `qa101zd_checks`); the inline checks are now `core` (goldens and scenario B checks, first) and `core_tail` (wall-register, injection and missing-SOW checks, last).
+  - `--list-groups` prints the names; `--group NAME` (repeatable) runs only those groups in canonical order after the shared setup (temp dir and both scenario chains). An unknown group or argument exits 2.
+  - A full run gives the same 494 check labels as before. No engine, skill, reference, contract or demo-data change.
 
 ## 1.0.0 - 2026-10-01
 
