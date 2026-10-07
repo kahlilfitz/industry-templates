@@ -61,6 +61,17 @@ Paragraph rule (deliverable-ingest step 3): a paragraph is a block of body text 
 blank line; headings, [Page N] markers and blank lines are not paragraphs. Paragraphs are counted
 from 1 on each page. A source with no [Page N] markers is unpaginated: every block is page 1 and
 paragraphs are counted from 1 from the top of the document.
+
+Syntax variants (quality-gate-criteria.md #8.11, T&E r15 follow-up): a line is read in one form
+whatever its markdown spelling - a blockquote '>', a '-'/'*'/'+'/numbered bullet or '[ ]'/'[x]'
+task box, a table row '| key | value |', bold, italic or code wrappers, and a ':', '=' or ' - '
+separator - so a declared field outside its section is refused, never silently dropped. A setext
+heading ('===' or '---' underline) is the same heading as its '#'/'##' form, and a draft heading's
+closing '#'s, wrappers, section number and trailing colon are removed before it is read, so
+'## **Disclaimer - general advice**' is the disclaimer heading. A title, cover Client, Client
+aliases or Distribution entry, or location section or label in a label form the engines write
+themselves (assertion_rules.reserved_name: a record path, a positional record label, a
+foreign-record stand-in or a reserved ID label) is refused, naming its position only.
 Exit code 0 = every scenario derives cleanly.
 """
 import json
@@ -106,6 +117,14 @@ CRITERIA_SET_LINE = re.compile(r"^[ \t]*criteria[ \t]+set[ \t]+id\b", re.IGNOREC
 # part's) leading key in that folded form; label_pattern finds a field label anywhere in a line in any of those forms.
 LEADING_BULLET = re.compile(r"^[ \t]*(?:[-*+]|[0-9]{1,9}[.)])[ \t]+")
 EMPHASIS = re.compile(r"[*`]")
+# A25 follow-up: a line is also normalised for blockquote markers, a task box, a table row (its first cell is the key),
+# underscore and other wrappers around the key, and the key/value separators ':', '=' and a spaced dash, and a setext
+# underline (=== or ---) makes the line above it a heading, before a parser decides that the line is prose.
+QUOTE_PREFIX = re.compile(r"^[ \t]*(?:>[ \t]?)+")
+TASK_BOX = re.compile(r"^\[[ xX]\][ \t]+")
+KEY_SEPARATOR = re.compile(r"[ \t]*[:=]|[ \t]+[-\u2010-\u2015\u2212][ \t]+")
+SETEXT_UNDERLINE = re.compile(r"^[ \t]{0,3}(?:=+|-+)[ \t]*$")
+WRAPPERS = "*_`"
 # A typed disclaimer heading ('Disclaimer - <type>') in any other case, dash or separator, and a [Page N] marker in any
 # other spelling, would otherwise be read as an ordinary section or as body text.
 DISCLAIMER_HEADING = re.compile(r"^Disclaimer - (.+)$")
@@ -144,22 +163,66 @@ def emit(line=""):
     print(str(line).encode("ascii", "backslashreplace").decode("ascii"))
 
 
+def normalise(text):
+    """A line's content in its canonical syntax (A25): leading whitespace and blockquote markers, one list bullet and a
+    task box removed, and a table row ('| key | value |') rewritten as 'key: value'."""
+    body = TASK_BOX.sub("", LEADING_BULLET.sub("", QUOTE_PREFIX.sub("", text), count=1), count=1).strip()
+    if body.startswith("|"):
+        cells = [cell.strip() for cell in body.strip("|").split("|")]
+        if len(cells) > 1:
+            body = f"{cells[0]}: {' | '.join(cells[1:])}"
+    return body
+
+
+def unwrap(text):
+    """Text with surrounding wrappers (bold, italic, code), spaces and a trailing colon removed, until none is left."""
+    previous = None
+    while previous != text:
+        previous, text = text, text.strip().strip(WRAPPERS).strip()
+        if text.endswith(":"):
+            text = text[:-1]
+    return text
+
+
 def field_key(text):
-    """The folded key of a 'key: value' line or cover part in any variant form (r15-C): leading whitespace and one list
-    bullet removed, emphasis (*, `) removed, then rules.canonical_id (case, spacing and -, _, . separators folded).
-    None when the text has no colon, or its key is blank or longer than any field name."""
-    body = EMPHASIS.sub("", LEADING_BULLET.sub("", text, count=1))
-    key, sep, _ = body.partition(":")
-    if not sep or len(key) > 60:
+    """The folded key of a 'key: value' line or cover part in any variant form (r15-C, A25): normalise()d, the key ends
+    at the first ':', '=' or spaced dash, its wrappers and emphasis are removed, then rules.canonical_id (case, spacing
+    and -, _, . separators folded). None when the text has no separator, or its key is blank or longer than any field
+    name."""
+    body = normalise(text)
+    separator = KEY_SEPARATOR.search(body)
+    if separator is None or separator.start() > 60:
         return None
-    return rules.canonical_id(key) or None
+    return rules.canonical_id(EMPHASIS.sub("", unwrap(body[:separator.start()]))) or None
+
+
+def names_field(line, keys, pattern):
+    """True when the line, in any syntactic variant, declares one of the field `keys`: its leading key (field_key), a
+    field label anywhere in it (`pattern`), or any cell of a table row."""
+    body = normalise(line)
+    cells = [unwrap(cell) for cell in QUOTE_PREFIX.sub("", line).strip().strip("|").split("|")] if "|" in line else []
+    return (field_key(line) in keys or declares(body, pattern)
+            or any(rules.canonical_id(EMPHASIS.sub("", cell)) in keys for cell in cells))
+
+
+def setext_headings(lines):
+    """{index of a setext heading's text line: '#' or '##'} (A25): a non-blank line that is not itself a heading, list
+    item, quote or table row, directly above a '===' (level 1) or '---' (level 2) underline. The underline is the next
+    index."""
+    found = {}
+    for index in range(len(lines) - 1):
+        text = lines[index].strip()
+        if (text and SETEXT_UNDERLINE.match(lines[index + 1]) and not SETEXT_UNDERLINE.match(lines[index])
+                and not text.startswith(("#", ">", "|")) and not PAGE_MARKER_LIKE.match(text) and not RECORD_ITEM.match(text)):
+            found[index] = "#" if lines[index + 1].strip().startswith("=") else "##"
+    return found
 
 
 def label_pattern(labels):
     """One regex finding any of `labels` ('Field name:') anywhere in an emphasis-stripped line, in any case and with any
-    spacing or -, _, . separator between its words and before the colon (r15-C)."""
+    spacing or -, _, . separator between its words, an optional closing '_' wrapper, and ':' or '=' (r15-C, A25)."""
     alternatives = ["[ \t_.-]+".join(map(re.escape, label.rstrip(":").split())) for label in labels]
-    return re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(alternatives) + r")[ \t]*:", re.IGNORECASE)
+    return re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(alternatives) + r")_?[ \t]*[:=]", re.IGNORECASE)
 
 
 def declares(line, pattern):
@@ -172,6 +235,15 @@ def unreserved(value, where):
     spelling) is refused naming its position only, exactly as the engines refuse it (quality-gate-criteria.md #8.11)."""
     if rules.reserved_label(value):
         raise PackError(f"{where} gives an ID in a label form the engines write themselves ({rules.RESERVED_LABEL_RULE})")
+    return value
+
+
+def unreserved_name(value, where):
+    """r15-A follow-up (D25): a raw-pack name, title or location in a label form the engines write themselves
+    (rules.reserved_name: a record path such as brand_checks[0], a positional record label, a foreign-record stand-in or
+    a reserved ID label) is refused naming its position only, exactly as the engines refuse it (#8.11)."""
+    if rules.reserved_name(value):
+        raise PackError(f"{where} gives a name in a label form the engines write themselves ({rules.RESERVED_NAME_RULE})")
     return value
 
 
@@ -189,7 +261,7 @@ def record_match(pattern, line, kind, where):
     that register in any case, spacing or emphasis variant) that the pattern does not match raises PackError naming only
     its position; prose lines return None. A record ID blank after the fold, or in a reserved label form, is refused."""
     match = pattern.match(line)
-    if match is None and (RECORD_ITEM.match(line) or declares(line, RECORD_LABEL_PATTERNS[kind])):
+    if match is None and (RECORD_ITEM.match(QUOTE_PREFIX.sub("", line)) or declares(line, RECORD_LABEL_PATTERNS[kind])):
         raise PackError(f"{where} is a record line of the {kind} that does not follow the documented line format; fix or remove it")
     if match is not None and "id" in pattern.groupindex and rules.key_of(match["id"]) is None:
         # An ID blank after the fold (for example "-" or "_") names nothing and must never match another (#8.17).
@@ -239,7 +311,10 @@ def read_text(path, label):
 
 
 def section_name(heading):
-    return SECTION_NUMBER.sub("", heading.strip())
+    """A heading's section name in any heading form (A25): a closing '#' sequence, bold, italic or code wrappers, a
+    section number and a trailing colon removed, so '## 1. **Disclaimer - general advice**:' is 'Disclaimer - general
+    advice'."""
+    return unwrap(SECTION_NUMBER.sub("", unwrap(re.sub(r"[ \t]+#+[ \t]*$", "", heading.strip()))))
 
 
 def parse_draft(text):
@@ -258,8 +333,14 @@ def parse_draft(text):
             blocks[(page, paragraph)] = {"section": section, "text": " ".join(current), "lines": list(current)}
             current.clear()
 
+    setext = setext_headings(lines)
     for number, raw in enumerate(lines, 1):
         line = raw.strip()
+        if number - 2 in setext:
+            continue
+        if number - 1 in setext:
+            # A setext heading is the same heading as its ATX form (A25): '===' a title, '---' a section heading.
+            line = f"{setext[number - 1]} {line}"
         marker = PAGE_MARKER.match(line)
         if marker:
             flush()
@@ -280,7 +361,7 @@ def parse_draft(text):
                                 "it would be read as an ordinary section and its disclaimer type dropped - fix it")
             if clause:
                 disclaimers.append(unreserved(clause.group(1).strip().lower().replace(" ", "_"), f"draft line {number} disclaimer type"))
-        elif PAGE_MARKER_LIKE.match(line):
+        elif PAGE_MARKER_LIKE.match(unwrap(normalise(line))):
             raise PackError(f"draft line {number} is a page marker that does not follow '[Page N]'; it would be read as body text and shift paragraph numbering - fix it")
         elif not line:
             flush()
@@ -311,12 +392,17 @@ def parse_draft(text):
         if block is first:
             continue
         for line in block["lines"]:
-            if any(field_key(part) in COVER_KEYS for part in line.split("|")):
+            if any(field_key(part) in COVER_KEYS for part in [line] + line.split("|")):
                 raise PackError(f"draft paragraph {index} (counting every paragraph from the top) gives a cover field ({', '.join(COVER_FIELDS)}) "
                                 "outside the cover block; it would be silently ignored - move it into the cover block or remove it")
     for field in ("Engagement", "Document ID"):
         if cover.get(field):
             unreserved(cover[field], f"draft cover field {field}")
+    if title:
+        unreserved_name(title, "draft title")
+    for field in ("Client", "Client aliases", "Distribution"):
+        for index, entry in enumerate((cover.get(field) or "").split(";") if field != "Client" else [cover.get(field) or ""], 1):
+            unreserved_name(entry.strip(), f"draft cover field {field} entry {index}")
     return title, cover, blocks, disclaimers
 
 
@@ -324,6 +410,8 @@ def parse_location(text, where):
     match = LOCATION.match(text.strip())
     if not match:
         raise PackError(f"{where}: Location ({show(text)}) does not follow '<section>, page N, paragraph N, <label>'")
+    unreserved_name(match["section"], f"{where} location section")
+    unreserved_name(match["label"], f"{where} location label")
     return {"section": match["section"], "page": position(match["page"], where), "paragraph": position(match["paragraph"], where), "label": match["label"]}
 
 
@@ -333,7 +421,14 @@ def register_sections(text):
     to no register and is a PackError, never skipped."""
     sections, name, first = {}, None, True
     labels = PREAMBLE_REGISTER_LABELS
-    for number, line in enumerate(text.splitlines(), 1):
+    lines = text.splitlines()
+    setext = setext_headings(lines)
+    for number, line in enumerate(lines, 1):
+        if number - 2 in setext:
+            continue
+        if number - 1 in setext:
+            # A setext heading is the same heading as its ATX form (A25): a register section, or the file's title.
+            line = f"{setext[number - 1]} {line.strip()}"
         if line.startswith("## "):
             name = line[3:].strip()
             if name in sections:
@@ -343,7 +438,7 @@ def register_sections(text):
             sections[name].append(line.strip())
         elif line.strip():
             stripped = line.strip()
-            if (RECORD_ITEM.match(stripped) or HANDLING_LINE.match(EMPHASIS.sub("", stripped)) or declares(stripped, labels)
+            if (RECORD_ITEM.match(stripped) or HANDLING_LINE.match(EMPHASIS.sub("", stripped)) or names_field(stripped, REGISTER_FIELD_KEYS, labels)
                     or (stripped.startswith("#") and not (first and line.startswith("# ")))):
                 raise PackError(f"release-registers.md line {number} is a record or heading line before the first register section; it belongs to no register - move it under its section heading or remove it")
             first = False
@@ -429,7 +524,10 @@ def record_lines(text, pattern, kind, label):
     after the first entry, or a file with no entry is a PackError naming the file and line, never skipped: prose is
     never read as an empty register."""
     matches, started, first = [], False, True
-    for number, raw in enumerate(text.splitlines(), 1):
+    lines = text.splitlines()
+    setext = setext_headings(lines)
+    keys = {rules.canonical_id(label.rstrip(":")) for label in RECORD_LABELS[kind]}
+    for number, raw in enumerate(lines, 1):
         line = raw.strip()
         match = record_match(pattern, line, kind, f"{label} line {number}") if line else None
         matches.append(match)
@@ -437,9 +535,10 @@ def record_lines(text, pattern, kind, label):
             continue
         if match is not None:
             started = True
-        elif started or (line.startswith("#") and not (first and raw.startswith("# "))):
-            raise PackError(f"{label} line {number} is not a record of the {kind} (a heading after the title, or prose after the first entry); "
-                            "a placeholder or prose line is never skipped - fix or remove it")
+        elif (started or (line.startswith("#") and not (first and raw.startswith("# "))) or (number - 1 in setext and not first)
+              or names_field(line, keys, RECORD_LABEL_PATTERNS[kind])):
+            raise PackError(f"{label} line {number} is not a record of the {kind} (a heading after the title, a field of a record "
+                            "in another syntax, or prose after the first entry); a placeholder or prose line is never skipped - fix or remove it")
         first = False
     if not started:
         raise PackError(f"{label} lists no entries; its prose is never read as an empty register - list its entries")

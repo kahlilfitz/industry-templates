@@ -654,6 +654,8 @@ def assertion_map_stage(payload, generated_at=None):
     validate_contract(payload, "assertion_map")
     # IDs are tokens, never prose (quality-gate-criteria.md #8.11); checked on the raw input before any screening.
     validate_id_shapes(payload)
+    # Names and locations are never in a label form the engines write themselves (D25, #8.11).
+    validate_reserved_names(payload)
     evidence_index(payload["evidence_set"])
     validate_assertions(payload["assertions"])
     # Ownership of a supplied finding ID is read before withholding (quality-gate-criteria.md #8.4).
@@ -1038,6 +1040,62 @@ FOREIGN_SUBJECT = "[another engagement or deliverable]"
 def foreign_record_id(path):
     """The stand-in ID of the foreign record at `path` (for example `deliverable.brand_checks[0]`): positional only."""
     return f"[record of another engagement or deliverable: {path}]"
+
+
+# The label forms the engines write in names and locations for records they name themselves (D25, #8.11), compared in
+# canonical_id form (case, surrounding whitespace and -, _, . separators folded): a record path (brand_checks[0],
+# deliverable.brand_checks[0], $.findings[2]), a positional record label with its path (Brand check 1
+# (deliverable.brand_checks[0]), Reviewer finding 1 (findings[0])), and the foreign-record stand-ins (FOREIGN_SUBJECT,
+# foreign_record_id). None is an identifier token, so ID_TOKEN already refuses them as IDs; reserved_name refuses them,
+# and the reserved ID labels (reserved_label), in the review input's name and location fields.
+_LABEL_PATH = r"(?:\$ ?)?[a-z][a-z0-9 ]*\[[0-9]+\](?:\[[0-9]+\]|[a-z0-9 ]+)*"
+ENGINE_LABEL_FORM = re.compile(
+    _LABEL_PATH + r"|[a-z][a-z ]* [0-9]+ \(" + _LABEL_PATH + r"\)"
+    + "|" + re.escape(canonical_id(FOREIGN_SUBJECT)) + "|" + re.escape(canonical_id(foreign_record_id("")).rstrip("]").rstrip()) + r" .*\]")
+RESERVED_NAME_RULE = ("a name, title or location may not be a label the engines write themselves: a record path (brand_checks[N], "
+                      "<section>[N]), a positional record label (Brand check N (<path>)), a foreign-record stand-in, or a reserved "
+                      "ID label (an AM-, GC- or SR- finding ID, brand-check-N, language-N, assertion and the like), in any case "
+                      "or separator spelling")
+# Name fields of the deliverable (D25): a string, or each entry of a list of strings.
+RESERVED_NAME_FIELDS = ("client_name", "title", "client_aliases", "intended_recipients")
+# Supplied records whose location names a section and paragraph label of this deliverable. An engine-owned finding in
+# findings[] (engine_id_owner) carries the engines' own positional location and is verified by recomputation (#8.4).
+LOCATED_RECORDS = (("assertions",), ("evidence_set",), ("deliverable", "brand_checks"), ("deliverable", "licensed_content"),
+                   ("prior_findings",), ("findings",))
+
+
+def reserved_name(value):
+    """True when value is a label the engines write themselves (ENGINE_LABEL_FORM, or reserved_label), after
+    canonical_id folding. The one shared check for name and location fields, in the engines and the raw-pack parser."""
+    return isinstance(value, str) and (bool(ENGINE_LABEL_FORM.fullmatch(canonical_id(value))) or reserved_label(value))
+
+
+def require_unreserved_name(value, path):
+    if reserved_name(value):
+        raise InputError(f"{path} is in a label form the engines write themselves: {RESERVED_NAME_RULE} (quality-gate-criteria.md #8.11)")
+
+
+def validate_reserved_names(payload):
+    """Refuse the review input when a name field (RESERVED_NAME_FIELDS) or a supplied record's location section or label
+    (LOCATED_RECORDS) is in a label form the engines write themselves (reserved_name), so no supplied value can pass for
+    the engines' own label of another record in any output (quality-gate-criteria.md #8.11). Checked on the raw input
+    before any screening; the message names the field path and the rule, never the value (#8.9)."""
+    deliverable = payload.get("deliverable") if isinstance(payload.get("deliverable"), dict) else {}
+    for field in RESERVED_NAME_FIELDS:
+        value = deliverable.get(field)
+        for index, entry in (enumerate(value) if isinstance(value, list) else [(None, value)]):
+            require_unreserved_name(entry, format_path(("deliverable", field) + (() if index is None else (index,))))
+    for segments in LOCATED_RECORDS:
+        records = payload
+        for part in segments:
+            records = records.get(part) if isinstance(records, dict) else None
+        for index, record in enumerate(records if isinstance(records, list) else []):
+            if not isinstance(record, dict) or not isinstance(record.get("location"), dict):
+                continue
+            if segments == ("findings",) and engine_id_owner(record.get("finding_id")) is not None:
+                continue
+            for member in ("section", "label"):
+                require_unreserved_name(record["location"].get(member), format_path(segments + (index, "location", member)))
 
 
 def _positional_location(path):

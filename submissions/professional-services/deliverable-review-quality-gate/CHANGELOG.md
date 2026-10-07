@@ -778,6 +778,70 @@ Three defect classes from T&E QA round 15, swept across every DRQG engine and ra
   - A check that both demos still derive.
   - Goldens and demo data are byte-identical.
 
+### T&E QA round 15 class sweep follow-up (A25/D25 from T&E e6925e4; 1.0.4, no version bump)
+
+The final T&E r15 class definitions add more markdown spellings (r15-C) and name fields (r15-A). Each variant was reproduced against copies of the demo raw packs and review inputs before the fix. Only confirmed gaps were fixed.
+
+- **r15-A: the engines' own label forms are refused in name and location fields.** Before the fix, every form passed the whole chain with a clean verdict. The forms were a record path (`deliverable.brand_checks[0]`, `findings[0]`), a positional label (`Brand check 1 (deliverable.brand_checks[0])`, `Reviewer finding 1 (findings[0])`), a foreign stand-in (`[another engagement or deliverable]`, `[record of another engagement or deliverable: evidence_set[0]]`) and a reserved ID label (`brand-check-1`, `AM-G8-foreign-finding-1`). They were tested in `client_name`, `title`, `client_aliases[]`, `intended_recipients[]` and the assertion and brand-check `location.section`/`location.label`. A raw cover Distribution entry `findings[0]` also derived.
+  - **Engines** (`assertion_rules.py`, byte-identical in assertion-map and gate-check):
+    - `ENGINE_LABEL_FORM` (line 1052) and the shared `reserved_name` predicate (line 1067), which also applies `reserved_label`.
+    - `require_unreserved_name` (line 1073).
+    - `validate_reserved_names` (line 1078). It covers the deliverable name fields and the location section and label of every supplied located record, and exempts an engine-owned finding, whose positional location is verified by recomputation (#8.4).
+    - It is called from `assertion_map_stage` (line 658), so gate_check, severity_rank and `--verify` refuse the same way (#8.21).
+    - The refusal names the field path and the rule, never the value (#8.9).
+  - **Raw parser** (`tests/derive_review_input.py`): new `unreserved_name` (line 241), applied to:
+    - the draft title (line 402);
+    - the cover Client, each Client aliases entry and each Distribution entry (line 405);
+    - every raw location section and label (lines 413-414).
+  - ID fields need no change. `ID_TOKEN` already refuses bracket, space and parenthesis forms, and r15-A above covers the reserved IDs.
+  - Intermediate JSON: n/a. A label form placed in mapped JSON (read by gate_check) or gate-checked JSON (read by severity_rank) was already refused, because each stage re-derives the whole document from the review input (#8.21, A23).
+- **r15-C: more syntactic variants** (`tests/derive_review_input.py`). Before the fix, each confirmed variant below derived cleanly and was silently ignored.
+  - **Gaps fixed:**
+    - In the registers preamble: a table row, `_key_` wrapper, `=` or ` - ` separator field, and a setext register heading.
+    - In the evidence and prior preambles: a table-row record, an `=` or `_Type_` field, and a setext heading.
+    - In the criteria extract, a second set-ID line written as a `>`, task-box, table-row or `=` form.
+    - In the draft: `> [Page 4]` and `**[Page 4]**` page markers, and a body cover field written as a `>`, task-box, table-row, `_key_`, `=` or ` - ` form.
+    - Bold, `_wrapped_` and setext disclaimer headings, which derived with the disclaimer type dropped.
+  - **Helpers:**
+    - `QUOTE_PREFIX`, `TASK_BOX`, `KEY_SEPARATOR` and `SETEXT_UNDERLINE` (from line 123).
+    - `normalise` (line 166): removes the quote prefix, bullet and task box, and rewrites a table row as `key: value`.
+    - `unwrap` (line 177): removes wrappers and a trailing colon.
+    - `field_key` (line 187) accepts `:`, `=` and ` - ` separators.
+    - `names_field` (line 199) and `setext_headings` (line 208).
+    - `label_pattern` (line 221) accepts `=` and a closing `_`.
+  - **Sites:**
+    - `record_match` (line 264) reads a `>`-quoted record line.
+    - `section_name` (line 313) removes closing `#`s, wrappers, the section number and a trailing colon.
+    - `parse_draft`:
+      - reads a setext heading as its ATX form (line 343);
+      - refuses a page-marker variant after `normalise`/`unwrap` (line 364);
+      - checks the whole line and each table cell for a cover field (line 395).
+    - `register_sections` reads a setext heading (line 431) and refuses any variant field in the preamble (line 441).
+    - `record_lines` refuses a variant field or a setext heading in the preamble (line 539).
+  - **Accepted consistently** (the same output as the canonical form): bold, italic, trailing-colon, closing-hash and setext disclaimer headings; a numbered trailing-colon section heading; and a setext register section heading.
+  - **Already refused (not gaps):**
+    - variants inside a known register section;
+    - numbered and trailing-colon register headings;
+    - `>` and task-box lines in the registers preamble;
+    - a `>` record in the prior preamble;
+    - a ` - ` set-ID line;
+    - a set ID under a setext criteria section;
+    - `**Client**:` in the body.
+  - **Prose:** a body line whose opening words are exactly a cover field name followed by ` - ` or `=` (for example `Status - on track`) is now refused as a cover field written in a variant form. Prose that merely contains a ` - ` or `=` still derives (control).
+- Docs: quality-gate-criteria.md #8.11 (all six copies) and the `tests/derive_review_input.py` docstring.
+- Tests: 1716 checks (were 1664). The 52 new checks are in `r15_sweep_tests`:
+  - r15-A:
+    - 8 label forms against each of 9 name and location fields;
+    - the gate_check, severity_rank and `--verify` entry points;
+    - the `reserved_name` predicate and its near misses;
+    - a near-miss chain control;
+    - 6 raw name sites.
+  - r15-C:
+    - 25 variant refusals;
+    - 8 consistent-acceptance controls, including prose with ` - ` and `=`;
+    - a check that a bold disclaimer heading is no longer dropped.
+  - Goldens and demo data are byte-identical.
+
 ### Test harness
 
 - Test harness: results stream as they run; `--list-groups` and `--group`; summary line unchanged. `tests/run_tests.py` prints `== group <name>` before each group and each `PASS <label>` or `FAIL <label>  (detail)` line as the check is recorded (ASCII-safe, flushed), so a suite cut off by a sandbox timeout still leaves evidence (checklist G7). Failures are repeated under `== failures` before the last line, which is still `N/M checks passed`. `--list-groups` prints the 44 group names (45 after the r15 sweep above); `--group NAME` (repeatable) runs only those groups, in canonical order, with the same shared setup. Every group runs alone with the same checks it has in a full run, so none needs another as a prerequisite. An unknown group or argument exits 2. Check labels and the count (1607) are unchanged; engines, skills, references, contracts and demo data are untouched.

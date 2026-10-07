@@ -7566,6 +7566,142 @@ def r15_sweep_tests(tmp):
     for index, (label, scenario_dir, edits) in enumerate(controls):
         code, output = derive_with(f"c-control-{index}", scenario_dir, edits)
         check(f"R15-C control: {label} is handled consistently and still derives", code == 0 and "derives from its raw pack" in output, output.strip()[:300])
+
+    # Follow-up (T&E e6925e4, A25/D25). r15-A: the engines' own label forms - a record path (brand_checks[N],
+    # <section>[N]), a positional record label, a foreign-record stand-in, a reserved ID label - are refused in name and
+    # location fields too (assertion_rules.reserved_name), in the review input and in the raw pack.
+    name_forms = ("deliverable.brand_checks[0]", "Findings[2]", "Brand check 1 (deliverable.brand_checks[0])", "reviewer finding 3 (findings[2])",
+                  "[another engagement or deliverable]", " [Record of another engagement or deliverable: evidence_set[0]] ", "brand-check-1",
+                  "AM-G8-foreign-finding-1")
+    name_fields = (
+        ("deliverable.client_name", review_a, lambda p, v: p["deliverable"].__setitem__("client_name", v)),
+        ("deliverable.title", review_a, lambda p, v: p["deliverable"].__setitem__("title", v)),
+        ("deliverable.client_aliases[0]", review_a, lambda p, v: p["deliverable"].__setitem__("client_aliases", [v])),
+        ("deliverable.intended_recipients[2]", review_b, lambda p, v: p["deliverable"]["intended_recipients"].append(v)),
+        ("assertions[0].location.section", review_a, lambda p, v: p["assertions"][0]["location"].__setitem__("section", v)),
+        ("assertions[0].location.label", review_a, lambda p, v: p["assertions"][0]["location"].__setitem__("label", v)),
+        ("deliverable.brand_checks[0].location.label", review_b, lambda p, v: p["deliverable"]["brand_checks"][0]["location"].__setitem__("label", v)),
+        ("evidence_set[0].location.section", review_a, lambda p, v: p["evidence_set"][0].setdefault("location", {"section": "Cover", "page": 1, "paragraph": 1, "label": "Cover"}).__setitem__("section", v)),
+        ("prior_findings[0].location.label", review_a, lambda p, v: p["prior_findings"][0]["location"].__setitem__("label", v)),
+    )
+    for index, (field, base, mutate) in enumerate(name_fields):
+        failures = []
+        for position, value in enumerate(name_forms):
+            packet = copy.deepcopy(base)
+            mutate(packet, value)
+            path = os.path.join(work, f"n-{index}-{position}-in.json")
+            write(path, packet)
+            code, output, exists = refusal(("assertion_map", "--input", path), f"n-{index}-{position}")
+            rest = output.replace(rules.RESERVED_NAME_RULE, "").replace(field, "")
+            if not (code == 1 and phrase in output and field in output and not exists and "Traceback" not in output and value.strip() not in rest):
+                failures.append((value, output.strip()[:200]))
+        check(f"R15-A follow-up {field} refuses every engine label form (record path, positional label, stand-in, reserved ID) with no output and no echo",
+              not failures, failures[:2])
+    packet = copy.deepcopy(review_b)
+    packet["deliverable"]["intended_recipients"].append("Escalation entry 1 (escalations[0])")
+    path = os.path.join(work, "n-entry-in.json")
+    write(path, packet)
+    expected_b = os.path.join(demo_b, "expected")
+    results = [refusal(("gate_check", "--mapped", os.path.join(expected_b, "assertion-mapped.json"), "--input", path), "n-entry-gc"),
+               refusal(("severity_rank", "--gates", os.path.join(expected_b, "gate-checked.json"), "--input", path), "n-entry-sr")]
+    code, stdout, stderr = run("severity_rank", "--verify", os.path.join(expected_b, "severity-ranked.json"), "--input", path)
+    results.append((code, stdout + stderr, False))
+    check("R15-A follow-up gate_check --input, severity_rank --input and --verify refuse a recipient named as a positional label, with no output",
+          all(code == 1 and phrase in output and not exists for code, output, exists in results), [(code, output.strip()[:120]) for code, output, _ in results])
+    benign = ("Aster Advisory Group", "Brand check 1 (draft)", "Figure 4 (benchmark)", "Findings", "Another engagement", "Group [Holdings]",
+              "Section 2.1", "[Page 3]", "Escalations team", "brand check")
+    check("R15-A follow-up reserved_name is one shared predicate: every engine label form is reserved (any case or surrounding whitespace) and no near miss is",
+          all(rules.reserved_name(value) and rules.reserved_name(f"  {value.upper()}  ") for value in name_forms)
+          and not any(rules.reserved_name(value) for value in benign), [value for value in benign if rules.reserved_name(value)])
+    packet = copy.deepcopy(review_a)
+    packet["deliverable"]["title"] = "Brand check 1 (draft)"
+    packet["assertions"][0]["location"]["label"] = "Figure 4 (benchmark)"
+    workdir = os.path.join(work, "n-control")
+    os.makedirs(workdir, exist_ok=True)
+    try:
+        ranked = read(chain_packet(packet, workdir, "n-control")["ranked"])
+        outcome = status(ranked)
+    except RuntimeError as exc:
+        outcome = str(exc)[:200]
+    check("R15-A follow-up control: near-miss names (a title 'Brand check 1 (draft)', a label 'Figure 4 (benchmark)') run the whole chain with the demo verdict",
+          outcome == status(read(os.path.join(demo_a, "expected", "severity-ranked.json"))), outcome)
+    raw_names = (
+        ("the draft title", demo_a, ("draft-deliverable.md", "# Orion Programme Benefits Review", "# findings[0]"), "findings[0]", "draft title"),
+        ("the cover Client", demo_a, ("draft-deliverable.md", "Client: Aster Advisory Group |", "Client: deliverable.brand_checks[0] |"), "brand_checks[0]", "Client entry 1"),
+        ("a cover Client aliases entry", demo_a, ("draft-deliverable.md", "Confidentiality marking:", "Client aliases: Aster; Brand check 1 (deliverable.brand_checks[0])\nConfidentiality marking:"),
+         "brand_checks[0]", "Client aliases entry 2"),
+        ("a cover Distribution entry", demo_b, ("draft-deliverable.md", "Distribution: Verdant Arc Services board; Cobalt Lenders LLP", "Distribution: Verdant Arc Services board; Cobalt Lenders LLP; findings[0]"),
+         "findings[0]", "Distribution entry 3"),
+        ("a register location label", demo_b, ("release-registers.md", "paragraph 1, Brand. Confidence", "paragraph 1, findings[0]. Confidence"), "findings[0]", "location label"),
+        ("a register location section", demo_b, ("release-registers.md", "Location: Cover, page 1", "Location: [another engagement or deliverable], page 1"), "another engagement", "location section"),
+    )
+    for index, (label, scenario_dir, edit, value, where) in enumerate(raw_names):
+        code, output = derive_with(f"n-raw-{index}", scenario_dir, [edit])
+        check(f"R15-A follow-up the raw-pack verifier refuses {label} in an engine label form, naming its position only",
+              code == 1 and phrase in output and where in output and value not in output.replace(rules.RESERVED_NAME_RULE, ""), output.strip()[:300])
+
+    # r15-C follow-up: blockquote, task-box and table-row lines, _key_ wrappers, ' - ' and '=' separators, and setext,
+    # numbered, wrapped and trailing-colon headings are one form of the line - refused where a declared field is out of
+    # its section, and read as the same heading where they are a heading.
+    end_b = "should not be treated as assurance.\n"
+    ev_intro = "Type, source and confidence as recorded by the engagement team.\n"
+    pr_intro = "the document check records whether the fix is in the current draft.\n"
+    early = "before the first register section"
+    variants = (
+        ("a '> Handling status' before the first register section", demo_b, [("release-registers.md", pre, pre + "> Handling status: breach\n")], early),
+        ("a '- [ ] Handling status' task box before the first register section", demo_b, [("release-registers.md", pre, pre + "- [ ] Handling status: breach\n")], early),
+        ("a '| Handling status | breach |' table row before the first register section", demo_b, [("release-registers.md", pre, pre + "| Handling status | breach |\n")], early),
+        ("a '_Handling status_:' before the first register section", demo_b, [("release-registers.md", pre, pre + "_Handling status_: breach\n")], early),
+        ("a 'Handling-status = breach' before the first register section", demo_b, [("release-registers.md", pre, pre + "Handling-status = breach\n")], early),
+        ("a 'Check basis - none' before the first register section", demo_b, [("release-registers.md", pre, pre + "Check basis - none\n")], early),
+        ("a '| Legal or release control | yes |' row before the first register section", demo_b, [("release-registers.md", pre, pre + "| Legal or release control | yes |\n")], early),
+        ("a setext register heading before the first register section", demo_b, [("release-registers.md", pre, pre + "Extra register\n==============\n")], early),
+        ("a table-row record in the evidence index preamble", demo_b, [("supporting-evidence-index.md", ev_intro, ev_intro + "| EV-B9 | Extra | Type | report | Source | workspace | Confidence | 0.9 |\n")],
+         "supporting-evidence-index.md line 3"),
+        ("a 'Confidence = 0.9' in the evidence index preamble", demo_b, [("supporting-evidence-index.md", ev_intro, ev_intro + "Confidence = 0.9\n")], "supporting-evidence-index.md line 3"),
+        ("a '_Type_:' in the evidence index preamble", demo_b, [("supporting-evidence-index.md", ev_intro, ev_intro + "_Type_: report\n")], "supporting-evidence-index.md line 3"),
+        ("a setext heading in the evidence index", demo_b, [("supporting-evidence-index.md", ev_intro, ev_intro + "More\n----\n")], "supporting-evidence-index.md line 3"),
+        ("a '| Tracker status | closed |' row in the prior-findings preamble", demo_b, [("prior-review-findings.md", pr_intro, pr_intro + "| Tracker status | closed |\n")],
+         "prior-review-findings.md line 3"),
+        ("a '> Criteria set ID:' beside the real line", demo_b, [("qrm-gate-criteria-extract.md", set_line, set_line + "> Criteria set ID: OTHER\n")], "names the criteria set ID but does not follow"),
+        ("a '- [x] Criteria set ID:' beside the real line", demo_b, [("qrm-gate-criteria-extract.md", set_line, set_line + "- [x] Criteria set ID: OTHER\n")], "names the criteria set ID but does not follow"),
+        ("a '| Criteria set ID | OTHER |' row beside the real line", demo_b, [("qrm-gate-criteria-extract.md", set_line, set_line + "| Criteria set ID | OTHER |\n")], "names the criteria set ID but does not follow"),
+        ("a 'Criteria-set-ID = OTHER' beside the real line", demo_b, [("qrm-gate-criteria-extract.md", set_line, set_line + "Criteria-set-ID = OTHER\n")], "names the criteria set ID but does not follow"),
+        ("a '> [Page 4]' page marker", demo_b, [("draft-deliverable.md", "[Page 4]", "> [Page 4]")], "page marker that does not follow"),
+        ("a '**[Page 4]**' page marker", demo_b, [("draft-deliverable.md", "[Page 4]", "**[Page 4]**")], "page marker that does not follow"),
+        ("a '> Engagement:' body paragraph", demo_b, [("draft-deliverable.md", end_b, end_b + "\n> Engagement: PS-OTHER\n")], "gives a cover field"),
+        ("a '- [ ] Engagement:' body paragraph", demo_b, [("draft-deliverable.md", end_b, end_b + "\n- [ ] Engagement: PS-OTHER\n")], "gives a cover field"),
+        ("a '| Engagement | PS-OTHER |' body row", demo_b, [("draft-deliverable.md", end_b, end_b + "\n| Engagement | PS-OTHER |\n")], "gives a cover field"),
+        ("an 'Engagement = PS-OTHER' body paragraph", demo_b, [("draft-deliverable.md", end_b, end_b + "\nEngagement = PS-OTHER\n")], "gives a cover field"),
+        ("a 'Document ID - OTHER-DOC' body paragraph", demo_b, [("draft-deliverable.md", end_b, end_b + "\nDocument ID - OTHER-DOC\n")], "gives a cover field"),
+        ("a '_Engagement_:' body paragraph", demo_b, [("draft-deliverable.md", end_b, end_b + "\n_Engagement_: PS-OTHER\n")], "gives a cover field"),
+    )
+    for index, (label, scenario_dir, edits, expected) in enumerate(variants):
+        code, output = derive_with(f"v-{index}", scenario_dir, edits)
+        check(f"R15-C follow-up the raw-pack verifier refuses {label} instead of silently ignoring it", code == 1 and "raw pack is malformed" in output and expected in output
+              and "OTHER" not in output and "breach" not in output, output.strip()[:300])
+    disclaimer = "## Disclaimer - general advice"
+    controls = (
+        ("a bold disclaimer heading", demo_a, [("draft-deliverable.md", disclaimer, "## **Disclaimer - general advice**")]),
+        ("an _italic_ disclaimer heading", demo_a, [("draft-deliverable.md", disclaimer, "## _Disclaimer - general advice_")]),
+        ("a trailing-colon disclaimer heading", demo_a, [("draft-deliverable.md", disclaimer, "## Disclaimer - general advice:")]),
+        ("a closing-hash disclaimer heading", demo_a, [("draft-deliverable.md", disclaimer, "## Disclaimer - general advice ##")]),
+        ("a setext disclaimer heading", demo_a, [("draft-deliverable.md", disclaimer + "\n", "Disclaimer - general advice\n---------------------------\n")]),
+        ("a numbered trailing-colon section heading", demo_b, [("draft-deliverable.md", "## 3. Recommendation\n", "## 3. Recommendation:\n")]),
+        ("a setext register section heading", demo_b, [("release-registers.md", "## Brand and formatting checks\n", "Brand and formatting checks\n---------------------------\n")]),
+        ("body prose with ' - ' and '=' after a non-field opening", demo_b, [("draft-deliverable.md", end_b, end_b + "\nThe engagement team agreed - subject to review - that cost = benefit.\n")]),
+    )
+    for index, (label, scenario_dir, edits) in enumerate(controls):
+        code, output = derive_with(f"v-control-{index}", scenario_dir, edits)
+        check(f"R15-C follow-up control: {label} is read as the canonical form and derives the unchanged review input", code == 0 and "derives from its raw pack" in output,
+              output.strip()[:300])
+
+    def dropped(payload):
+        payload["deliverable"]["present_disclaimer_types"] = []
+        payload["prior_findings"][0]["location"]["section"] = "**Disclaimer"
+    code, output = derive_with("v-dropped", demo_a, [("draft-deliverable.md", disclaimer, "## **Disclaimer - general advice**"),
+                                                     ("prior-review-findings.md", "Location: Disclaimer,", "Location: **Disclaimer,")], dropped)
+    check("R15-C follow-up a bold disclaimer heading is not dropped: a review input without its disclaimer type no longer derives", code == 1, output.strip()[:300])
     demos = [dri.check_scenario(demo) for demo in (demo_a, demo_b)]
     check("R15-C control: both shipped demo packs still derive from their raw packs", demos == [[], []], demos)
 
