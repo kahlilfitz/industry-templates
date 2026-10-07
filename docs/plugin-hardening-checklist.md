@@ -520,8 +520,11 @@ How to read a report:
 - [ ] **E11. Plans never send the reader to restricted material.** Generated plan or action items
   (first-week plans, next steps, reading lists) never tell the reader to read or use an item whose
   status restricts it, such as `pending_practice_review` or title-and-citation-only. Such items are
-  restated with the restriction, not repeated verbatim. [engagement-mobilization-onboarding-pack
-  1.0.1 evaluation]
+  restated with the restriction, not repeated verbatim. Detect by reference to restricted content,
+  not by a list of reading verbs (passive, noun and reworded forms slip past verb lists). Exempt
+  only narrow administrative actions about the review itself, and never fuzzy-match client-owned
+  documents. A restriction always names a concrete restricted item. [engagement-mobilization-onboarding-pack
+  1.0.1 evaluation; 1.0.2 QA rounds 1 to 3]
   Test: a plan item that names the restricted item by ID, by title words and by generic wording
   ("from the knowledge digest") is restated; a plan item that names a cleared item is unchanged.
 
