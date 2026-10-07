@@ -106,9 +106,9 @@ human testers).
 |---|---|---|---|---|---|---|---|---|---|---|
 | 01 | `engagement-closeout-knowledge-harvest` | 1.0.2 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.0.2 tracker tab | reviewers |
 | 02 | `engagement-staffing-bench-match` | 1.1.4 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.1.4 tracker tab | reviewers |
-| 03 | `engagement-mobilization-onboarding-pack` | 1.0.0 evaluated; 1.0.1 frozen | 1.0.0 Blocked (trust-and-safety gate); 1.0.1 frozen 2026-10-07 (`40D3968E…9EC1`, receipt `f9518fd`, clean) after QA round 20 (cap) and the T&E round 15 class sweep; evaluated **No-ship** 2026-10-07 (complete-chain functional case failed; trust and safety, security and skill floors passed) | No | No | No | No | No | Fix the scenario A lesson placeholder and pending-asset reading item; prepare 1.0.2 | operator |
+| 03 | `engagement-mobilization-onboarding-pack` | 1.0.0 evaluated; 1.0.1 frozen | 1.0.0 Blocked (trust-and-safety gate); 1.0.1 frozen 2026-10-07 (`40D3968E…9EC1`, receipt `f9518fd`, clean) after QA round 20 (cap) and the T&E round 15 class sweep; evaluated **No-ship** 2026-10-07 (complete-chain functional case failed; trust and safety, security and skill floors passed) | No | No | No | No | No | 1.0.2 fix in progress (lesson placeholder; pending-asset first-week item), then QA, freeze and a new Cowork run | operator |
 | 04 | `time-expense-narrative-compliance` | 1.0.3 evaluated; 1.0.4 frozen | 1.0.3 Blocked (trust-and-safety gate); 1.0.4 frozen 2026-10-07 (`1E1380E3…10B4`, receipt `f9518fd`, clean) after QA round 15 (cap, `e6925e4`); in Cowork evaluation | No | No | No | No | No | Evaluate in a new Cowork task, then archive | operator |
-| 05 | `deliverable-review-quality-gate` | 1.0.3 evaluated; 1.0.4 frozen | 1.0.3 Blocked (B1 demo inputs not derivable from raw packs; B2 shipped tests read `metadata.json`), every measured gate met; 1.0.4 frozen 2026-10-07 (`4AE31530…316B`, receipt `f9518fd`, clean) after QA round 17 (cap, `1d20138`) and the T&E round 15 class sweep; evaluated **Blocked** 2026-10-07 on missing release evidence only (installed-runtime critical-path and independent grader calibration); every measured bar met | No | No | No | No | No | Owner decision on the evidence block; line up the two human reviewers | operator |
+| 05 | `deliverable-review-quality-gate` | 1.0.3 evaluated; 1.0.4 frozen | 1.0.3 Blocked (B1 demo inputs not derivable from raw packs; B2 shipped tests read `metadata.json`), every measured gate met; 1.0.4 frozen 2026-10-07 (`4AE31530…316B`, receipt `f9518fd`, clean) after QA round 17 (cap, `1d20138`) and the T&E round 15 class sweep; evaluated **Blocked** 2026-10-07 on missing release evidence only (installed-runtime critical-path and independent grader calibration); every measured bar met; owner accepted 2026-10-07, no re-version | No | No | No | No | No | Two reviewers install the 1.0.4 ZIP and complete the 1.0.4 tracker tab; then decide on re-evaluating this exact ZIP | reviewers |
 
 Notes on the board:
 
@@ -117,8 +117,9 @@ Notes on the board:
   [tracker notes](../operator-runbook.md#tracker-workbooks-and-sensitivity-labels)); check them
   there. This file records only gate status, never reviewer names, per-prompt results or the
   owner's reasoning.
-- C5: the industry `README.md` was updated on 2026-10-01 to show Mobilization 1.0.0, T&E 1.0.3 and
-  DRQG 1.0.2 as Blocked, with their fixed versions in final review.
+- C5: the industry `README.md` was updated on 2026-10-07 with the Mobilization 1.0.1 No-ship and
+  DRQG 1.0.4 Blocked verdicts and the T&E 1.0.4 evaluation in progress. It does not change C5 for
+  any plugin, because C5 means promoted and recorded.
 - No Wave 1 distributable has been promoted yet. Only the Wave 2 `client-status-qbr` folder holds a
   promoted ZIP.
 
@@ -363,9 +364,13 @@ Accepted residuals from pre-freeze QA rounds 15 to 19 (low or by design under th
    [hardening checklist](../plugin-hardening-checklist.md) (`f9518fd`).
 5. Done (2026-10-07): frozen as `evaluate-engagement-mobilization-onboarding-pack-v1.0.1-2026-10-07`.
 6. Done (2026-10-07): evaluated **No-ship** and archived to `Evaluation\1.0.1\`.
-7. 1.0.2: render a real generalized lesson (or hold the item) instead of the placeholder directive,
-   and keep `pending_practice_review` assets out of first-week reading items; update the scenario A
-   golden and add a complete-chain output check. Update the industry README.
+7. In progress (2026-10-07): 1.0.2. Closeout `drafting_guidance` is an instruction to the Closeout
+   drafter, and the governed record carries no finished lesson text, so the engine must never render
+   it as content: a lesson without written text is excluded or shown as title and citation only.
+   First-week items that point at a `pending_practice_review` asset are restated as title and
+   citation only. Update the scenario A golden and add a complete-chain output check. Industry
+   README updated with the 1.0.1 verdict.
+8. Next: a QA round on the 1.0.2 commits, then the pre-freeze checklist and freeze.
 
 ## 04 Time & Expense Narrative Compliance
 
@@ -549,9 +554,12 @@ Accepted residuals from pre-freeze QA rounds 13 to 15 (low or by design under th
 6. Done (2026-10-07): frozen as `evaluate-deliverable-review-quality-gate-v1.0.4-2026-10-07`.
 7. Done (2026-10-07): evaluated **Blocked** (missing installed-runtime and grader-calibration
    evidence only) and archived to `Evaluation\1.0.4\`.
-8. Owner decision: no candidate change is requested, so do not re-version. The installed-runtime
-   critical-path evidence overlaps the two-reviewer gate (C2); record both reviewers' installed
-   runs, then decide whether to re-evaluate this exact ZIP. Update the industry README.
+8. Done (2026-10-07): owner accepted the evidence block. No candidate change is requested, so do
+   not re-version. Deployment doc and a 1.0.4 tracker tab created in the library, and the industry
+   README updated.
+9. Two reviewers install the 1.0.4 ZIP in Cowork and complete the 1.0.4 tracker tab. Their
+   installed runs supply the installed-runtime critical-path evidence and the human labels the
+   report asks for (C2). Then decide whether to re-evaluate this exact ZIP.
 
 ## Lessons that changed the process
 
