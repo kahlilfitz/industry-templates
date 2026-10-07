@@ -28,9 +28,11 @@ def _hold_src(h):
 # 1. exact references (a knowledge ID or a full title, any separators between their words) are resolved against ALL
 #    digest items, longest first, and blanked, so text naming a cleared item is never re-read as a pending one;
 # 2. title words in the remaining text are compared with pending items only (two distinctive words - words this
-#    engagement's own scope does not use - or one distinctive word there and a second title word anywhere in the item);
+#    engagement's own scope does not use - or one distinctive word there and a second title word anywhere in the item),
+#    and only when the item has knowledge context or holds every distinctive title word and names no client location;
 # 3. a generic reference to knowledge content (prior knowledge, the knowledge digest, lessons learned, reusable or
-#    Closeout assets) is a reference to every pending digest item;
+#    Closeout assets) is a reference to every pending digest item; with nothing pending it is rendered as written, so a
+#    restatement always names concrete pending items;
 # 4. any reference to knowledge content counts as consuming it, whatever the verb, voice or noun form ("should be
 #    reviewed", "a review of prior knowledge is required"): there is no list of reading verbs. The only exemption is an
 #    item that is clearly administrative about the review itself (_admin): every clause is an administrative action
@@ -52,7 +54,10 @@ _FW_GENERIC=re.compile(r"(?<![a-z0-9])(?:"
     r"|lessons?[ -](?:learned|learnt|log|register|library)"
     r"|(?:reusable|released|harvested|closeout|close out)[ -](?:assets?|materials?|content|lessons?|records?|outputs?)"
     r"|assets?\s+from\s+the\s+(?:closeout|close out|previous|prior|digest))(?![a-z0-9])")
-_FW_PENDING=re.compile(r"(?<![a-z0-9])(?:pending|awaiting|unreviewed|under review|not yet (?:reviewed|cleared|approved))(?![a-z0-9])")
+# A fuzzy title match (#2.5 title words) counts only beside knowledge context, or when every distinctive title word is
+# present; a client-owned document or system location without knowledge context is never fuzzy-matched.
+_FW_KCTX=re.compile(r"(?<![a-z0-9])(?:digest|knowledge|closeout|close out|lessons?|reusable assets?|(?:previous|prior|earlier|past) engagements?)(?![a-z0-9])")
+_FW_CLIENT=re.compile(r"(?<![a-z0-9])(?:clients?\s+s(?![a-z0-9])|clients?'s?(?![a-z0-9])|clients'|(?:client|customer)\s+(?:portal|system|systems|site|sites|sharepoint|tool|tools|environment|tenant|workspace|intranet)|service\s+portal)")
 _FW_ADMIN_V=re.compile(r"(?:please\s+)?(?:schedule|reschedule|book|request|chase|confirm|check|ask|follow up(?:\s+(?:on|with|about))?|attend|escalate|arrange|organi[sz]e|set up|track|invite|contact|remind|raise|log|query|notify)(?![a-z0-9])\s*")
 _FW_REVIEW_OBJ=re.compile(r"(?<![a-z0-9])(?:review|reviews|reviewers?|status|sign ?offs?|approvals?|clearance|confirmation|practice leads?|knowledge management leads?|km leads?|knowledge managers?)(?![a-z0-9])")
 _FW_PREP={"of","for","with","before","after","by","on","at","from","in","to","into","about","that","so","when","until","once","while","during","within","via","regarding","if","because","since","unless"}
@@ -140,14 +145,17 @@ def pending_refs(x,items,own):
     cw=set().union(*(toks(unwithheld(c.get("title")) or "") for c in cleared if isinstance(c.get("title"),str)))
     # Beside a cleared item it names, a pending title word the cleared title lacks ("... onboarding guide and checklist")
     # still names the pending sibling (#2.5).
-    named+=[i for i in items if _pending(i) and i not in named and (_fuzzy(i,T,own,Ta) or (cleared and _sibling(i,T,cw,Ta)))]
+    kctx=bool(_FW_KCTX.search(text)); cloc=bool(_FW_CLIENT.search(text))
+    def fz(i):
+        D=toks(unwithheld(i.get("title")) or "")-own if isinstance(i.get("title"),str) else set()
+        return _fuzzy(i,T,own,Ta) and (kctx or (not cloc and bool(D) and D<=T))
+    named+=[i for i in items if _pending(i) and i not in named and (fz(i) or (cleared and _sibling(i,T,cw,Ta)))]
     if named: return named,cleared
     if cleared: return None  # names a cleared item (and no pending one): a location word ("from the digest") is not a reference
     if not _FW_GENERIC.search(rest): return None
     pend=[i for i in items if _pending(i)]
     if pend: return pend,[i for i in items if not _pending(i)]
-    if _FW_PENDING.search(rest): return [],[]  # states a pending review the digest no longer lists: still qualified
-    return None
+    return None  # nothing pending in the digest: stale "pending review" wording alone never restricts an item
 def _hit(t,c,v):
     """True when the normalised text t (compact form c) spells ID or title v exactly; a split long target is also read
     with every separator removed."""
@@ -188,7 +196,6 @@ def _restate(n,pend,cleared,ns):
     it never says both "read" and "do not read" for the same item (#2.3, #2.5)."""
     cite=f"(SOW first-week {_items_label(ns)}; knowledge-reuse-rules.md #2.3,#2.5)"; one=len(pend)==1
     src=_src(*(v for i in cleared+pend for v in (i.get("title"),i.get("knowledge_id"))))
-    if not pend: return (f"{n}. Note only the titles and citations of prior-knowledge digest items pending practice review; do not read or reuse their content until review confirms. {cite}",())
     note=f"note only the title{'' if one else 's'} and citation{'' if one else 's'} of {_label(pend)}"+(" in the prior-knowledge digest" if not cleared else "")+f"; {'its' if one else 'their'} content is pending practice review - do not read or reuse {'it' if one else 'them'} until review confirms."
     if cleared: return (f"{n}. In the prior-knowledge digest, read only the cleared item{'' if len(cleared)==1 else 's'} {_label(cleared)}; {note} {cite}",src)
     return (f"{n}. {note[0].upper()}{note[1:]} {cite}",src)

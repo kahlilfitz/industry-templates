@@ -64,7 +64,6 @@ _GUIDE=tuple(re.compile(p) for p in (
     r"(?<![a-z0-9])"+_MODAL+r"\s+(?:be\s+)?"+_W+r"{0,2}?(?:"+_TVF[3:-1]+r")(?![a-z0-9])",
     r"(?<![a-z0-9])"+_MODAL+r"\s+"+_W+r"{0,2}?"+_MV+r"\s+"+_W+r"{0,8}?(?:"+_TEXTN[3:-1]+r"|into)(?![a-z0-9])",
     r"(?<![a-z0-9])(?:to be|still to be|yet to be|should be|must be|needs to be|has to be|is to be|are to be)\s+"+_MVP+r"\s+"+_W+r"{0,6}?(?:from|into|using|based on|out of)(?![a-z0-9])",
-    r"(?<![a-z0-9])into\s+(?:a|an|one|the|this|that|its|their)\s+"+_W+r"{0,5}?(?:summary|lesson|note|overview|abstract|synopsis|paragraph|description|narrative|write ?up|blurb|brief|recap|statement)(?![a-z0-9])",
     # (iii) placeholders and drafting rules
     r"(?<![a-z0-9])(?:to be|still to be|yet to be|will be|should be|must be|needs to be)\s+"+_TVP+r"(?![a-z0-9])",
     r"(?<![a-z0-9])(?:drafting|preparation|writer'?s?|editor'?s?|stage|hand ?off)\s+(?:note|guidance|instructions?|brief)(?![a-z0-9])",
@@ -73,10 +72,39 @@ _GUIDE=tuple(re.compile(p) for p in (
     r"(?<![a-z0-9])(?:using|from|use)\s+(?:only\s+)?the (?:title|category|citations?|evidence ids?)(?:\s+(?:and|or)\s+(?:the\s+)?(?:title|category|citations?|evidence ids?))*\s+only(?![a-z0-9])",
     r"(?<![a-z0-9])using only the (?:title|category|citations?|evidence)(?![a-z0-9])",
     r"^\W*(?:tbd|tbc|todo|to do|placeholder)(?![a-z0-9])"))
+# "into a <...> summary/lesson/note/overview" is a directive on its own, except inside a relative clause of a noun
+# phrase ("Template that turns raw notes into a status summary"), which describes what the asset does.
+_INTO=re.compile(r"(?<![a-z0-9])into\s+(?:a|an|one|the|this|that|its|their)\s+"+_W+r"{0,5}?(?:summary|lesson|note|overview|abstract|synopsis|paragraph|description|narrative|write ?up|blurb|brief|recap|statement)(?![a-z0-9])")
+_RELCL=re.compile(r"(?<![a-z0-9])(?:that|which)\s+(?:also\s+|automatically\s+)?[a-z]+s(?![a-z0-9])")
+# Imperative mood (round 3): a sentence that opens with a base-form verb, not an article, determiner, numeral, pronoun,
+# a noun-phrase head (Checklist, Template, Guide, Summary ...), a participle ("Used by ...", "Covering ...") or a
+# third-person verb ("Covers ..."), followed by its object ("Use the ...", "Populate the ...", "Refer to ..."), and
+# naming a text product anywhere in the sentence, is a directive to whoever writes the text.
+_NONVERB={"a","an","the","this","these","those","that","its","their","our","your","his","her","my","each","every","all","any","some","no","one","two","three","four","five","it","they","we","he","she","i","you","there","here","of","for","by","with","from","in","on","at","to","as","and","or","but","if","when","how","what","why","where","who","which","is","are","was","were","be","been","has","have","had","can","will","would","should","must","may","might","not","also","only","new","first","final","internal","external","reusable","cleared","approved","standard","weekly","monthly","daily","annual","quarterly","key","short","brief","concise","patient","client","onboarding","access","governance","steering","status","project","programme","program","delivery","risk","data","quick","step","joiner","team","practice","sample","example"}
+_NOUNHEAD={"checklist","checklists","template","templates","guide","guides","guidance","summary","summaries","lesson","lessons","playbook","playbooks","overview","overviews","note","notes","outline","outlines","draft","drafts","reference","handbook","manual","pattern","framework","toolkit","kit","deck","document","report","record","log","list","map","matrix","plan","catalogue","catalog","library","glossary","briefing","brief","process","procedure","policy","template","case","set","pack","collection","cheat","sheet","form","agenda","minutes","digest","narrative","section","paragraph","description","write","writeup","primer","walkthrough","explainer","faq","q","tips","starter","intro","introduction"}
+_PARTICLE={"the","a","an","this","these","those","that","it","them","each","every","all","any","your","our","its","their","to","up","in","out","through","together","down","over","with","only","both","one"}
+_TEXTPROD=re.compile(r"(?<![a-z0-9])(?:summary|summaries|overviews?|lessons?|notes?|write ?ups?|write-ups?|narratives?|briefs?|sections?|drafts?|paragraphs?|descriptions?|digests?)(?![a-z0-9])")
+_NOUNSUF=("tion","sion","ment","ness","ance","ence","ity","ship","ism","ology","ics","ary","ory")
+_PARTICIPLE={"written","made","built","done","taken","given","drawn","kept","held","run","won","shown","known","seen","set","put","read"}
+def _imperative(t):
+    for snt in re.split(r"[.;!?\n]+",t):
+        w=re.findall(r"[a-z0-9]+(?:'[a-z]+)?",snt)
+        while w and w[0] in {"please","just","then","now","simply","kindly","next","also"}: w=w[1:]
+        if len(w)<2: continue
+        v=w[0]
+        if (v in _NONVERB or v in _NOUNHEAD or v in _PARTICIPLE or v.isdigit() or v.endswith(("ing","ed")+_NOUNSUF)
+                or (v.endswith("s") and not v.endswith(("ss","us","is")))): continue
+        if w[1] in _PARTICLE and _TEXTPROD.search(" ".join(w[1:])): return True
+    return False
 def stage_guidance(v):
     """True when a supplied description is guidance addressed to a drafter or later stage, or a placeholder (#2.6)."""
     t=norm(unwithheld(v) or "") if isinstance(v,str) else ""
-    return bool(t) and any(p.search(t) for p in _GUIDE)
+    if not t: return False
+    if any(p.search(t) for p in _GUIDE) or _imperative(t): return True
+    for m in _INTO.finditer(t):
+        a=max(t.rfind(c,0,m.start()) for c in ".;!?")+1
+        if not _RELCL.search(t[a:m.start()]): return True
+    return False
 def check_asset(a,w,released=False):  # knowledge-reuse-rules.md #1.4
     for k in ("asset_id","title","description","category","confidentiality_permission","citation","engagement_id","client_name","matter_id")+(("clearance_state",) if released else ()): field(a,k,"str",w,nullable=True)
     field(a,"tags","strlist",w,nullable=True); field(a,"evidence_ids","list",w,nullable=True); field(a,"review_required","bool",w,nullable=True); field(a,"confidence","num01",w)  # evidence_ids is read as a list (unattributed_names); its items are identifiers (check_ids)

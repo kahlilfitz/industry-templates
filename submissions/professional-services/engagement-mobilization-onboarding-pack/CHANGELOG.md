@@ -68,6 +68,33 @@ A second QA round confirmed four more blocking defects (cases guidance-drafter-t
 - **Tests:** a new `qa102b_checks` group adds 11 checks: the six reproducers; attack (15) and benign (8) chain sweeps for A, plus cleared-only and unit checks; run-merge checks for B; and for C a unit set of 20 reworded guidance strings and 19 factual descriptions, plus chain checks. A mixed-script look-alike is withheld by the steering guard before matching, which the tests accept as an equally safe outcome. Existing checks are unchanged.
   - Suite: 564 checks.
 
+### 1.0.2 QA round 3 (on 78ea96b)
+
+The final QA round confirmed three blocking defects (cases guidance-use-to-create, guidance-populate-template, factual-writers-guide and client-access-checklist). The fixes are targeted; every round-1 and round-2 reproducer keeps its output except where noted below. Still 1.0.2 (not frozen).
+
+- **QA-102c-1: imperative guidance rendered as content** (`knowledge_match.py`). "Use the title and citations to create a concise onboarding summary." and "Populate the template with a concise onboarding overview." on a cleared asset rendered as its summary. "Refer to the cited evidence when writing the onboarding summary." (guidance-refer-when-writing) had the same cause.
+  - Fix: a structural imperative-mood rule (#2.6 (iv)). A sentence is stage guidance when it opens with a base-form verb and that verb is followed by its object or particle ("Use the ...", "Populate the ...", "Refer to ..."), and the sentence names a text product (summary, overview, lesson, note, write-up, narrative, brief, section, draft, paragraph, description, digest).
+  - A sentence does not count as imperative when it opens with any of: an article, determiner, numeral, pronoun or preposition; a noun-phrase head (Checklist, Template, Guide, Summary, Lesson, Playbook ...) or a word with a noun suffix; a participle ("Used by ...", "Written by ...", "Covering ..."); or a third-person verb ("Explains ...", "Includes ...").
+  - The "into a ... summary" pattern no longer fires inside a relative clause of a noun phrase, so "Template that turns raw notes into a status summary." renders.
+  - The excluded item keeps reason `description_is_stage_guidance_not_written_content`.
+- **QA-102c-2: stale pending wording restricted an item with nothing pending** (`access_checklist.py`). With only cleared AST-A-001 in the digest (factual-writers-guide), the SOW item "read the onboarding checklist from the knowledge digest (pending practice review)" became a generic "Note only the titles and citations of prior-knowledge digest items pending practice review" note with no item behind it.
+  - Fix: the pending-wording fallback and the generic note are removed. An item is restated only when the current digest holds a pending item that it references (by ID, title or split run) or, for a generic reference, when at least one pending item exists. Every restatement names the concrete pending item(s) by title and ID.
+  - With nothing pending, the item is rendered as written.
+  - Justified output changes, all because the digest the pack renders holds no pending item: item 3 is now verbatim instead of the generic note in these reproducers: round-2 guidance-drafter-turn and guidance-whoever-synthesizes, and the earlier pending-description-other-client and pending-description-split-instruction cases (wall-check holds the pending item, so the pack digest is empty and on hold).
+  - The v102 unit check that expected the generic note for "Review the knowledge digest items pending review" with an empty digest now expects the item as written.
+- **QA-102c-3: a client-owned checklist was fuzzy-matched to pending knowledge** (`access_checklist.py`). "Complete the client's onboarding access checklist in the service portal" (client-access-checklist) was restated as the pending "Patient access onboarding checklist" note.
+  - Fix: a fuzzy title-word match (not an exact title or ID) counts only when the item also carries knowledge context (digest, knowledge, Closeout, lesson(s), reusable asset(s), previous/prior/earlier/past engagement) or holds every distinctive title word. An item that names a client-owned document or system location (the client's ..., client or customer portal/system/SharePoint ..., service portal) without knowledge context is never fuzzy-matched.
+  - Scenario A's "read the onboarding checklist from the knowledge digest (pending practice review)" has knowledge context and is still restated; "use the onboarding checklist during week 1" holds every distinctive title word and is still restated.
+- **Duplication check.** The changed logic lives only in `knowledge_match.py` (knowledge-match, wall-check, pack-draft) and `access_checklist.py` (wall-check, pack-draft); all copies are byte-identical and `tests/check_shared_copies.py` passes.
+- **Docs:** knowledge-reuse-rules #2.5 and #2.6 (all six copies) and the README.
+- **Goldens:** unchanged (both scenarios byte-identical when regenerated by the engines).
+- **Tests:** a new `qa102c_checks` group adds 7 checks:
+  - the D1, D2 and D3 reproducers in the full chain with verify_render;
+  - a D1 unit set of 15 imperative guidance strings and 16 noun-phrase or declarative descriptions, including relative-clause, participle and gerund openings, plus a chain check that three of them render;
+  - a D2 unit check that stale pending wording never restricts an item with an empty or cleared-only digest, and that every restatement names AST-A-001;
+  - a D3 unit set of 8 client-location items and 10 items that keep matching (knowledge context, exact ID or title, every distinctive word, full-width).
+  - Suite: 571 checks.
+
 ## 1.0.1 - 2026-10-01
 
 Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
