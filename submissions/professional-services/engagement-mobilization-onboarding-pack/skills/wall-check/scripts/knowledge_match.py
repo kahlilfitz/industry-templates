@@ -13,19 +13,65 @@ PENDING_SUMMARY="Released Closeout knowledge candidate; use the title and citati
 NO_DESCRIPTION="No written description is supplied in the governed Closeout record; refer to the title and citation."  # #1.4
 def review_status(*xs):  # knowledge-reuse-rules.md #2.3: only an explicit false clears review
     return "pending_practice_review" if any(x.get("review_required") is not False for x in xs if isinstance(x,dict)) else CLEARED
-# knowledge-reuse-rules.md #2.6: a description addressed to a drafter or a later stage ("The next drafting stage should
-# create ...", "Preparation note for the next stage: compose ...", "Draft a generalized lesson ...") or a placeholder
-# for text not yet written is guidance, not content. It is compared after NFKC, case and look-alike folding (norm).
-_GV=r"(?:draft|write|re-?write|compose|create|produce|generate|summari[sz]e|paraphrase|prepare|author|outline|generali[sz]e|reconstruct|condense|craft|fill in|expand|polish|convert)"
+# knowledge-reuse-rules.md #2.6: a description that is guidance addressed to whoever produces the text, rather than
+# written content, is never rendered. It is recognised by structure, not by one list of verbs, after NFKC, case and
+# look-alike folding (norm):
+# (i) it addresses a producer: "For the drafter, ...", "Whoever writes the next version ...", "the next stage should
+#     ...", "for the next version", "you should ...", "Preparation note for the next stage: ...";
+# (ii) it is a directive to produce text: an imperative or a modal construction (should, must, needs to, is to, to be
+#     ...) whose verb produces or transforms text. Verbs that only produce text (write, draft, summarise, synthesise,
+#     rephrase ...) count with any object; verbs that also produce other things (create, turn, convert, make, build,
+#     prepare ...) count when their object is text (a summary, lesson, note, overview, the citations ...) or they turn
+#     something "into" it; and "into a <...> summary/lesson/note/overview" counts on its own;
+# (iii) it is a placeholder for text not yet written ("to be written", "TBD") or a drafting rule ("Do not quote ...",
+#     "from the title and citations only").
+# Factual descriptions that merely mention drafters or summaries ("Checklist used by the drafting team", "Summary of
+# the governance cadence", "Onboarding guide written by the delivery team") render unchanged.
+def _forms(v):
+    """Every inflection of verb v (first word inflected for phrasal verbs): base, -s, past/participle, -ing."""
+    w,_,tail=v.partition(" "); tail=(" "+tail) if tail else ""
+    irr={"write":("writes","wrote","written","writing"),"rewrite":("rewrites","rewrote","rewritten","rewriting"),"make":("makes","made","making"),"build":("builds","built","building"),"recast":("recasts","recasting"),"put":("puts","putting"),"distil":("distils","distilled","distilling"),"set":("sets","setting")}
+    if w in irr: f=(w,)+irr[w]
+    elif w.endswith("e"): f=(w,w+"s",w+"d",w[:-1]+"ing")
+    elif w.endswith("y") and w[-2:-1] not in "aeiou": f=(w,w[:-1]+"ies",w[:-1]+"ied",w+"ing")
+    elif w.endswith(("s","sh","ch","x","z")): f=(w,w+"es",w+"ed",w+"ing")
+    else: f=(w,w+"s",w+"ed",w+"ing")
+    return [x+tail for x in f]
+def _alt(xs): return "(?:"+"|".join(sorted({re.escape(x).replace("\\ ",r"\s+") for x in xs},key=len,reverse=True))+")"
+_TEXT_V=("write","write up","draft","redraft","rewrite","compose","summarise","summarize","synthesise","synthesize","condense","rephrase","reword","paraphrase","restate","recast","generalise","generalize","author","reconstruct","distil","distill","abridge","flesh out","boil down")
+_MAKE_V=("create","produce","generate","prepare","turn","convert","make","build","outline","expand","adapt","transform","rework","revise","compile","craft","polish","simplify","shorten","fill in","put together","elaborate","formulate","assemble","edit","update","extend","develop","derive","extract")
+_TV=_alt(_TEXT_V); _MV=_alt(_MAKE_V); _TVF=_alt(f for v in _TEXT_V for f in _forms(v)); _MVF=_alt(f for v in _MAKE_V for f in _forms(v)); _AVF=_alt(f for v in _TEXT_V+_MAKE_V for f in _forms(v))
+_TVP=_alt(_forms(v)[-2] for v in _TEXT_V); _MVP=_alt(_forms(v)[-2] for v in _MAKE_V)  # participles
+_TEXTN=r"(?:summary|summaries|lessons?|notes?|overviews?|text|paragraphs?|sentences?|descriptions?|narratives?|abstracts?|synopsis|synopses|write ?ups?|blurbs?|prose|guidance|versions?|drafts?|citations?|evidence(?: ids?)?|titles?|category|bullets?|brief|recaps?|wording|statements?|entry|entries|account)"
+_OBJ=r"(?:a|an|the|this|these|those|that|it|them|one|each|every|all|any|some|its|their|our|your|short|brief|concise|clear|generali[sz]ed|generic|new|plain|simple|single|final|joiner facing|"+_TEXTN[3:-1]+r")"
+_LEAD=r"(?:^|[.;:!?,]\s*|\s-+\s*)(?:(?:please|just|now|first|then|simply|kindly|next)\s+)*"
+_PRODUCER=r"(?:drafters?|writers?|authors?|editors?|reviewers?|summari[sz]ers?|copywriters?|preparers?|compilers?|(?:next|later|following|subsequent|downstream)\s+(?:drafting\s+)?(?:stage|step|version|draft|drafter|writer|pass|iteration|revision)s?|drafting\s+(?:stage|step|team)s?)"
+_MODAL=r"(?:should|must|shall|needs? to|has to|have to|is to|are to|ought to|(?:is|are) (?:required|expected|asked) to|will need to)"
+_W=r"(?:[a-z0-9'-]+\s+)"
 _GUIDE=tuple(re.compile(p) for p in (
-    r"(?<![a-z0-9])(?:(?:next|later|following|subsequent|downstream|drafting|writing|authoring|summary|summari[sz]ing|harvest|closeout|final)\s+(?:stage|step|pass|agent|model|engine|skill)s?|drafters?|the (?:writer|model|assistant|agent|llm))(?![a-z0-9])\W+(?:[a-z0-9'-]+\W+){0,8}?"+_GV+r"(?![a-z0-9])",
-    r"(?:^|[.;:!?]\s*)(?:please\s+)?"+_GV+r"\s+(?:a|an|the|this|these|those|one|short|brief|concise|generali[sz]ed|generic|new|summary|lesson|overview|description|paragraph|sentence|text|narrative|it|them)(?![a-z0-9])",
-    r"(?<![a-z0-9])(?:drafting|preparation|writer'?s?|editor'?s?|stage|hand-?off)\s+(?:note|guidance|instructions?|brief)(?![a-z0-9])",
-    r"(?<![a-z0-9])(?:note|instructions?|guidance)\s+(?:for|to)\s+(?:the\s+)?(?:drafters?|writers?|editors?|next|later|following|downstream|drafting)(?![a-z0-9])",
+    # (i) addresses a producer
+    r"(?:^|[.;:!?]\s*)(?:(?:a\s+)?(?:note|message|instructions?|guidance|reminder)\s+)?(?:for|to|attention|attn)\s*:?\s*(?:the\s+|any\s+|a\s+|our\s+|each\s+)?"+_PRODUCER+r"(?![a-z0-9])\s*(?:[,:;]|-+|$)",
+    r"(?<![a-z0-9])(?:for|to)\s+(?:the|any|a|our|each)\s+(?:drafters?|writers?|editors?|summari[sz]ers?|copywriters?)(?![a-z0-9])(?!\s+(?:team|teams|group|community|guild|role|roles|function|pool)(?![a-z0-9]))",
+    r"(?<![a-z0-9])(?:whoever|whomever|anyone who|anybody who|someone who|the person who|whichever (?:stage|step|agent|model|person|team|writer|drafter))\s+(?:next\s+|later\s+|then\s+)?(?:"+_AVF[3:-1]+r"|picks? (?:this|it) up|takes? (?:this|it) (?:on|over))(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:for|to|by)\s+(?:the\s+)?(?:next|later|following|subsequent|downstream)\s+(?:drafting\s+)?(?:stage|step|version|draft|drafter|writer|pass|iteration|revision)s?(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:next|later|following|subsequent|downstream)\s+(?:drafting\s+)?(?:stage|step|version|draft|pass|iteration|revision)s?\s*(?:[:,]|-+\s|"+_MODAL+r"(?![a-z0-9])|will(?![a-z0-9])|can(?![a-z0-9])|may(?![a-z0-9]))",
+    r"(?<![a-z0-9])(?:(?:next|later|following|subsequent|downstream|drafting|writing|authoring|summary|summari[sz]ing|harvest|closeout|final)\s+(?:stage|step|pass|agent|model|engine|skill)s?|drafters?|the (?:writer|model|assistant|agent|llm))(?![a-z0-9])\W+"+_W+r"{0,8}?"+_AVF+r"(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:you|your team)\s+(?:"+_MODAL[3:-1]+r"|will|can|could|may|might)\s+"+_W+r"{0,2}?(?:"+_TV[3:-1]+r"|"+_MV[3:-1]+r")(?![a-z0-9])",
+    r"(?:^|[.;:!?,]\s*)you\s+(?:"+_TV[3:-1]+r"|"+_MV[3:-1]+r")(?![a-z0-9])",
+    # (ii) a directive to produce or transform text
+    _LEAD+_TV+r"\s+"+_OBJ+r"(?![a-z0-9])",
+    _LEAD+_MV+r"\s+"+_W+r"{0,8}?(?:"+_TEXTN[3:-1]+r"|into)(?![a-z0-9])",
+    r"(?<![a-z0-9])"+_MODAL+r"\s+(?:be\s+)?"+_W+r"{0,2}?(?:"+_TVF[3:-1]+r")(?![a-z0-9])",
+    r"(?<![a-z0-9])"+_MODAL+r"\s+"+_W+r"{0,2}?"+_MV+r"\s+"+_W+r"{0,8}?(?:"+_TEXTN[3:-1]+r"|into)(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:to be|still to be|yet to be|should be|must be|needs to be|has to be|is to be|are to be)\s+"+_MVP+r"\s+"+_W+r"{0,6}?(?:from|into|using|based on|out of)(?![a-z0-9])",
+    r"(?<![a-z0-9])into\s+(?:a|an|one|the|this|that|its|their)\s+"+_W+r"{0,5}?(?:summary|lesson|note|overview|abstract|synopsis|paragraph|description|narrative|write ?up|blurb|brief|recap|statement)(?![a-z0-9])",
+    # (iii) placeholders and drafting rules
+    r"(?<![a-z0-9])(?:to be|still to be|yet to be|will be|should be|must be|needs to be)\s+"+_TVP+r"(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:drafting|preparation|writer'?s?|editor'?s?|stage|hand ?off)\s+(?:note|guidance|instructions?|brief)(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:note|instructions?|guidance)\s+(?:for|to)\s+(?:the\s+)?(?:drafters?|writers?|editors?|next|later|following|downstream|drafting)(?![a-z0-9])(?!\s+(?:team|teams|group|community|guild|function)(?![a-z0-9]))",
     r"(?<![a-z0-9])do not (?:quote|reconstruct|paraphrase|copy|reproduce|repeat)(?![a-z0-9])",
     r"(?<![a-z0-9])(?:using|from|use)\s+(?:only\s+)?the (?:title|category|citations?|evidence ids?)(?:\s+(?:and|or)\s+(?:the\s+)?(?:title|category|citations?|evidence ids?))*\s+only(?![a-z0-9])",
     r"(?<![a-z0-9])using only the (?:title|category|citations?|evidence)(?![a-z0-9])",
-    r"(?<![a-z0-9])(?:to be|still to be|yet to be|will be|should be|must be|needs to be)\s+(?:written|drafted|generated|composed|created|produced|summari[sz]ed|prepared|completed|added|filled in)(?![a-z0-9])",
     r"^\W*(?:tbd|tbc|todo|to do|placeholder)(?![a-z0-9])"))
 def stage_guidance(v):
     """True when a supplied description is guidance addressed to a drafter or later stage, or a placeholder (#2.6)."""
