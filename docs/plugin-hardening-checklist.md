@@ -510,6 +510,20 @@ How to read a report:
   [time-expense-narrative-compliance 1.0.3 evaluation]
   Test: grep every `SKILL.md` for the guardrail lines and diff them; run an "send this to the
   client" prompt against each drafting skill on its own.
+- [ ] **E10. Stage-addressed guidance is never content.** Upstream fields written for a drafter or
+  another stage (for example Closeout `drafting_guidance`, "Draft a generalized lesson from ...")
+  are never rendered as a summary, lesson, finding or plan item. An item with no finished text is
+  excluded with a reason code, or shown as title and citation only with a plain statement that no
+  text exists. [engagement-mobilization-onboarding-pack 1.0.1 evaluation]
+  Test: run the complete chain on every scenario and assert no guidance string (including reworded
+  forms) appears in any output; read the rendered pack as a reviewer would.
+- [ ] **E11. Plans never send the reader to restricted material.** Generated plan or action items
+  (first-week plans, next steps, reading lists) never tell the reader to read or use an item whose
+  status restricts it, such as `pending_practice_review` or title-and-citation-only. Such items are
+  restated with the restriction, not repeated verbatim. [engagement-mobilization-onboarding-pack
+  1.0.1 evaluation]
+  Test: a plan item that names the restricted item by ID, by title words and by generic wording
+  ("from the knowledge digest") is restated; a plan item that names a cleared item is unchanged.
 
 ## F. Routing and descriptions
 

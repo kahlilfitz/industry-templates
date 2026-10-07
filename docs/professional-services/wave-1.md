@@ -364,12 +364,13 @@ Accepted residuals from pre-freeze QA rounds 15 to 19 (low or by design under th
    [hardening checklist](../plugin-hardening-checklist.md) (`f9518fd`).
 5. Done (2026-10-07): frozen as `evaluate-engagement-mobilization-onboarding-pack-v1.0.1-2026-10-07`.
 6. Done (2026-10-07): evaluated **No-ship** and archived to `Evaluation\1.0.1\`.
-7. In progress (2026-10-07): 1.0.2. Closeout `drafting_guidance` is an instruction to the Closeout
-   drafter, and the governed record carries no finished lesson text, so the engine must never render
-   it as content: a lesson without written text is excluded or shown as title and citation only.
+7. Done (2026-10-07): 1.0.2 fix `25e6cbd`, 537/537 checks. Closeout `drafting_guidance` is an
+   instruction to the Closeout drafter, and the governed record carries no finished lesson text,
+   so a lesson without written text is now excluded (`lesson_text_not_written_in_governed_closeout_record`).
    First-week items that point at a `pending_practice_review` asset are restated as title and
-   citation only. Update the scenario A golden and add a complete-chain output check. Industry
-   README updated with the 1.0.1 verdict.
+   citation only. Scenario A goldens were regenerated from the engines, and a complete-chain output
+   check was run on both scenarios. New checklist items E10 and E11. Industry README updated with
+   the 1.0.1 verdict.
 8. Next: a QA round on the 1.0.2 commits, then the pre-freeze checklist and freeze.
 
 ## 04 Time & Expense Narrative Compliance
