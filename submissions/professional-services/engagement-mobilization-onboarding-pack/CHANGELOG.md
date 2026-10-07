@@ -501,7 +501,7 @@ Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
 
 A sweep for three defect classes from T&E's QA round 15, with each class reproduced against copies of the demo raw packs before the fix. Line numbers are for the `engagement-retrieve` / `wall-check` source copies; every byte-identical copy is edited identically (`check_shared_copies.py` 49/49).
 
-- **r15-A (reserved labels in every ID field): n/a, no engine change.**
+- **r15-A (reserved labels in every ID field): first pass n/a, no engine change** (superseded by the extension below, which refuses the engines' own hold-ID, path and position forms too).
   - Mobilization emits no positional label as an identifier:
     - a foreign Closeout asset or lesson is excluded with `asset_id`/`lesson_id` null and a path citation;
     - a foreign inventory row is named only by its hold path (`raw/workspace-inventory.csv row N.<column>`);
@@ -536,6 +536,58 @@ A sweep for three defect classes from T&E's QA round 15, with each class reprodu
   - split pairs behind 5 variant labels, and a benign variant-pair control;
   - `fld` unit checks.
   - Suite 494 → 513 checks.
+
+**Extension: final class definitions from T&E e6925e4.** Each case was reproduced on copies of the demo packs before the fix.
+
+- **r15-A (engine label forms in every ID and name, in raw and intermediate input): fixed.**
+  - `safety_text.py:273-310`: new `reserved_label`. It matches a hold ID, a source path or `rendered order of ...`, a file reference, a row or line position, a JSON position and the display fallbacks (`(blank ...)`, `this client or matter`, `Released knowledge asset ...`, `Lesson: ...`), after NFKC, format-character removal, case folding and whitespace collapse.
+  - `check_id` (`:262`) refuses these forms in every identifier; a hold's own `hold_id` is exempt.
+  - New `check_name`/`check_names`/`check_csv_names` refuse them in names, with a fixed `RESERVED_LABEL_REASON` naming the field and never the value. Every Staffing/Closeout `NAME_MEMBERS` member (`:289`) is covered, along with the register `person` and `client_name` (`:1472`).
+  - Call sites:
+    - `scope_digest.py:89` (Staffing names);
+    - `scope_digest.py:252-253` (SOW Client and Title; roster person, role and point_of_contact);
+    - `knowledge_match.py:32` (Closeout names);
+    - `wall_check.py:77` and `access_checklist.py:160` (inventory `name`).
+  - Carried intermediates are refused whole by the next stage through the existing schema and recompute checks.
+  - Plain role vocabulary (`Engagement manager`, `role`) is not reserved.
+- **r15-B (grammar before scope): 2 more sites fixed.**
+  - `scope_digest.py:315`: a roster row with a blank `person` but other values was skipped as nobody's row. It is now refused with an `InputError` naming the row. A wholly blank row is still ignored.
+  - `scope_digest.py:156,359-361`: a Staffing slate or recommendation record with an unrecognised verdict was ignored when the person was not on the roster, not confirmed or excluded. It now holds with `HOLD-UNRECOGNISED-STAFFING-VERDICT` at its `eligibility.verdict` path, using the fixed `VERDICT_GRAMMAR_REASON` and one escalation (`safety_text.py:1030-1031`). A confirmed member still holds once, at its roster row.
+  - n/a:
+    - The Closeout `adapt` already type-checks every record before `derive` excludes another client's assets or lessons.
+    - Staffing has no date or window fields, so there are no out-of-window rows.
+    - `assignment_status` is not an enum (#4.1: anything but `confirmed` is not assigned), and a non-`PERM` confidentiality permission is an exclusion, not a grammar error.
+- **r15-C (every variant and heading form): fixed.**
+  - `safety_text.py:420-465`: `label_parts` now also reads:
+    - task-box bullets;
+    - `1.2` and `a)` numbering;
+    - `_key_` wrappers;
+    - `=` and a spaced `-`/en/em-dash separator;
+    - closing `#`s;
+    - table rows, with the key from the first cell and the remaining cells as the value; a separator row is no field.
+  - `unlabel` (`:753`) strips a variant label only for a declared key, so undeclared ` - ` prose keeps its text.
+  - `scope_digest.py:21-50`: `field_lines` also refuses these heading forms of a declared label:
+    - setext headings;
+    - numbered, wrapped and trailing-colon headings;
+    - a blank declared label followed by content;
+    - a table header row over a separator.
+  - Variant fields in the wrong file, or repeated, are refused. A blank declared value followed by the next field still reads blank and holds.
+- *Docs* (all 6 copies):
+  - confidentiality-and-ethical-wall-rules.md #1.2 (variant and heading forms) and #1.3 (reserved label forms in IDs and names);
+  - role-access-matrix.md #4.4 (blank-person row) and #3.4 (verdict grammar on unused records).
+- *Behaviour changes:* the inputs above now hold or are refused. The goldens contain none of them and are byte-identical; both demos still derive from their raw packs.
+- Tests: `r15_sweep_tests` +12 checks (31 in total), with benign controls:
+  - label-form unit tests against 90 golden names and IDs;
+  - ID fields (7) and name fields (15) end to end;
+  - carried intermediates;
+  - blank-person and verdict-grammar holds, with controls;
+  - 13 further variant rotations giving the golden pack byte-for-byte;
+  - 14 heading, wrong-file and repeat refusals;
+  - prose controls;
+  - split pairs behind `=`, ` - `, task-box and table labels;
+  - parser unit tests.
+  - Suite 513 → 525 checks.
+  - QA-R18-10 (`qa101zb_checks`) now also accepts the person-free indexed slate path, because a non-roster slate record with an unrecognised verdict (Jules Park, scenario B) now holds there. It still requires the roster-row path for confirmed members and that no path names a person.
 
 ## 1.0.0 - 2026-10-01
 

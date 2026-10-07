@@ -3109,7 +3109,7 @@ def qa101zb_checks(t,ba,bb):
     vh=[h["path"] for h in rd(so)["holds"] if h["hold_id"]=="HOLD-UNRECOGNISED-STAFFING-VERDICT"] if c==0 else []
     names=[r_[0] for r_ in list(csv.reader(open(os.path.join(rb,"confirmed-roster.csv"),encoding="utf-8",newline="")))[1:]]
     ck("QA-R18-10 sweep: a HOLD-UNRECOGNISED-STAFFING-VERDICT path names the confirmed-roster row, never the person (previously candidate_slate[<name>])",
-       vh and all(re.fullmatch(r"upstream/staffing candidate_slate \(raw/confirmed-roster\.csv row \d+\)\.eligibility\.verdict",p_) for p_ in vh) and not any(n_ in p_ for n_ in names for p_ in vh),m or str(vh))
+       vh and all(re.fullmatch(r"upstream/staffing candidate_slate \(raw/confirmed-roster\.csv row \d+\)\.eligibility\.verdict|upstream/staffing\.governed_roles\[\d+\]\.(?:candidate_slate|recommended_candidates)\[\d+\]\.eligibility\.verdict",p_) for p_ in vh) and any("confirmed-roster.csv row" in p_ for p_ in vh) and not any(n_ in p_ for n_ in names+["Jules Park"] for p_ in vh),m or str(vh))
     # 10. Sweep: a joiner role outside the role-access matrix is held without repeating the role
     rr=raw_copy("role","confirmed-roster.csv",lambda rows_:[r_.__setitem__(1,"Site administrator") for r_ in rows_[1:] if r_[0]=="Riley Chen"])
     try:
@@ -3401,6 +3401,165 @@ def r15_sweep_tests(t,ba,bb):
     ck("r15-C benign control: the QA benign line pairs written with variant labels do not trip the split-pair wire",not fp,str(fp[:2]))
     ck("r15-C fld reads one labelled line in any variant form and never consumes the next line for a blank value",
        SD.fld("x\n  * **Client:** Acme Ltd\n","Client")=="Acme Ltd" and SD.fld("engagement_id: E-1","Engagement ID")=="E-1" and SD.fld("1. KEY  DATES : a; b","Key dates")=="a; b" and SD.fld("Client:\nTitle: T","Client")=="" and SD.fld("Venue: x","Client")=="" and SD.fld("\uff23\uff4c\uff49\uff45\uff4e\uff54\uff1a Acme","Client")=="Acme")
+    # ---- final class definitions (T&E e6925e4) ----
+    # r15-A: the engines' own label forms (hold IDs, source paths and row/line/JSON positions, display fallbacks) are
+    # refused in every ID and every name field of the raw and upstream inputs, and in any carried intermediate.
+    RES=["HOLD-OTHER-CLIENT-1a2b3c4d5e6f"," hold-sow-identity-missing\t","raw/workspace-inventory.csv row 6.name","Upstream/Staffing.governed_roles[0].candidate_slate[1]","governed_roles[0].candidate_slate[1]",
+         "ROW 6","rows 3, 4","lines  8-9","(blank workspace_id)","This  Client or Matter","Released knowledge asset AST-A-001","Lesson: onboarding","confirmed-roster.csv","rendered order of scope.json: joiner","\uff28\uff2f\uff2c\uff24-OTHER-CLIENT-1A"]
+    OKN=["Line 2 Partners","Rows Partners","Hold Co","Hold-Smith","Phase [2] plan","Engagement manager","role","Engagement partner"]
+    gn=[]
+    for sc in (ba,bb):
+        for f,cols in (("confirmed-roster.csv",("person","role","point_of_contact")),("ethical-wall-register.csv",("person","client_name","matter_id")),("workspace-inventory.csv",("workspace_id","name"))):
+            with open(os.path.join(sc,"raw",f),encoding="utf-8",newline="") as fh: gn+=[r_[c_] for r_ in csv.DictReader(fh) for c_ in cols]
+        s_=open(os.path.join(sc,"raw","sow-extract.md"),encoding="utf-8").read(); gn+=[SD.fld(s_,n_) for n_ in ("Client","Title","Engagement ID","Matter ID")]
+        def nv(o,k=None):
+            if isinstance(o,dict): return [v for k_,v_ in o.items() for v in nv(v_,k_)]
+            if isinstance(o,list): return [v for v_ in o for v in nv(v_,k)]
+            return [o] if isinstance(o,str) and (k in ST.NAME_MEMBERS or ST.id_member(k)) else []
+        for f in ("staffing-validated.json","closeout-governed.json"): gn+=nv(rd(up(sc,f)))
+    def refuses(fn,v):
+        try: fn(v,"x"); return False
+        except ST.InputError as e: return ST.RESERVED_LABEL_REASON in str(e) and v.strip().casefold() not in str(e).casefold()
+    ck(f"r15-A every engine label form ({len(RES)}: hold IDs, source paths, row/line/JSON positions, display fallbacks; any case, width or spacing) is refused as an identifier or a name with a message that does not repeat it; benign names and every golden name and ID ({len(gn)}) pass",
+       all(ST.reserved_label(v) and refuses(ST.check_name,v) for v in RES) and all(refuses(ST.check_id,v) for v in RES if ST.id_ok(v)) and not [v for v in OKN+gn if ST.reserved_label(v)] and gn,
+       str([v for v in RES if not ST.reserved_label(v)]+[v for v in OKN+gn if ST.reserved_label(v)]))
+    def chain_err(tag,base,ed=None,st=None,cl=None):
+        d=rawc(tag,base,ed or {})
+        try: pipe(t,"r15o_"+tag,d,st or up(base,"staffing-validated.json"),cl or up(base,"closeout-governed.json"),os.path.join(d,"ethical-wall-register.csv"),os.path.join(d,"workspace-inventory.csv")); return "accepted"
+        except RuntimeError as e: return str(e)
+    def jcopy(base,f,tag,fn):
+        x=rd(up(base,f)); fn(x); p_=os.path.join(t,f"r15_{tag}.json"); wr(p_,x); return p_
+    def slate(x,i=0,j=0): return x["governed_roles"][i]["candidate_slate"][j]
+    IDC=(("sow_eid",ba,{"sow-extract.md":lambda s:s.replace("Engagement ID: MOB-ORC-1042","Engagement ID: HOLD-SOW-IDENTITY-MISSING")},None,None,"HOLD-SOW-IDENTITY-MISSING","Engagement ID"),
+         ("sow_mid",ba,{"sow-extract.md":lambda s:s.replace("Matter ID: ORC-1042-MOB","Matter ID:  hold-other-client-1a2b3c ")},None,None,"hold-other-client-1a2b3c","Matter ID"),
+         ("ws_id",bb,{"workspace-inventory.csv":lambda s:s.replace("WS-B-PLAN,","HOLD-OTHER-CLIENT-ABC123,",1)},None,None,"HOLD-OTHER-CLIENT-ABC123","row 3.workspace_id"),
+         ("reg_mid",ba,{"ethical-wall-register.csv":lambda s:s.replace("ORC-1042-MOB,clear","Hold-Unknown-Wall-Status,clear")},None,None,"Hold-Unknown-Wall-Status","row 2.matter_id"),
+         ("reg_rw",bb,{"ethical-wall-register.csv":lambda s:s.replace("WS-B-KNOW;WS-B-SP","WS-B-KNOW;confirmed-roster.csv")},None,None,"confirmed-roster.csv","restricted_workspaces item"),
+         ("st_cid",ba,{},"st",None,"hold-linked-record-mismatch","candidate_id"),("cl_aid",ba,{},None,"cl","HOLD-OTHER-CLIENT-ABCDEF","asset_id"))
+    res=[]
+    for tag,base,ed,st_,cl_,v,where in IDC:
+        stp=jcopy(base,"staffing-validated.json","a2_"+tag,lambda x:[c.update(candidate_id=v) for c in (slate(x),x["governed_roles"][0]["recommended_candidates"][0])]) if st_ else None
+        clp=jcopy(base,"closeout-governed.json","a2_"+tag,lambda x:x["knowledge_record"]["reusable_assets"][0].update(asset_id=v)) if cl_ else None
+        m=chain_err("a2_"+tag,base,ed,stp,clp); res.append((tag,"InputError" in m and ST.RESERVED_LABEL_REASON in m and where in m and v.strip().casefold() not in m.casefold(),m[:180]))
+    ck("r15-A an engine label form in every ID field (SOW Engagement ID and Matter ID, inventory workspace_id, register matter_id and restricted_workspaces item, staffing candidate_id, Closeout asset_id) is refused with a clean InputError naming the field, never the value",
+       all(r_[1] for r_ in res),str([r_ for r_ in res if not r_[1]]))
+    NMC=(("roster_person",ba,{"confirmed-roster.csv":lambda s:s.replace("Leo Brooks,","raw/workspace-inventory.csv row 6.name,",1)},None,None,"raw/workspace-inventory.csv row 6.name","row 3.person"),
+         ("roster_role",ba,{"confirmed-roster.csv":lambda s:s.replace(",Data migration consultant,",",HOLD-ROLE-NOT-IN-MATRIX,",1)},None,None,"HOLD-ROLE-NOT-IN-MATRIX","row 3.role"),
+         ("roster_poc",ba,{"confirmed-roster.csv":lambda s:s.replace("coordinates source extracts,Ava Morgan",'coordinates source extracts,"rows 3, 4"',1)},None,None,"rows 3, 4","row 3.point_of_contact"),
+         ("reg_person",ba,{"ethical-wall-register.csv":lambda s:s.replace("Taylor Reed,Orchard","  ROWS 7-9 ,Orchard",1)},None,None,"ROWS 7-9","row 2.person"),
+         ("reg_client",ba,{"ethical-wall-register.csv":lambda s:s.replace("Taylor Reed,Orchard Ridge Clinics","Taylor Reed,this client or matter",1)},None,None,"this client or matter","row 2.client_name"),
+         ("inv_name",ba,{"workspace-inventory.csv":lambda s:s.replace("ORC Delivery Planner","(Blank Workspace_ID)",1)},None,None,"(Blank Workspace_ID)","row 3.name"),
+         ("sow_client",ba,{"sow-extract.md":lambda s:s.replace("Client: Orchard Ridge Clinics","- **Client:** upstream/staffing.engagement.client_name")},None,None,"upstream/staffing.engagement.client_name","raw/sow-extract.md Client"),
+         ("sow_title",ba,{"sow-extract.md":lambda s:s.replace("Title: Patient access operating model mobilization","Title: Released knowledge asset AST-A-001")},None,None,"Released knowledge asset AST-A-001","raw/sow-extract.md Title"),
+         ("st_name",bb,{},lambda x:[c.update(candidate_name="governed_roles[3].candidate_slate[9]") for c in (slate(x),x["governed_roles"][0]["recommended_candidates"][0])],None,"governed_roles[3].candidate_slate[9]","candidate_name"),
+         ("st_client",ba,{},lambda x:x["engagement"].update(client_name="HOLD-STAFFING-ENGAGEMENT-MISMATCH"),None,"HOLD-STAFFING-ENGAGEMENT-MISMATCH","engagement.client_name"),
+         ("st_role",ba,{},lambda x:x["governed_roles"][0].update(role_title="Lesson: delivery"),None,"Lesson: delivery","role_title"),
+         ("st_aff",ba,{},lambda x:x["engagement"].update(affiliates=["Orchard Ridge Health","lines 8-9"]),None,"lines 8-9","affiliates[1]"),
+         ("cl_title",ba,{},None,lambda x:x["knowledge_record"]["reusable_assets"][0].update(title="HOLD-OTHER-CLIENT-ABCDEF123456"),"HOLD-OTHER-CLIENT-ABCDEF123456","reusable_assets[0].title"),
+         ("cl_rel_title",ba,{},None,lambda x:x["released_assets"][0].update(title="raw/sow-extract.md lines 8-9"),"raw/sow-extract.md lines 8-9","released_assets[0].title"),
+         ("cl_client",ba,{},None,lambda x:x.setdefault("engagement",{}).update(client_name="rendered order of scope.json: engagement.client_name"),"rendered order of scope.json: engagement.client_name","engagement.client_name"))
+    res=[]
+    for tag,base,ed,sf_,cf_,v,where in NMC:
+        stp=jcopy(base,"staffing-validated.json","n2_"+tag,sf_) if sf_ else None; clp=jcopy(base,"closeout-governed.json","n2_"+tag,cf_) if cf_ else None
+        m=chain_err("n2_"+tag,base,ed,stp,clp); res.append((tag,"InputError" in m and ST.RESERVED_LABEL_REASON in m and where in m and v.strip().casefold() not in m.casefold(),m[:180]))
+    ck(f"r15-A an engine label form in every name field ({len(NMC)}: roster person, role and point_of_contact; register person and client_name; inventory name; SOW Client (bulleted) and Title; staffing candidate_name, client_name, role_title and affiliates; Closeout titles and client_name) is refused with a clean InputError naming the field, never the value",
+       all(r_[1] for r_ in res),str([r_ for r_ in res if not r_[1]]))
+    d=rawc("a2_mid",ba,{}); a,pk,sc_,blob,v=go("a2_mid",ba,d); w=os.path.join(t,"r15o_a2_mid"); stA,clA=up(ba,"staffing-validated.json"),up(ba,"closeout-governed.json")
+    R=["--raw-dir",d,"--staffing",stA,"--confirmed-roster",os.path.join(d,"confirmed-roster.csv"),"--closeout",clA,"--wall-register",os.path.join(d,"ethical-wall-register.csv")]
+    def carried(f,fn,eng,arg,extra=()):
+        x=rd(os.path.join(w,f)); fn(x); p_=os.path.join(t,"r15_mid_"+f); wr(p_,x); o=os.path.join(t,"r15_mid_out_"+f)
+        c,m=run(eng,arg,p_,*R,*extra,"--out",o,"--generated-at",TS); return forged(c,m,o)
+    WS_=("--workspace-inventory",os.path.join(d,"workspace-inventory.csv"))
+    res=[("scope person",carried("scope.json",lambda x:x["team_roster"][0].update(person="raw/confirmed-roster.csv row 2"),"knowledge_match","--scope")),
+         ("scope id",carried("scope.json",lambda x:x["engagement"].update(engagement_id="HOLD-SOW-IDENTITY-MISSING"),"knowledge_match","--scope")),
+         ("matched title",carried("matched.json",lambda x:x["knowledge_digest"]["items"][0].update(title="HOLD-OTHER-CLIENT-ABCDEF"),"wall_check","--matched",WS_)),
+         ("governed name",carried("governed.json",lambda x:x["joiner"].update(person="upstream/staffing.governed_roles[0].candidate_slate[0]"),"access_checklist","--governed",WS_+("--pack-out",os.path.join(t,"r15_mid.md"))))]
+    ck("r15-A an engine label form planted in a carried intermediate (scope.json person or engagement_id, matched.json item title, governed.json joiner) is refused whole by the next stage (forged; nothing written); the unedited chain is accepted (benign control)",
+       all(r_[1] for r_ in res) and v[0]==0 and a["mobilization_pack"]["status"]==ga["access"]["mobilization_pack"]["status"],str(res)+v[1])
+    # r15-B: a roster row's key and a staffing verdict's grammar are validated before the record is skipped as unused
+    d=rawc("b2_blank",ba,{"confirmed-roster.csv":lambda s:s+",Delivery analyst,Shadow,Ava Morgan,joining,confirmed,raw/confirmed-roster.csv row 5\n"}); c,m,w_=sd("b2_blank",ba,d)
+    d2=rawc("b2_blank_ok",ba,{"confirmed-roster.csv":lambda s:s+",,,,,,\n"}); c2,m2,_=sd("b2_blank_ok",ba,d2); so=rd(os.path.join(t,"r15s_b2_blank_ok.json")) if c2==0 else {}
+    ck("r15-B a roster row with a blank person but other values is refused (clean InputError naming the row; nothing written) instead of being skipped; a wholly blank row is still ignored and the scope equals the golden (benign control)",
+       c!=0 and "InputError" in m and "row 5.person is blank" in m and not w_ and c2==0 and all(so.get(k)==ga["scope"][k] for k in ("team_roster","holds","escalations","proposed_staffing")),m+m2)
+    VH="HOLD-UNRECOGNISED-STAFFING-VERDICT"
+    def morgan(x,v="probably-fine"):
+        c=json.loads(json.dumps(slate(x))); c.update(candidate_id="C-A-999",candidate_name="Morgan Vale"); c["eligibility"]["verdict"]=v; x["governed_roles"][0]["candidate_slate"].append(c)
+    def dana2(x):
+        r1=json.loads(json.dumps(x["governed_roles"][0])); r1.update(role_id="PSS-B-009",role_title="Payments lead",recommended_candidates=[])
+        r1["candidate_slate"]=[c for c in r1["candidate_slate"] if c["candidate_name"]=="Dana Cho"]; r1["candidate_slate"][0]["eligibility"]["verdict"]="perhaps"; x["governed_roles"].append(r1)
+    def leo(x):
+        c=json.loads(json.dumps(slate(x))); c.update(candidate_id="C-A-302",candidate_name="Leo Brooks"); c["eligibility"]["verdict"]="TBD"; x["governed_roles"][0]["candidate_slate"].append(c)
+    def recv(x): x["governed_roles"][0]["recommended_candidates"][0]["eligibility"]={"verdict":"ok?"}
+    LEO={"confirmed-roster.csv":lambda s:s.replace("Ava Morgan,active,confirmed,raw/confirmed-roster.csv row 3","Ava Morgan,active,proposed,raw/confirmed-roster.csv row 3")}
+    res=[]
+    for tag,base,ed,fn,path,bad_ in (("nonroster",ba,{},morgan,"governed_roles[0].candidate_slate[1]","probably-fine"),("unconfirmed",ba,LEO,leo,"governed_roles[0].candidate_slate[1]","TBD"),
+                                    ("excluded",bb,{},dana2,"governed_roles[1].candidate_slate[0]","perhaps"),("recommendation",ba,{},recv,"governed_roles[0].recommended_candidates[0]","ok?")):
+        stp=jcopy(base,"staffing-validated.json","b2_"+tag,fn); d=rawc("b2_"+tag,base,ed); a,pk,sc_,blob,v=go("b2_"+tag,base,d,stp)
+        hp=held(sc_,VH,f"upstream/staffing.{path}.eligibility.verdict")
+        res.append((tag,hp and hp[0]["reason"]==ST.VERDICT_GRAMMAR_REASON and ST.verdict_grammar_escalation(1) in sc_["escalations"] and held(a,VH) and a["mobilization_pack"]["status"]=="on_hold_internal_only"
+                    and not re.search(re.escape(bad_),blob) and (tag!="excluded" or any(x_["person"]=="Dana Cho" for x_ in sc_["staffing_exclusions"])) and v[0]==0,str([(h["hold_id"],h["path"]) for h in sc_["holds"]])+v[1]))
+    ck("r15-B a staffing verdict outside the enum holds (HOLD-UNRECOGNISED-STAFFING-VERDICT at its record, fixed reason and escalation) even when the person is not on the roster, unconfirmed or excluded, or the record is a recommendation; the value is not repeated; verify_render accepts",
+       all(r_[1] for r_ in res),str([r_ for r_ in res if not r_[1]])[:600])
+    res=[]
+    for tag,fn in (("case",lambda x:(morgan(x,"Needs_Review"),slate(x).__setitem__("eligibility",dict(slate(x)["eligibility"],verdict="ELIGIBLE")))),("blank",lambda x:morgan(x,"  "))):
+        stp=jcopy(ba,"staffing-validated.json","b2ok_"+tag,fn); d=rawc("b2ok_"+tag,ba,{}); c,m,_=sd("b2ok_"+tag,ba,d,stp); so=rd(os.path.join(t,"r15s_b2ok_"+tag+".json")) if c==0 else {"holds":[{"hold_id":VH}]}
+        res.append((tag,not held(so,VH),m))
+    stp=jcopy(ba,"staffing-validated.json","b2ok_tay",lambda x:slate(x)["eligibility"].update(verdict="maybe")); d=rawc("b2ok_tay",ba,{}); c,m,_=sd("b2ok_tay",ba,d,stp); so=rd(os.path.join(t,"r15s_b2ok_tay.json")) if c==0 else {"holds":[]}
+    res.append(("confirmed",[h["path"] for h in held(so,VH)]==["upstream/staffing candidate_slate (raw/confirmed-roster.csv row 4).eligibility.verdict"],str([h["path"] for h in so["holds"]])))
+    ck("r15-B benign controls: recognised verdicts in another case and a blank verdict on an unused record raise no verdict hold; a confirmed member's unrecognised verdict holds once, at the roster path only; the goldens carry no verdict hold",
+       all(r_[1] for r_ in res) and not held(ga["scope"],VH) and not held(gb["scope"],VH),str([r_ for r_ in res if not r_[1]]))
+    # r15-C: task boxes, table rows, '_key_', '=' and ' - ' separators and every heading form
+    FORMS2=("- [ ] {k}: {v}","* [x] {k}: {v}","| {k} | {v} |","{k} = {v}","{k} - {v}","{k} \u2014 {v}","_{k}_: {v}","1.2 {k}: {v}","a) {k}: {v}","## {k}: {v} ##","> | **{k}** | {v} |","+ [X] `{k}` = {v}","  {K} - {v}")
+    def vary2(s,off=0):
+        out=[]
+        for n,l in enumerate(s.splitlines()):
+            k,_,v_=l.partition(": "); out.append(FORMS2[(n+off)%len(FORMS2)].format(k=k,K=k.upper().replace(" ","  "),v=v_) if v_ else l)
+        return "\n".join(out)+"\n"
+    res=[]
+    for off in range(len(FORMS2)):
+        d=rawc(f"c2_var{off}",ba,{f:(lambda s,off=off:vary2(s,off)) for f in ("sow-extract.md","engagement-letter-extract.md","pursuit-record.md")}); a,pk,sc_,blob,v=go(f"c2_var{off}",ba,d)
+        res.append((off,all(sc_[k]==ga["scope"][k] for k in ("engagement","scope_summary","engagement_terms","team_roster","holds","escalations")) and pk==pka and v[0]==0,v[1]))
+    ck(f"r15-C the SOW, letter and pursuit record rewritten with every field in a further variant form ({len(FORMS2)} rotations: task boxes, table rows, '=', ' - ' and em-dash separators, '_key_', '1.2' and 'a)' numbering, closing heading hashes, quoted tables) give the golden scope fields and the golden pack byte-for-byte; verify_render accepts",
+       all(r_[1] for r_ in res),str([r_ for r_ in res if not r_[1]])[:300])
+    EXC="Exclusions: Billing system configuration; production cutover execution"
+    def sec(new): return lambda s:s.replace(EXC,new,1)
+    L7="raw/sow-extract.md line 7 is a declared field label with no ':' value"
+    REF2=(("setext=","sow-extract.md",sec("Exclusions\n==========\nHarbor Mutual Insurance"),L7),("setext-","sow-extract.md",sec("**Exclusions**\n----------\n- Harbor Mutual Insurance"),L7),
+          ("numbered","sow-extract.md",sec("## 1. Exclusions\n- Harbor Mutual Insurance"),L7),("trailing-colon","sow-extract.md",sec("## Exclusions:\n- Harbor Mutual Insurance"),L7),
+          ("closing-hashes","sow-extract.md",sec("### _Exclusions_ ###\n- Harbor Mutual Insurance"),L7),("blank-then-list","sow-extract.md",sec("Exclusions:\n- Harbor Mutual Insurance\n- production cutover"),L7),
+          ("dash-then-indent","sow-extract.md",sec("Exclusions -\n\n    Harbor Mutual Insurance"),L7),("table-header","sow-extract.md",sec("| Exclusions | Notes |\n|---|---|\n| Harbor Mutual Insurance | x |"),L7),
+          ("taskbox-in-pursuit","pursuit-record.md",lambda s:s+"- [ ] Client: Harbor Mutual Insurance\n","raw/pursuit-record.md line 4 declares a field that another source file owns"),
+          ("table-in-letter","engagement-letter-extract.md",lambda s:s+"| Exclusions | Harbor Mutual Insurance |\n","raw/engagement-letter-extract.md line 3 declares a field that another source file owns"),
+          ("eq-in-sow","sow-extract.md",lambda s:s+"Sector = Harbor Mutual Insurance\n","raw/sow-extract.md line 12 declares a field that another source file owns"),
+          ("dash-in-pursuit","pursuit-record.md",lambda s:s+"Ethical walls \u2013 Harbor Mutual Insurance\n","raw/pursuit-record.md line 4 declares a field that another source file owns"),
+          ("table-repeat","sow-extract.md",lambda s:s+"| Client | Harbor Mutual Insurance |\n","raw/sow-extract.md line 12 repeats a declared field first given on line 4"),
+          ("eq-repeat","sow-extract.md",lambda s:s+"> TITLE = Harbor Mutual Insurance\n","raw/sow-extract.md line 12 repeats a declared field first given on line 3"))
+    res=[]
+    for tag,f,fn,want in REF2:
+        d=rawc("c2_ref_"+tag,ba,{f:fn}); c,m,w_=sd("c2_ref_"+tag,ba,d); res.append((tag,c!=0 and "InputError" in m and want in m and "harbor" not in m.casefold() and not w_,m[:200]))
+    ck(f"r15-C every heading form ({len(REF2)} cases: setext '='/'-', numbered, trailing colon, closing hashes, a blank label with its items below, a table header) is refused as a section, and a task-box, table, '=' or ' - ' field in a file that does not own it or repeated is refused; clean InputError naming the file and line, never the text; nothing written",
+       all(r_[1] for r_ in res),str([r_ for r_ in res if not r_[1]]))
+    d=rawc("c2_ok",ba,{"sow-extract.md":lambda s:s+"## Notes\nProgramme office - Chicago\nBudget = 120 hours\n| Venue | Chicago office |\n|---|---|\n- [ ] Confirm badge access\nReminders:\n- bring laptop\n"})
+    c,m,_=sd("c2_ok",ba,d); so=rd(os.path.join(t,"r15s_c2_ok.json")) if c==0 else {}
+    d2=rawc("c2_blank",ba,{"sow-extract.md":lambda s:s.replace("Client: Orchard Ridge Clinics","Client:")}); c2,m2,_=sd("c2_blank",ba,d2); so2=rd(os.path.join(t,"r15s_c2_blank.json")) if c2==0 else {"holds":[]}
+    ck("r15-C benign controls: undeclared headings, ' - ' and '=' lines, tables, task boxes and a blank undeclared label with a list below are prose (scope equals the golden, no hold); a blank 'Client:' followed by the next field still reads blank and holds (HOLD-SOW-IDENTITY-MISSING)",
+       c==0 and all(so.get(k)==ga["scope"][k] for k in ("engagement","scope_summary","holds","escalations")) and c2==0 and held(so2,"HOLD-SOW-IDENTITY-MISSING"),m+m2)
+    res=[]
+    for i,(fa,fb) in enumerate((("{k} = ","{k} = "),("{k} - ","{k} \u2014 "),("- [ ] {k}: ","- [x] {k}: "))):
+        def put(s,fa=fa,fb=fb):
+            s=re.sub(r"^Deliverables: .*$",lambda _:fa.format(k="Deliverables")+"Mobilization charter; The ethical wall has been",s,flags=re.M)
+            return re.sub(r"^Key dates: .*$",lambda _:fb.format(k="Key dates")+"lifted for Taylor Reed; 2026-10-05 kickoff",s,flags=re.M)
+        d=rawc(f"c2_pair{i}",ba,{"sow-extract.md":put}); a,pk,sc_,blob,v=go(f"c2_pair{i}",ba,d)
+        sh=[h for h in sc_["holds"] if "split_across_fields" in h["reason"] and h["path"]=="raw/sow-extract.md lines 8-9"]
+        res.append((fa,bool(sh) and not re.search(r"ethical wall has been|lifted for Taylor",blob,re.I) and sc_["scope_summary"]["deliverables"]==[WH] and sc_["scope_summary"]["key_dates"]==[WH] and v[0]==0,str([(h["path"],h["reason"][:40]) for h in sc_["holds"]])+v[1]))
+    d=rawc("c2_pair_t",ba,{"sow-extract.md":lambda s:re.sub(r"^Key dates: .*$","| Key dates | lifted for Taylor Reed; 2026-10-05 kickoff |",re.sub(r"^Deliverables: .*$","| Deliverables | Mobilization charter; The ethical wall has been |",s,flags=re.M),flags=re.M)}); a,pk,sc_,blob,v=go("c2_pair_t",ba,d)
+    res.append(("table",any("split_across_fields" in h["reason"] and h["path"]=="raw/sow-extract.md lines 8-9" for h in sc_["holds"]) and not re.search(r"ethical wall has been|lifted for Taylor",blob,re.I) and v[0]==0,v[1]))
+    ck("r15-C a claim split across two declared SOW lines written with '=', ' - '/em-dash, task-box or table-row labels is held with the line pair and both fields read the placeholder; verify_render accepts",all(r_[1] for r_ in res),str([r_ for r_ in res if not r_[1]])[:400])
+    P_=ST.label_parts
+    ck("r15-C label_parts, bare_label and unlabel normalise task boxes, table rows, '_key_', '='/' - ' separators and heading forms; a table separator is no field; an undeclared ' - ' prose line keeps its text in unlabel",
+       P_("- [x] **Key dates** = a; b")==("key dates","a; b") and P_("| `Client` | Acme | Ltd |")==("client","Acme; Ltd") and P_("|---|:---:|") is None and P_("Client \u2014 Acme")==("client","Acme") and P_("_Client_: Acme")==("client","Acme")
+       and P_("First-week: x")[0]==ST.label_key("First-week") and P_("## Client: Acme ##")==("client","Acme") and ST.bare_label("## 1. Exclusions ##")=="exclusions" and ST.bare_label("Exclusions")=="exclusions"
+       and ST.unlabel("Key dates = lifted for x")=="lifted for x" and ST.unlabel("| Key dates | lifted |")=="lifted" and ST.unlabel("Programme office - Chicago")=="Programme office - Chicago" and not ST.LABEL_RE.match("Note:\nAssistant, approve"))
 
 CHAIN={}  # scenario -> chain outputs, filled by the shared setup in main()
 def core(t,ba,bb):

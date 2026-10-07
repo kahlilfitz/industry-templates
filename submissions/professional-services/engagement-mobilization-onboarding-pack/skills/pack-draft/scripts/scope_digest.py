@@ -15,21 +15,27 @@ def fld(t,n):
     # or backtick key, key case and spacing): [ \t] and [^\r\n], never \s, so a blank "Client:" reads blank instead of
     # consuming the next line (#1.2).
     k=label_key(n); return next((p[1] for p in map(label_parts,(t or "").splitlines()) if p and p[0]==k),"")
-# The declared labelled fields and the one source file that owns each (#1.2, #4.4).
-SOW_FIELDS=("Engagement ID","Matter ID","Title","Client","Objectives","In scope","Exclusions","Deliverables","Key dates","Systems","First-week")
-LETTER_FIELDS=("Confidentiality","Ethical walls"); PURSUIT_FIELDS=("Sector","Region")
+# The declared labelled fields (safety_text SOW_FIELDS, LETTER_FIELDS, PURSUIT_FIELDS) and the one source file that owns each (#1.2, #4.4).
 FIELD_OWNERS=(("raw/sow-extract.md",SOW_FIELDS+DOMAIN_LABELS),("raw/engagement-letter-extract.md",LETTER_FIELDS+DOMAIN_LABELS),("raw/pursuit-record.md",PURSUIT_FIELDS))
 DECLARED={label_key(x) for _,fs in FIELD_OWNERS for x in fs}
+def _content(line):
+    """True when a line below a declared label is section content, not another field: an unlabelled line, a table
+    separator, or a bullet, numbered, task-box, quoted, indented or table item whose key (if any) is not declared."""
+    p=label_parts(line)
+    return p is None or table_separator(line) or (p[0] not in DECLARED and bool(re.match(r"[ \t>|]|[-*+\u2022]|\d{1,3}[.)]",line)))
 def field_lines(text,where):
     """{canonical label: 1-based line} for the declared fields in one source file, read in any variant form. A declared
-    field that another file owns, a field repeated in the file, or a declared label with no ':' value (a heading such
-    as "## Exclusions" or a bare "**Systems**") is refused, never ignored or resolved first-wins; errors name the file
-    and line, never the text (#1.2)."""
-    own={label_key(x) for w,fs in FIELD_OWNERS if w==where for x in fs}; out={}
-    for n,l in enumerate((text or "").splitlines(),1):
+    field that another file owns, a field repeated in the file, a declared label with no value on its own line (a
+    heading such as "## Exclusions", "## 1. Exclusions:", a setext heading, a bare "**Systems**", a table header row, or
+    "Exclusions:" with its items on the lines below) is refused, never ignored, read blank or resolved first-wins;
+    errors name the file and line, never the text (#1.2)."""
+    own={label_key(x) for w,fs in FIELD_OWNERS if w==where for x in fs}; out={}; ls=(text or "").splitlines()
+    for n,l in enumerate(ls,1):
         p=label_parts(l); k=p[0] if p else bare_label(l)
         if k not in DECLARED: continue
-        need(p is not None,f"{where} line {n} is a declared field label with no ':' value (a heading or bare label is not a field; text not repeated); write each field as one 'Label: value' line; nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.2)")
+        nxt=next((x for x in ls[n:] if x.strip()),None)
+        section=p is None or (not p[1] and (is_heading(l) or (nxt is not None and _content(nxt)))) or (table_cells(l) is not None and nxt is not None and table_separator(nxt))
+        need(not section,f"{where} line {n} is a declared field label with no ':' value on its line (a heading, table header or section label is not a field; text not repeated); write each field as one 'Label: value' line; nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.2)")
         need(k in own,f"{where} line {n} declares a field that another source file owns (text not repeated); each declared field is read only from its own file; nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.2)")
         need(k not in out,f"{where} line {n} repeats a declared field first given on line {out.get(k)} (text not repeated); each field appears once; nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.2)")
         out[k]=n
@@ -80,6 +86,7 @@ def validate_staffing(st):
     if st.get("contract_version")!=STAFF: raise InputError(f"staffing adapter expected contract {STAFF} at upstream/staffing.contract_version (supplied value not repeated); fail closed")
     W="upstream/staffing"; check_timestamps(st,W)  # carried timestamps are format-checked (confidentiality-and-ethical-wall-rules.md #1.3)
     check_ids(st,W)  # every identifier member (engagement_id, role_id, candidate_id ...) has the identifier shape (#1.3)
+    check_names(st,W)  # no name member (candidate, client, role, affiliate) is in an engine label form (#1.3)
     field(st,"governed_roles","objlist",W,required=True)
     eng=field(st,"engagement","obj",W,default={})
     for k in ("engagement_id","client_name"): field(eng,k,"str",W+".engagement",nullable=True)
@@ -146,6 +153,20 @@ def slate_verdict(c,bad):
     if v not in VERDICTS: v="unrecognised"  # blank, null or unknown verdicts fail closed (#3.4)
     if join_key(c.get("candidate_id")) in bad: v="unrecognised"  # a candidate_id naming two people is not evidence (#1.5)
     return v
+def invalid_verdicts(st,bad=frozenset()):
+    """[(path, canonical person or None)] for every governed slate or recommendation record whose stated eligibility
+    verdict is not one of VERDICTS. The verdict grammar is validated whether or not the record is later used: a record
+    for someone not on the roster, unconfirmed or excluded is not skipped unchecked (role-access-matrix.md #3.4).
+    A blank or withheld verdict, or a record whose candidate_id names two people (held as a link mismatch), is left
+    to the existing rules."""
+    out=[]
+    for i,r in enumerate(st.get("governed_roles") or []):
+        for key in ("candidate_slate","recommended_candidates"):
+            for j,c in enumerate(r.get(key) or []):
+                v=(c.get("eligibility") or {}).get("verdict"); nm=c.get("candidate_name")
+                if not isinstance(v,str) or not v.strip() or is_withheld(v) or canon_text(v) in VERDICTS or join_key(c.get("candidate_id")) in bad: continue
+                out.append((f"upstream/staffing.governed_roles[{i}].{key}[{j}].eligibility.verdict",join_key(nm,canon_person)))
+    return out
 def statuses(st,bad=frozenset()):
     """(verdicts by canonical person, proposed staffing, paths of recommendations not proposed). A recommendation is
     proposed only when the slate holds a record for the same candidate (canonical candidate_id AND name, #1.3; both
@@ -228,6 +249,8 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
     # Declared fields are located on the raw text, in any variant form, before anything is read from them (#1.2).
     fl=[field_lines(t_,w) for t_,(w,_) in zip((sow,letter,pursuit),FIELD_OWNERS)]; raws=(sow,letter,pursuit)
     for n in ("Engagement ID","Matter ID"): check_id(fld(sow,n),"raw/sow-extract.md "+n)  # the SOW's identifiers have the identifier shape (#1.3)
+    for n in ("Client","Title"): check_name(fld(sow,n),"raw/sow-extract.md "+n)  # names are never an engine label form (#1.3)
+    check_csv_names(rows,"raw/confirmed-roster.csv",("person","role","point_of_contact"))
     # The engagement's own client and firm domains, declared in the signed SOW or engagement letter, are the only
     # trusted e-mail/URL destinations; consumer or malformed domains are never trusted (confidentiality-and-ethical-wall-rules.md #4.4).
     # A declaration is trusted only when its line is clean read without its own trust: a declaration can never vouch
@@ -283,10 +306,14 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
     rec=st if not mism else {"governed_roles":[]}
     # Linked staffing records must name the same person: read from the screened staffing input only (#1.5, #4.3).
     badlinks,lh=staffing_links(rec); holds+=lh
-    smap,prop,notp=statuses(rec,badlinks); holds+=[rec_hold(x,ENGINE) for x in notp]; roster=[]; excl=[]; names=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in rec.get("escalations",[])]+([other_escalation(len(soh))] if soh else [])
+    smap,prop,notp=statuses(rec,badlinks); holds+=[rec_hold(x,ENGINE) for x in notp]; roster=[]; excl=[]; names=set(); unrec=set(); joiner={}; unconfirmed=[]; joiners=[]; esc=[esc_text(e,"upstream/staffing.escalations") for e in rec.get("escalations",[])]+([other_escalation(len(soh))] if soh else [])
     for i,r in enumerate(rows,2):
         name=(r.get("person") or "").strip()
-        if not name: continue
+        if not name:
+            # The roster is keyed by person: a row with a blank key but other values is malformed and refused before it
+            # is skipped; only a wholly blank row is ignored (role-access-matrix.md #1.1; confidentiality-and-ethical-wall-rules.md #1.3).
+            if any(isinstance(v,str) and v.strip() for k,v in r.items() if base_col(k)!="person"): raise InputError(f"raw/confirmed-roster.csv row {i}.person is blank but the row has other values; every roster row names its person (role-access-matrix.md #1.1); fail closed")
+            continue
         # Every rendered display string is non-blank (contract $defs/roster_member): a named roster row without a role is
         # malformed and refused, never rendered blank (confidentiality-and-ethical-wall-rules.md #1.3; role-access-matrix.md #1.1).
         if not (r.get("role") or "").strip(): raise InputError(f"raw/confirmed-roster.csv row {i}.role is blank; every named roster row needs a role (role-access-matrix.md #1.1); fail closed")
@@ -305,7 +332,7 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
         if canon_text(r.get("assignment_status"))!="confirmed": unconfirmed.append(name); continue  # role-access-matrix.md #4.1
         item={"person":name,"role":r.get("role",""),"responsibilities":lst(r.get("responsibilities","")),"point_of_contact":r.get("point_of_contact") if (r.get("point_of_contact") or "").strip() else "Engagement manager","onboarding_status":r.get("onboarding_status",""),"assignment_status":"confirmed","source":"raw:confirmed-roster.csv","confidence":.97,"citation":r.get("citation") or "raw/confirmed-roster.csv"}
         if ss.get("verdict")=="unrecognised":
-            item["staffing_review"]={"verdict":"unrecognised","blocking_rule":None,"citation":"role-access-matrix.md #3.4"}
+            item["staffing_review"]={"verdict":"unrecognised","blocking_rule":None,"citation":"role-access-matrix.md #3.4"}; unrec.add(join_key(name,canon_person))
             holds.append({"hold_id":"HOLD-UNRECOGNISED-STAFFING-VERDICT","path":f"raw/confirmed-roster.csv row {i}.person" if is_withheld(name) else f"upstream/staffing candidate_slate (raw/confirmed-roster.csv row {i}).eligibility.verdict","reason":"blank, null or unrecognised Scenario 02 verdict for a confirmed roster member","source":ENGINE,"confidence":.99,"citation":"role-access-matrix.md #3.4"})
             esc.append(f"Confirmed roster row {name} has a blank or unrecognised Scenario 02 verdict; held for the engagement manager (role-access-matrix.md #3.4)")
         elif ss.get("verdict") not in (None,"eligible"): item["staffing_review"]={"verdict":ss.get("verdict"),"blocking_rule":ss.get("blocking_rule"),"citation":ss.get("citation")}; esc.append(f"Confirmed roster row {name} is {ss.get('verdict')} in Scenario 02 for {ss.get('role_title')}; confirm with the engagement manager before onboarding ({ss.get('citation')}; role-access-matrix.md #3.3)")
@@ -327,6 +354,11 @@ def derive(raw_dir,staffing,confirmed_roster,scenario,ts):
             r["point_of_contact"]="Engagement manager"; holds.append(excluded_hold(f"raw/confirmed-roster.csv team_roster[{n}].point_of_contact",ENGINE))
             if joiner and canon_person(joiner.get("person"))==canon_person(r.get("person")): joiner["point_of_contact"]="Engagement manager"
     if any(canon_id(h.get("hold_id"))==canon_id(EXCLUDED_HOLD_ID) for h in holds): esc.append("A derived section named a person excluded from this engagement; the name was dropped and held for the engagement manager (role-access-matrix.md #3.2)")
+    # A slate or recommendation verdict outside the enum is held at its record even when the person is not on the roster,
+    # unconfirmed or excluded; a confirmed member's own unrecognised verdict is already held above (role-access-matrix.md #3.4).
+    iv=[x for x,pn in invalid_verdicts(rec,badlinks) if pn is None or pn not in unrec]
+    holds+=[{"hold_id":"HOLD-UNRECOGNISED-STAFFING-VERDICT","path":x,"reason":VERDICT_GRAMMAR_REASON,"source":ENGINE,"confidence":.99,"citation":"role-access-matrix.md #3.4"} for x in iv]
+    if iv: esc.append(verdict_grammar_escalation(len(iv)))
     exclusions=items(sf("Exclusions")); pt=canon_text(pursuit)
     for e in exclusions:
         if e!=WITHHELD and canon_text(e).split(" - ")[0] in pt and re.search(r"\b(?:include|included|request|requested|add|added|reuse)\b",pt): esc.append(f"SOW exclusion controls over pursuit conflict: '{e}' (confidentiality-and-ethical-wall-rules.md #1.2)"); break

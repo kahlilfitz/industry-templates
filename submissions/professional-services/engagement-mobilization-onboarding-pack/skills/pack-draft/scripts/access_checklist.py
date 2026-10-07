@@ -157,7 +157,7 @@ def _derive(p,register,inventory,ts,closeout,staffing,ph=(),blocked=()):
     # hold the wall, the digest and knowledge-dependent or client-confidential access (#1.4, #2.1, #3.3; checklist B6).
     # Cells are screened from the rows AS READ, before an unusable header or a repeated ID empties the collection the
     # decisions use: an inventory that is not used is still screened and its flagged cells held (#1.3, #3.3, #4.3).
-    rows=read_csv(inventory,False,"workspace inventory"); check_csv_ids(rows,"raw/workspace-inventory.csv",("workspace_id",))  # identifier shape (#1.3)
+    rows=read_csv(inventory,False,"workspace inventory"); check_csv_ids(rows,"raw/workspace-inventory.csv",("workspace_id",)); check_csv_names(rows,"raw/workspace-inventory.csv",("name",))  # identifier shape (#1.3)
     as_read=[dict(r) for r in rows or []]  # the cells before screening rewrites them: a quarantined row's grammar is read from these (#1.3)
     bad=wall_check.inventory_problem(rows)  # the one missing/malformed check wall_check applies, on the rows as read (#1.2, #1.3)
     if bad: fixed.append(wall_check.inventory_hold(bad,ENGINE))

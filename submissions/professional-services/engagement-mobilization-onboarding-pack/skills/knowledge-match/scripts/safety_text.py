@@ -259,9 +259,51 @@ def id_ok(v):
     if not isinstance(v, str): return False
     t = strip_cf(unicodedata.normalize("NFKC", strip_cf(v))).strip()
     return not t or bool(ID_RE.fullmatch(t))
-def check_id(v, where):
+def check_id(v, where, reserved=True):
     need(v is None or isinstance(v, str), f"{where} must be {ID_SHAPE}, given as a JSON string (or null when absent), got {id_type(v)} (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
     need(id_ok(v), f"{where} must be {ID_SHAPE} (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
+    need(not (reserved and reserved_label(v)), f"{where} {RESERVED_LABEL_REASON} and is not an identifier (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
+# Reserved label forms (#1.3). The engines refer to records they hold, withhold or cannot name by labels of their own:
+# a hold ID (HOLD-OTHER-CLIENT-1a2b3c), a source path or position (raw/workspace-inventory.csv row 6.name,
+# upstream/staffing.governed_roles[0].candidate_slate[1], lines 8-9, rendered order of ...), and the display
+# fallbacks "(blank workspace_id)", "this client or matter", "Released knowledge asset <id>" and "Lesson: <category>"
+# (the withheld placeholders are held as supplied markers, #4.3). A supplied identifier or name in one of these forms,
+# in any case or width and with any surrounding or doubled whitespace, would read as the engine's own reference to a
+# held or other party's record, so it is refused wherever a raw or upstream input supplies an ID or a name.
+RESERVED_LABEL_REASON = "is in a label form the engines emit for a held or positional record (a hold ID, a source path or row/line position, or a display fallback)"
+_RESERVED_LABEL_RE = re.compile(r"hold(?:-[a-z0-9]+){2,}"
+    r"|(?:raw|upstream|expected|demo-data)/.*|rendered order of .*"
+    r"|[\w.-]+\.(?:csv|md|json)\b.*"
+    r"|(?:rows?|lines?) \d+(?:(?: ?[-,] ?| and )\d+)*(?:\.\w+)?"
+    r"|[\w.]*\[\d+\][\w.\[\]]*(?: .*)?"
+    r"|\(blank [\w ]+\)|this client or matter|released knowledge asset .+|lesson: .*")
+def reserved_label(v):
+    """True when a supplied ID or name is one of the engines' own label forms (RESERVED_LABEL_REASON), read in NFKC
+    with format characters removed, case folded, ends trimmed and inner whitespace collapsed."""
+    if not isinstance(v, str): return False
+    t = " ".join(strip_cf(unicodedata.normalize("NFKC", strip_cf(v))).casefold().split())
+    return bool(t) and bool(_RESERVED_LABEL_RE.fullmatch(t))
+def check_name(v, where):
+    need(not reserved_label(v), f"{where} {RESERVED_LABEL_REASON} and is not a name (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
+# The name members of the staffing and Closeout inputs (person, client, role, title and affiliate names).
+NAME_MEMBERS = {"name", "candidate_name", "client_name", "role_title", "title", "person", "point_of_contact", "affiliates"}
+def check_names(doc, where):
+    """check_name for every name member (NAME_MEMBERS, and each string item of a name list) of a supplied JSON document
+    at any depth; the reported path names only trusted member keys (member_seg)."""
+    def walk(v, p, name=False):
+        if isinstance(v, dict):
+            for k, x in v.items(): walk(x, p + "." + member_seg(k), k in NAME_MEMBERS)
+        elif isinstance(v, list):
+            for n, x in enumerate(v): walk(x, f"{p}[{n}]", name)
+        elif name: check_name(v, p)
+    walk(doc, where)
+def check_csv_names(rows, label, cols):
+    """check_name for every cell of the name columns of a CSV as read (every copy of a repeated column)."""
+    if not rows: return
+    lab = cell_labels(rows)
+    for i, r in enumerate(rows, 2):
+        for k, v in r.items():
+            if base_col(k) in cols: check_name(v, f"{label} row {i}.{lab.get(k, 'column')}")
 def id_member(k): return isinstance(k, str) and (k == "id" or k.endswith("_id") or k.endswith("_ids"))
 def check_ids(doc, where):
     """check_id for every identifier member of a supplied JSON document, at any depth. A member named id or *_id holds
@@ -278,7 +320,7 @@ def check_ids(doc, where):
                     if k.endswith("_ids"):
                         need(x is None or isinstance(x, list), f"{q} must be an array of identifiers (or null when absent), got {'a string' if isinstance(x, str) else id_type(x)} (value not repeated); nothing written; fail closed (confidentiality-and-ethical-wall-rules.md #1.3)")
                         for n, y in enumerate(x or ()): check_id(y, f"{q}[{n}]")
-                    else: check_id(x, q)
+                    else: check_id(x, q, k != "hold_id")  # a hold's own ID is the engine's hold-ID form
                     continue  # a checked identifier member holds only strings or null: nothing below it to walk
                 walk(x, q)
         elif isinstance(v, list):
@@ -370,28 +412,57 @@ def _trust(ds): return tuple(sorted({canon_text(d).lstrip("@.") for d in (ds or 
 # its whole-document re-derivation from the raw inputs (same_document), declaration lines and trusted list included,
 # then sets the trusted set from those lines with the same rule (adopt_trust, domain_trust). An edited
 # trusted_domains list or declaration line can therefore never switch off transfer screening.
-# A labelled field line in any syntactic variant (#1.2): leading whitespace, '>' quotes, a '#' heading, a '-', '*',
-# '+', bullet or numbered marker, a bold, italic or backtick key, and space before the colon are the same field, and
-# the key is compared canonically (canon_id: case, width, '-', '_' and spacing). One line only ([ \t], never \s).
-_LABEL_PREFIX = r"^[ \t\ufeff]*(?:>[ \t]*)*(?:#{1,6}[ \t]*)?(?:(?:[-*+\u2022]|\d{1,3}[.)])[ \t]+)?"
+# A labelled field line in any syntactic variant (#1.2): leading whitespace, '>' quotes, a '#' heading at any level, a
+# '-', '*', '+', bullet, numbered ("1.", "2)", "1.2", "a.") or task-box ("- [ ]", "- [x]") marker, a bold, italic,
+# underscore or backtick key, space before the separator, a ':', '=' or spaced ' - ' separator and a table row
+# ("| Client | Acme |") are the same field, and the key is compared canonically (canon_id: case, width, '-', '_' and
+# spacing). One line only ([ \t], never \s). Closing heading hashes ("## Exclusions ##") are not part of the key.
+_LABEL_PREFIX = (r"^[ \t\ufeff]*(?:>[ \t]*)*(?:#{1,6}[ \t]*)?"
+                 r"(?:(?:[-*+\u2022]|\d{1,3}(?:\.\d{1,3})*[.)]?|[A-Za-z][.)])[ \t]+(?:\[[ xX]?\][ \t]+)?)?")
 _LABEL_WRAP = r"\*\*|__|\*|_|`"
-_LABEL_LINE_RE = re.compile(_LABEL_PREFIX + rf"(?P<o>{_LABEL_WRAP})?[ \t]*(?P<k>[^:\uff1a\r\n]{{1,60}}?)[ \t]*(?P<c>{_LABEL_WRAP})?[ \t]*[:\uff1a](?P<v>[^\r\n]*)$")
-_BARE_LABEL_RE = re.compile(_LABEL_PREFIX + rf"(?:{_LABEL_WRAP})?[ \t]*(?P<k>[^:\uff1a\r\n]{{1,60}}?)[ \t]*(?:{_LABEL_WRAP})?[ \t]*$")
+_LABEL_SEP = r"(?:[:\uff1a=]|(?<=[ \t])[-\u2013\u2014](?=[ \t]|$))"
+_LABEL_LINE_RE = re.compile(_LABEL_PREFIX + rf"(?P<o>{_LABEL_WRAP})?[ \t]*(?P<k>[^:\uff1a=\r\n]{{1,60}}?)[ \t]*(?P<c>{_LABEL_WRAP})?[ \t]*{_LABEL_SEP}(?P<v>[^\r\n]*)$")
+_BARE_LABEL_RE = re.compile(_LABEL_PREFIX + rf"(?:{_LABEL_WRAP})?[ \t]*(?P<k>[^:\uff1a=\r\n]{{1,60}}?)[ \t]*(?:{_LABEL_WRAP})?(?:[ \t]+#+)?[ \t]*$")
+_TABLE_ROW_RE = re.compile(r"^[ \t\ufeff]*(?:>[ \t]*)*\|(?P<b>[^\r\n]*)$")
+_TABLE_SEP_CELL = re.compile(r"[ \t]*:?-{1,}:?[ \t]*|[ \t]*")
+_HEADING_RE = re.compile(r"^[ \t\ufeff]*(?:>[ \t]*)*#{1,6}")
 def label_key(label): return canon_id(label)
-def label_parts(line):
-    """(canonical key, value) for a labelled line ("Client: Acme", "- **Client:** Acme", "  `client_name` : Acme"), else
-    None. A key wrapped across the colon ("**Client:** Acme") loses its closing wrapper from the value."""
-    m = _LABEL_LINE_RE.match(line) if isinstance(line, str) else None
+def table_cells(line):
+    """The cells of a markdown table row ("| a | b |"), or None for any other line."""
+    m = _TABLE_ROW_RE.match(line) if isinstance(line, str) else None
+    return [c.strip() for c in re.sub(r"\|[ \t]*$", "", m.group("b")).split("|")] if m else None
+def table_separator(line):
+    """True for a markdown table separator row ("|---|:--:|")."""
+    c = table_cells(line); return bool(c) and all(_TABLE_SEP_CELL.fullmatch(x) for x in c) and any("-" in x for x in c)
+def is_heading(line): return bool(_HEADING_RE.match(line)) if isinstance(line, str) else False
+def _line_parts(line):
+    m = _LABEL_LINE_RE.match(line)
     if not m or not label_key(m.group("k")): return None
     v = m.group("v").strip()
     if m.group("o") and not m.group("c") and v.startswith(m.group("o")): v = v[len(m.group("o")):].strip()
-    return label_key(m.group("k")), v
+    return label_key(m.group("k")), re.sub(r"[ \t]+#+$", "", v) if is_heading(line) else v
+def label_parts(line):
+    """(canonical key, value) for a labelled line ("Client: Acme", "- **Client:** Acme", "  `client_name` = Acme",
+    "Client - Acme", "| Client | Acme |"), else None. A key wrapped across the colon ("**Client:** Acme") loses its
+    closing wrapper from the value; the value of a table row is its other non-blank cells joined with '; '."""
+    if not isinstance(line, str): return None
+    cells = table_cells(line)
+    if cells is None: return _line_parts(line)
+    if table_separator(line) or not cells: return None
+    if len(cells) == 1: return _line_parts(cells[0])
+    p = _line_parts(cells[0]); k = p[0] if p and not p[1] else bare_label(cells[0])
+    return (k, "; ".join(c for c in cells[1:] if c)) if k else None
 def bare_label(line):
-    """The canonical key of a line that is only a label with no ':' ("## Exclusions", "**Systems**"), else None."""
+    """The canonical key of a line that is only a label with no separator ("## Exclusions", "**Systems**",
+    "## 1. Exclusions ##"), else None."""
     m = _BARE_LABEL_RE.match(line) if isinstance(line, str) else None
     return (label_key(m.group("k")) or None) if m else None
 DOMAIN_LABELS = ("Client domains", "Client domain", "Firm domains", "Firm domain")  # confidentiality-and-ethical-wall-rules.md #4.4
 DOMAIN_KEYS = {label_key(x) for x in DOMAIN_LABELS}
+# The declared labelled fields of the raw sources (scope_digest.FIELD_OWNERS assigns each to its one owning file, #1.2).
+SOW_FIELDS = ("Engagement ID", "Matter ID", "Title", "Client", "Objectives", "In scope", "Exclusions", "Deliverables", "Key dates", "Systems", "First-week")
+LETTER_FIELDS = ("Confidentiality", "Ethical walls"); PURSUIT_FIELDS = ("Sector", "Region")
+DECLARED_KEYS = {label_key(x) for x in SOW_FIELDS + LETTER_FIELDS + PURSUIT_FIELDS + DOMAIN_LABELS}
 def declaration_value(line):
     """The value of a labelled domain declaration line ("Client domains: a.example; b.example"), in any variant form
     (label_parts), else None."""
@@ -679,7 +750,13 @@ def list_runs(v, key, pairs=None):
 # a variant label never hides a split pair (#1.2).
 LABEL_RE = re.compile(r"^[ \t\ufeff]*(?:>[ \t]*)*(?:#{1,6}[ \t]*)?(?:(?:[-*+\u2022]|\d{1,3}[.)])[ \t]*)?"
                       rf"(?:{_LABEL_WRAP})?[ \t]*[A-Za-z][A-Za-z0-9 /&()'_-]{{0,40}}?[ \t]*(?:{_LABEL_WRAP})?[ \t]*[:\uff1a](?:{_LABEL_WRAP})?[ \t]+")
-def unlabel(s): return LABEL_RE.sub("", s or "", count=1).strip()
+def unlabel(s):
+    """s without its field label. A declared field in a separator or table variant ("Key dates = x", "Key dates - x",
+    "| Key dates | x |", label_parts) loses its label too, so no variant hides a split pair or run (#1.2, #4.5)."""
+    s = s or ""; m = LABEL_RE.match(s)
+    if m: return s[m.end():].strip()
+    p = label_parts(s)
+    return p[1] if p and p[0] in DECLARED_KEYS else s.strip()
 def split_items(v):
     if (v or "").strip() == WITHHELD: return [WITHHELD]
     return [x.strip(" -") for x in re.split(r";|\n-", v or "") if x.strip(" -")]
@@ -949,6 +1026,9 @@ REC_REASON = "a staffing recommendation is not backed by an eligible slate verdi
 REC_CITATION = "role-access-matrix.md #3.2"
 def rec_hold(path, engine): return {"hold_id": REC_HOLD_ID, "path": path, "reason": REC_REASON, "source": engine, "confidence": 0.98, "citation": REC_CITATION}
 def rec_escalation(n): return f"{n} staffing recommendation(s) are not backed by an eligible slate verdict for the same candidate; not proposed - confirm with the engagement manager (role-access-matrix.md #3.2)"
+# A stated verdict outside the enum is a grammar error whether or not its record is used (role-access-matrix.md #3.4).
+VERDICT_GRAMMAR_REASON = "unrecognised Scenario 02 verdict on a staffing record not used for a confirmed roster member (value not repeated); the record is invalid and not used"
+def verdict_grammar_escalation(n): return f"{n} staffing record(s) carry an unrecognised Scenario 02 verdict; not used - confirm the staffing input with the engagement manager (role-access-matrix.md #3.4)"
 EXCLUDED_HOLD_ID = "HOLD-EXCLUDED-PERSON-NAMED"
 STAFFING_UNSTATED_REASON = "staffing input does not state the SOW's client or engagement ID (blank or missing); the staffing evidence cannot be confirmed for this engagement and is not trusted"
 STAFFING_UNSTATED_ESCALATION = "Staffing input does not state the SOW's client or engagement ID; staffing evidence held for the engagement manager (confidentiality-and-ethical-wall-rules.md #1.2, #3.3)"
@@ -982,7 +1062,7 @@ ENGINE_REASONS = {OVERSIZE_REASON, OTHER_HOLD_REASON,
     "unknown wall status value (not repeated); treated as hold",
     "ethical-wall register " + DUPLICATE_HEADER_REASON, "workspace inventory " + DUPLICATE_HEADER_REASON + "; no access is requested",
     "workspace inventory workspace_id " + DUPLICATE_ID_REASON + "; no access is requested", LINK_REASON, REC_REASON,
-    WITHHELD_FIELD_REASON, EXCLUDED_REASON, STAFFING_UNSTATED_REASON}
+    WITHHELD_FIELD_REASON, EXCLUDED_REASON, STAFFING_UNSTATED_REASON, VERDICT_GRAMMAR_REASON}
 _PERM = r"(?:none|viewer|member|contributor|admin|owner)"
 ENGINE_REASON_RES = [re.compile(r"embedded_instruction:[a-z_]+(?:,[a-z_]+)*"),
     re.compile(r"\d+ declared client/firm domain\(s\) are malformed or consumer/file-sharing domains and are not trusted \(not repeated\)"),
@@ -1086,6 +1166,7 @@ _ESC_SAFETY = re.compile(r"\d+ (?:source|upstream) field\(s\) held for embedded 
 _ESC_OTHER = re.compile(r"\d+ field\(s\) withheld because they name another client or matter; .*")
 _ESC_TOPIC = re.compile(r"\d+ wall briefing topic\(s\) withheld from the pack; .*")
 _ESC_ID = [(re.compile(r"Confirmed roster row .+ has a blank or unrecognised Scenario 02 verdict; .*"), "HOLD-UNRECOGNISED-STAFFING-VERDICT"),
+    (re.compile(r"\d+ staffing record\(s\) carry an unrecognised Scenario 02 verdict; .*"), "HOLD-UNRECOGNISED-STAFFING-VERDICT"),
     (re.compile(r"Roster row \d+ has a blank or unrecognised onboarding_status; .*"), "HOLD-UNKNOWN-ONBOARDING-STATUS"),
     (re.compile(r"A declared client/firm domain is malformed or a consumer/file-sharing domain; .*"), "HOLD-DOMAIN-NOT-TRUSTED"),
     (re.compile(r"Staffing input is for a different client or engagement than the SOW; .*"), "HOLD-STAFFING-ENGAGEMENT-MISMATCH"),
@@ -1388,6 +1469,7 @@ def register_rows(path):
     cols = list(getattr(rows, "columns", ()) or ())
     need(any(base_col(k) == "client_name" for k in cols), NO_IDENTITY_COLUMN_MSG)
     check_csv_ids(rows, REGISTER_LABEL, ("matter_id",), ("restricted_workspaces",))  # identifier shape (#1.3)
+    check_csv_names(rows, REGISTER_LABEL, ("person", "client_name"))  # never an engine label form (#1.3)
     return rows
 def register_identity_holds(path, engine):
     """unreadable_identity_holds for the wall register at path (refused when it is absent, register_rows)."""

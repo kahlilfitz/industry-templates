@@ -74,7 +74,7 @@ def govern(p,register,inventory,closeout,staffing,raised=None):
     document to re-derive, never trust, the decision state (confidentiality-and-ethical-wall-rules.md #1.4, #3.3)."""
     p,mh=screen_upstream(p,"matched",ENGINE)  # every upstream string screened and redacted before use; any hit holds the wall (#4.1, #4.3)
     if mh: p.setdefault("escalations",[]).append(upstream_escalation(len(mh)))
-    rows=register_rows(register); ws=read_csv(inventory,False,"workspace inventory"); check_csv_ids(ws,"raw/workspace-inventory.csv",("workspace_id",)); up=list(p.get("holds",[])); holds=list(mh); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
+    rows=register_rows(register); ws=read_csv(inventory,False,"workspace inventory"); check_csv_ids(ws,"raw/workspace-inventory.csv",("workspace_id",)); check_csv_names(ws,"raw/workspace-inventory.csv",("name",)); up=list(p.get("holds",[])); holds=list(mh); deniedk=[]; deniedw=[]; heldw=[]; may=[]; withheld_names=[]; j=p.get("joiner") or {}; e=p.get("engagement") or {}; esc=p.setdefault("escalations",[])
     status="clear"; reason="wall register marks joiner clear for this client/matter"; cit="confidentiality-and-ethical-wall-rules.md #2.2"
     own=own_words(p); own_ids={canon_id(e.get("matter_id")),canon_id(e.get("engagement_id"))}-{""}
     def hold_status(hid,path,why,rule):

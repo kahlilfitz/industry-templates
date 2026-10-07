@@ -29,6 +29,7 @@ def adapt(p):
         if key not in kr or not isinstance(kr[key],list) or any(not isinstance(r,dict) for r in kr[key]): raise InputError(f"closeout adapter requires knowledge_record.{key}[] of objects (an absent member is not an empty list); fail closed")
     W="upstream/closeout"; check_timestamps(x,W)  # carried timestamps are format-checked (confidentiality-and-ethical-wall-rules.md #1.3)
     check_ids(x,W)  # every identifier member (asset_id, cluster_id, record_id, evidence_ids, engagement_id, matter_id ...) is a string or null of the identifier shape (#1.3)
+    check_names(x,W)  # no title, client or affiliate name is in an engine label form (#1.3)
     field(kr,"record_id","str",W+".knowledge_record",nullable=True)  # read by unattributed_names: type-checked like every field a reader uses (#1.3)
     for i,r in enumerate(ra): check_asset(r,f"{W}.released_assets[{i}]",True)
     for i,r in enumerate(kr["reusable_assets"]): check_asset(r,f"{W}.knowledge_record.reusable_assets[{i}]")
