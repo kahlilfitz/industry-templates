@@ -158,8 +158,8 @@
   ],
   "provenance": {
     "engines": [
-      "scope_digest/1.0.1",
-      "knowledge_match/1.0.1"
+      "scope_digest/1.0.2",
+      "knowledge_match/1.0.2"
     ],
     "generated_at": "2026-10-01T00:00:00Z",
     "sources": [

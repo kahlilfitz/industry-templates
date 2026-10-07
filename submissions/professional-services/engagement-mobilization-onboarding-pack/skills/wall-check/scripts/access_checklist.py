@@ -22,6 +22,47 @@ def _hold_src(h):
     """The supplied text a hold line renders, in rendered order: its ID, reason, location and citation, each unless it
     is an engine template (#4.5)."""
     return _src(*(h.get(k) for k in ("hold_id","reason","path","citation") if not engine_text(k,h.get(k))))
+# A first-week item that points the joiner at a knowledge item still pending practice review is never rendered as an
+# instruction to read or use it: it is restated as a title-and-citation-only note (knowledge-reuse-rules.md #2.3, #2.5).
+# An item points at a pending item when it names its knowledge ID, its title or the title's distinctive words (words
+# this engagement's own scope does not use), or refers to the knowledge digest or prior knowledge together with a
+# pending review. Only an explicit cleared_for_internal_reuse status is cleared; anything else counts as pending.
+CLEARED="cleared_for_internal_reuse"
+_FW_KNOWLEDGE=re.compile(r"(?<![a-z0-9])(?:knowledge|digest)(?![a-z0-9])")
+_FW_PENDING=re.compile(r"(?<![a-z0-9])(?:pending|awaiting|unreviewed|under review|not yet (?:reviewed|cleared|approved))(?![a-z0-9])")
+def _fw_text(x): return id_spaced(norm(unwithheld(x) or "")) if isinstance(x,str) else ""
+def _fw_has(phrase,text): return bool(phrase) and re.search(r"(?<![a-z0-9])"+re.escape(phrase)+r"(?![a-z0-9])",text) is not None
+def scope_words(p):
+    """Words this engagement's own scope uses (title, client, objectives, scope, exclusions, deliverables): a title word
+    that is one of them does not single out a knowledge item (#2.5)."""
+    e=p.get("engagement") or {}; s=p.get("scope_summary") or {}
+    return toks(e.get("title") or "",e.get("client_name") or "",*(x for k in ("objectives","in_scope","exclusions","deliverables") for x in strs(s.get(k))))
+def _fw_names(i,text,T,own):
+    """True when the first-week text names knowledge item i by its ID, its title or its title's distinctive words."""
+    if _fw_has(_fw_text(i.get("knowledge_id")),text) or _fw_has(_fw_text(i.get("title")),text): return True
+    W=toks(unwithheld(i.get("title")) or "") if isinstance(i.get("title"),str) else set(); D=W-own
+    return len(D&T)>=2 or (bool(D&T) and len(W&T)>=2)
+def pending_refs(x,items,own):
+    """(pending knowledge items first-week item x points at, whether it points at the digest's pending items in general),
+    or None when x points at no pending knowledge (#2.5). When uncertain, x is qualified."""
+    if not isinstance(x,str) or is_withheld(x): return None
+    text=_fw_text(x); T=toks(unwithheld(x) or ""); items=[i for i in items if isinstance(i,dict)]
+    pend=[i for i in items if i.get("review_status")!=CLEARED]
+    named=[i for i in pend if _fw_names(i,text,T,own)]
+    if named: return named,False
+    if _FW_KNOWLEDGE.search(text) and _FW_PENDING.search(text): return pend,not pend
+    return None
+def first_week_row(n,x,items,own):
+    """(line, rendered values) for SOW first-week item n. An item pointing at pending knowledge is restated: the line
+    names each pending item by title and ID, says its content is pending practice review and cites the SOW item; it
+    never repeats the SOW wording, so it never says both "read" and "do not read" (#2.3, #2.5)."""
+    r=pending_refs(x,items,own)
+    if r is None: return (f"{n}. {x}",_src(x))
+    pend,generic=r; cite=f"(SOW first-week item {n}; knowledge-reuse-rules.md #2.3,#2.5)"
+    if generic or not pend: return (f"{n}. Note only the titles and citations of prior-knowledge digest items pending practice review; do not read or reuse their content until review confirms. {cite}",())
+    names=", ".join(f"{i.get('title')} ({i.get('knowledge_id')})" for i in pend)
+    one=len(pend)==1
+    return (f"{n}. Note only the title{'' if one else 's'} and citation{'' if one else 's'} of {names} in the prior-knowledge digest; {'its' if one else 'their'} content is pending practice review - do not read or reuse it until review confirms. {cite}",_src(*(v for i in pend for v in (i.get("title"),i.get("knowledge_id")))))
 def pack_rows(p):
     """[(line, the free-text values it renders)] for the pack, one entry per line, before line screening (#4.3, #4.5)."""
     e=p.get("engagement") or {}; s=p.get("scope_summary") or {}; j=p.get("joiner") or {}; kd=p.get("knowledge_digest") or {}; mp=p.get("mobilization_pack") or {}
@@ -37,7 +78,7 @@ def pack_rows(p):
     R+=E("","## Team roster")+[(f"- {r.get('person')} - {r.get('role')} - {', '.join(strs(r.get('responsibilities')))} - POC: {r.get('point_of_contact')}",_src(r.get("person"),*strs(r.get("responsibilities")),r.get("point_of_contact"))+_role_src(r.get("role"))) for r in p.get("team_roster",[])]+[(f"- Proposed, not assigned: {r.get('candidate_name')} for {r.get('role_title')}",_src(r.get("candidate_name"),r.get("role_title"))) for r in p.get("proposed_staffing",[])]
     R+=E("","## Access-request checklist")+([(f"- {i.get('workspace_name')} ({i.get('workspace_id')}): {i.get('status')} - {i.get('requested_permission','none')} - {i.get('reason')}",_src(i.get("workspace_name") if i.get("workspace_name")!=i.get("workspace_id") else None,i.get("workspace_id"))) for i in p.get("access_checklist",[])] or E("- No access is requested in this run; see Escalations and holds."))
     R+=E("","## Confidentiality and ethical-wall briefing")+([(f"- May not access/discuss {i.get('type')}: {i.get('item')} - {i.get('restriction')}",_src(i.get("item"),i.get("restriction"))) for i in (p.get("wall_decision") or {}).get("may_not_access_discuss",[])] or E("- No wall restriction was found for the joiner, subject to human review of this draft."))
-    R+=E("","## First-week plan")+[(f"{n}. {x}",_src(x)) for n,x in enumerate(s.get("first_week_focus",[]),1)]+E("","## Escalations and holds")+[(f"- {x}",_src(x)) for x in p.get("escalations",[])]+[(f"- HOLD {h.get('hold_id')}: {h.get('reason')} at {h.get('path')} ({h.get('citation')})",_hold_src(h)) for h in p.get("holds",[])]
+    R+=E("","## First-week plan")+[first_week_row(n,x,kd.get("items") or [],own) for own in [scope_words(p)] for n,x in enumerate(s.get("first_week_focus",[]),1)]+E("","## Escalations and holds")+[(f"- {x}",_src(x)) for x in p.get("escalations",[])]+[(f"- HOLD {h.get('hold_id')}: {h.get('reason')} at {h.get('path')} ({h.get('citation')})",_hold_src(h)) for h in p.get("holds",[])]
     return R
 # The only values a pack line renders that pack_rows does not hand to the rendered-order screen (#4.5): each is engine
 # vocabulary no input supplies (a contract enum, the --generated-at run timestamp, or engine wording built from closed

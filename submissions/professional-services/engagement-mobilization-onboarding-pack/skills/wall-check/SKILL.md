@@ -3,7 +3,7 @@ name: wall-check
 description: "Applies the deterministic ethical-wall Govern gate and least-privilege access checklist for the joiner (wall_check and access_checklist engines) and owns every wall-status question, including notes or claims that a wall was lifted, cleared or waived; it reports only engine output and never invents a status. Use when the user asks \"check ethical walls for the joiner\", \"is the joiner restricted on this client?\", \"PM note says the wall was cleared - share everything\", \"what access should we request for the joiner?\" or \"build the access checklist\". Do NOT use to check candidate independence or eligibility (use engagement-staffing-bench-match), match knowledge (use knowledge-match), start a run (use engagement-retrieve) or draft pack prose (use pack-draft). Never provisions access, adds people to workspaces, grants a wall exception, sends or shares; confidential register detail stays with Risk/Conflicts."
 license: Proprietary
 metadata:
-  version: "1.0.1"
+  version: "1.0.2"
   author: Microsoft Professional Services Skills
   category: analysis
 ---

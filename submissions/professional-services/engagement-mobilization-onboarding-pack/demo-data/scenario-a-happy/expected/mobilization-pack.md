@@ -37,7 +37,6 @@ Joiner: Taylor Reed - Delivery analyst
 ## Prior-knowledge digest
 Status: ready
 - Patient access onboarding checklist (AST-A-001) [pending_practice_review] - Released Closeout knowledge candidate; use the title and citation only until practice review confirms. Source: upstream closeout AST-A-001; upstream released_assets AST-A-001; knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1
-- Lesson: mobilization-governance (LC-A-001) [cleared_for_internal_reuse] - Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text. Source: synthetic decision log row 4; upstream closeout LC-A-001; knowledge-reuse-rules.md #2.2,#2.4,#3.2
 
 ## Team roster
 - Ava Morgan - Client delivery manager - Owns mobilization cadence, approves first-week plan - POC: Engagement partner
@@ -56,7 +55,7 @@ Status: ready
 ## First-week plan
 1. Review SOW scope and exclusions
 2. meet delivery manager and data lead
-3. read the onboarding checklist from the knowledge digest (pending practice review)
+3. Note only the title and citation of Patient access onboarding checklist (AST-A-001) in the prior-knowledge digest; its content is pending practice review - do not read or reuse it until review confirms. (SOW first-week item 3; knowledge-reuse-rules.md #2.3,#2.5)
 4. request viewer/member access only
 5. attend first governance huddle
 

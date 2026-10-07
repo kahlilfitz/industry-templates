@@ -3,7 +3,7 @@ name: roster-pull
 description: "Explains the engine-built team roster in scope.json: who is confirmed, who is only proposed by Scenario 02, and who is excluded or needs review, using only engine output (never invents names or assignments). Use when the user asks \"who is on the team?\", \"who is confirmed vs proposed?\", \"is Jules assigned yet?\", \"who is the joiner and their point of contact?\" or \"why is someone excluded from the roster?\". Do NOT use to pull the bench, availability or conflicts roster, or to recommend, rank or re-check candidates (use engagement-staffing-bench-match). Do NOT use to start a run or read the SOW (use engagement-retrieve), match knowledge (use knowledge-match), check walls or access (use wall-check) or draft the pack (use pack-draft). Never adds anyone to a team or roster, sends or shares anything; conflict reasons stay confidential."
 license: Proprietary
 metadata:
-  version: "1.0.1"
+  version: "1.0.2"
   author: Microsoft Professional Services Skills
   category: analysis
 ---

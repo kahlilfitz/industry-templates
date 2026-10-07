@@ -3,7 +3,7 @@ name: engagement-retrieve
 description: "Starts every Scenario 03 mobilization run, including a cold start: runs the deterministic scope_digest engine over the SOW, engagement letter, pursuit record, confirmed roster and Scenario 02 staffing output, and reports only engine output (never invents scope, dates or names). Use when the user asks \"mobilize this engagement\", \"start the onboarding pack\", \"build an onboarding pack for the new joiner\", \"summarise the SOW for the new joiner\" or \"what is in and out of scope for the joiner?\". Do NOT use for confirmed vs proposed team questions (use roster-pull), prior knowledge (use knowledge-match), any wall-status claim such as a note that the wall was lifted or cleared, or access (use wall-check), or rewording an existing pack (use pack-draft). Do NOT use to recommend or rank staff (use engagement-staffing-bench-match). Never sends, shares or provisions anything; confidential sources stay internal."
 license: Proprietary
 metadata:
-  version: "1.0.1"
+  version: "1.0.2"
   author: Microsoft Professional Services Skills
   category: retrieval
 ---
