@@ -7,8 +7,30 @@ ENGINE="engine:knowledge_match"; CLOSE="ps.engagement-closeout-knowledge-harvest
 STATES={"RELEASE_CANDIDATE_SANITISED","RELEASE_CANDIDATE_SANITIZED"}  # knowledge-reuse-rules.md #2.1
 PERM="cleared_for_internal_engagement_reuse"  # knowledge-reuse-rules.md #2.2
 LESSON_NOT_WRITTEN="lesson_text_not_written_in_governed_closeout_record"  # knowledge-reuse-rules.md #2.4
+DESCRIPTION_IS_GUIDANCE="description_is_stage_guidance_not_written_content"  # knowledge-reuse-rules.md #2.6
+CLEARED="cleared_for_internal_reuse"
+PENDING_SUMMARY="Released Closeout knowledge candidate; use the title and citation only until practice review confirms."  # #2.3
+NO_DESCRIPTION="No written description is supplied in the governed Closeout record; refer to the title and citation."  # #1.4
 def review_status(*xs):  # knowledge-reuse-rules.md #2.3: only an explicit false clears review
-    return "pending_practice_review" if any(x.get("review_required") is not False for x in xs if isinstance(x,dict)) else "cleared_for_internal_reuse"
+    return "pending_practice_review" if any(x.get("review_required") is not False for x in xs if isinstance(x,dict)) else CLEARED
+# knowledge-reuse-rules.md #2.6: a description addressed to a drafter or a later stage ("The next drafting stage should
+# create ...", "Preparation note for the next stage: compose ...", "Draft a generalized lesson ...") or a placeholder
+# for text not yet written is guidance, not content. It is compared after NFKC, case and look-alike folding (norm).
+_GV=r"(?:draft|write|re-?write|compose|create|produce|generate|summari[sz]e|paraphrase|prepare|author|outline|generali[sz]e|reconstruct|condense|craft|fill in|expand|polish|convert)"
+_GUIDE=tuple(re.compile(p) for p in (
+    r"(?<![a-z0-9])(?:(?:next|later|following|subsequent|downstream|drafting|writing|authoring|summary|summari[sz]ing|harvest|closeout|final)\s+(?:stage|step|pass|agent|model|engine|skill)s?|drafters?|the (?:writer|model|assistant|agent|llm))(?![a-z0-9])\W+(?:[a-z0-9'-]+\W+){0,8}?"+_GV+r"(?![a-z0-9])",
+    r"(?:^|[.;:!?]\s*)(?:please\s+)?"+_GV+r"\s+(?:a|an|the|this|these|those|one|short|brief|concise|generali[sz]ed|generic|new|summary|lesson|overview|description|paragraph|sentence|text|narrative|it|them)(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:drafting|preparation|writer'?s?|editor'?s?|stage|hand-?off)\s+(?:note|guidance|instructions?|brief)(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:note|instructions?|guidance)\s+(?:for|to)\s+(?:the\s+)?(?:drafters?|writers?|editors?|next|later|following|downstream|drafting)(?![a-z0-9])",
+    r"(?<![a-z0-9])do not (?:quote|reconstruct|paraphrase|copy|reproduce|repeat)(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:using|from|use)\s+(?:only\s+)?the (?:title|category|citations?|evidence ids?)(?:\s+(?:and|or)\s+(?:the\s+)?(?:title|category|citations?|evidence ids?))*\s+only(?![a-z0-9])",
+    r"(?<![a-z0-9])using only the (?:title|category|citations?|evidence)(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:to be|still to be|yet to be|will be|should be|must be|needs to be)\s+(?:written|drafted|generated|composed|created|produced|summari[sz]ed|prepared|completed|added|filled in)(?![a-z0-9])",
+    r"^\W*(?:tbd|tbc|todo|to do|placeholder)(?![a-z0-9])"))
+def stage_guidance(v):
+    """True when a supplied description is guidance addressed to a drafter or later stage, or a placeholder (#2.6)."""
+    t=norm(unwithheld(v) or "") if isinstance(v,str) else ""
+    return bool(t) and any(p.search(t) for p in _GUIDE)
 def check_asset(a,w,released=False):  # knowledge-reuse-rules.md #1.4
     for k in ("asset_id","title","description","category","confidentiality_permission","citation","engagement_id","client_name","matter_id")+(("clearance_state",) if released else ()): field(a,k,"str",w,nullable=True)
     field(a,"tags","strlist",w,nullable=True); field(a,"evidence_ids","list",w,nullable=True); field(a,"review_required","bool",w,nullable=True); field(a,"confidence","num01",w)  # evidence_ids is read as a list (unattributed_names); its items are identifiers (check_ids)
@@ -57,7 +79,7 @@ def nb(*vs):
     return next((v for v in vs if isinstance(v,str) and v.strip()),None)
 def rel(scope,item):
     ss=scope["scope_summary"]
-    over=sorted(toks(item.get("title") or "",item.get("description") or ""," ".join(item.get("tags") or []),item.get("category") or "") & toks((scope.get("joiner") or {}).get("role") or ""," ".join(ss.get("objectives",[]))," ".join(ss.get("in_scope",[]))," ".join(ss.get("deliverables",[]))))
+    over=sorted(toks(item.get("title") or "","" if stage_guidance(item.get("description")) else item.get("description") or ""," ".join(item.get("tags") or []),item.get("category") or "") & toks((scope.get("joiner") or {}).get("role") or ""," ".join(ss.get("objectives",[]))," ".join(ss.get("in_scope",[]))," ".join(ss.get("deliverables",[]))))  # guidance is never scored (#2.6)
     return (round(min(.99,.55+.08*len(over)),2) if over else .4),over
 # ---------------------------------------------------------------- one other-client identity set (#3.3)
 # Every stage screens with the same identity set, derived here from every identity source: the wall register, the
@@ -155,7 +177,7 @@ def derive(s,closeout,register,ts,staffing):
     s,sh=screen_upstream(s,"scope",ENGINE)
     raw=adapt(closeout)
     c,own_h=screen_upstream(raw,"upstream/closeout",ENGINE,raw=True); rels={canon_id(x.get("asset_id")):x for x in c["released_assets"] if x.get("clearance_state") in STATES and canon_id(x.get("asset_id")) and not is_withheld(x.get("asset_id"))}  # joined by canon_id (#1.3); a blank or withheld ID joins nothing (#4.3)
-    inc=[]; exc=[]; unw=[]; kr=c["knowledge_record"]; ceng=c.get("engagement") or {}; lh=[]  # subjects compared on screened text only (#4.3)
+    inc=[]; exc=[]; unw=[]; und=[]; kr=c["knowledge_record"]; ceng=c.get("engagement") or {}; lh=[]  # subjects compared on screened text only (#4.3)
     for i,asset in enumerate(kr["reusable_assets"]):
         aid=asset.get("asset_id")
         if not canon_id(aid) or is_withheld(aid) or canon_id(aid) not in rels: exc.append({"asset_id":aid,"reason":"not_in_released_assets","citation":"knowledge-reuse-rules.md #2.1"}); continue
@@ -163,9 +185,15 @@ def derive(s,closeout,register,ts,staffing):
             foreign_exclusion(lh,exc,"asset_id",f"upstream/closeout.knowledge_record.reusable_assets[{i}]"); continue
         perm=asset.get("confidentiality_permission",rels[canon_id(aid)].get("confidentiality_permission"))
         if perm is not None and perm!=PERM: exc.append({"asset_id":aid,"reason":"confidentiality_permission_not_internal_reuse","citation":"knowledge-reuse-rules.md #2.2"}); continue
+        # Review status first (#2.3): a pending item never renders its supplied description, only the fixed
+        # title-and-citation-only statement. A cleared item renders its description unless it is guidance addressed to
+        # a drafter or later stage, which is not written content: that item is excluded (#2.6, as lessons are, #2.4).
+        rs=review_status(asset,rels[canon_id(aid)]); desc=asset.get("description")
+        if isinstance(desc,str) and desc.strip() and (rs!=CLEARED or stage_guidance(desc)): und.append({"knowledge_id":aid,"title":nb(asset.get("title"),rels[canon_id(aid)].get("title"),f"Released knowledge asset {aid}"),"description":desc,"citations":[nb(asset.get("citation"),"knowledge_record.reusable_assets"),nb(rels[canon_id(aid)].get("citation"),"released_assets")],"path":f"upstream/closeout.knowledge_record.reusable_assets[{i}].description"})
+        if rs==CLEARED and stage_guidance(desc): exc.append({"asset_id":aid,"reason":DESCRIPTION_IS_GUIDANCE,"citation":"knowledge-reuse-rules.md #2.6"}); continue
         score,over=rel(s,asset)
         if score<.5: exc.append({"asset_id":aid,"reason":"below_relevance_floor","citation":"knowledge-reuse-rules.md #3.1"}); continue
-        inc.append({"knowledge_id":aid,"title":nb(asset.get("title"),rels[canon_id(aid)].get("title"),f"Released knowledge asset {aid}"),"summary":nb(asset.get("description"),"Released Closeout knowledge candidate; use the title and citation only until practice review confirms."),"relevance_score":score,"matched_terms":over,"clearance_state":rels[canon_id(aid)].get("clearance_state"),"confidentiality_permission":perm or "release_candidate_state","review_status":review_status(asset,rels[canon_id(aid)]),"source":"adapter:closeout-governed.knowledge_record","confidence":min(asset.get("confidence",.9),rels[canon_id(aid)].get("confidence",.9)),"citations":[nb(asset.get("citation"),"knowledge_record.reusable_assets"),nb(rels[canon_id(aid)].get("citation"),"released_assets"),"knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"]})
+        inc.append({"knowledge_id":aid,"title":nb(asset.get("title"),rels[canon_id(aid)].get("title"),f"Released knowledge asset {aid}"),"summary":nb(desc,NO_DESCRIPTION) if rs==CLEARED else PENDING_SUMMARY,"relevance_score":score,"matched_terms":over,"clearance_state":rels[canon_id(aid)].get("clearance_state"),"confidentiality_permission":perm or "release_candidate_state","review_status":rs,"source":"adapter:closeout-governed.knowledge_record","confidence":min(asset.get("confidence",.9),rels[canon_id(aid)].get("confidence",.9)),"citations":[nb(asset.get("citation"),"knowledge_record.reusable_assets"),nb(rels[canon_id(aid)].get("citation"),"released_assets"),"knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"]})
     for i,lesson in enumerate(kr["lessons"]):
         lp=lesson.get("confidentiality_permission")
         if not canon_id(lesson.get("cluster_id")) or is_withheld(lesson.get("cluster_id")): exc.append({"lesson_id":lesson.get("cluster_id"),"reason":"no_lesson_id","citation":"knowledge-reuse-rules.md #1.4"}); continue  # every knowledge item carries its identity (contract $defs/knowledge_item)
@@ -190,15 +218,17 @@ def derive(s,closeout,register,ts,staffing):
     if any(hold_is(h,"HOLD-OTHER-CLIENT-") for h in uh): s.setdefault("escalations",[]).append(other_escalation(sum(hold_is(h,"HOLD-OTHER-CLIENT-") for h in uh)))
     # An excluded unwritten lesson's citations still travel and its record is Closeout text, so the record (ID, category,
     # guidance, citations) is screened beside the items, then dropped: a name or split instruction in it holds, and the
-    # excluded entry's citation carrying any of it is withheld (#2.4, #3.3, #4.5).
-    s["excluded_lesson_records"]=unw
+    # excluded entry's citation carrying any of it is withheld (#2.4, #3.3, #4.5). An asset description that is never
+    # rendered (a pending item's, or cleared stage guidance) is Closeout text too: it is read with its item's title, ID and
+    # citations, so a claim split across it and a citation holds and the citation is withheld (#2.3, #2.6).
+    s["excluded_lesson_records"]=unw; s["unrendered_descriptions"]=und
     if terms:
         s["prior_knowledge_candidates"]=inc; s["excluded_items"]=exc; s,oh=screen_other(s,terms,ENGINE,"matched."); inc=s.pop("prior_knowledge_candidates"); exc=s.pop("excluded_items")
         if oh: holds=dedup_holds(holds+oh); s.setdefault("escalations",[]).append(other_escalation(len(oh)))
     # Each knowledge item is read as the pack renders it - title, ID, summary and supplied citations on one line, item
     # after item - so a claim split across a summary and its citation is held here and withheld everywhere (#4.5).
-    def rows(d): return knowledge_rows(d)+[(x["path"],rendered_values(x.get("category"),x.get("lesson_id"),x.get("drafting_guidance"),*rendered_citations(x.get("citations")))) for x in d.get("excluded_lesson_records") or [] if isinstance(x,dict)]
-    s["prior_knowledge_candidates"]=inc; s["excluded_items"]=exc; s,rh=screen_rendered(s,rows,"matched knowledge items"); inc=s.pop("prior_knowledge_candidates"); exc=s.pop("excluded_items"); s.pop("excluded_lesson_records",None)
+    def rows(d): return knowledge_rows(d)+[(x["path"],rendered_values(x.get("category"),x.get("lesson_id"),x.get("drafting_guidance"),*rendered_citations(x.get("citations")))) for x in d.get("excluded_lesson_records") or [] if isinstance(x,dict)]+[(x["path"],rendered_values(x.get("title"),x.get("knowledge_id"),x.get("description"),*rendered_citations(x.get("citations")))) for x in d.get("unrendered_descriptions") or [] if isinstance(x,dict)]
+    s["prior_knowledge_candidates"]=inc; s["excluded_items"]=exc; s,rh=screen_rendered(s,rows,"matched knowledge items"); inc=s.pop("prior_knowledge_candidates"); exc=s.pop("excluded_items"); s.pop("excluded_lesson_records",None); s.pop("unrendered_descriptions",None)
     if rh: holds=dedup_holds(holds+rh); s.setdefault("escalations",[]).append(rendered_escalation("knowledge item",len(rh)))
     status="ready" if inc and not holds else "hold" if holds else "empty"
     if not inc and not holds: s.setdefault("escalations",[]).append("No released, permissioned prior-knowledge records matched the engagement (knowledge-reuse-rules.md #2.1,#2.2,#3.1)")

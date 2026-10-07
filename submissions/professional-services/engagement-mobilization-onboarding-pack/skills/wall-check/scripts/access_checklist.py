@@ -22,47 +22,146 @@ def _hold_src(h):
     """The supplied text a hold line renders, in rendered order: its ID, reason, location and citation, each unless it
     is an engine template (#4.5)."""
     return _src(*(h.get(k) for k in ("hold_id","reason","path","citation") if not engine_text(k,h.get(k))))
-# A first-week item that points the joiner at a knowledge item still pending practice review is never rendered as an
-# instruction to read or use it: it is restated as a title-and-citation-only note (knowledge-reuse-rules.md #2.3, #2.5).
-# An item points at a pending item when it names its knowledge ID, its title or the title's distinctive words (words
-# this engagement's own scope does not use), or refers to the knowledge digest or prior knowledge together with a
-# pending review. Only an explicit cleared_for_internal_reuse status is cleared; anything else counts as pending.
+# A first-week item that directs the joiner to read or use a knowledge item still pending practice review is never
+# rendered as written: it is restated as a title-and-citation-only note (knowledge-reuse-rules.md #2.3, #2.5). Only an
+# explicit cleared_for_internal_reuse status is cleared; anything else counts as pending. Reading order:
+# 1. exact references (a knowledge ID or a full title, any separators between their words) are resolved against ALL
+#    digest items, longest first, and blanked, so text naming a cleared item is never re-read as a pending one;
+# 2. title words in the remaining text are compared with pending items only (two distinctive words - words this
+#    engagement's own scope does not use - or one distinctive word there and a second title word anywhere in the item);
+# 3. a generic reference to prior knowledge or the digest is a pending reference when it instructs reading or using
+#    the content (or states a pending review, or is a bare fragment) and the digest holds pending items;
+# 4. an administrative action about the review itself (schedule, request, chase, attend ... the review) with no
+#    reading or use intent stays verbatim;
+# 5. adjacent entries are read together in rendered order (as the pack's other run screens are): a pending ID or title,
+#    or a prior-knowledge phrase with reading intent, that only the joined entries spell is a reference by every entry
+#    in the run.
+# When uncertain, the item is qualified (fail toward caution).
 CLEARED="cleared_for_internal_reuse"
-_FW_KNOWLEDGE=re.compile(r"(?<![a-z0-9])(?:knowledge|digest)(?![a-z0-9])")
+_SEP=r"[^a-z0-9]*"
+_FW_GENERIC=re.compile(r"(?<![a-z0-9])(?:prior[ -]?knowledge|knowledge(?![ -](?:transfer|sharing|share|session|handover|hand-over|gap|gaps|management|manager|managers|lead|leads|owner|owners|team))|digest|lessons? learned|reusable assets?|closeout (?:assets?|lessons?|knowledge))(?![a-z0-9])")
 _FW_PENDING=re.compile(r"(?<![a-z0-9])(?:pending|awaiting|unreviewed|under review|not yet (?:reviewed|cleared|approved))(?![a-z0-9])")
+_FW_CONSUME=re.compile(r"(?<![a-z0-9])(?:re-?read|read|reading|use|using|re-?use|consume|study|skim|browse|consult|apply|adopt|leverage|borrow|copy|open|download|print|learn|absorb|familiari[sz]e|go (?:through|over)|work through|walk ?through|look (?:at|over|through|into)|refer to|draw on|check|follow(?![ -]up))(?![a-z0-9])|(?:^|[.;:,(]\s*|(?<![a-z0-9])(?:and|then|to|please|must|should|will|can)\s+)(?:re-?)?review(?![a-z0-9])|(?<![a-z0-9])(?:re-?)?review\s+(?:the|a|an|this|these|those|all|each|every|any|its|their|our|prior|previous|relevant|existing)(?![a-z0-9])")
+_FW_ADMIN=re.compile(r"(?:^|[.;:,]\s*|(?<![a-z0-9])(?:and|then|please)\s+)(?:schedule|request|chase|attend|book|arrange|organi[sz]e|set up|follow up(?: on)?|ask(?: for)?|confirm|track|escalate|invite|e-?mail|contact|remind|join|plan|agree|raise|log|submit|notify|call|ping|nudge|sign up)(?![a-z0-9])")
+_FW_REVIEW_NOUN=re.compile(r"(?<![a-z0-9])(?:review|approval|sign-?off|clearance|confirmation)(?![a-z0-9])")
+_FW_SPLIT_GENERIC=("priorknowledge","knowledgedigest","knowledge","digest")
 def _fw_text(x): return id_spaced(norm(unwithheld(x) or "")) if isinstance(x,str) else ""
-def _fw_has(phrase,text): return bool(phrase) and re.search(r"(?<![a-z0-9])"+re.escape(phrase)+r"(?![a-z0-9])",text) is not None
+def _compact(t): return re.sub(r"[^a-z0-9]","",t)
+def _target_rx(v):
+    """An exact reference to an ID or title: its words in order with any separators between them, word-bounded."""
+    w=re.findall(r"[a-z0-9]+",_fw_text(v)) if isinstance(v,str) and not is_withheld(v) else []
+    return re.compile(r"(?<![a-z0-9])"+_SEP.join(map(re.escape,w))+r"(?![a-z0-9])") if w else None
 def scope_words(p):
     """Words this engagement's own scope uses (title, client, objectives, scope, exclusions, deliverables): a title word
     that is one of them does not single out a knowledge item (#2.5)."""
     e=p.get("engagement") or {}; s=p.get("scope_summary") or {}
     return toks(e.get("title") or "",e.get("client_name") or "",*(x for k in ("objectives","in_scope","exclusions","deliverables") for x in strs(s.get(k))))
-def _fw_names(i,text,T,own):
-    """True when the first-week text names knowledge item i by its ID, its title or its title's distinctive words."""
-    if _fw_has(_fw_text(i.get("knowledge_id")),text) or _fw_has(_fw_text(i.get("title")),text): return True
+def _pending(i): return i.get("review_status")!=CLEARED
+def _resolve(text,items):
+    """(indices of digest items the text names exactly, the text with those references blanked). Every ID and full title
+    of every item is tried, longest first and pending before cleared on a tie, so a longer cleared title is never
+    re-read as a shorter pending one and a shared title counts as pending (#2.5)."""
+    tg=sorted(((len(_compact(_fw_text(v))),0 if _pending(i) else 1,n,rx) for n,i in enumerate(items) for v in (i.get("knowledge_id"),i.get("title")) for rx in [_target_rx(v)] if rx),key=lambda t:(-t[0],t[1],t[2]))
+    hit=[]
+    for _,_,n,rx in tg:
+        if rx.search(text): hit.append(n); text=rx.sub(lambda m:" "*len(m.group()),text)
+    return sorted(set(hit)),text
+def _fuzzy(i,T,own,Tall=frozenset()):
+    """True when the unresolved words T name pending item i by its title's distinctive words: two of them, or one with a
+    second title word anywhere in the item (Tall), so "the onboarding guide and checklist" still names the checklist."""
     W=toks(unwithheld(i.get("title")) or "") if isinstance(i.get("title"),str) else set(); D=W-own
-    return len(D&T)>=2 or (bool(D&T) and len(W&T)>=2)
+    return len(D&T)>=2 or (bool(D&T) and len(W&(T|Tall))>=2)
+def _sibling(i,T,cw,Tall):
+    """True when the unresolved words T hold a title word of pending item i that the named cleared titles (words cw)
+    lack, and the item shares a second word with i's title."""
+    W=toks(unwithheld(i.get("title")) or "") if isinstance(i.get("title"),str) else set()
+    return bool((W-cw)&T) and len(W&Tall)>=2
 def pending_refs(x,items,own):
-    """(pending knowledge items first-week item x points at, whether it points at the digest's pending items in general),
-    or None when x points at no pending knowledge (#2.5). When uncertain, x is qualified."""
+    """(pending items first-week item x points at, cleared items it names exactly) or None when x is rendered as written
+    (#2.5). A generic reference names every pending digest item; when uncertain, x is qualified."""
     if not isinstance(x,str) or is_withheld(x): return None
-    text=_fw_text(x); T=toks(unwithheld(x) or ""); items=[i for i in items if isinstance(i,dict)]
-    pend=[i for i in items if i.get("review_status")!=CLEARED]
-    named=[i for i in pend if _fw_names(i,text,T,own)]
-    if named: return named,False
-    if _FW_KNOWLEDGE.search(text) and _FW_PENDING.search(text): return pend,not pend
+    items=[i for i in items if isinstance(i,dict)]; text=_fw_text(x)
+    hit,rest=_resolve(text,items)
+    named=[items[n] for n in hit if _pending(items[n])]; cleared=[items[n] for n in hit if not _pending(items[n])]
+    T=toks(rest); Ta=toks(text)
+    cw=set().union(*(toks(unwithheld(c.get("title")) or "") for c in cleared if isinstance(c.get("title"),str)))
+    # Beside a cleared item it names, a pending title word the cleared title lacks ("... onboarding guide and checklist")
+    # still names the pending sibling (#2.5).
+    named+=[i for i in items if _pending(i) and i not in named and (_fuzzy(i,T,own,Ta) or (cleared and _sibling(i,T,cw,Ta)))]
+    consume=bool(_FW_CONSUME.search(text)); admin=not consume and bool(_FW_ADMIN.search(text) and _FW_REVIEW_NOUN.search(text))
+    if admin: return None  # an action about the review itself, with no reading or use (#2.5)
+    if named: return named,cleared
+    if cleared: return None  # names a cleared item (and no pending one): a location word ("from the digest") is not a reference
+    g=_FW_GENERIC.search(rest)
+    if not g: return None
+    pend=[i for i in items if _pending(i)]
+    if consume or _FW_PENDING.search(rest) or not rest[:g.start()].strip(" -:;,.()"):
+        if pend: return pend,[i for i in items if not _pending(i)]
+        if _FW_PENDING.search(rest): return [],[]  # states a pending review the digest no longer lists: still qualified
     return None
+def _hit(t,c,v):
+    """True when the normalised text t (compact form c) spells ID or title v exactly; a split long target is also read
+    with every separator removed."""
+    rx=_target_rx(v); k=_compact(_fw_text(v))
+    return bool(rx and rx.search(t)) or (len(k)>=6 and k in c)
+def split_refs(xs,items):
+    """[(entry indices, pending items)] for runs of 2 to RUN_MAX adjacent first-week entries (blank, filler and withheld
+    entries are skipped and never break a run) whose join spells a pending ID or title, or a prior-knowledge phrase
+    with reading intent, that no single entry of the run spells; a run containing a smaller flagged run is not read
+    again (#2.5, #4.5 run reading)."""
+    items=[i for i in items if isinstance(i,dict)]; pend=[i for i in items if _pending(i)]
+    if not pend: return []
+    seq=[k for k,x in enumerate(xs) if isinstance(x,str) and not is_withheld(x) and not filler(x)]
+    T={k:_fw_text(xs[k]) for k in seq}; C={k:_compact(T[k]) for k in seq}; out=[]; done=[]
+    for size in range(2,min(RUN_MAX,len(seq))+1):
+        for a in range(len(seq)-size+1):
+            span=seq[a:a+size]; ss=set(span)
+            if any(d<=ss for d in done): continue
+            t=" ".join(T[k] for k in span); c="".join(C[k] for k in span)
+            named=[i for i in pend if any(_hit(t,c,v) and not any(_hit(T[k],C[k],v) for k in span) for v in (i.get("knowledge_id"),i.get("title")))]
+            gen=_FW_CONSUME.search(t) and any(g in c and not any(g in C[k] for k in span) for g in _FW_SPLIT_GENERIC)
+            if named or gen: out.append((span,named or pend)); done.append(ss)
+    return out
+def _label(xs): return ", ".join(f"{i.get('title')} ({i.get('knowledge_id')})" for i in xs)
+def _items_label(ns): return f"item {ns[0]}" if len(ns)==1 else "items "+", ".join(map(str,ns[:-1]))+f" and {ns[-1]}"
+def _restate(n,pend,cleared,ns):
+    """The restated line for SOW first-week item(s) ns, rendered at number n: cleared items named in the item may be
+    read; each pending item is named by title and ID as title-and-citation only. It never repeats the SOW wording, so
+    it never says both "read" and "do not read" for the same item (#2.3, #2.5)."""
+    cite=f"(SOW first-week {_items_label(ns)}; knowledge-reuse-rules.md #2.3,#2.5)"; one=len(pend)==1
+    src=_src(*(v for i in cleared+pend for v in (i.get("title"),i.get("knowledge_id"))))
+    if not pend: return (f"{n}. Note only the titles and citations of prior-knowledge digest items pending practice review; do not read or reuse their content until review confirms. {cite}",())
+    note=f"note only the title{'' if one else 's'} and citation{'' if one else 's'} of {_label(pend)}"+(" in the prior-knowledge digest" if not cleared else "")+f"; {'its' if one else 'their'} content is pending practice review - do not read or reuse {'it' if one else 'them'} until review confirms."
+    if cleared: return (f"{n}. In the prior-knowledge digest, read only the cleared item{'' if len(cleared)==1 else 's'} {_label(cleared)}; {note} {cite}",src)
+    return (f"{n}. {note[0].upper()}{note[1:]} {cite}",src)
 def first_week_row(n,x,items,own):
-    """(line, rendered values) for SOW first-week item n. An item pointing at pending knowledge is restated: the line
-    names each pending item by title and ID, says its content is pending practice review and cites the SOW item; it
-    never repeats the SOW wording, so it never says both "read" and "do not read" (#2.3, #2.5)."""
+    """(line, rendered values) for SOW first-week item n read alone (#2.5)."""
     r=pending_refs(x,items,own)
-    if r is None: return (f"{n}. {x}",_src(x))
-    pend,generic=r; cite=f"(SOW first-week item {n}; knowledge-reuse-rules.md #2.3,#2.5)"
-    if generic or not pend: return (f"{n}. Note only the titles and citations of prior-knowledge digest items pending practice review; do not read or reuse their content until review confirms. {cite}",())
-    names=", ".join(f"{i.get('title')} ({i.get('knowledge_id')})" for i in pend)
-    one=len(pend)==1
-    return (f"{n}. Note only the title{'' if one else 's'} and citation{'' if one else 's'} of {names} in the prior-knowledge digest; {'its' if one else 'their'} content is pending practice review - do not read or reuse it until review confirms. {cite}",_src(*(v for i in pend for v in (i.get("title"),i.get("knowledge_id")))))
+    return (f"{n}. {x}",_src(x)) if r is None else _restate(n,r[0],r[1],[n])
+def first_week_rows(xs,items,own):
+    """[(line, rendered values)] for the SOW first-week items, numbered as the SOW lists them. Items pointing at pending
+    knowledge, alone or as part of an adjacent run, are restated; every other item is unchanged (#2.5)."""
+    xs=list(xs); items=[i for i in items if isinstance(i,dict)]; refs={k:pending_refs(x,items,own) for k,x in enumerate(xs)}
+    grp={}; runs=split_refs(xs,items)
+    for span,pend in runs:
+        g=set(span).union(*(grp[k] for k in span if k in grp))
+        for k in g: grp[k]=g
+    R=[]
+    for k,x in enumerate(xs):
+        n=k+1
+        if k in grp:
+            g=sorted(grp[k]); ns=[j+1 for j in g]
+            if k!=g[0]: R.append((f"{n}. Continues SOW first-week item {g[0]+1}, restated in item {g[0]+1} above as a title-and-citation-only note. (SOW first-week item {n}; knowledge-reuse-rules.md #2.5)",())); continue
+            pend=[]; cl=[]
+            for j in g:
+                for i in (refs[j] or ([],[]))[0]+[i for s_,p_ in runs if j in s_ for i in p_]:
+                    if i not in pend: pend.append(i)
+                for i in (refs[j] or ([],[]))[1]:
+                    if i not in cl: cl.append(i)
+            R.append(_restate(n,pend,cl,ns)); continue
+        r=refs[k]
+        R.append(first_week_row(n,x,items,own) if r is not None else (f"{n}. {x}",_src(x)))
+    return R
 def pack_rows(p):
     """[(line, the free-text values it renders)] for the pack, one entry per line, before line screening (#4.3, #4.5)."""
     e=p.get("engagement") or {}; s=p.get("scope_summary") or {}; j=p.get("joiner") or {}; kd=p.get("knowledge_digest") or {}; mp=p.get("mobilization_pack") or {}
@@ -78,7 +177,7 @@ def pack_rows(p):
     R+=E("","## Team roster")+[(f"- {r.get('person')} - {r.get('role')} - {', '.join(strs(r.get('responsibilities')))} - POC: {r.get('point_of_contact')}",_src(r.get("person"),*strs(r.get("responsibilities")),r.get("point_of_contact"))+_role_src(r.get("role"))) for r in p.get("team_roster",[])]+[(f"- Proposed, not assigned: {r.get('candidate_name')} for {r.get('role_title')}",_src(r.get("candidate_name"),r.get("role_title"))) for r in p.get("proposed_staffing",[])]
     R+=E("","## Access-request checklist")+([(f"- {i.get('workspace_name')} ({i.get('workspace_id')}): {i.get('status')} - {i.get('requested_permission','none')} - {i.get('reason')}",_src(i.get("workspace_name") if i.get("workspace_name")!=i.get("workspace_id") else None,i.get("workspace_id"))) for i in p.get("access_checklist",[])] or E("- No access is requested in this run; see Escalations and holds."))
     R+=E("","## Confidentiality and ethical-wall briefing")+([(f"- May not access/discuss {i.get('type')}: {i.get('item')} - {i.get('restriction')}",_src(i.get("item"),i.get("restriction"))) for i in (p.get("wall_decision") or {}).get("may_not_access_discuss",[])] or E("- No wall restriction was found for the joiner, subject to human review of this draft."))
-    R+=E("","## First-week plan")+[first_week_row(n,x,kd.get("items") or [],own) for own in [scope_words(p)] for n,x in enumerate(s.get("first_week_focus",[]),1)]+E("","## Escalations and holds")+[(f"- {x}",_src(x)) for x in p.get("escalations",[])]+[(f"- HOLD {h.get('hold_id')}: {h.get('reason')} at {h.get('path')} ({h.get('citation')})",_hold_src(h)) for h in p.get("holds",[])]
+    R+=E("","## First-week plan")+first_week_rows(s.get("first_week_focus",[]),kd.get("items") or [],scope_words(p))+E("","## Escalations and holds")+[(f"- {x}",_src(x)) for x in p.get("escalations",[])]+[(f"- HOLD {h.get('hold_id')}: {h.get('reason')} at {h.get('path')} ({h.get('citation')})",_hold_src(h)) for h in p.get("holds",[])]
     return R
 # The only values a pack line renders that pack_rows does not hand to the rendered-order screen (#4.5): each is engine
 # vocabulary no input supplies (a contract enum, the --generated-at run timestamp, or engine wording built from closed

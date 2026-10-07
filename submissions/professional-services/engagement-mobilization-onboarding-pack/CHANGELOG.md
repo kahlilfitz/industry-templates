@@ -26,6 +26,30 @@ Fixes the Cowork 1.0.1 evaluation (No-ship). The other results from that run pas
   - Existing checks updated because the scenario A lesson is no longer an item (each now expects the exclusion): QA-I2 (repeats the asset instead), QA-M6, QA-O1 (adds a second item), QA-P2 (two cases), A22 (re-adding the excluded lesson's ID in place of reversing a now one-element list) and QA-R20-2.
   - Suite: 537 checks.
 
+### 1.0.2 QA round (on 25e6cbd)
+
+A QA round on the first 1.0.2 commit confirmed four blocking defects. They are fixed here, still at 1.0.2 because it was not frozen. Each defect's reproducer is now a regression test, with an attack set and a benign set.
+
+- **QA-102-D1: a pending asset's description rendered as its summary** (`knowledge_match.py`, asset loop). An asset whose `review_status` is `pending_practice_review` copied its supplied `description` into `summary`. So "The next drafting stage should create a concise onboarding summary from the title and citations only." reached `matched.json`, the digest and the pack (cases asset-guidance and asset-guidance-reworded).
+  - Fix: review status is derived first. A pending item never renders a supplied description: its summary is always the fixed title-and-citation-only statement (#2.3).
+  - A cleared asset whose description is guidance to a drafter or later stage, or a placeholder ("to be written", "TBD"), is not written content. Consistent with hardening checklist E10 and with unwritten lessons (#2.4), it is listed in `excluded_items` with the new reason `description_is_stage_guidance_not_written_content` (#2.6) and is never an item.
+  - Guidance is never scored for relevance (#3.1).
+  - A cleared asset with no description now gets a finished statement that none is supplied, in place of the pending-review statement it used to inherit.
+  - Descriptions that are never rendered (a pending item's, or cleared guidance) are still Closeout text. They are screened beside the items, with their item's title, ID and citations, as an unwritten lesson's record is. A name in them still holds (QA-1 "Closeout engagement for another client"). A claim split across a description and a citation still holds, and the citation is withheld (MOB-QA-16-05).
+- **QA-102-D2: generic first-week references needed status wording** (`access_checklist.py`). "Read prior knowledge before kickoff" and "Read the knowledge digest before kickoff" stayed unqualified while the digest held a pending item (cases generic-prior and generic-digest). "Schedule the pending knowledge review with the practice lead" was wrongly rewritten (case benign-review).
+  - Fix: reading or use intent (read, use, review, study, skim, consult, apply ...) toward knowledge content is detected independently of status wording. A generic reference with that intent, or a bare fragment, is restated while the digest holds pending items: "read only the cleared item(s) ...", plus each pending item named as title and citation only. Cleared items are never dropped.
+  - Administrative actions about the review itself (schedule, request, chase, attend, book the review or sign-off) are rendered as written. So are people and sessions ("knowledge management lead", "knowledge transfer session").
+- **QA-102-D3: a pending ID split across adjacent first-week entries** ("Read AST-A-" / "001 before kickoff", case split-id) was not caught.
+  - Fix: first-week entries are read in rendered order as runs of 2-8 adjacent entries, as the plugin's other run screens read lines; blank or punctuation-only entries never break a run. A pending ID, title or prior-knowledge phrase that only the joined entries spell is a reference by the whole run.
+  - The first entry carries the note, citing every SOW item in the run. Each later entry says it continues that item. Numbering and all other items are unchanged.
+- **QA-102-D4: an exact reference to a cleared similar-title asset was rewritten as the pending one** (case cleared-similar: "Read the Patient access onboarding guide (AST-A-002) before kickoff" became a note about AST-A-001 "Patient access onboarding checklist").
+  - Fix: exact IDs and full titles of every digest item are resolved first, longest first. An item that names only cleared items exactly is unchanged. Fuzzy title-word matching applies only to pending items, and only to text not resolved to an exact reference. An item that names both the cleared and the pending asset ("guide and checklist") is restated, keeping the cleared one readable.
+- **Duplication check.** The pending-summary logic exists only in `knowledge_match.py`, and the first-week logic only in `access_checklist.py`. Both are shared files, kept byte-identical (knowledge-match, wall-check and pack-draft for the first; wall-check and pack-draft for the second), and `tests/check_shared_copies.py` passes. `verify_render` re-derives through the same code.
+- **Docs:** knowledge-reuse-rules #1.4, #2.3, #2.5 (rewritten), #2.6 (new) and #3.1, in all six copies; knowledge-match SKILL.md step 3; pack-draft SKILL.md step 4; the README; and four new `sample-test-prompts.csv` rows.
+- **Goldens** were regenerated by the engines with `--generated-at 2026-10-01T00:00:00Z`. Only scenario B changed, in 3 files (+4/-4 lines). In `matched.json` (2 lines), `governed.json` and `access-checklist.json`, the summary of pending AST-B-REL changes from its supplied description "Reusable pattern for first-week risk-control workshop planning in servicing transformations." to the fixed title-and-citation-only statement (D1: a pending item never renders its description). Scenario B's digest is `denied_by_wall`, so its pack is unchanged. Every scenario A file and both packs are byte-identical.
+- **Tests:** a new `qa102_checks` group adds 16 checks. Each defect has its reproducer, an attack sweep and a benign set, plus unit checks for the guidance detector and for exact-reference resolution. Existing checks are unchanged.
+  - Suite: 553 checks.
+
 ## 1.0.1 - 2026-10-01
 
 Fixes the Cowork 1.0.0 evaluation (Blocked). Each finding maps to the fix below.
