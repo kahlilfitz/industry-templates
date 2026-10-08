@@ -107,7 +107,7 @@ human testers).
 | 01 | `engagement-closeout-knowledge-harvest` | 1.0.2 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.0.2 tracker tab | reviewers |
 | 02 | `engagement-staffing-bench-match` | 1.1.4 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.1.4 tracker tab | reviewers |
 | 03 | `engagement-mobilization-onboarding-pack` | 1.0.1 evaluated; 1.0.2 frozen | 1.0.0 Blocked (trust-and-safety gate); 1.0.1 frozen 2026-10-07 (`40D3968E…9EC1`, receipt `f9518fd`, clean) after QA round 20 (cap) and the T&E round 15 class sweep; evaluated **No-ship** 2026-10-07 (complete-chain functional case failed; trust and safety, security and skill floors passed) | No | No | No | No | No | 1.0.2 frozen 2026-10-07 (`C49C8EA7…A378`, receipt `9d27925`, clean) after QA round 3 (cap); evaluate in a new Cowork task, then archive | operator |
-| 04 | `time-expense-narrative-compliance` | 1.0.3 evaluated; 1.0.4 frozen | 1.0.3 Blocked (trust-and-safety gate); 1.0.4 frozen 2026-10-07 (`1E1380E3…10B4`, receipt `f9518fd`, clean) after QA round 15 (cap, `e6925e4`); evaluated **No-ship** 2026-10-07 on missing grader-calibration evidence only (no human reference labels); every measured bar met | No | No | No | No | No | Owner decision on the evidence gap (same as DRQG 1.0.4: accept, no re-version, two reviewers on this ZIP) | operator |
+| 04 | `time-expense-narrative-compliance` | 1.0.3 evaluated; 1.0.4 frozen | 1.0.3 Blocked (trust-and-safety gate); 1.0.4 frozen 2026-10-07 (`1E1380E3…10B4`, receipt `f9518fd`, clean) after QA round 15 (cap, `e6925e4`); evaluated **No-ship** 2026-10-07 on missing grader-calibration evidence only (no human reference labels); every measured bar met; owner accepted 2026-10-08, no re-version | No | No | Yes | No | No | Two reviewers install the 1.0.4 ZIP and complete the 1.0.4 tracker tab; then decide on re-evaluating this exact ZIP | reviewers |
 | 05 | `deliverable-review-quality-gate` | 1.0.3 evaluated; 1.0.4 frozen | 1.0.3 Blocked (B1 demo inputs not derivable from raw packs; B2 shipped tests read `metadata.json`), every measured gate met; 1.0.4 frozen 2026-10-07 (`4AE31530…316B`, receipt `f9518fd`, clean) after QA round 17 (cap, `1d20138`) and the T&E round 15 class sweep; evaluated **Blocked** 2026-10-07 on missing release evidence only (installed-runtime critical-path and independent grader calibration); every measured bar met; owner accepted 2026-10-07, no re-version | No | No | Yes | No | No | Two reviewers install the 1.0.4 ZIP and complete the 1.0.4 tracker tab; then decide on re-evaluating this exact ZIP | reviewers |
 
 Notes on the board:
@@ -465,10 +465,13 @@ Accepted residuals from pre-freeze QA rounds 12 to 14 (low or by design under th
 4. Done (2026-10-07): frozen as `evaluate-time-expense-narrative-compliance-v1.0.4-2026-10-07`.
 5. Done (2026-10-07): evaluated **No-ship** (grader-calibration evidence gap only, with every
    measured bar met) and archived to `Evaluation\1.0.4\`. Industry README updated.
-6. Owner decision: this is the same evaluator evidence gate as DRQG 1.0.4. The recommendation is
-   the same: accept it, do not re-version, and have the two reviewers run this exact ZIP. Their
-   labels supply the calibration evidence. On acceptance, create the deployment doc and the 1.0.4
-   tracker tab.
+6. Done (2026-10-08): owner accepted the evidence gap, the same evaluator gate as DRQG 1.0.4. No
+   candidate change is requested, so do not re-version. Deployment doc and a 1.0.4 tracker tab
+   (53 prompts, 9 critical paths, grader-label columns) created in the library, and the industry
+   README updated.
+7. Two reviewers install the 1.0.4 ZIP in Cowork and complete the 1.0.4 tracker tab. Their
+   per-prompt results and quality scores supply the human labels the report asks for (C2). Then
+   decide whether to re-evaluate this exact ZIP.
 
 ## 05 Deliverable Review & Quality Gate
 
