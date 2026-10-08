@@ -106,7 +106,7 @@ human testers).
 |---|---|---|---|---|---|---|---|---|---|---|
 | 01 | `engagement-closeout-knowledge-harvest` | 1.0.2 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.0.2 tracker tab | reviewers |
 | 02 | `engagement-staffing-bench-match` | 1.1.4 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.1.4 tracker tab | reviewers |
-| 03 | `engagement-mobilization-onboarding-pack` | 1.0.2 evaluated | 1.0.0 Blocked (trust-and-safety gate); 1.0.1 **No-ship** 2026-10-07 (complete-chain functional case failed); 1.0.2 frozen 2026-10-07 (`C49C8EA7…A378`, receipt `9d27925`, clean) after QA round 3 (cap); evaluated **Blocked** 2026-10-08 on missing grader-calibration evidence only (no human reference labels); every measured bar met and the 1.0.1 defect did not recur | No | No | No | No | No | Owner decision on the evidence gap (same as DRQG and T&E 1.0.4: accept, no re-version, two reviewers on this ZIP) | operator |
+| 03 | `engagement-mobilization-onboarding-pack` | 1.0.2 evaluated | 1.0.0 Blocked (trust-and-safety gate); 1.0.1 **No-ship** 2026-10-07 (complete-chain functional case failed); 1.0.2 frozen 2026-10-07 (`C49C8EA7…A378`, receipt `9d27925`, clean) after QA round 3 (cap); evaluated **Blocked** 2026-10-08 on missing grader-calibration evidence only (no human reference labels); every measured bar met and the 1.0.1 defect did not recur; owner accepted 2026-10-08, no re-version | No | No | Yes | No | No | Two reviewers install the 1.0.2 ZIP and complete the 1.0.2 tracker tab; then decide on re-evaluating this exact ZIP | reviewers |
 | 04 | `time-expense-narrative-compliance` | 1.0.3 evaluated; 1.0.4 frozen | 1.0.3 Blocked (trust-and-safety gate); 1.0.4 frozen 2026-10-07 (`1E1380E3…10B4`, receipt `f9518fd`, clean) after QA round 15 (cap, `e6925e4`); evaluated **No-ship** 2026-10-07 on missing grader-calibration evidence only (no human reference labels); every measured bar met; owner accepted 2026-10-08, no re-version | No | No | Yes | No | No | Two reviewers install the 1.0.4 ZIP and complete the 1.0.4 tracker tab; then decide on re-evaluating this exact ZIP | reviewers |
 | 05 | `deliverable-review-quality-gate` | 1.0.3 evaluated; 1.0.4 frozen | 1.0.3 Blocked (B1 demo inputs not derivable from raw packs; B2 shipped tests read `metadata.json`), every measured gate met; 1.0.4 frozen 2026-10-07 (`4AE31530…316B`, receipt `f9518fd`, clean) after QA round 17 (cap, `1d20138`) and the T&E round 15 class sweep; evaluated **Blocked** 2026-10-07 on missing release evidence only (installed-runtime critical-path and independent grader calibration); every measured bar met; owner accepted 2026-10-07, no re-version | No | No | Yes | No | No | Two reviewers install the 1.0.4 ZIP and complete the 1.0.4 tracker tab; then decide on re-evaluating this exact ZIP | reviewers |
 
@@ -386,10 +386,13 @@ Accepted residuals from pre-freeze QA rounds 15 to 19 (low or by design under th
    (`C49C8EA7…A378`, receipt `9d27925`, clean; 571/571 from the extracted ZIP).
 10. Done (2026-10-08): evaluated **Blocked** (grader-calibration evidence gap only; every measured
     bar met) and archived to `Evaluation\1.0.2\`.
-11. Owner decision: this is the same evaluator evidence gate as DRQG and T&E 1.0.4. The
-    recommendation is to accept it with no re-version; the two reviewers then install this ZIP and
-    their tracker scores supply the human reference labels. The deployment doc and tracker follow
-    the decision.
+11. Done (2026-10-08): owner accepted the evidence gap, the same evaluator gate as DRQG and T&E
+    1.0.4. No candidate change is requested, so do not re-version. Deployment doc and a 1.0.2
+    tracker tab (55 prompts, 9 critical paths, grader-label columns) created in the library, and
+    the industry README updated.
+12. Two reviewers install the 1.0.2 ZIP in Cowork and complete the 1.0.2 tracker tab. Their
+    per-prompt results and quality scores supply the human labels the report asks for (C2). Then
+    decide whether to re-evaluate this exact ZIP.
 
 ## 04 Time & Expense Narrative Compliance
 
