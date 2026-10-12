@@ -64,8 +64,9 @@
    NOT_ENGINE_OWNED (document_differences), provenance included. The activity packet itself is checked the same way
    against activity_pull re-run on the raw exports (verify_activity_root, item 2).
 
-This file ships as identical copies next to each engine (skills are self-contained);
-tests/check_shared_copies.py fails when the copies drift.
+This file ships as identical copies next to each engine (skills are self-contained); the test-data
+check test-data/professional-services/time-expense-narrative-compliance/<version>/tests/check_shared_copies.py
+(not shipped in the package) fails when the copies drift.
 """
 import argparse
 import csv
@@ -110,7 +111,7 @@ POSITIONAL_LABEL_RE = re.compile(r"(?:calendar export|document activity log|time
                                  r"|engagement letter extract|mailbox summary|client billing guidelines extract"
                                  r"|code structure) row [1-9][0-9]*"
                                  r"|other (?:engagement|timekeeper) (?:signal|entry|name) [1-9][0-9]*")
-SIGNAL_POLICY_VERSION = "signal_policy/1.0.4"
+SIGNAL_POLICY_VERSION = "signal_policy/1.0.5"
 TEAM_VIEW_PREFIX = "engagement-manager:"
 TEAM_VIEW_TOKEN_RE = re.compile(r"engagement-manager:[A-Za-z0-9._-]+")
 WITHHELD_TEXT = contract_check.WITHHELD_MARKER  # "[withheld: flagged as embedded_instruction - client-billing-guidelines.md #11.2]"
@@ -1029,7 +1030,7 @@ def enforce_timekeeper_scope(packet, engine="engine:unknown", strict=False):
 
 # --- Embedded-instruction tripwire (client-billing-guidelines.md #11.1 / #11.2) -------------
 # The detector is the shared steering_guard module, vendored byte-identically next to each engine
-# (tests/check_shared_copies.py pins its SHA-256). Plugin vocabulary goes only through its hooks.
+# (the test-data tests/check_shared_copies.py, not shipped in the package, pins its SHA-256). Plugin vocabulary goes only through its hooks.
 
 STEERING_HOOKS = {
     "extra_verdict_words": ("billable", "compliant", "no write down", "approved for billing"),
@@ -1144,7 +1145,7 @@ def _joined(values):
 
 
 # Every free-text field of a signal or entry that an engine can copy into a draft, a flag detail or the report.
-# tests/run_tests.py inventory_tests asserts every contract string field is in one of these, closed, re-derived
+# The test-data tests/run_tests.py inventory_tests asserts every contract string field is in one of these, closed, re-derived
 # or reconciled, or never rendered (#13.2).
 SIGNAL_TEXT_KEYS = ("subject", "purpose", "deliverable", "file_name", "organizer", "activity_class", "meeting_id",
                     "source", "review_reason", "engagement_id", "activity_id", "person", "attendees", "citations")
@@ -3105,8 +3106,8 @@ def validate_packet(packet, stage):
 # that every later stage re-runs on the activity packet, comparing the whole carried document with the result.
 REDERIVE_CITATION = "client-billing-guidelines.md #13.8"
 CONTRACT_VERSION = "ps.time-expense-narrative-compliance.v1"
-STAGE_VERSIONS = {"activity": "activity_pull/1.0.4", "drafted": "narrative_draft/1.0.4", "coded": "code_map/1.0.4",
-                  "governed": "guideline_check/1.0.4"}
+STAGE_VERSIONS = {"activity": "activity_pull/1.0.5", "drafted": "narrative_draft/1.0.5", "coded": "code_map/1.0.5",
+                  "governed": "guideline_check/1.0.5"}
 STAGE_ENGINES = {"drafted": "engine:narrative_draft", "coded": "engine:code_map", "governed": "engine:guideline_check"}
 # Carried fields no engine derives from its inputs, left out of the whole-document comparison (and only these). Each
 # is still validated by the contract walk and validate_packet and screened by the next stage's sweep_packet.

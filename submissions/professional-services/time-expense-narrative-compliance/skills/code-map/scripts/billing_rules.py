@@ -15,8 +15,9 @@
 Constants mirror references/task-phase-codes.md and references/client-billing-guidelines.md section
 by section. The model reports these results; it never decides, suppresses or downgrades them.
 
-This file ships as identical copies next to code_map.py, guideline_check.py and exception_report.py;
-tests/check_shared_copies.py fails when the copies drift.
+This file ships as identical copies next to code_map.py, guideline_check.py and exception_report.py; the
+test-data check test-data/professional-services/time-expense-narrative-compliance/<version>/tests/check_shared_copies.py
+(not shipped in the package) fails when the copies drift.
 """
 import os
 import re

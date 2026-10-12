@@ -56,7 +56,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:activity_pull"
-ENGINE_VERSION = signal_policy.STAGE_VERSIONS["activity"]  # "activity_pull/1.0.4"; later stages require it (#13.8)
+ENGINE_VERSION = signal_policy.STAGE_VERSIONS["activity"]  # "activity_pull/1.0.5"; later stages require it (#13.8)
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 POLICY_CITATION = signal_policy.POLICY_CITATION
 MATCHED_CONFIDENCE = signal_policy.MATCHED_CONFIDENCE  # shared: later stages re-derive it (#13.5)
@@ -616,8 +616,8 @@ def pull(args, script_dir=None, extra_sources=None):
 # The activity packet fields that no raw export determines: activity_pull's run parameters. rederive() reads them back
 # from the packet and re-runs pull() on the raw exports with them; the result must still equal the whole packet, so
 # each of these is compared like every other field, and a value activity_pull would not have written is a difference.
-# Every other field is derived from the raw exports, the plugin's config/signal-sources.json or this engine's
-# constants. tests/run_tests.py (qa13_tests) fails when the contract gains a top-level or provenance field that is
+# Every other field is derived from the raw exports, the skill's config/signal-sources.json or this engine's
+# constants. The test-data tests/run_tests.py (qa13_tests) fails when the contract gains a top-level or provenance field that is
 # neither derived nor listed here.
 RUN_PARAMETERS = {
     ("period",): "--period-start and --period-end: the requested period, which selects rows but is not in any export",

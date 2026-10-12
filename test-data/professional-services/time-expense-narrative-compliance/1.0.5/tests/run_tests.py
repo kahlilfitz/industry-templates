@@ -5153,7 +5153,7 @@ def r13_tests(tmp):
          lambda g: mail_record(g).update(excluded_by="engine:code_map"), "excluded_signals[0]"),
         ("exclusion record writer naming an engine that has not run, with provenance.engines widened to match",
          lambda g: (mail_record(g).update(excluded_by="engine:exception_report"),
-                    g["provenance"]["engines"].append("exception_report/1.0.4")), "excluded_signals[0]"),
+                    g["provenance"]["engines"].append("exception_report/1.0.5")), "excluded_signals[0]"),
         ("compliance.source", lambda g: comp(g).update(source="engine:code_map"), "differing: source"),
         ("compliance.confidence", lambda g: comp(g).update(confidence=0.11), "differing: confidence"),
         ("compliance.citations", lambda g: comp(g).update(citations=["client-billing-guidelines.md #1.1"]),

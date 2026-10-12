@@ -23,8 +23,9 @@ levels, checked iteratively before parsing, so no recursive walker or deepcopy c
 and the JSON type of the value - never the value itself, which is untrusted text; a map key in a path is written
 as its position ("<member #2>").
 
-This file ships as identical copies next to each engine (skills are self-contained);
-tests/check_shared_copies.py fails when the copies drift.
+This file ships as identical copies next to each engine (skills are self-contained); the test-data
+check test-data/professional-services/time-expense-narrative-compliance/<version>/tests/check_shared_copies.py
+(not shipped in the package) fails when the copies drift.
 """
 import datetime
 import functools
@@ -109,7 +110,11 @@ class ContractError(ValueError):
 
 
 def contract_path(script_dir):
-    """The contract shipped with the skill (skills/<skill>/contracts/), else the plugin-level copy."""
+    """The contract shipped with this skill (skills/<skill>/contracts/, one level above scripts/).
+
+    Every skill ships its own byte-identical copy, so it is found on the first step; the package has no
+    plugin-level contracts/ folder. The bounded search above it only runs when the skill copy is missing,
+    and finding nothing is a ContractError (fail closed)."""
     current = os.path.abspath(script_dir)
     for _ in range(4):
         candidate = os.path.join(current, "contracts", CONTRACT_FILE)

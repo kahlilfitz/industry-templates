@@ -6,7 +6,7 @@ exception_report.py), whose constants mirror references/task-phase-codes.md and
 references/client-billing-guidelines.md. guideline_check.py recomputes the same mapping and holds
 an entry whose supplied code_mapping disagrees (client-billing-guidelines.md #13.1).
 
-v1.0.4 rules:
+v1.0.5 rules:
 - Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1), and rows
   outside the recorded timekeeper scope are withheld (#12.1). A recorded team view must be confirmed
   by the raw engagement letter and exports (--raw-dir) or the packet is refused; with --raw-dir, and
@@ -30,7 +30,7 @@ import billing_rules  # noqa: E402  (shared rules, identical copies next to guid
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = billing_rules.CODE_MAP_ENGINE
-ENGINE_VERSION = "code_map/1.0.4"
+ENGINE_VERSION = "code_map/1.0.5"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 
 

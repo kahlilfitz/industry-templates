@@ -4,7 +4,7 @@
 
 - Prepared for: engagement manager and billing coordinator (review only)
 - Period covered by the governed data: 2026-09-14 to 2026-09-18 (entries and activity actually dated 2026-09-14 to 2026-09-16)
-- Generated: 2026-09-23T00:00:00Z by exception_report/1.0.4 from guideline_check output (flags quoted verbatim)
+- Generated: 2026-09-23T00:00:00Z by exception_report/1.0.5 from guideline_check output (flags quoted verbatim)
 
 ## Summary
 

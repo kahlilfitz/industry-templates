@@ -6,7 +6,7 @@ with draft narratives attached. The model may offer improved prose beside the pa
 owns every draft, linked evidence, confidence, provenance and citations; later stages re-derive each
 draft and refuse one that differs (client-billing-guidelines.md #13.5).
 
-v1.0.4 rules:
+v1.0.5 rules:
 - Signals from disabled or unknown sources are dropped first (signal_policy.py,
   client-billing-guidelines.md #10.1); an entry that linked one is marked needs_review.
 - Rows outside the recorded timekeeper scope are withheld before drafting (#12.1). A recorded team view is
@@ -43,7 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = signal_policy.DRAFT_ENGINE  # "engine:narrative_draft"
-ENGINE_VERSION = signal_policy.STAGE_VERSIONS["drafted"]  # "narrative_draft/1.0.4", shared with later re-derivations
+ENGINE_VERSION = signal_policy.STAGE_VERSIONS["drafted"]  # "narrative_draft/1.0.5", shared with later re-derivations
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 
 

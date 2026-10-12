@@ -2,7 +2,7 @@
 
 ## 1.0.5 - 2026-10-12
 
-Packaging release: the plugin moves from the Claude `.claude-plugin` layout to the MOS3 Microsoft 365 app package (manifest 1.28). 1.0.4 was the evaluated candidate (No-ship on missing grader labels only, owner-accepted). No change to the rules engine, the contract `ps.time-expense-narrative-compliance.v1`, the output contracts or the pre-bill packet; every golden is unchanged.
+Packaging release: the plugin moves from the Claude `.claude-plugin` layout to the MOS3 Microsoft 365 app package (manifest 1.28). 1.0.4 was the evaluated candidate (No-ship on missing grader labels only, owner-accepted). No change to the rules engine, the contract `ps.time-expense-narrative-compliance.v1`, the output contracts or the pre-bill packet; the goldens differ from 1.0.4 only in the engine version strings.
 
 ### MOS3 package
 - New `manifest.json` (manifest 1.28, new GUID `id`, `name.short` "Time Entry Narrative Check", accent `#7B3FA0`, `color.png`/`outline.png` icons, five `agentSkills`). The short name says "Time Entry" because the plugin handles time entries only; expense reports and receipts stay out of scope, as the descriptions and `description.full` say.
@@ -18,7 +18,10 @@ Packaging release: the plugin moves from the Claude `.claude-plugin` layout to t
 - Each skill now carries `config/signal-sources.json`, byte-identical in all five; the canonical copy is `skills/activity-pull/config/signal-sources.json`.
 - `signal_policy.find_plugin_config` (byte-identical in all five skills) reads only `<skill>/config/signal-sources.json` next to the engine's `scripts/` folder instead of walking up to six folders for a plugin-root `config/`. Fail-closed behaviour is unchanged: a malformed copy is refused, and a skill without its copy runs on the narrow default floor (mailbox sources off). Provenance still records it as `config/signal-sources.json`.
 - Root `config/`, `contracts/` and `references/` removed: nothing outside the skills used them, and every skill already carried identical copies. Canonical copies are in `skills/activity-pull/` (`billing_rules.py`: `skills/guideline-check/scripts/`); `check_shared_copies.py` checks the others against them (34 pairs, config included).
-- Engine version stamps (`activity_pull/1.0.4` and the others in provenance and the report) stay at 1.0.4 because the engines did not change and the goldens record them.
+
+### Version stamps (hardening checklist G5)
+- Engine version constants move to 1.0.5: `signal_policy.STAGE_VERSIONS` (activity_pull, narrative_draft, code_map, guideline_check), `SIGNAL_POLICY_VERSION`, and `code_map`, `guideline_check` and `exception_report` `ENGINE_VERSION`. The goldens in `test-data/professional-services/time-expense-narrative-compliance/1.0.5/demo-data` (each scenario's `activity.json` and `expected/`) are regenerated; only the version strings changed. The rules engine is unchanged.
+- Comment-only: `contract_check.contract_path` now documents that the skill's own contract copy is found first (the package has no plugin-level copy), and the script comments that pointed at `tests/...` now name the test-data scripts, which are not shipped in the package.
 
 ### Skill descriptions
 - Every SKILL.md: frontmatter adds `compatibility` and `metadata.icon`, `metadata.version` is "1.0.5". Descriptions are rewritten to two sentences, five or more quoted triggers and one `Do NOT use for ... (use <sibling>)` sentence that keeps the sibling, safety (submit, approve, send) and expense exclusions. New triggers: "build my activity packet for this period", "draft narratives from my week", "recommend phase codes for my entries", "draft the pre-bill packet".

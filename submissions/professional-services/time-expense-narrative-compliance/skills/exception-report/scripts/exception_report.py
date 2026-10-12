@@ -6,7 +6,7 @@ engagement manager and billing coordinator. It only writes a local draft file: i
 e-mail, chat or network code and never sends, submits, approves or alters WIP balances.
 Engine flags are quoted verbatim; nothing is dropped or softened.
 
-v1.0.4: governed data that holds rows outside the recorded timekeeper scope is refused
+v1.0.5: governed data that holds rows outside the recorded timekeeper scope is refused
 (client-billing-guidelines.md #12.1). Every data-derived cell (person, subject, narrative,
 flag detail, exclusion reason, engagement names) passes the shared embedded-instruction
 tripwire; flagged text is replaced by a withheld marker and never printed (#11.2). The engagement
@@ -45,7 +45,7 @@ import billing_rules  # noqa: E402  (shared rules, identical copies next to code
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:exception_report"
-ENGINE_VERSION = "exception_report/1.0.4"
+ENGINE_VERSION = "exception_report/1.0.5"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 HEADER_KEYS = ("client_name", "matter_name", "engagement_id")
 
@@ -94,8 +94,8 @@ RENDERED_HOLD = ("- **Rendered text withheld:** {n} table cell(s) or line(s) rea
                  "source records (client-billing-guidelines.md #11.1, #11.2)")
 # D22: the only report lines the rendered-order screen skips are these exact engine strings, which carry no data. Every
 # other line - a table row, a bullet, the engagement header, or any line a later template adds - is data and is
-# screened (an unknown heading or table header is screened like data, never exempted). tests/run_tests.py checks every
-# report the suite renders against this list.
+# screened (an unknown heading or table header is screened like data, never exempted). The test-data
+# tests/run_tests.py checks every report the suite renders against this list.
 FIXED_LINES = frozenset({
     "", "# DRAFT - not sent, not approved", "None.",
     "## Summary", "## Rejects - rewrite or remove before pre-bill", "## Held for review", "## Needs review",
