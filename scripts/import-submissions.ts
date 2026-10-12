@@ -13,10 +13,17 @@
  * exported unpacked to that directory, flattened one per folder. CI publishes
  * the result on the orphan `catalog` branch, which is the URL people paste
  * into Copilot Studio's "Add skill › From GitHub".
+ *
+ * A submission whose metadata.json sets `"packageFormat": "mos3"` is built as a MOS3 Microsoft 365
+ * app package instead (`scripts/mos3-package.ts`): `manifest.json`, `color.png`, `outline.png` and
+ * `skills/**` at the ZIP root, with no wrapper folder. Every other submission keeps the Claude
+ * plugin layout below.
  */
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import AdmZip from "adm-zip";
+import { buildMos3Zip, validateMos3Submission } from "./mos3-package.js";
+import { isBuildLitter } from "./package-files.js";
 
 const ROOT = process.cwd();
 const SUBMISSIONS = join(ROOT, "submissions");
@@ -44,25 +51,16 @@ const NEVER_BUNDLE = new Set([
   "tests",
 ]);
 
-/**
- * Build litter that can turn up at any depth, not just the top level. Several
- * submissions ship Python that the agent is told to run from the plugin folder,
- * which leaves `__pycache__` next to the script; the compiled files embed the
- * author's absolute paths, so they must never reach a downloader.
- */
-const LITTER_DIRS = new Set(["__pycache__", ".pytest_cache", ".ruff_cache", ".DS_Store"]);
-
-function isBuildLitter(rel: string): boolean {
-  return rel
-    .split(posix.sep)
-    .some((segment) => LITTER_DIRS.has(segment) || segment.endsWith(".pyc"));
-}
-
 const errors: string[] = [];
 const notes: string[] = [];
+const warnings: string[] = [];
 
 function fail(slug: string, message: string) {
   errors.push(`  ${slug}: ${message}`);
+}
+
+function warn(slug: string, message: string) {
+  warnings.push(`  ${slug}: ${message}`);
 }
 
 type SubmissionData = {
@@ -277,6 +275,44 @@ function catalogOutputDir(): string | undefined {
   return outputDir;
 }
 
+/**
+ * Validate a `packageFormat: "mos3"` submission and, unless `--check`, build it as a MOS3
+ * Microsoft 365 app package. Returns the catalog folders exported for it.
+ */
+function importMos3(
+  industryDir: string,
+  slug: string,
+  dir: string,
+  meta: Record<string, unknown>,
+  catalogDir: string | undefined,
+): string[] {
+  const d = validateMetadata(slug, meta, resolveGithub(meta.authorGithub, meta.authorUrl));
+  const result = validateMos3Submission(dir, meta);
+  for (const message of result.warnings) warn(slug, message);
+  for (const message of result.errors) fail(slug, message);
+  if (!d || result.errors.length) return [];
+  if (industryFolder(d.industry) !== industryDir) {
+    fail(
+      slug,
+      `filed under submissions/${industryDir}/ but metadata.json says "${d.industry}" ` +
+        `— move it to submissions/${industryFolder(d.industry)}/ or fix the metadata`,
+    );
+    return [];
+  }
+
+  const skills = readPluginSkills(dir);
+  notes.push(
+    `  ${slug} — ${d.industry} · mos3 plugin · ${skills.length} ${skills.length === 1 ? "skill" : "skills"}`,
+  );
+  if (CHECK_ONLY) return [];
+
+  // Entries sit at the ZIP root (MOS3 rejects a wrapper folder); the timestamp is pinned to the
+  // submission's own date, as for the Claude layout, so unchanged input rebuilds byte-identically.
+  const stamp = d.updatedAt ?? d.createdAt ?? new Date("2026-01-01T00:00:00Z");
+  buildMos3Zip(dir, join(OUT_BUNDLES, `${slug}.zip`), stamp);
+  return catalogDir ? exportCatalogSkills(dir, slug, catalogDir) : [];
+}
+
 function main() {
   if (!existsSync(SUBMISSIONS)) {
     console.error("No submissions/ directory found.");
@@ -332,6 +368,15 @@ function main() {
       meta = JSON.parse(readFileSync(metaPath, "utf8"));
     } catch (e) {
       fail(slug, `metadata.json is not valid JSON — ${(e as Error).message}`);
+      continue;
+    }
+
+    if (meta.packageFormat !== undefined && meta.packageFormat !== "mos3") {
+      fail(slug, 'packageFormat must be "mos3" or omitted (omitted builds the Claude plugin layout)');
+      continue;
+    }
+    if (meta.packageFormat === "mos3") {
+      catalogSkills.push(...importMos3(industryDir, slug, dir, meta, catalogDir));
       continue;
     }
 
@@ -428,6 +473,11 @@ function main() {
   if (notes.length) {
     console.log(`${CHECK_ONLY ? "Checked" : "Imported"} ${notes.length} submission(s):`);
     console.log(notes.join("\n"));
+  }
+
+  if (warnings.length) {
+    console.warn(`\n${warnings.length} warning(s):`);
+    console.warn(warnings.join("\n"));
   }
 
   if (errors.length) {
