@@ -22,3 +22,6 @@ public/bundles/
 # or bundled.
 __pycache__/
 *.pyc
+
+# Generated test-data ZIPs for MOS3 candidates (scripts/evaluation-workflow.ts buildTestDataZip).
+/public/test-data/

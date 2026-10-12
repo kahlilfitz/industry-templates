@@ -150,6 +150,10 @@ async function main(): Promise<void> {
   const deadline = Date.now() + timeoutMinutes * 60_000;
   console.log(`Watching ${tasksRoot} for ${slug} ${version}.`);
   console.log(`Expected ZIP SHA-256: ${runData.artifactSha256}`);
+  if (runData.testDataFile) {
+    // Tasks are matched on the plugin ZIP only; the archive step copies and re-verifies the test data.
+    console.log(`Test-data ZIP: ${runData.testDataFile} (SHA-256 ${runData.testDataSha256}); archived alongside the reports.`);
+  }
   console.log(`Archive root (${sharepointSource}): ${sharepointRoot}`);
 
   const reportedTasks = new Set<string>();

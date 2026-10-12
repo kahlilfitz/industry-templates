@@ -14,6 +14,7 @@ import {
   EvaluationRun,
   assertNonEmptyFile,
   confirmsArtifactMatch,
+  containsDigest,
   extractVerdict,
   findSubmission,
   htmlToText,
@@ -22,6 +23,7 @@ import {
   resolveInputPath,
   resolveSharepointRoot,
   sha256,
+  verdictGuidance,
 } from "./evaluation-workflow.js";
 
 // OneDrive briefly locks newly created folders while it registers them for sync.
@@ -84,6 +86,19 @@ function main(): void {
     throw new Error("frozen evaluated ZIP no longer matches its recorded SHA-256");
   }
 
+  // A MOS3 candidate is evaluated with a second, non-candidate attachment: its test-data ZIP.
+  let testDataPath: string | undefined;
+  if (runData.testDataFile !== undefined) {
+    if (runData.testDataFile !== `${slug}-test-data-${version}.zip` || !runData.testDataSha256) {
+      throw new Error("frozen evaluation manifest has an unexpected test-data filename or no test-data SHA-256");
+    }
+    testDataPath = join(runDir, runData.testDataFile);
+    assertNonEmptyFile(testDataPath, "frozen test-data ZIP");
+    if (sha256(testDataPath) !== runData.testDataSha256) {
+      throw new Error("frozen test-data ZIP no longer matches its recorded SHA-256");
+    }
+  }
+
   for (const report of REQUIRED_REPORTS) {
     assertNonEmptyFile(join(source, report), report);
   }
@@ -105,6 +120,12 @@ function main(): void {
     );
   }
   const automatedVerdict = extractVerdict(fullReport);
+  if (runData.testDataSha256 !== undefined && !containsDigest(fullReport, runData.testDataSha256)) {
+    throw new Error(
+      "full-report.html does not state the frozen test-data ZIP SHA-256, so the shipped regression " +
+        "cannot be tied to the test data that was prepared",
+    );
+  }
 
   const destination = join(
     sharepointRoot,
@@ -131,6 +152,13 @@ function main(): void {
     if (sha256(archivedArtifact) !== runData.artifactSha256) {
       throw new Error("archived ZIP hash verification failed");
     }
+    if (testDataPath && runData.testDataFile) {
+      const archivedTestData = join(staging, runData.testDataFile);
+      copyFileSync(testDataPath, archivedTestData);
+      if (sha256(archivedTestData) !== runData.testDataSha256) {
+        throw new Error("archived test-data ZIP hash verification failed");
+      }
+    }
     renameWithRetry(staging, destination);
   } catch (error) {
     rmSync(staging, { recursive: true, force: true });
@@ -153,13 +181,15 @@ function main(): void {
   console.log(`  Source: ${source}`);
   console.log(`  Destination: ${destination}`);
   console.log(`  ZIP SHA-256: ${runData.artifactSha256}`);
+  if (runData.testDataFile) {
+    console.log(`  Test-data ZIP: ${runData.testDataFile} (SHA-256 ${runData.testDataSha256})`);
+  }
+  if (runData.atkValidated === false) {
+    console.log("  ATK validated: no (LocalChecksOnly: not a deployable acceptance result)");
+  }
   console.log(`  Reports: ${REQUIRED_REPORTS.map((report) => basename(report)).join(", ")}`);
   console.log("");
-  if (automatedVerdict === "Ready") {
-    console.log("Next gate: two independent human reviewers must complete the critical-path checks.");
-  } else {
-    console.log("Do not publish this artifact. Fix the reported blockers and prepare a new version.");
-  }
+  for (const line of verdictGuidance(automatedVerdict)) console.log(line);
 }
 
 try {

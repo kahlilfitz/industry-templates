@@ -47,6 +47,22 @@ The full report must visibly state:
 - security scan result
 - unresolved trigger-conflict count
 - blockers and required follow-up
-- final automated verdict using exactly one of: Ready, Blocked, or No-ship
+- a "Pending human-review evidence" section (see below)
+- final automated verdict using exactly one of: Ready for human review, Blocked, or No-ship
+
+Automated verdicts (state exactly one, spelled exactly as written):
+- Ready for human review: every measured bar is met — identity/SHA match, package structure, every
+  skill at or above its launch floor, behavioral, trust and safety, security, trigger conflicts, and
+  the shipped regression. The only open items are evidence that the two-reviewer human review
+  supplies: installed-runtime critical-path runs, human grader-calibration labels, and human spot
+  checks. List those under "Pending human-review evidence"; they are not blockers.
+- Blocked: evidence is missing that human review cannot supply (for example a stage that did not run,
+  or an ambiguous artifact identity), or a gate failed closed for a reason that is not an observed
+  plugin defect.
+- No-ship: an observed defect, a below-floor score, or a safety or security blocker.
+
+Do not use a bare "Ready", and do not report Blocked only because installed-runtime runs, human
+grader-calibration labels, or human spot checks are still to come; those belong in the
+"Pending human-review evidence" section. Ready for human review is never a publish signal.
 
 Do not call the plugin published. State that publication remains pending until two independent human reviewers complete the critical-path spot checks.

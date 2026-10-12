@@ -17,6 +17,11 @@ Each evaluation archive contains exactly the evaluated ZIP and three Cowork repo
 └── full-report.html
 ```
 
+A MOS3 candidate (see [MOS3 package format and test data](#mos3-package-format-and-test-data)) also
+archives the test-data ZIP it was evaluated with, next to the plugin ZIP:
+`<plugin-slug>-test-data-<artifact-version>.zip`. The test-data ZIP is evidence, not part of the
+candidate, and is never distributed.
+
 Keep successful and failed evaluations. Never rebuild or replace an evaluated ZIP after the Cowork
 run. A changed artifact requires a new package version and a new evaluation folder.
 
@@ -31,13 +36,15 @@ run. A changed artifact requires a new package version and a new evaluation fold
 | Perform independent human reviews | | | Yes |
 | Approve publication | | | Yes |
 
-An automated `Ready` verdict is not a publication decision. Both reviewers run every prompt in the
+An automated `Ready for human review` verdict is not a publication decision. Both reviewers run every prompt in the
 tracker; the critical-path prompts are the mandatory minimum the tracker must contain.
 
 ## Prerequisites
 
 1. Install Node.js 22 and run `npm install`.
-2. Ensure the plugin's `metadata.json` and `.claude-plugin/plugin.json` use the same version.
+2. Ensure the plugin's `metadata.json` and `.claude-plugin/plugin.json` use the same version. For a
+   MOS3 submission, `metadata.json` and the root `manifest.json` must use the same version, and the
+   version's test data must exist under `test-data\`.
 3. Complete plugin-specific regression tests.
 4. Link the synchronized Industry Templates SharePoint library into the repository once with
    `npm run sharepoint:link`, and confirm `npm run sharepoint:doctor` reports ready. See
@@ -108,6 +115,42 @@ If preparation records `"gitDirty": true`, the exact ZIP remains hash-protected,
 fully traceable to the recorded commit alone. Prefer preparing from a clean worktree for formal
 release evidence.
 
+### MOS3 candidates
+
+For a submission with `"packageFormat": "mos3"`, preparation also:
+
+1. Runs `npm run check:test-data` after the build.
+2. Builds `<plugin-slug>-test-data-<version>.zip` from `test-data\<industry>\<plugin-slug>\<version>\`.
+3. Extracts the plugin ZIP to `<tmp>\plugin` and the test-data ZIP to `<tmp>\test-data`, and runs
+   each runner in `<tmp>\test-data\tests\` with the test-data folder as its working directory,
+   `--plugin-root <tmp>\plugin` and `PLUGIN_ROOT` set to the same path. The timeout, streaming and
+   failure rules are the same as above. A version without test data fails.
+4. Validates the plugin ZIP with the Microsoft 365 Agents Toolkit CLI:
+
+   ```powershell
+   npx --yes @microsoft/m365agentstoolkit-cli validate --package-file <plugin ZIP>
+   ```
+
+   A non-zero exit fails preparation. The toolkit validates through Microsoft 365 and opens a
+   sign-in window, so run preparation from an interactive session and sign in with a work account;
+   it is stopped after 15 minutes. `--skip-atk` skips it for local iteration only: the command
+   prints `LocalChecksOnly: not a deployable acceptance result` and records `"atkValidated": false`
+   in the receipt. Do not send a `--skip-atk` candidate for formal evaluation.
+5. Copies both ZIPs into the inbox and records `packageFormat`, `testDataFile`, `testDataSha256` and
+   `atkValidated` in `evaluation-run.json`.
+6. Renders the prompt from `docs\evaluation\cowork-evaluation-prompt-mos3.txt`, which also carries
+   the test-data file name and SHA-256.
+7. Writes `FROZEN.sha256` into the test-data version folder. Commit it: from then on
+   `check:test-data` fails if that folder changes.
+
+```text
+evaluation-inbox/<plugin-slug>/<artifact-version>/
+├── <plugin-slug>.zip
+├── <plugin-slug>-test-data-<artifact-version>.zip
+├── evaluation-run.json
+└── cowork-prompt.txt
+```
+
 ## Step 2: run the Cowork task
 
 This step is manual because Cowork does not support changing its task output directory from the
@@ -115,8 +158,9 @@ repository scripts.
 
 1. Open Cowork.
 2. Create a task using the exact `coworkTaskName` from `evaluation-run.json`.
-3. Attach `<plugin-slug>.zip` from the frozen `evaluation-inbox` folder.
-4. Do not attach the mutable copy under `public/bundles/`.
+3. Attach `<plugin-slug>.zip` from the frozen `evaluation-inbox` folder. For a MOS3 candidate, also
+   attach `<plugin-slug>-test-data-<artifact-version>.zip` from the same folder.
+4. Do not attach the mutable copies under `public/bundles/` or `public/test-data/`.
 5. Attach or reference `Industry-Templates-Plugin-Testing-Strategy.docx`.
 6. Paste the complete contents of `cowork-prompt.txt`.
 7. Confirm the prompt requests exactly:
@@ -139,7 +183,10 @@ the task page and whether the task's output folder is still changing.
 
 The full report must visibly state the plugin slug, artifact version, Cowork task/run label,
 artifact SHA-256, per-skill scores and launch floors, behavioral and safety totals, security result,
-unresolved-conflict count, blockers, and one automated verdict: `Ready`, `Blocked`, or `No-ship`.
+unresolved-conflict count, blockers, a "Pending human-review evidence" section, and one automated
+verdict: `Ready for human review`, `Blocked`, or `No-ship`. A MOS3 full report also states the
+test-data SHA-256 with its own check, the package-structure result and the six Partner Team Guide
+Step 2 checks.
 
 ## Step 3: locate Cowork output
 
@@ -221,27 +268,40 @@ The archive command:
 
 1. Requires all three report filenames and rejects empty files.
 2. Confirms `full-report.html` identifies the frozen slug and version.
-3. Confirms the full report contains the frozen ZIP's SHA-256.
+3. Confirms the full report contains the frozen ZIP's SHA-256 and, for a MOS3 candidate, the frozen
+   test-data ZIP's SHA-256. Any stated `SHA-256 check: MISMATCH` fails the archive.
 4. Extracts the automated verdict.
-5. Copies only the three reports and frozen ZIP.
+5. Copies only the three reports and frozen ZIP, plus the frozen test-data ZIP when the receipt
+   records one (its SHA-256 is checked before and after the copy).
 6. Recomputes the copied ZIP's SHA-256.
 7. Refuses to overwrite an existing version folder.
 8. Updates the ignored local run receipt with the verdict and archive location.
+
+Matching and identity checks are keyed to the plugin ZIP's SHA-256; the test-data ZIP never selects
+a Cowork task.
 
 Archive `Blocked` and `No-ship` runs as evidence. Do not publish them.
 
 ### Interpreting the verdict
 
-`Ready` means internal bar items 1–7 of the testing strategy are met and the human spot check
-(item 8) is pending. `Blocked` means one or more items were missed without a guardrail, safety or
-security breach; `No-ship` means such a breach was found. Behavioral item 2 requires a pass rate of
-95% or more, and `WEAK` cases count as not passing, so remediation must fix every `WEAK` case as
-well as every `FAIL`. See [Reading a verdict](operator-runbook.md#reading-a-verdict) in the operator
-runbook for the full bar and where to find each finding in `full-report.html`.
+| Verdict | Meaning |
+|---|---|
+| `Ready for human review` | Every measured bar is met: identity/SHA match, package structure, every skill at its floor, behavioral, trust and safety, security, conflicts, shipped regression. The only open items are evidence that the two-reviewer human review supplies (installed-runtime critical-path runs, human grader-calibration labels, human spot checks), listed under "Pending human-review evidence", not as blockers. |
+| `Blocked` | Evidence is missing that human review cannot supply (for example a stage that did not run, or an ambiguous artifact identity), or a gate failed closed for a reason that is not an observed plugin defect. |
+| `No-ship` | An observed defect, a below-floor score, or a safety or security blocker. |
+
+`Ready for human review` is never a publish signal. The archive and watch commands still read a
+bare legacy `Ready` in older reports as `Ready for human review`; any other `Ready for …` phrase
+fails to parse. Under the current prompts, missing human-review evidence alone should not produce
+`Blocked`; if it does, check the report's "Pending human-review evidence" section and raise it with
+the owner. Behavioral item 2 requires a pass rate of 95% or more, and `WEAK` cases count as not
+passing, so remediation must fix every `WEAK` case as well as every `FAIL`. See
+[Reading a verdict](operator-runbook.md#reading-a-verdict) in the operator runbook for where to find
+each finding in `full-report.html`.
 
 ## Step 5: complete the human gate
 
-For a `Ready` evaluation:
+For a `Ready for human review` evaluation:
 
 1. Two independent reviewers each run every prompt in the tracker. The critical-path prompts are
    the mandatory minimum the tracker must contain.
@@ -274,5 +334,41 @@ Run the evaluation automation tests with:
 npm run test:evaluation
 ```
 
-These tests cover argument parsing, HTML normalization, verdict extraction, formatted SHA-256
-matching, file hashing, and the from-ZIP shipped-test run (pass, failure and timeout).
+These tests cover argument parsing, HTML normalization, verdict extraction (including the legacy
+`Ready` mapping and phrase ordering), both prompt templates, formatted SHA-256 matching, file
+hashing, and the from-ZIP shipped-test run (pass, failure and timeout, and the MOS3 run from a
+test-data ZIP against a plugin ZIP). They also cover MOS3 validation and packaging
+(`scripts\mos3-package.test.ts`) and the test-data checks, freezing and ZIP
+(`scripts\test-data.test.ts`).
+
+## MOS3 package format and test data
+
+A submission opts into the MOS3 Microsoft 365 app package (manifest schema 1.28) with
+`"packageFormat": "mos3"` in `metadata.json`; without the field it builds the Claude plugin layout as
+before. The importer (`npm run build`, or `npm run check:submissions` to validate without writing)
+then requires a root `manifest.json`, `color.png` (192×192) and `outline.png` (32×32, white on
+transparent), and one `skills\<name>\SKILL.md` per `agentSkills` entry. It fails if `.claude-plugin\`
+remains or `bundleTests` is set. `public\bundles\<plugin-slug>.zip` holds `manifest.json`,
+`color.png`, `outline.png` and `skills/**` at the ZIP root, with no wrapper folder.
+
+Test data for a MOS3 plugin lives outside the plugin, one folder per version:
+
+```text
+test-data/<industry-folder>/<plugin-slug>/<version>/
+├── README.md
+├── demo-data/
+├── tests/          run_tests.py or test_engines.py, optional check_shared_copies.py and helpers
+└── FROZEN.sha256   written by evaluation:prepare; commit it
+```
+
+`<industry-folder>` is the folder name used under `submissions\`. Runners take the plugin root as
+`python tests/<runner> --plugin-root <dir>` or the `PLUGIN_ROOT` environment variable. The plugin
+root is an extracted MOS3 ZIP or the submission folder; with neither set it defaults to
+`<repo>\submissions\<industry-folder>\<plugin-slug>`. The data root is the runner's parent version
+folder. Runners keep `--group` and `--list-groups` where they have them.
+
+`npm run check:test-data` requires the current version folder for every MOS3 submission, with a
+runner in `tests\`, `demo-data\` and `README.md`. Any version folder with `FROZEN.sha256` must match
+it exactly, including no extra or missing files. Other unfrozen versions warn, and test data for a
+slug with no submission fails. `FROZEN.sha256` lists `<sha256>  <relative/path>` sorted by path,
+for every file except itself and build litter such as `__pycache__`.
