@@ -16,7 +16,7 @@
     "third_party_products": [],
     "confidence": 0.95,
     "source": "skill:artifact-assemble",
-    "citation": "raw/confidentiality-terms-extract.md clause 1; deliverable-register.csv header"
+    "citation": "raw/engagement-profile.md"
   },
   "artifacts": [
     {
@@ -158,7 +158,7 @@
   "confidentiality_terms": [
     {
       "term_id": "TERM-01",
-      "summary": "Client name, sites and operating data must be removed before firm knowledge reuse.",
+      "summary": "Client names, sites, contacts and operating data must not leave the engagement boundary without written approval.",
       "confidence": 0.96,
       "source": "skill:artifact-assemble",
       "citation": "raw/confidentiality-terms-extract.md clause 2"

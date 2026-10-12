@@ -18,7 +18,7 @@
     ],
     "confidence": 0.94,
     "source": "skill:artifact-assemble",
-    "citation": "raw/confidentiality-terms-extract.md clause 1; raw/deliverable-register.csv header"
+    "citation": "raw/engagement-profile.md"
   },
   "artifacts": [
     {
@@ -122,7 +122,7 @@
       ],
       "confidence": 0.92,
       "source": "skill:artifact-assemble",
-      "citation": "raw/decision-log.csv row 4"
+      "citation": "raw/decision-log.csv row 2"
     },
     {
       "asset_id": "AST-104",
@@ -141,7 +141,7 @@
       ],
       "confidence": 0.9,
       "source": "skill:artifact-assemble",
-      "citation": "raw/deliverable-register.csv row 6"
+      "citation": "raw/deliverable-register.csv row 7"
     },
     {
       "asset_id": "AST-105",
@@ -159,7 +159,7 @@
       "aggregation_tokens": [],
       "confidence": 0.93,
       "source": "skill:artifact-assemble",
-      "citation": "raw/retrospective-transcript.txt lines 16-19"
+      "citation": "raw/retrospective-transcript.txt lines 18-19"
     }
   ],
   "decision_log": [
@@ -169,7 +169,7 @@
       "impact": "Go-live date and named product became central to the delivery story.",
       "confidence": 0.94,
       "source": "skill:artifact-assemble",
-      "citation": "raw/decision-log.csv row 4"
+      "citation": "raw/decision-log.csv row 2"
     },
     {
       "decision_id": "DEC-207",
@@ -177,7 +177,7 @@
       "impact": "Reduced integration rework during the final two sprints.",
       "confidence": 0.92,
       "source": "skill:artifact-assemble",
-      "citation": "raw/decision-log.csv row 5"
+      "citation": "raw/decision-log.csv row 3"
     }
   ],
   "retrospective_inputs": [
@@ -208,7 +208,7 @@
       "named_people": [],
       "confidence": 0.89,
       "source": "skill:artifact-assemble",
-      "citation": "raw/retrospective-transcript.txt lines 16-19"
+      "citation": "raw/retrospective-transcript.txt lines 16-17"
     }
   ],
   "confidentiality_terms": [
@@ -334,7 +334,7 @@
       ],
       "confidence": 0.92,
       "source": "engine:asset_identify",
-      "citation": "raw/decision-log.csv row 4; reuse-asset-rubric.md #1.1,#2.1,#3.1,#4.1,#5.1"
+      "citation": "raw/decision-log.csv row 2; reuse-asset-rubric.md #1.1,#2.1,#3.1,#4.1,#5.1"
     },
     {
       "asset_id": "AST-104",
@@ -352,7 +352,7 @@
       ],
       "confidence": 0.9,
       "source": "engine:asset_identify",
-      "citation": "raw/deliverable-register.csv row 6; reuse-asset-rubric.md #1.1,#2.1,#3.1,#4.1,#5.1"
+      "citation": "raw/deliverable-register.csv row 7; reuse-asset-rubric.md #1.1,#2.1,#3.1,#4.1,#5.1"
     },
     {
       "asset_id": "AST-105",
@@ -369,7 +369,7 @@
       "aggregation_tokens": [],
       "confidence": 0.93,
       "source": "engine:asset_identify",
-      "citation": "raw/retrospective-transcript.txt lines 16-19; reuse-asset-rubric.md #1.1,#2.1,#3.1,#4.1,#5.1"
+      "citation": "raw/retrospective-transcript.txt lines 18-19; reuse-asset-rubric.md #1.1,#2.1,#3.1,#4.1,#5.1"
     }
   ],
   "provenance": {
@@ -379,7 +379,15 @@
       "sanitize_check/1.0.3"
     ],
     "generated_at": "2026-09-23T21:20:35Z",
-    "demo_scenario": "scenario-b-drama"
+    "demo_scenario": "scenario-b-drama",
+    "input_escalations": [],
+    "policies": [
+      "reuse-asset-rubric.md #1-#6",
+      "confidentiality-sanitisation-rules.md #8.1",
+      "lesson-taxonomy.md #1-#4",
+      "confidentiality-sanitisation-rules.md #1-#8"
+    ],
+    "screening": "steering_guard 1.1.2 (shared, vendored) with the closeout hook profile"
   },
   "lesson_clusters": [
     {
@@ -392,8 +400,8 @@
         "DEC-207"
       ],
       "evidence_citations": [
-        "raw/decision-log.csv row 4",
-        "raw/decision-log.csv row 5"
+        "raw/decision-log.csv row 2",
+        "raw/decision-log.csv row 3"
       ],
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
@@ -412,7 +420,7 @@
       ],
       "evidence_citations": [
         "raw/retrospective-transcript.txt lines 4-9",
-        "raw/retrospective-transcript.txt lines 16-19"
+        "raw/retrospective-transcript.txt lines 16-17"
       ],
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
@@ -444,22 +452,22 @@
       {
         "target_type": "asset",
         "target_id": "AST-101",
-        "disposition": "release_candidate",
-        "clearance_state": "RELEASE_CANDIDATE_SANITISED",
-        "reason": "no individual hold marker detected; candidate still requires human review",
+        "disposition": "hold",
+        "clearance_state": "HOLD_AGGREGATION_RISK",
+        "reason": "aggregation risk: 6 identifying token categories across candidate assets (client_headcount, go_live_date, region, sector, third_party_product, unique_architecture)",
         "confidence": 0.91,
         "source": "engine:sanitize_check",
-        "citation": "confidentiality-sanitisation-rules.md #6.2,#7.1"
+        "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
       },
       {
         "target_type": "asset",
         "target_id": "AST-102",
-        "disposition": "release_candidate",
-        "clearance_state": "RELEASE_CANDIDATE_SANITISED",
-        "reason": "no individual hold marker detected; candidate still requires human review",
+        "disposition": "hold",
+        "clearance_state": "HOLD_AGGREGATION_RISK",
+        "reason": "aggregation risk: 6 identifying token categories across candidate assets (client_headcount, go_live_date, region, sector, third_party_product, unique_architecture)",
         "confidence": 0.9,
         "source": "engine:sanitize_check",
-        "citation": "confidentiality-sanitisation-rules.md #6.2,#7.1"
+        "citation": "confidentiality-sanitisation-rules.md #5.1,#5.2"
       },
       {
         "target_type": "asset",
@@ -595,8 +603,8 @@
         "DEC-207"
       ],
       "evidence_citations": [
-        "raw/decision-log.csv row 4",
-        "raw/decision-log.csv row 5"
+        "raw/decision-log.csv row 2",
+        "raw/decision-log.csv row 3"
       ],
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
@@ -615,7 +623,7 @@
       ],
       "evidence_citations": [
         "raw/retrospective-transcript.txt lines 4-9",
-        "raw/retrospective-transcript.txt lines 16-19"
+        "raw/retrospective-transcript.txt lines 16-17"
       ],
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
@@ -690,8 +698,8 @@
           "DEC-207"
         ],
         "evidence_citations": [
-          "raw/decision-log.csv row 4",
-          "raw/decision-log.csv row 5"
+          "raw/decision-log.csv row 2",
+          "raw/decision-log.csv row 3"
         ],
         "rewrite_required": false,
         "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
@@ -710,7 +718,7 @@
         ],
         "evidence_citations": [
           "raw/retrospective-transcript.txt lines 4-9",
-          "raw/retrospective-transcript.txt lines 16-19"
+          "raw/retrospective-transcript.txt lines 16-17"
         ],
         "rewrite_required": false,
         "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
@@ -751,6 +759,8 @@
     "clearance_state": "DRAFT_NOT_PUBLISHED",
     "confidence": 0.86,
     "source": "engine:sanitize_check",
-    "citation": "confidentiality-sanitisation-rules.md #6.2; downstream handoff contract"
-  }
+    "citation": "confidentiality-sanitisation-rules.md #6.2; downstream handoff contract",
+    "draft_label": "DRAFT - HUMAN REVIEW REQUIRED"
+  },
+  "screening_holds": []
 }

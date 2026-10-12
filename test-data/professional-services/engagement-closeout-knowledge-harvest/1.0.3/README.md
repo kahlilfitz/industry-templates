@@ -10,10 +10,13 @@ plugin.
 
 | Path | Contents |
 |---|---|
-| `demo-data/scenario-a-happy/` | Raw closeout pack (`raw/`), structured input `engagement.json`, engine goldens (`expected/`) |
+| `demo-data/scenario-a-happy/` | Raw closeout pack (`raw/`), structured input `engagement.json` (derivable from `raw/` by `skills/artifact-assemble/references/closeout-ingest-rules.md`), engine goldens and stdout (`expected/`), the knowledge-record skeleton and an accepted reviewer-filled example draft |
 | `demo-data/scenario-b-drama/` | Same layout; the aggregation-risk confidentiality case |
 | `tests/test_engines.py` | Engine regression suite (Python 3 standard library `unittest`) |
-| `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker |
+| `tests/check_shared_copies.py` | Stand-alone check that the contract, references, `closeout_core.py` and `steering_guard.py` copies are byte-identical across skills, with `steering_guard.py` pinned to the `shared/steering-guard` release hash |
+| `tests/steering-corpus.json` | Byte-identical copy of `shared/steering-guard/corpus.json` (attack, benign and field-pair lines) |
+| `tests/closeout-steering-sets.json` | Closeout sets: 25 attack, 14 paraphrase, 26 benign closeout and lessons lines, 7 attack pairs, 5 benign pairs and 19 recorded detector gaps |
+| `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker (one per 1.0.3 fix) |
 
 ## Running the tests
 
@@ -32,6 +35,9 @@ $env:PLUGIN_ROOT = '<extracted ZIP folder>'; python tests\test_engines.py
 ```
 
 ```powershell
+# Shared-copy check on its own (also run by the release group)
+python tests\check_shared_copies.py --plugin-root <extracted ZIP folder>
+
 # List the groups, then run only some of them (--group is repeatable)
 python tests\test_engines.py --list-groups
 python tests\test_engines.py --group goldens --group sanitisation
@@ -46,29 +52,43 @@ finishes (a failing subtest fails its test), prints failure details after the re
 
 | Group | Tests | Covers |
 |---|---|---|
-| `contract` | 2 | Wrong contract version and missing required arrays fail in every engine |
-| `lessons` | 2 | Lesson clustering, ranking and taxonomy citations |
+| `contract` | 5 | Contract version, required arrays, output schema and the Mobilization Scenario 01 adapter |
+| `validation` | 21 | Strict input validation: types, enums, duplicates, depth, reserved labels, no echo |
+| `lessons` | 1 | Lesson clustering, ranking and taxonomy citations |
 | `sanitisation` | 7 | Govern holds, citations, raw-seed exclusion and engine versions (`/1.0.3`) |
-| `goldens` | 1 | Both scenarios reproduce every `expected/` JSON and stdout golden byte for byte, LF only |
-| `packaging` | 2 | Byte-identical skill copies and the MOS3 package boundary |
+| `policy` | 9 | Ties, empty terms, release versus hold, precedence and provenance labels |
+| `integrity` | 9 | Every stage re-derives the previous stage's whole document and refuses edits |
+| `screening` | 13 | Embedded-instruction screen: families, locations, joins, oversize, rendered holds |
+| `steering-corpus` | 5 | Vendored shared detector and corpus scored at the real call site |
+| `steering-sets` | 6 | Closeout attack, paraphrase and benign sets through the real chain |
+| `drafting` | 6 | Knowledge-record skeleton and `record_check.py` refusal codes |
+| `derivation` | 1 | Demo inputs re-derive from each scenario's raw pack (G4b) |
+| `goldens` | 1 | Both scenarios reproduce every `expected/` file byte for byte, LF only |
+| `packaging` | 3 | Byte-identical skill copies, the MOS3 package boundary and LF-only packaged text (G3) |
+| `release` | 8 | Guardrails, citations, routing, versions, stand-alone skills and the runner |
+| `harness` | 2 | A crashing test is reported as FAIL |
+
+The full suite (97 tests) takes about 75 seconds.
 
 ## What the scenarios cover
 
 - **Scenario A, happy path** (`scenario-a-happy`): a regional distribution engagement with a mostly
   complete package. `asset_identify` scores three assets and finds one deliverable gap (the draft
-  training handover); `lesson_cluster` builds cited governance and adoption clusters;
-  `sanitize_check` produces review-required release candidates with no aggregation hold.
+  training handover); `lesson_cluster` builds cited governance and adoption clusters and keeps the
+  tied DEC-014 decision `unclassified` for review; `sanitize_check` produces review-required release
+  candidates with no aggregation hold and holds the client-specific AST-003 configuration (#1.3).
 - **Scenario B, drama path** (`scenario-b-drama`): individually harmless facts (anonymised
   architecture, "European utility" descriptor, 6,200 headcount, go-live date, named third-party
   product) combine to identify the synthetic client. `sanitize_check` sets `HOLD_AGGREGATION_RISK`
   (#5.1, #5.2), holds the steering deck for an embedded client logo/name, and flags a named-person
-  blame quote for role/process rewrite (#2.1, #2.2).
+  blame quote for role/process rewrite (#2.1, #2.2). Every member asset's own finding carries the
+  group hold.
 
-The suite also covers wrong-contract and missing-array failures in every engine, unclassified lesson
-evidence, named-person and commercial-figure holds, client names in asset text, exclusion of raw seeds
-from the governed knowledge record, byte-identical contract and reference copies across all five
-skills, and the package boundary (no demo data, tests or `.claude-plugin` in the plugin root, no
-paths that escape a skill folder).
+The suite also builds hostile and malformed variants of these scenarios in memory: injected,
+obfuscated, split and rendered-only instructions; malformed, duplicated and over-deep input; forged
+or edited intermediates; unknown markers and empty terms; and filled drafts that leak held or client
+material. It also checks byte-identical copies, the package boundary, the guardrail block, citations,
+routing and version declarations.
 
 ## Freezing
 

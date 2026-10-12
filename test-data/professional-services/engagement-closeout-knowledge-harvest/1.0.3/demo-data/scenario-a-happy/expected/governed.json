@@ -16,7 +16,7 @@
     "third_party_products": [],
     "confidence": 0.95,
     "source": "skill:artifact-assemble",
-    "citation": "raw/confidentiality-terms-extract.md clause 1; deliverable-register.csv header"
+    "citation": "raw/engagement-profile.md"
   },
   "artifacts": [
     {
@@ -158,7 +158,7 @@
   "confidentiality_terms": [
     {
       "term_id": "TERM-01",
-      "summary": "Client name, sites and operating data must be removed before firm knowledge reuse.",
+      "summary": "Client names, sites, contacts and operating data must not leave the engagement boundary without written approval.",
       "confidence": 0.96,
       "source": "skill:artifact-assemble",
       "citation": "raw/confidentiality-terms-extract.md clause 2"
@@ -274,27 +274,33 @@
       "sanitize_check/1.0.3"
     ],
     "generated_at": "2026-09-23T21:20:35Z",
-    "demo_scenario": "scenario-a-happy"
+    "demo_scenario": "scenario-a-happy",
+    "input_escalations": [],
+    "policies": [
+      "reuse-asset-rubric.md #1-#6",
+      "confidentiality-sanitisation-rules.md #8.1",
+      "lesson-taxonomy.md #1-#4",
+      "confidentiality-sanitisation-rules.md #1-#8"
+    ],
+    "screening": "steering_guard 1.1.2 (shared, vendored) with the closeout hook profile"
   },
   "lesson_clusters": [
     {
       "cluster_id": "LC-001",
-      "category": "delivery-governance",
-      "priority_score": 75,
-      "review_candidate": false,
+      "category": "unclassified",
+      "priority_score": 70,
+      "review_candidate": true,
       "evidence_ids": [
-        "DEC-014",
-        "RET-001"
+        "DEC-014"
       ],
       "evidence_citations": [
-        "raw/decision-log.csv row 2",
-        "raw/retrospective-transcript.txt lines 8-10"
+        "raw/decision-log.csv row 2"
       ],
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
-      "confidence": 0.8,
+      "confidence": 0.65,
       "source": "engine:sanitize_check",
-      "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1"
+      "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.5; lesson-taxonomy.md #2.1,#2.2,#3.1"
     },
     {
       "cluster_id": "LC-002",
@@ -314,6 +320,23 @@
       "confidence": 0.91,
       "source": "engine:sanitize_check",
       "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.2; lesson-taxonomy.md #2.1,#2.2,#3.1"
+    },
+    {
+      "cluster_id": "LC-003",
+      "category": "delivery-governance",
+      "priority_score": 60,
+      "review_candidate": false,
+      "evidence_ids": [
+        "RET-001"
+      ],
+      "evidence_citations": [
+        "raw/retrospective-transcript.txt lines 8-10"
+      ],
+      "rewrite_required": false,
+      "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
+      "confidence": 0.71,
+      "source": "engine:sanitize_check",
+      "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1"
     }
   ],
   "sanitisation_report": {
@@ -343,11 +366,11 @@
         "target_type": "asset",
         "target_id": "AST-003",
         "disposition": "hold",
-        "clearance_state": "HOLD_NOT_SHORTLISTED",
-        "reason": "reuse score did not reach shortlist band",
+        "clearance_state": "HOLD_REDACTION_REQUIRED",
+        "reason": "reuse score did not reach shortlist band; client-specific configuration requires removal before reuse: client_specific_configuration",
         "confidence": 0.88,
         "source": "engine:sanitize_check",
-        "citation": "confidentiality-sanitisation-rules.md #6.2; reuse-asset-rubric.md #5.2,#5.3"
+        "citation": "confidentiality-sanitisation-rules.md #6.2; reuse-asset-rubric.md #5.2,#5.3; confidentiality-sanitisation-rules.md #1.3"
       }
     ],
     "governance_note": "Release candidates require human practice review; the engine never clears publication or external use.",
@@ -383,33 +406,31 @@
       "asset_id": "AST-003",
       "title": "Client-specific routing configuration workbook",
       "reuse_score": 44.0,
-      "clearance_state": "HOLD_NOT_SHORTLISTED",
+      "clearance_state": "HOLD_REDACTION_REQUIRED",
       "review_required": true,
-      "reason": "reuse score did not reach shortlist band",
+      "reason": "reuse score did not reach shortlist band; client-specific configuration requires removal before reuse: client_specific_configuration",
       "confidence": 0.88,
       "source": "engine:sanitize_check",
-      "citation": "confidentiality-sanitisation-rules.md #6.2; reuse-asset-rubric.md #5.2,#5.3"
+      "citation": "confidentiality-sanitisation-rules.md #6.2; reuse-asset-rubric.md #5.2,#5.3; confidentiality-sanitisation-rules.md #1.3"
     }
   ],
   "lessons_for_draft": [
     {
       "cluster_id": "LC-001",
-      "category": "delivery-governance",
-      "priority_score": 75,
-      "review_candidate": false,
+      "category": "unclassified",
+      "priority_score": 70,
+      "review_candidate": true,
       "evidence_ids": [
-        "DEC-014",
-        "RET-001"
+        "DEC-014"
       ],
       "evidence_citations": [
-        "raw/decision-log.csv row 2",
-        "raw/retrospective-transcript.txt lines 8-10"
+        "raw/decision-log.csv row 2"
       ],
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
-      "confidence": 0.8,
+      "confidence": 0.65,
       "source": "engine:sanitize_check",
-      "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1"
+      "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.5; lesson-taxonomy.md #2.1,#2.2,#3.1"
     },
     {
       "cluster_id": "LC-002",
@@ -429,6 +450,23 @@
       "confidence": 0.91,
       "source": "engine:sanitize_check",
       "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.2; lesson-taxonomy.md #2.1,#2.2,#3.1"
+    },
+    {
+      "cluster_id": "LC-003",
+      "category": "delivery-governance",
+      "priority_score": 60,
+      "review_candidate": false,
+      "evidence_ids": [
+        "RET-001"
+      ],
+      "evidence_citations": [
+        "raw/retrospective-transcript.txt lines 8-10"
+      ],
+      "rewrite_required": false,
+      "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
+      "confidence": 0.71,
+      "source": "engine:sanitize_check",
+      "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1"
     }
   ],
   "knowledge_record": {
@@ -463,30 +501,28 @@
     "held_assets_summary": [
       {
         "asset_id": "AST-003",
-        "clearance_state": "HOLD_NOT_SHORTLISTED",
-        "reason": "reuse score did not reach shortlist band",
-        "citation": "confidentiality-sanitisation-rules.md #6.2; reuse-asset-rubric.md #5.2,#5.3"
+        "clearance_state": "HOLD_REDACTION_REQUIRED",
+        "reason": "reuse score did not reach shortlist band; client-specific configuration requires removal before reuse: client_specific_configuration",
+        "citation": "confidentiality-sanitisation-rules.md #6.2; reuse-asset-rubric.md #5.2,#5.3; confidentiality-sanitisation-rules.md #1.3"
       }
     ],
     "lessons": [
       {
         "cluster_id": "LC-001",
-        "category": "delivery-governance",
-        "priority_score": 75,
-        "review_candidate": false,
+        "category": "unclassified",
+        "priority_score": 70,
+        "review_candidate": true,
         "evidence_ids": [
-          "DEC-014",
-          "RET-001"
+          "DEC-014"
         ],
         "evidence_citations": [
-          "raw/decision-log.csv row 2",
-          "raw/retrospective-transcript.txt lines 8-10"
+          "raw/decision-log.csv row 2"
         ],
         "rewrite_required": false,
         "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
-        "confidence": 0.8,
+        "confidence": 0.65,
         "source": "engine:sanitize_check",
-        "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1"
+        "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.5; lesson-taxonomy.md #2.1,#2.2,#3.1"
       },
       {
         "cluster_id": "LC-002",
@@ -506,6 +542,23 @@
         "confidence": 0.91,
         "source": "engine:sanitize_check",
         "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.2; lesson-taxonomy.md #2.1,#2.2,#3.1"
+      },
+      {
+        "cluster_id": "LC-003",
+        "category": "delivery-governance",
+        "priority_score": 60,
+        "review_candidate": false,
+        "evidence_ids": [
+          "RET-001"
+        ],
+        "evidence_citations": [
+          "raw/retrospective-transcript.txt lines 8-10"
+        ],
+        "rewrite_required": false,
+        "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
+        "confidence": 0.71,
+        "source": "engine:sanitize_check",
+        "citation": "confidentiality-sanitisation-rules.md #6.2; lesson-taxonomy.md #1.1; lesson-taxonomy.md #2.1,#2.2,#3.1"
       }
     ],
     "sanitisation_summary": "2 release candidate asset(s), 1 held asset(s), 0 lesson rewrite(s).",
@@ -523,6 +576,8 @@
     "clearance_state": "DRAFT_NOT_PUBLISHED",
     "confidence": 0.86,
     "source": "engine:sanitize_check",
-    "citation": "confidentiality-sanitisation-rules.md #6.2; downstream handoff contract"
-  }
+    "citation": "confidentiality-sanitisation-rules.md #6.2; downstream handoff contract",
+    "draft_label": "DRAFT - HUMAN REVIEW REQUIRED"
+  },
+  "screening_holds": []
 }

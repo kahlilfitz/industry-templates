@@ -1,0 +1,4 @@
+asset_id,title,asset_type,description,generalisability,effort_to_recreate,shelf_life_months,client_dependency,confidentiality_markers,aggregation_tokens,evidence
+AST-001,Cutover readiness checklist,checklist,"Role-neutral checklist for go-live readiness across process, data, support and comms.",5,4,18,1,,generic_operating_model,raw/retrospective-transcript.txt lines 18-24
+AST-002,Role-based training storyboard,template,Storyboard for manager and frontline readiness sessions.,4,3,12,2,,generic_training_pattern,raw/retrospective-transcript.txt lines 29-34
+AST-003,Client-specific routing configuration workbook,configuration,Routing matrix tied to the client's facility network and approval hierarchy.,2,4,6,5,client_specific_configuration,,raw/deliverable-register.csv row 6

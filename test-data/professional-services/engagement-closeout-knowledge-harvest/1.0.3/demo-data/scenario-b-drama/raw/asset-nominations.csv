@@ -1,0 +1,6 @@
+asset_id,title,asset_type,description,generalisability,effort_to_recreate,shelf_life_months,client_dependency,confidentiality_markers,aggregation_tokens,evidence
+AST-101,Anonymised grid-ops target architecture,diagram,Architecture pattern for field operations integration and outage response orchestration.,5,5,24,1,,sector;region;unique_architecture,raw/deliverable-register.csv row 4
+AST-102,European utility readiness narrative,case-pattern,Descriptor and storyline for operating-model readiness in a regulated utility.,4,4,18,1,,sector;region,raw/retrospective-transcript.txt lines 4-9
+AST-103,GridMesh go-live runbook,runbook,Go-live sequence for GridMesh Optimizer cutover on 2026-04-14.,4,5,18,1,implementation_date,go_live_date;third_party_product,raw/decision-log.csv row 2
+AST-104,Operations benefits model,model,"Benefits model using a 6,200-headcount operations baseline.",4,4,12,2,precise_headcount,client_headcount,raw/deliverable-register.csv row 7
+AST-105,Executive steering deck,deck,"Reusable steering narrative, but page-three diagram caption embeds the client logo and name.",5,4,18,1,client_logo;client_name,,raw/retrospective-transcript.txt lines 18-19

@@ -1,5 +1,5 @@
 # Lesson Clustering Taxonomy - Engagement Closeout
-Deterministic clustering rules consumed by `lesson_cluster.py`. The model drafts prose from these clusters but does not invent the grouping or priority.
+Deterministic clustering rules consumed by `lesson_cluster.py` (rules in `closeout_core.py`). The model drafts prose from these clusters but does not invent the grouping or priority.
 
 ## 1. Cluster taxonomy
 ### 1.1 Delivery governance
@@ -12,7 +12,10 @@ Data quality, migration, integration sequencing, environments and technical depe
 Staffing model, budget, resourcing, margin, contracting and partner dependencies.
 ### 1.5 Unclassified evidence
 Evidence with no taxonomy keyword match remains `unclassified` and is a review candidate. It must
-not default to delivery governance.
+not default to delivery governance. Evidence whose keyword hits tie between two or more categories
+is also `unclassified`: conflicting signals never pick a category by order. Evidence withheld for
+embedded-instruction review (confidentiality-sanitisation-rules.md #8.1) is never read; it is
+`unclassified` with an `embedded_instruction` signal.
 
 ## 2. Priority scoring
 ### 2.1 High-impact signals

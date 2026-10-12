@@ -1,5 +1,5 @@
 # Reuse & Asset Rubric - Engagement Closeout
-Deterministic scoring rules consumed by `asset_identify.py`. Scores identify reuse value only; they do not determine confidentiality clearance.
+Deterministic scoring rules consumed by `asset_identify.py` (rules in `closeout_core.py`). Scores identify reuse value only; they do not determine confidentiality clearance.
 
 ## 1. Generalisability
 ### 1.1 Weight
