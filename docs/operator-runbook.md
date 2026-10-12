@@ -67,9 +67,9 @@ name in each plugin's tracker workbook in SharePoint.
    Office (see [Tracker workbooks](#tracker-workbooks-and-sensitivity-labels)).
 6. Open `sharepoint\Industry-Templates-Plugin-Testing-Strategy.docx` and read the release bar. You
    attach this document to every Cowork evaluation.
-7. For MOS3 candidates, have a work account that can sign in to Microsoft 365 from an interactive
-   session. `evaluation:prepare` fetches the Microsoft 365 Agents Toolkit CLI with `npx` and its
-   `validate` step opens a sign-in window.
+7. For MOS3 candidates, have network access to npm and Microsoft 365. `evaluation:prepare` fetches
+   the Microsoft 365 Agents Toolkit CLI with `npx` and runs `validate --interactive false`, which
+   needs no sign-in and never opens a sign-in window.
 8. Confirm the toolchain:
 
    ```powershell
@@ -186,8 +186,8 @@ overlap across plugins.
    **Freezing a MOS3 candidate** adds three things (details in
    [MOS3 candidates](evaluation-workflow.md#mos3-candidates)):
 
-   - Run prepare from an interactive session and complete the Microsoft 365 sign-in that
-     `atk validate --package-file` opens; it is stopped after 15 minutes. `--skip-atk` prints
+   - Prepare runs `atk validate --package-file <zip> --interactive false` with no sign-in; it is
+     stopped after 15 minutes. `--skip-atk` prints
      `LocalChecksOnly: not a deployable acceptance result` and records `"atkValidated": false`; use
      it only for local iteration and never send that candidate to Cowork.
    - Prepare builds `<slug>-test-data-<version>.zip` and runs the test-data runners against the
@@ -827,7 +827,7 @@ over 90 minutes each, and a slow agent looked the same as a hung one.
 | `no SharePoint root configured`, `plain local folder` or `broken link` | `sharepoint\` link missing or wrong | `npm run sharepoint:doctor`, then `npm run sharepoint:link` |
 | `frozen evaluation candidate already exists` | That version is already frozen | Bump the version; never delete the inbox folder to retry |
 | `version mismatch: metadata …, manifest …` | `plugin.json` (or MOS3 `manifest.json`) and `metadata.json` disagree | Make them match |
-| `Microsoft 365 Agents Toolkit validation failed … no result within 15 minutes` | The toolkit's Microsoft 365 sign-in was not completed, or prepare ran from a non-interactive session | Rerun prepare from an interactive terminal and complete the sign-in. Do not send a `--skip-atk` candidate to Cowork |
+| `Microsoft 365 Agents Toolkit validation failed … no result within 15 minutes` | The toolkit could not reach npm or its acceptance-test service | Check network access and rerun prepare. Do not send a `--skip-atk` candidate to Cowork |
 | `check:test-data`: `… is frozen but … has changed since it was frozen` (or `was added after`, `is listed but missing`) | Someone edited a frozen test-data folder | Restore it from git (`git checkout -- <folder>`, then remove added files). Put the change in the next version's folder instead |
 | `check:test-data`: `test-data\…\<version>\ is missing` | A MOS3 submission's version was bumped without copying its test data forward | Copy the previous version's folder forward (see [MOS3 test data](#mos3-test-data)) |
 | `bundleTests is not allowed with packageFormat mos3` or `.claude-plugin/ must be removed` | A MOS3 conversion left Claude-layout pieces behind | Remove them; tests belong in the test-data folder |

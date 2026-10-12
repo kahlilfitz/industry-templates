@@ -40,18 +40,16 @@ function run(command: string, args: string[]): void {
 }
 
 /**
- * `npx --yes @microsoft/m365agentstoolkit-cli validate --package-file <zip>` (the toolkit's `atk
- * validate`). A non-zero exit fails preparation.
+ * `npx --yes @microsoft/m365agentstoolkit-cli validate --package-file <zip> --interactive false`
+ * (the toolkit's `atk validate`). Package validation needs no Microsoft 365 sign-in, and
+ * `--interactive false` stops the toolkit opening a sign-in window. A non-zero exit fails preparation.
  */
 const ATK_TIMEOUT_MINUTES = 15;
 
 function atkValidate(packagePath: string): void {
-  const args = ["--yes", ATK_PACKAGE, "validate", "--package-file", packagePath];
+  const args = ["--yes", ATK_PACKAGE, "validate", "--package-file", packagePath, "--interactive", "false"];
   console.log(`Validating the app package with the Microsoft 365 Agents Toolkit: npx ${args.join(" ")}`);
-  console.log(
-    "The toolkit validates through Microsoft 365 and may open a sign-in window; sign in with a " +
-      `work account. It is stopped after ${ATK_TIMEOUT_MINUTES} minutes.`,
-  );
+  console.log(`It runs without a sign-in prompt and is stopped after ${ATK_TIMEOUT_MINUTES} minutes.`);
   const quoted = ["npx", ...args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg))].join(" ");
   const options = { cwd: ROOT, stdio: "inherit" as const, timeout: ATK_TIMEOUT_MINUTES * 60_000 };
   const result =
@@ -66,7 +64,7 @@ function atkValidate(packagePath: string): void {
     throw new Error(
       `Microsoft 365 Agents Toolkit validation failed for ${basename(packagePath)} ` +
         (timedOut
-          ? `(no result within ${ATK_TIMEOUT_MINUTES} minutes; it usually waits for a Microsoft 365 sign-in that was not completed); `
+          ? `(no result within ${ATK_TIMEOUT_MINUTES} minutes; check network access to the toolkit's acceptance-test service); `
           : `(${result.error ? result.error.message : `exit code ${result.status ?? `null, signal ${result.signal}`}`}); `) +
         "fix the package, or pass --skip-atk for a local-only check that is not a deployable acceptance result",
     );

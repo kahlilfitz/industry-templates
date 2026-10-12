@@ -715,6 +715,6 @@ H10 and H12 need a manual check. The packaging and test-data rules are in
   `steering_guard.py` copies in unfrozen test-data folders stay byte-identical to `shared\`.
   Test: `npm run check:shared`.
 - [ ] **H14. Accepted by the Agents Toolkit.** `evaluation:prepare` runs
-  `atk validate --package-file` on the plugin ZIP, which needs an interactive Microsoft 365
-  sign-in. A `--skip-atk` run is LocalChecksOnly and is not a deployable acceptance.
+  `atk validate --package-file --interactive false` on the plugin ZIP (no sign-in). A `--skip-atk`
+  run is LocalChecksOnly and is not a deployable acceptance.
   Test: the receipt records `"atkValidated": true` before the candidate goes to Cowork.

@@ -134,12 +134,12 @@ For a submission with `"packageFormat": "mos3"`, preparation also:
 4. Validates the plugin ZIP with the Microsoft 365 Agents Toolkit CLI:
 
    ```powershell
-   npx --yes @microsoft/m365agentstoolkit-cli validate --package-file <plugin ZIP>
+   npx --yes @microsoft/m365agentstoolkit-cli validate --package-file <plugin ZIP> --interactive false
    ```
 
-   A non-zero exit fails preparation. The toolkit validates through Microsoft 365 and opens a
-   sign-in window, so run preparation from an interactive session and sign in with a work account;
-   it is stopped after 15 minutes. `--skip-atk` skips it for local iteration only: the command
+   A non-zero exit fails preparation. Package validation needs no Microsoft 365 sign-in, and
+   `--interactive false` keeps the toolkit from opening a sign-in window; it is stopped after 15
+   minutes. `--skip-atk` skips it for local iteration only: the command
    prints `LocalChecksOnly: not a deployable acceptance result` and records `"atkValidated": false`
    in the receipt. Do not send a `--skip-atk` candidate for formal evaluation.
 5. Copies both ZIPs into the inbox and records `packageFormat`, `testDataFile`, `testDataSha256` and

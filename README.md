@@ -152,7 +152,7 @@ The command validates and builds the repository, then writes the immutable ZIP, 
 and a ready-to-paste Cowork prompt under `evaluation-inbox/<slug>/<version>/`. Attach that frozen ZIP
 to Cowork and require exactly `plugin-health.html`, `behavioral-test-report.html`, and
 `full-report.html`. For a MOS3 plugin it also validates the package with
-`atk validate --package-file` (an interactive Microsoft 365 sign-in), builds
+`atk validate --package-file --interactive false` (no sign-in), builds
 `<slug>-test-data-<version>.zip` and writes `FROZEN.sha256` into the test-data folder, which you
 commit. Attach both ZIPs to Cowork; the test-data ZIP is for the regression only.
 
