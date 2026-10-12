@@ -932,7 +932,7 @@
           "constraints_considered": [
             {
               "type": "adverse_matter",
-              "client_name": "Unrelated Synthetic Client",
+              "client_name": "another client (name withheld)",
               "status": "closed",
               "material": null,
               "role_type": "",
@@ -944,7 +944,7 @@
               "reason": "recorded entity does not match the client or a declared affiliate",
               "source": "connector:conflicts-register",
               "confidence": 0.97,
-              "citation": "conflicts extract CF-ORC-1042 row 18"
+              "citation": "conflicts register row 3 for another client; name and citation withheld (independence-eligibility-rules.md #9.9)"
             },
             {
               "type": "availability",
@@ -1196,7 +1196,7 @@
           "constraints_considered": [
             {
               "type": "adverse_matter",
-              "client_name": "Unrelated Synthetic Client",
+              "client_name": "another client (name withheld)",
               "status": "closed",
               "material": null,
               "role_type": "",
@@ -1208,7 +1208,7 @@
               "reason": "recorded entity does not match the client or a declared affiliate",
               "source": "connector:conflicts-register",
               "confidence": 0.97,
-              "citation": "conflicts extract CF-ORC-1042 row 18"
+              "citation": "conflicts register row 3 for another client; name and citation withheld (independence-eligibility-rules.md #9.9)"
             },
             {
               "type": "availability",
@@ -1467,7 +1467,7 @@
           "constraints_considered": [
             {
               "type": "adverse_matter",
-              "client_name": "Unrelated Synthetic Client",
+              "client_name": "another client (name withheld)",
               "status": "closed",
               "material": null,
               "role_type": "",
@@ -1479,7 +1479,7 @@
               "reason": "recorded entity does not match the client or a declared affiliate",
               "source": "connector:conflicts-register",
               "confidence": 0.97,
-              "citation": "conflicts extract CF-ORC-1042 row 18"
+              "citation": "conflicts register row 3 for another client; name and citation withheld (independence-eligibility-rules.md #9.9)"
             },
             {
               "type": "availability",

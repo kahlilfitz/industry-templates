@@ -1055,20 +1055,45 @@ class FitScoreTests(unittest.TestCase):
 
 
 class SlateValidateTests(unittest.TestCase):
+    # validate() checks every contract field it relies on, so hand-built documents are complete.
+    ENGAGEMENT = {
+        "engagement_id": "ENG-1",
+        "client_name": "Example Client",
+        "affiliates": ["Example Holdings"],
+        "source": "skill:role-intake",
+        "confidence": 0.9,
+        "citation": "SOW extract",
+    }
+    ROLES = [{
+        "role_id": "R-1",
+        "title": "Delivery manager",
+        "start_date": "2026-11-02",
+        "allocation_pct": 50,
+        "required_skills": ["delivery"],
+        "source": "skill:role-intake",
+        "confidence": 0.9,
+        "citation": "staffing request",
+    }]
+    ROLE_FIELDS = {
+        "top_provisional_candidate_refused": False,
+        "source": "engine:constraint_check",
+        "confidence": 0.99,
+        "citation": "independence-eligibility-rules.md #1.1-#8.1",
+    }
+
     def validate_candidate(self, candidate, engagement=None):
         payload = {
             "contract_version": slate_validate.CONTRACT,
-            "engagement": engagement or {
-                "client_name": "Example Client",
-                "affiliates": ["Example Holdings"],
-            },
+            "engagement": dict(self.ENGAGEMENT, **(engagement or {})),
+            "roles": json.loads(json.dumps(self.ROLES)),
             "governed_roles": [
-                {
-                    "role_id": "R-1",
-                    "role_title": "Delivery manager",
-                    "candidate_slate": [candidate],
-                    "recommended_candidates": [candidate],
-                }
+                dict(
+                    self.ROLE_FIELDS,
+                    role_id="R-1",
+                    role_title="Delivery manager",
+                    candidate_slate=[candidate],
+                    recommended_candidates=[candidate],
+                )
             ],
             "gaps": [],
             "escalations": [],
@@ -1082,7 +1107,21 @@ class SlateValidateTests(unittest.TestCase):
             "candidate_id": "C-1",
             "candidate_name": "Alex Smith",
             "fit_score": 90,
+            "component_scores": {},
+            "component_citations": {},
+            "availability_context": {
+                "effective_available_pct": 100.0,
+                "requested_allocation_pct": 50.0,
+                "utilization_after_staffing_pct": 50.0,
+                "evidence_complete": True,
+                "calculation_warnings": [],
+            },
+            "source": "engine:fit_score",
+            "confidence": 0.9,
+            "citation": "bench row C-1",
             "provisional_rank": 1,
+            "rank_source": "engine:slate_rank",
+            "rank_citation": "fit-scoring-rubric.md #7.1",
             "final_eligible_rank": 1,
             "constraints_considered": [
                 {
@@ -1102,7 +1141,10 @@ class SlateValidateTests(unittest.TestCase):
             "eligibility": {
                 "verdict": "eligible",
                 "recommendation_status": "recommended",
+                "blocking_rule": None,
                 "reasons": ["no blocker"],
+                "source": "engine:constraint_check",
+                "confidence": 0.9,
                 "citation": "rule",
             },
         }
@@ -1247,44 +1289,37 @@ class SlateValidateTests(unittest.TestCase):
             checked["eligibility"]["recommendation_status"],
         )
         self.assertEqual(
-            "independence-eligibility-rules.md #9.1",
+            "independence-eligibility-rules.md #9.6",
             checked["eligibility"]["blocking_rule"],
         )
         self.assertIn("source citation redacted", checked["citation"])
         self.assertEqual([], result["governed_roles"][0]["recommended_candidates"])
 
     def test_main_demotes_unsafe_recommendation(self):
+        candidate = dict(
+            self.safe_candidate(),
+            constraints_considered=[
+                {
+                    "type": "unknown",
+                    "applies_to_engagement": True,
+                    "disposition": "needs_review",
+                    "reason": "unrecognised record",
+                }
+            ],
+        )
         payload = {
             "contract_version": slate_validate.CONTRACT,
+            "engagement": dict(self.ENGAGEMENT),
+            "roles": json.loads(json.dumps(self.ROLES)),
             "governed_roles": [
-                {
-                    "role_id": "R-1",
-                    "role_title": "Delivery manager",
-                    "candidate_slate": [
-                        {
-                            "candidate_id": "C-1",
-                            "candidate_name": "Alex Smith",
-                            "fit_score": 90,
-                            "provisional_rank": 1,
-                            "final_eligible_rank": 1,
-                            "constraints_considered": [
-                                {
-                                    "type": "unknown",
-                                    "applies_to_engagement": True,
-                                    "disposition": "needs_review",
-                                    "reason": "unrecognised record",
-                                }
-                            ],
-                            "eligibility": {
-                                "verdict": "eligible",
-                                "recommendation_status": "recommended",
-                                "reasons": ["no blocker"],
-                                "citation": "rule",
-                            },
-                        }
-                    ],
-                    "recommended_candidates": [],
-                }
+                dict(
+                    self.ROLE_FIELDS,
+                    role_id="R-1",
+                    role_title="Delivery manager",
+                    candidate_slate=[candidate],
+                    # The carried recommendation list must re-derive from the slate (A22).
+                    recommended_candidates=[candidate],
+                )
             ],
             "gaps": [],
             "escalations": [],
@@ -1411,7 +1446,8 @@ class GoldenScenarioTests(unittest.TestCase):
                 (skills / "slate-draft/scripts/slate_validate.py",
                  ["--roles", scenario_dir / "roles.json", "--bench", scenario_dir / "bench.json",
                   "--constraints", scenario_dir / "constraints.json",
-                  "--governed", out / "governed.json", "--out", out / "validated.json"]),
+                  "--governed", out / "governed.json", "--out", out / "validated.json",
+                  "--draft-out", out / "slate-draft.md"]),
             )
             for script, args in steps:
                 # A fresh cwd proves the engines do not depend on the working directory.
@@ -1432,6 +1468,12 @@ class GoldenScenarioTests(unittest.TestCase):
                     actual = (out / (stage + ".json")).read_bytes()
                     self.assertNotIn(b"\r", actual, "%s %s.json has CR bytes" % (scenario, stage))
                     self.assertEqual(expected, actual, "%s/expected/%s.json differs" % (scenario, stage))
+            with self.subTest(scenario=scenario, stage="slate-draft"):
+                # A23: the slate draft is rendered by the engine; compare raw bytes (LF only).
+                expected = (scenario_dir / "expected" / "slate-draft.md").read_bytes()
+                actual = (out / "slate-draft.md").read_bytes()
+                self.assertNotIn(b"\r", actual, "%s slate-draft.md has CR bytes" % scenario)
+                self.assertEqual(expected, actual, "%s/expected/slate-draft.md differs" % scenario)
 
     def test_scenario_a_happy_reproduces_goldens(self):
         self.run_chain("scenario-a-happy")
@@ -1601,8 +1643,11 @@ class _EngineInjectionHarness:
             self._run(slate_validate, ["slate_validate.py", "--roles", roles, "--bench", str(temp / "bench.json"),
                                        "--constraints", str(temp / "constraints.json"),
                                        "--governed", str(temp / "governed.json"),
-                                       "--out", str(temp / "validated.json")])
+                                       "--out", str(temp / "validated.json"),
+                                       "--draft-out", str(temp / "slate-draft.md")])
             outputs["slate_validate"] = (temp / "validated.json").read_text(encoding="utf-8")
+            with self.subTest(engine="slate_validate (slate-draft.md)", line=_ascii(line)):
+                self.assertNotIn(line.strip(), (temp / "slate-draft.md").read_text(encoding="utf-8"))
 
             # The same line written straight into a governed slate citation never reaches the
             # validator: governed.json no longer re-derives from the clean inputs (rule 9.8).
@@ -1617,10 +1662,12 @@ class _EngineInjectionHarness:
                 "slate_validate.py", "--roles", roles, "--bench", str(self.scenario / "bench.json"),
                 "--constraints", str(self.scenario / "constraints.json"),
                 "--governed", str(temp / "forged-governed.json"), "--out", str(temp / "forged.json"),
+                "--draft-out", str(temp / "forged-draft.md"),
             ], expected=2)
             with self.subTest(engine="slate_validate (governed injection)", line=_ascii(line)):
                 self.assertIn("does not re-derive", error)
                 self.assertFalse((temp / "forged.json").exists())
+                self.assertFalse((temp / "forged-draft.md").exists())
                 self.assertNotIn(line, error)
         return {name: (text, json.loads(text).get("escalations", [])) for name, text in outputs.items()}
 

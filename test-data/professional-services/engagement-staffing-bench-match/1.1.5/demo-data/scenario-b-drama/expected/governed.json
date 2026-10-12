@@ -1110,6 +1110,13 @@
               "disposition": "clear",
               "reason": "effective available capacity meets requested allocation",
               "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]"
+            },
+            {
+              "type": "source_screening",
+              "applies_to_engagement": true,
+              "disposition": "needs_review",
+              "reason": "bench or score record carries text withheld by source screening",
+              "citation": "independence-eligibility-rules.md #9.6"
             }
           ],
           "eligibility": {
@@ -1117,11 +1124,12 @@
             "recommendation_status": "not_recommended",
             "blocking_rule": "independence-eligibility-rules.md #3.1",
             "reasons": [
-              "unresolved material financial interest in client 'Aster Foods Cooperative'"
+              "unresolved material financial interest in client 'Aster Foods Cooperative'",
+              "bench or score record carries text withheld by source screening"
             ],
             "source": "engine:constraint_check",
             "confidence": 0.96,
-            "citation": "independence-eligibility-rules.md #3.1; conflicts register CF-AFC-2077 row 3 - unresolved restricted equity holding"
+            "citation": "independence-eligibility-rules.md #3.1; conflicts register CF-AFC-2077 row 3 - unresolved restricted equity holding; independence-eligibility-rules.md #9.6"
           }
         },
         {
@@ -1708,6 +1716,13 @@
               "disposition": "clear",
               "reason": "effective available capacity meets requested allocation",
               "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]"
+            },
+            {
+              "type": "source_screening",
+              "applies_to_engagement": true,
+              "disposition": "needs_review",
+              "reason": "bench or score record carries text withheld by source screening",
+              "citation": "independence-eligibility-rules.md #9.6"
             }
           ],
           "eligibility": {
@@ -1715,11 +1730,12 @@
             "recommendation_status": "not_recommended",
             "blocking_rule": "independence-eligibility-rules.md #3.1",
             "reasons": [
-              "unresolved material financial interest in client 'Aster Foods Cooperative'"
+              "unresolved material financial interest in client 'Aster Foods Cooperative'",
+              "bench or score record carries text withheld by source screening"
             ],
             "source": "engine:constraint_check",
             "confidence": 0.94,
-            "citation": "independence-eligibility-rules.md #3.1; conflicts register CF-AFC-2077 row 3 - unresolved restricted equity holding"
+            "citation": "independence-eligibility-rules.md #3.1; conflicts register CF-AFC-2077 row 3 - unresolved restricted equity holding; independence-eligibility-rules.md #9.6"
           }
         },
         {

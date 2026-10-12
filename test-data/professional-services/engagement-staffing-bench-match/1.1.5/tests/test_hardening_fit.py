@@ -191,9 +191,11 @@ class FitHardeningTests(unittest.TestCase):
         out = self.temp / "validated.json"
         if out.exists():
             out.unlink()
+        draft = self.temp / "slate-draft.md"
         result = self.cli(VALIDATE, "--roles", roles, "--bench", bench, "--constraints", constraints,
-                          "--governed", self.write("governed.json", governed), "--out", out)
+                          "--governed", self.write("governed.json", governed), "--out", out, "--draft-out", draft)
         self.assert_refused(result, out, contains=contains)
+        self.assertFalse(draft.exists(), "slate draft written on failure")
 
     def in_process(self, engine, argv, out):
         stderr, stdout = io.StringIO(), io.StringIO()
@@ -215,7 +217,8 @@ class FitHardeningTests(unittest.TestCase):
         self.assertEqual(governed, json.loads(out.read_text(encoding="utf-8")))
         validated = self.temp / "validated.json"
         result = self.cli(VALIDATE, "--roles", folder / "roles.json", "--bench", folder / "bench.json",
-                          "--constraints", folder / "constraints.json", "--governed", out, "--out", validated)
+                          "--constraints", folder / "constraints.json", "--governed", out, "--out", validated,
+                          "--draft-out", self.temp / "slate-draft.md")
         self.assertEqual(0, result.returncode, ascii_safe(result.stderr))  # noqa: F821
         self.assertEqual(slate_validate.validate(governed), json.loads(validated.read_text(encoding="utf-8")))
 
@@ -229,10 +232,12 @@ class FitHardeningTests(unittest.TestCase):
                           "--constraints", folder / "constraints.json", "--out", out)
         self.assert_refused(result, out, contains="command line")
         out = self.temp / "validated.json"
-        result = self.cli(VALIDATE, "--governed", folder / "expected" / "governed.json", "--out", out)
+        draft = self.temp / "slate-draft.md"
+        result = self.cli(VALIDATE, "--governed", folder / "expected" / "governed.json", "--out", out,
+                          "--draft-out", draft)
         self.assert_refused(result, out, contains="command line")
         result = self.cli(VALIDATE, "--roles", folder / "roles.json", "--bench", folder / "bench.json",
-                          "--governed", folder / "expected" / "governed.json", "--out", out)
+                          "--governed", folder / "expected" / "governed.json", "--out", out, "--draft-out", draft)
         self.assert_refused(result, out, contains="command line")
 
     def test_a23_ranked_field_changes_are_refused(self):
@@ -358,7 +363,8 @@ class FitHardeningTests(unittest.TestCase):
         folder = DEMO / "scenario-b-drama"
         self._walk(slate_validate, governed, lambda forged, out: [
             "--roles", folder / "roles.json", "--bench", folder / "bench.json",
-            "--constraints", folder / "constraints.json", "--governed", forged, "--out", out], "validated.json")
+            "--constraints", folder / "constraints.json", "--governed", forged, "--out", out,
+            "--draft-out", out.parent / "slate-draft.md"], "validated.json")
 
     # ----------------------------------------------------------------------------------------
     # Part 2 - fit_score.py / slate_rank.py / safety_text.py

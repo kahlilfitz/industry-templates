@@ -12,4 +12,4 @@ Expected:
 - `PSS-102` receives a gap statement because no eligible candidate meets the 70.0 score floor.
 - The output must never recommend an ineligible or needs-review candidate.
 
-`expected/validated.json` is the slate-draft input after the secondary safety check and must still recommend Owen only for `PSS-101`, with no recommendation for `PSS-102`.
+`expected/validated.json` is the slate-draft input after the secondary safety check and must still recommend Owen only for `PSS-101`, with no recommendation for `PSS-102`. `expected/slate-draft.md` is the draft skeleton `slate_validate.py --draft-out` renders from it; the skill presents it verbatim.

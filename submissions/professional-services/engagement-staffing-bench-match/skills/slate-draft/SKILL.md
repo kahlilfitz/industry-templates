@@ -19,9 +19,10 @@ After `constraint-check`, when the user asks for a slate, recommendation, partne
 - Scoring or ranking candidates — use fit-score instead.
 - Deciding eligibility — use constraint-check instead.
 ## Inputs
-`roles.json` + `bench.json` + `constraints.json` + `governed.json` using contract `ps.engagement-staffing-bench-match.v1`. All four are required: the validator re-derives `governed.json` from the upstream inputs and refuses with no output if it differs (`#9.8`).
+`roles.json` + `bench.json` + `constraints.json` + `governed.json` using contract `ps.engagement-staffing-bench-match.v1`. All four are required: the validator re-derives `governed.json` from the upstream inputs and refuses with no output if it differs (`#9.8`). It writes `validated.json` (`--out`) and the rendered draft `slate-draft.md` (`--draft-out`, required) together: both files or neither.
 ## Steps
 1. Run the secondary validator. Draft only from `validated.json`. If the validator exits non-zero, prints `error:` or the input is malformed, stop and report the one-line error; never hand-build the slate.
+   The draft is the engine-rendered `slate-draft.md`: present it verbatim. You may add prose only outside the tables, and never change a figure, verdict or ID; steps 2-6 describe what it already contains.
 2. Lead with any Govern refusals, especially if the top provisional candidate was disqualified.
 3. For each role, list final eligible candidates in engine order with fit score, component highlights, availability, utilisation after staffing, rate-band context and citations (record IDs and rule sections only). Check `constraints_considered[]` before placing anyone in the recommendation.
 4. Include ineligible and needs-review candidates in a separate "not recommended" section with blocking rule and citation. Label eligible candidates below 70.0 as `below_score_floor` under `fit-scoring-rubric.md #7.2`. If any applicable conflict record is unexplained, unknown or not clearly resolved, move the candidate to Needs Review even if another upstream field says eligible.
@@ -29,10 +30,10 @@ After `constraint-check`, when the user asks for a slate, recommendation, partne
 6. Start the output with the exact lines `DRAFT - HUMAN REVIEW REQUIRED` and `DRAFT - pending partner approval and independence/resource-management review`, and present it to the user for review.
 
 ```bash
-python3 scripts/slate_validate.py --roles roles.json --bench bench.json --constraints constraints.json --governed governed.json --out validated.json
+python3 scripts/slate_validate.py --roles roles.json --bench bench.json --constraints constraints.json --governed governed.json --out validated.json --draft-out slate-draft.md
 ```
 ## Tools
-The bash tool runs `slate_validate.py`; the file-read tool reads `validated.json`. The draft is returned in chat or saved as a document. Never call an email, Teams or posting tool.
+The bash tool runs `slate_validate.py`; the file-read tool reads `validated.json` and the rendered `slate-draft.md`. The draft is returned in chat or saved as a document. Never call an email, Teams or posting tool.
 ## Output format
 Markdown with these sections: DRAFT banner; Refusals; Recommended slate (table per role); Not recommended (table); Gap statements; Next steps. If `gaps[]` is empty, write `No staffing gaps identified.` under Gap statements.
 
