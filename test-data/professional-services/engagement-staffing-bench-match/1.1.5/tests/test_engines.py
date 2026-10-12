@@ -1,5 +1,19 @@
+"""Regression suite for engagement-staffing-bench-match.
+
+Run from the test-data version folder:
+
+    python tests/test_engines.py [--plugin-root <dir>] [unittest options]
+
+The plugin root (an extracted MOS3 ZIP or the submission folder) comes from --plugin-root, then
+the PLUGIN_ROOT environment variable, then <repo>/submissions/professional-services/<slug>.
+Every skills/... path resolves against the plugin root; every demo-data/... path resolves
+against the data root, the parent of this tests/ folder. Neither depends on the cwd.
+"""
+import argparse
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -7,11 +21,39 @@ from pathlib import Path
 from unittest import mock
 
 
-ROOT = Path(__file__).resolve().parents[1]
+SLUG = "engagement-staffing-bench-match"
+DATA_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _ascii(text):
+    return str(text).encode("ascii", "backslashreplace").decode("ascii")
+
+
+def resolve_plugin_root(argv):
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--plugin-root")
+    known, rest = parser.parse_known_args(argv)
+    if known.plugin_root:
+        root = Path(known.plugin_root)
+    elif os.environ.get("PLUGIN_ROOT"):
+        root = Path(os.environ["PLUGIN_ROOT"])
+    else:
+        root = DATA_ROOT.parents[3] / "submissions" / "professional-services" / SLUG
+    return root.resolve(), rest
+
+
+PLUGIN_ROOT, _UNITTEST_ARGS = resolve_plugin_root(sys.argv[1:])
+print("plugin root: " + _ascii(PLUGIN_ROOT), flush=True)
+print("data root: " + _ascii(DATA_ROOT), flush=True)
+if not (PLUGIN_ROOT / "skills").is_dir():
+    sys.exit(
+        "error: plugin root " + _ascii(PLUGIN_ROOT) + " has no skills/ folder; pass "
+        "--plugin-root <extracted ZIP or submission folder> or set PLUGIN_ROOT"
+    )
 
 
 def load_module(name, relative_path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / relative_path)
+    spec = importlib.util.spec_from_file_location(name, PLUGIN_ROOT / relative_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -1236,36 +1278,35 @@ class SlateValidateTests(unittest.TestCase):
         self.assertEqual("slate_validate/1.1.4", result["provenance"]["engines"][-1])
 
 
+SKILL_NAMES = ("role-intake", "bench-query", "fit-score", "constraint-check", "slate-draft")
+# skills/fit-score/ holds the canonical copy of every file shared between skills.
+CANONICAL_SKILL = "fit-score"
+SHARED_SKILL_FILES = (
+    "contracts/ps.engagement-staffing-bench-match.v1.json",
+    "references/fit-scoring-rubric.md",
+    "references/independence-eligibility-rules.md",
+)
+
+
 class SharedCopyTests(unittest.TestCase):
     def test_contract_and_reference_copies_match_canonical_files(self):
-        canonical_contract = (
-            ROOT / "contracts/ps.engagement-staffing-bench-match.v1.json"
-        ).read_bytes()
-        canonical_references = {
-            name: (ROOT / "references" / name).read_bytes()
-            for name in (
-                "fit-scoring-rubric.md",
-                "independence-eligibility-rules.md",
-            )
-        }
+        for relative in SHARED_SKILL_FILES:
+            canonical = (PLUGIN_ROOT / "skills" / CANONICAL_SKILL / relative).read_bytes()
+            for skill in SKILL_NAMES:
+                copy = PLUGIN_ROOT / "skills" / skill / relative
+                with self.subTest(skill=skill, file=relative):
+                    self.assertTrue(copy.is_file(), "skills/%s/%s is missing" % (skill, relative))
+                    self.assertEqual(canonical, copy.read_bytes(), "skills/%s/%s" % (skill, relative))
 
-        for skill_dir in (ROOT / "skills").iterdir():
-            if not skill_dir.is_dir():
-                continue
-            contract = skill_dir / "contracts/ps.engagement-staffing-bench-match.v1.json"
-            if contract.exists():
-                self.assertEqual(canonical_contract, contract.read_bytes(), str(contract))
-            for name, canonical in canonical_references.items():
-                reference = skill_dir / "references" / name
-                if reference.exists():
-                    self.assertEqual(canonical, reference.read_bytes(), str(reference))
+        skill_dirs = sorted(p.name for p in (PLUGIN_ROOT / "skills").iterdir() if p.is_dir())
+        self.assertEqual(sorted(SKILL_NAMES), skill_dirs)
 
     def test_shared_safety_sanitizer_copies_match(self):
-        canonical_path = ROOT / "skills/fit-score/scripts/safety_text.py"
+        canonical_path = PLUGIN_ROOT / "skills/fit-score/scripts/safety_text.py"
         canonical = canonical_path.read_bytes()
         copies = (
-            ROOT / "skills/constraint-check/scripts/safety_text.py",
-            ROOT / "skills/slate-draft/scripts/safety_text.py",
+            PLUGIN_ROOT / "skills/constraint-check/scripts/safety_text.py",
+            PLUGIN_ROOT / "skills/slate-draft/scripts/safety_text.py",
         )
 
         for copy in copies:
@@ -1273,10 +1314,10 @@ class SharedCopyTests(unittest.TestCase):
 
     def test_scenario_b_structured_inputs_preserve_raw_source_flags(self):
         constraints = json.loads(
-            (ROOT / "demo-data/scenario-b-drama/constraints.json").read_text(encoding="utf-8")
+            (DATA_ROOT / "demo-data/scenario-b-drama/constraints.json").read_text(encoding="utf-8")
         )
         roles = json.loads(
-            (ROOT / "demo-data/scenario-b-drama/roles.json").read_text(encoding="utf-8")
+            (DATA_ROOT / "demo-data/scenario-b-drama/roles.json").read_text(encoding="utf-8")
         )
         c204 = next(
             item for item in constraints["constraints"] if item["candidate_id"] == "C-204"
@@ -1286,5 +1327,69 @@ class SharedCopyTests(unittest.TestCase):
         self.assertTrue(any("Mina" in item for item in roles["escalations"]))
 
 
+class PackageLayoutTests(unittest.TestCase):
+    def test_every_skill_is_self_contained(self):
+        for skill in SKILL_NAMES:
+            skill_dir = PLUGIN_ROOT / "skills" / skill
+            with self.subTest(skill=skill):
+                self.assertTrue((skill_dir / "SKILL.md").is_file())
+                for forbidden in ("demo-data", "tests"):
+                    self.assertFalse(
+                        (skill_dir / forbidden).exists(),
+                        "skills/%s/%s must live in test-data, not the package" % (skill, forbidden),
+                    )
+                for path in skill_dir.rglob("*"):
+                    if path.is_file() and path.suffix in (".md", ".py", ".json"):
+                        text = path.read_text(encoding="utf-8")
+                        for marker in ("../../", "demo-data/", "CLAUDE_PLUGIN_ROOT", ".claude-plugin"):
+                            self.assertNotIn(marker, text, str(path.relative_to(PLUGIN_ROOT)))
+
+
+class GoldenScenarioTests(unittest.TestCase):
+    """Run the shipped engine chain on each demo scenario and diff every stage against its golden."""
+
+    def run_chain(self, scenario):
+        scenario_dir = DATA_ROOT / "demo-data" / scenario
+        skills = PLUGIN_ROOT / "skills"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            out = Path(temp_dir)
+            steps = (
+                (skills / "fit-score/scripts/fit_score.py",
+                 ["--roles", scenario_dir / "roles.json", "--bench", scenario_dir / "bench.json",
+                  "--out", out / "scored.json"]),
+                (skills / "fit-score/scripts/slate_rank.py",
+                 ["--scored", out / "scored.json", "--out", out / "ranked.json"]),
+                (skills / "constraint-check/scripts/constraint_check.py",
+                 ["--ranked", out / "ranked.json", "--constraints", scenario_dir / "constraints.json",
+                  "--out", out / "governed.json"]),
+                (skills / "slate-draft/scripts/slate_validate.py",
+                 ["--governed", out / "governed.json", "--out", out / "validated.json"]),
+            )
+            for script, args in steps:
+                # A fresh cwd proves the engines do not depend on the working directory.
+                result = subprocess.run(
+                    [sys.executable, str(script)] + [str(a) for a in args],
+                    cwd=temp_dir,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="backslashreplace",
+                )
+                self.assertEqual(0, result.returncode, _ascii(script.name + ": " + result.stderr))
+                self.assertNotIn("Traceback", result.stderr)
+            for stage in ("scored", "ranked", "governed", "validated"):
+                with self.subTest(scenario=scenario, stage=stage):
+                    # Engines write platform line endings; goldens are stored with LF.
+                    expected = (scenario_dir / "expected" / (stage + ".json")).read_bytes().replace(b"\r\n", b"\n")
+                    actual = (out / (stage + ".json")).read_bytes().replace(b"\r\n", b"\n")
+                    self.assertEqual(expected, actual, "%s/expected/%s.json differs" % (scenario, stage))
+
+    def test_scenario_a_happy_reproduces_goldens(self):
+        self.run_chain("scenario-a-happy")
+
+    def test_scenario_b_drama_reproduces_goldens(self):
+        self.run_chain("scenario-b-drama")
+
+
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(argv=[sys.argv[0]] + _UNITTEST_ARGS)
