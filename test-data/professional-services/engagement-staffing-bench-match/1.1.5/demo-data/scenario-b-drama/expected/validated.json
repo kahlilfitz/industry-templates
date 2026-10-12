@@ -96,7 +96,11 @@
       "slate_rank/1.1.5",
       "constraint_check/1.1.5",
       "slate_validate/1.1.5"
-    ]
+    ],
+    "policies": {
+      "fit-scoring-rubric.md": "1.1.5",
+      "independence-eligibility-rules.md": "1.1.5"
+    }
   },
   "bench_candidates": [
     {
@@ -281,6 +285,9 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
+          "screening_holds": [
+            "bench_candidates[0].citation: instruction-like text withheld (independence-eligibility-rules.md #9.6)"
+          ],
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -329,6 +336,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -373,6 +381,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "screening_holds": [],
           "provisional_rank": 4,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -418,6 +427,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
+          "screening_holds": [],
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -471,6 +481,9 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
+          "screening_holds": [
+            "bench_candidates[0].citation: instruction-like text withheld (independence-eligibility-rules.md #9.6)"
+          ],
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -513,6 +526,7 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
+          "screening_holds": [],
           "provisional_rank": 4,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -562,6 +576,7 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "screening_holds": [],
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -607,6 +622,7 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -667,6 +683,9 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
+          "screening_holds": [
+            "bench_candidates[0].citation: instruction-like text withheld (independence-eligibility-rules.md #9.6)"
+          ],
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -715,6 +734,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -760,6 +780,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
+          "screening_holds": [],
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -804,6 +825,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "screening_holds": [],
           "provisional_rank": 4,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -862,6 +884,7 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "screening_holds": [],
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -907,6 +930,7 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -951,6 +975,9 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
+          "screening_holds": [
+            "bench_candidates[0].citation: instruction-like text withheld (independence-eligibility-rules.md #9.6)"
+          ],
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -993,6 +1020,7 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
+          "screening_holds": [],
           "provisional_rank": 4,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -1054,6 +1082,9 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
+          "screening_holds": [
+            "bench_candidates[0].citation: instruction-like text withheld (independence-eligibility-rules.md #9.6)"
+          ],
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3",
@@ -1138,6 +1169,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3",
@@ -1225,6 +1257,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
+          "screening_holds": [],
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3",
@@ -1305,6 +1338,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "screening_holds": [],
           "provisional_rank": 4,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3",
@@ -1391,6 +1425,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3",
@@ -1492,6 +1527,7 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "screening_holds": [],
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3",
@@ -1573,6 +1609,7 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3",
@@ -1653,6 +1690,9 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
+          "screening_holds": [
+            "bench_candidates[0].citation: instruction-like text withheld (independence-eligibility-rules.md #9.6)"
+          ],
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3",
@@ -1731,6 +1771,7 @@
           "source": "engine:fit_score",
           "confidence": 0.94,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
+          "screening_holds": [],
           "provisional_rank": 4,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3",

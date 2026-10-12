@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""slate_validate - deterministic secondary safety check before drafting."""
-import argparse
-import json
+"""slate_validate - deterministic secondary safety check before drafting.
+
+``validate(governed_payload)`` is the pure engine (no file I/O). The CLI never trusts a supplied
+governed.json: it re-derives the governed document from roles.json, bench.json and constraints.json
+with the vendored fit_score, slate_rank and constraint_check engines and refuses any difference
+(independence-eligibility-rules.md #9.8) before validating the re-derived document.
+"""
 import re
 import sys
 from pathlib import Path
@@ -10,6 +14,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+import constraint_check
+from input_guard import ArgumentParser, InputError, load_json, need, run, same_document, write_json
 from safety_text import sanitize_free_text
 
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
@@ -150,19 +156,19 @@ def recommendation_problems(candidate, engagement):
     return merge_unique(problems)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--governed", required=True)
-    parser.add_argument("--out", required=True)
-    args = parser.parse_args()
+def validate(governed_payload):
+    """Secondary safety check of a governed document; returns the validated document. No file I/O.
 
-    with open(args.governed, encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if payload.get("contract_version") != CONTRACT:
-        sys.exit("wrong governed contract")
+    The input is never mutated. ``governed_payload`` is expected to be a document this plugin's
+    engines produced (the CLI passes the re-derived one), so whole engine markers in it are kept.
+    """
+    need(isinstance(governed_payload, dict) and governed_payload.get("contract_version") == CONTRACT,
+         "governed.json: wrong governed contract (contract_version)")
 
     safety_escalations = []
-    payload = sanitize_free_text(payload, "governed_input", safety_escalations)
+    payload = sanitize_free_text(
+        governed_payload, "governed_input", safety_escalations, engine_markers_ok=True
+    )
     escalations = merge_unique(payload.get("escalations", []), safety_escalations)
     unsafe_roles, unsafe_candidates = unsafe_sanitized_records(safety_escalations)
     gaps = list(payload.get("gaps", []))
@@ -254,11 +260,50 @@ def main():
         if not engine.startswith("slate_validate/")
     ]
     provenance["engines"] = merge_unique(engines, [ENGINE_VERSION])
+    return payload
 
-    with open(args.out, "w", encoding="utf-8", newline="\n") as handle:
-        json.dump(payload, handle, indent=2)
-    print(f"slate_validate: {len(payload.get('governed_roles', []))} role(s) -> {args.out}")
+
+def rederive_governed(roles_payload, bench_payload, constraints_payload):
+    """The governed document the plugin's own engines derive from the three raw inputs."""
+    ranked = constraint_check.rederive_ranked(roles_payload, bench_payload)
+    try:
+        return constraint_check.govern(ranked, constraints_payload)
+    except SystemExit as error:
+        if isinstance(error.code, str):
+            raise InputError(error.code) from None
+        raise
+
+
+def _main(argv):
+    parser = ArgumentParser(prog="slate_validate.py", description="Deterministic secondary slate validation.")
+    parser.add_argument("--roles", required=True)
+    parser.add_argument("--bench", required=True)
+    parser.add_argument("--constraints", required=True)
+    parser.add_argument("--governed", required=True)
+    parser.add_argument("--out", required=True)
+    args = parser.parse_args(argv)
+
+    roles_payload = load_json(args.roles, "roles.json")
+    bench_payload = load_json(args.bench, "bench.json")
+    constraints_payload = load_json(args.constraints, "constraints.json")
+    governed_payload = load_json(args.governed, "governed.json")
+    need(governed_payload.get("contract_version") == CONTRACT,
+         "governed.json: wrong governed contract (contract_version)")
+    need(constraints_payload.get("contract_version") == CONTRACT,
+         "constraints.json: wrong constraints contract (contract_version)")
+    expected = rederive_governed(roles_payload, bench_payload, constraints_payload)
+    need(same_document(governed_payload, expected),
+         "governed.json does not re-derive from roles.json, bench.json and constraints.json "
+         "(rule 9.8); re-run constraint-check")
+    payload = validate(expected)
+    write_json(args.out, payload)
+    print(f"slate_validate: {len(payload.get('governed_roles', []))} role(s) -> validated output written")
     return 0
+
+
+def main(argv=None):
+    """CLI entry point: one clean ``error:`` line and exit 2 on any input error, no output file."""
+    return run(lambda: _main(argv))
 
 
 if __name__ == "__main__":

@@ -4,9 +4,12 @@
 Reads role requirements and bench candidates as JSON and writes JSON. No network, no model
 calls, no side effects beyond the requested output file. The model quotes this output; it
 never recomputes scores or utilisation figures.
+
+``score(roles_payload, bench_payload)`` is the pure engine (no file I/O); later engines import it
+to re-derive this stage (independence-eligibility-rules.md #9.8). Inputs are validated in full
+before anything is scored; any malformed input is one ``error:`` line naming a field path, exit 2,
+and no output file.
 """
-import argparse
-import json
 import re
 import sys
 from datetime import date, timedelta
@@ -16,7 +19,28 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from safety_text import is_suspect, safe_citation, safe_text, sanitize_free_text
+from input_guard import (
+    ArgumentParser,
+    InputError,
+    canonical,
+    check_confidence,
+    check_date,
+    check_id,
+    check_name,
+    check_pct,
+    check_timestamp,
+    duplicate_keys,
+    field,
+    has_marker,
+    id_key,
+    is_num,
+    load_json,
+    need,
+    run,
+    text_list,
+    write_json,
+)
+from safety_text import ScreeningLog, is_suspect, safe_citation, safe_text, sanitize_free_text
 
 ENGINE = "engine:fit_score"
 ENGINE_VERSION = "fit_score/1.1.5"
@@ -36,9 +60,19 @@ CERT_WEIGHT = 0.10            # fit-scoring-rubric.md #2.3
 
 SENIORITY_BANDS = ["associate", "consultant", "senior consultant", "manager", "senior manager", "director", "partner"]
 
-def load(path):
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+# Sources a raw roles.json / bench.json record may carry; engine:* stamps belong to engine output only.
+RAW_SOURCES = (
+    "skill:role-intake",
+    "connector:resource-management-system",
+    "connector:conflicts-register",
+)
+# Members only an engine writes; a raw input carrying one is refused (rule 9.8).
+ENGINE_OWNED = ("scored_roles", "ranked_roles", "governed_roles", "gaps")
+POLICIES = {
+    "fit-scoring-rubric.md": "1.1.5",
+    "independence-eligibility-rules.md": "1.1.5",
+}
+
 
 def merge_unique(*groups):
     merged = []
@@ -51,33 +85,197 @@ def merge_unique(*groups):
                 merged.append(text)
     return merged
 
+
 def normalize_candidate_id(value):
-    return str(value or "").strip().casefold()
+    return id_key(value) or ""
+
+
+# ---------------------------------------------------------------------------------------------
+# Input validation (A1/A2/A5a/A6/A7/A12/A13/A17/A21/B4/C5/D17/D20/D25; rules 9.7, 9.8, 9.9).
+# Messages name field paths only; values and file paths are never echoed.
+# ---------------------------------------------------------------------------------------------
+def _ident(value, path):
+    check_id(value, path)
+    need(not is_suspect(value), f"{path} carries instruction-like text (rule 9.7)")
+    return value
+
+
+def _opt_text(obj, key, where):
+    return field(obj, key, "str", where, required=key in obj)
+
+
+def _opt_list(obj, key, where):
+    return text_list(obj, key, where, required=key in obj)
+
+
+def _provenance_fields(obj, where):
+    source = field(obj, "source", "str", where)
+    need(source in RAW_SOURCES, f"{where}.source is not a recognised source for this input (rule 9.9)")
+    check_confidence(field(obj, "confidence", "num", where), f"{where}.confidence")
+    citation = field(obj, "citation", "str", where)
+    need(citation.strip(), f"{where}.citation must not be blank (citations are required provenance)")
+
+
+def _validate_engagement(document):
+    engagement = field(document, "engagement", "obj", "")
+    need(engagement, "engagement must not be empty")
+    _ident(field(engagement, "engagement_id", "str", "engagement"), "engagement.engagement_id")
+    check_name(field(engagement, "client_name", "str", "engagement"), "engagement.client_name")
+    affiliates = _opt_list(engagement, "affiliates", "engagement")
+    for index, affiliate in enumerate(affiliates or []):
+        check_name(affiliate, f"engagement.affiliates[{index}]")
+    for key in ("practice", "stage"):
+        _opt_text(engagement, key, "engagement")
+    _provenance_fields(engagement, "engagement")
+    return engagement
+
+
+def _validate_header(document, wrong_contract):
+    need(document.get("contract_version") == CONTRACT, f"{wrong_contract} (contract_version)")
+    for key in ENGINE_OWNED:
+        need(key not in document,
+             f"{key} is engine-owned and not valid in a raw input; supply role-intake or bench output (rule 9.8)")
+    _opt_list(document, "escalations", "")
+    provenance = field(document, "provenance", "obj", "", required="provenance" in document)
+    if provenance is not None:
+        if "generated_at" in provenance:
+            check_timestamp(provenance["generated_at"], "provenance.generated_at")
+        _opt_list(provenance, "engines", "provenance")
+        _opt_text(provenance, "demo_scenario", "provenance")
+        policies = field(provenance, "policies", "obj", "provenance", required="policies" in provenance)
+        for key, value in (policies or {}).items():
+            need(isinstance(value, str), "provenance.policies values must be strings")
+    return provenance or {}
+
+
+def _validate_role(role, where):
+    need(isinstance(role, dict), f"{where} must be an object")
+    _ident(field(role, "role_id", "str", where), f"{where}.role_id")
+    check_name(field(role, "title", "str", where), f"{where}.title")
+    check_date(field(role, "start_date", "str", where), f"{where}.start_date")
+    allocation = check_pct(field(role, "allocation_pct", "num", where), f"{where}.allocation_pct")
+    need(allocation > 0, f"{where}.allocation_pct must be greater than 0")
+    text_list(role, "required_skills", where)
+    for key in ("preferred_skills", "required_certifications", "required_languages"):
+        _opt_list(role, key, where)
+    for key in ("seniority", "location", "industry_context"):
+        _opt_text(role, key, where)
+    field(role, "remote_ok", "bool", where, required="remote_ok" in role)
+    band = field(role, "rate_band", "obj", where)
+    low = field(band, "min", "num", f"{where}.rate_band")
+    high = field(band, "max", "num", f"{where}.rate_band")
+    need(0 <= low <= high, f"{where}.rate_band must satisfy 0 <= min <= max")
+    _opt_text(band, "currency", f"{where}.rate_band")
+    _provenance_fields(role, where)
+
+
+def _validate_blocks(candidate, key, where):
+    blocks = field(candidate, key, "list", where)
+    for index, block in enumerate(blocks):
+        path = f"{where}.{key}[{index}]"
+        need(isinstance(block, dict), f"{path} must be an object")
+        check_pct(field(block, "allocation_pct", "num", path), f"{path}.allocation_pct")
+        # A missing or unparseable date keeps the conservative path (fit-scoring-rubric.md #4.1).
+        for date_key in ("start", "end"):
+            field(block, date_key, "str", path, required=False)
+        _opt_text(block, "citation", path)
+
+
+def _validate_candidate(candidate, where):
+    need(isinstance(candidate, dict), f"{where} must be an object")
+    _ident(field(candidate, "candidate_id", "str", where), f"{where}.candidate_id")
+    check_name(field(candidate, "name", "str", where), f"{where}.name")
+    text_list(candidate, "skills", where)
+    for key in ("certifications", "industry_experience", "languages"):
+        _opt_list(candidate, key, where)
+    for key in ("seniority", "location"):
+        _opt_text(candidate, key, where)
+    if candidate.get("rate") is not None:
+        need(is_num(candidate["rate"]), f"{where}.rate must be a number")
+        need(candidate["rate"] >= 0, f"{where}.rate must not be negative")
+    check_pct(field(candidate, "current_allocation_pct", "num", where), f"{where}.current_allocation_pct")
+    if "target_utilization_pct" in candidate:
+        check_pct(field(candidate, "target_utilization_pct", "num", where),
+                  f"{where}.target_utilization_pct")
+    for key in ("approved_leave", "soft_bookings"):
+        _validate_blocks(candidate, key, where)
+    _provenance_fields(candidate, where)
+
+
+def _labelled(label, check, *args):
+    try:
+        return check(*args)
+    except InputError as error:
+        raise InputError(f"{label}: {error}") from None
+
+
+def _validate_roles_document(roles_payload):
+    provenance = _validate_header(roles_payload, "wrong roles contract")
+    engagement = _validate_engagement(roles_payload)
+    roles = field(roles_payload, "roles", "list", "")
+    need(roles, "roles must not be empty")
+    for index, role in enumerate(roles):
+        _validate_role(role, f"roles[{index}]")
+    need(not duplicate_keys([role["role_id"] for role in roles]),
+         "roles repeat a role_id after canonical folding (rule 9.7)")
+    return engagement, provenance
+
+
+def _validate_bench_document(bench_payload):
+    provenance = _validate_header(bench_payload, "wrong bench contract")
+    engagement = _validate_engagement(bench_payload)
+    field(bench_payload, "roles", "list", "", required="roles" in bench_payload)
+    candidates = field(bench_payload, "bench_candidates", "list", "")
+    for index, candidate in enumerate(candidates):
+        _validate_candidate(candidate, f"bench_candidates[{index}]")
+    need(not duplicate_keys([candidate["candidate_id"] for candidate in candidates]),
+         "bench_candidates repeat a candidate_id after canonical folding (rule 9.7)")
+    return engagement, provenance
+
+
+def validate_inputs(roles_payload, bench_payload):
+    """Refuse malformed roles.json / bench.json before anything is screened or scored."""
+    need(isinstance(roles_payload, dict), "roles.json: top level must be a JSON object")
+    need(isinstance(bench_payload, dict), "bench.json: top level must be a JSON object")
+    roles_engagement, roles_provenance = _labelled("roles.json", _validate_roles_document, roles_payload)
+    bench_engagement, bench_provenance = _labelled("bench.json", _validate_bench_document, bench_payload)
+    need(
+        canonical(roles_engagement["client_name"]) == canonical(bench_engagement["client_name"])
+        and id_key(roles_engagement["engagement_id"]) == id_key(bench_engagement["engagement_id"]),
+        "bench.json: engagement does not match roles.json engagement (client_name, engagement_id)",
+    )
+    need("generated_at" in roles_provenance or "generated_at" in bench_provenance,
+         "provenance.generated_at is required in roles.json or bench.json")
+
+
+# ---------------------------------------------------------------------------------------------
+# Scoring helpers. Redacted marker values never count as evidence (D19).
+# ---------------------------------------------------------------------------------------------
+def _usable(values):
+    return [value for value in values or [] if not has_marker(value)]
+
 
 def duration_window(role):
     raw = role.get("duration_weeks")
-    if raw in (None, ""):
+    if raw is None or raw == "":
         return DEFAULT_DURATION_WEEKS, True, [
             f"duration_weeks missing - availability counted over a "
             f"{DEFAULT_DURATION_WEEKS}-week window; confirm duration"
         ]
-    try:
-        weeks = int(raw)
-        if weeks < 1:
-            raise ValueError
-        return weeks, False, []
-    except (TypeError, ValueError):
-        return DEFAULT_DURATION_WEEKS, True, [
-            f"duration_weeks {raw!r} is invalid - availability counted over a "
-            f"{DEFAULT_DURATION_WEEKS}-week window; confirm duration"
-        ]
+    if is_num(raw) and raw == int(raw) and raw >= 1:
+        return int(raw), False, []
+    return DEFAULT_DURATION_WEEKS, True, [
+        f"duration_weeks is not a whole number of weeks of at least 1 - availability counted over a "
+        f"{DEFAULT_DURATION_WEEKS}-week window; confirm duration"
+    ]
+
 
 def percent_value(value, default, label, warnings):
-    try:
+    if is_num(value):
         return float(value)
-    except (TypeError, ValueError):
-        warnings.append(f"{label} is missing or invalid; used conservative {default}%")
-        return float(default)
+    warnings.append(f"{label} is missing or invalid; used conservative {default}%")
+    return float(default)
+
 
 def overlap_pct(blocks, start, weeks):
     role_start = date.fromisoformat(start)
@@ -136,14 +334,16 @@ def overlap_pct(blocks, start, weeks):
             weighted_total += allocation * overlap_days / role_days
     return min(weighted_total, 100.0), warnings
 
+
 def coverage(required, actual):
     if not required:
         return 1.0
-    actual_set = {x.lower() for x in actual or []}
+    actual_set = {x.lower() for x in _usable(actual)}
     return len([x for x in required if x.lower() in actual_set]) / len(required)
 
+
 def matched_requirements(required, actual):
-    actual_set = {str(value).casefold() for value in actual or []}
+    actual_set = {str(value).casefold() for value in _usable(actual)}
     seen = set()
     matches = []
     for requirement in required or []:
@@ -153,15 +353,21 @@ def matched_requirements(required, actual):
             matches.append(requirement)
     return sorted(matches)
 
+
 def skill_score(role, cand):
     required = coverage(role.get("required_skills", []), cand.get("skills", []))
     preferred = coverage(role.get("preferred_skills", []), cand.get("skills", []))
     certs = coverage(role.get("required_certifications", []), cand.get("certifications", []))
     return required * REQUIRED_SKILL_WEIGHT + preferred * PREFERRED_SKILL_WEIGHT + certs * CERT_WEIGHT
 
+
+def _band_index(level):
+    return SENIORITY_BANDS.index("" if has_marker(level) else (level or "").lower())
+
+
 def seniority_score(role_level, cand_level):
     try:
-        diff = abs(SENIORITY_BANDS.index((role_level or "").lower()) - SENIORITY_BANDS.index((cand_level or "").lower()))
+        diff = abs(_band_index(role_level) - _band_index(cand_level))
     except ValueError:
         return 0.0
     if diff == 0:
@@ -171,6 +377,7 @@ def seniority_score(role_level, cand_level):
     if diff == 2:
         return 0.40     # fit-scoring-rubric.md #3.3
     return 0.0          # fit-scoring-rubric.md #3.4
+
 
 def availability_context(role, cand):
     weeks, duration_assumed, warnings = duration_window(role)
@@ -214,18 +421,23 @@ def availability_context(role, cand):
         "calculation_warnings": warnings,
     }
 
+
 def normalize_location(value):
+    if has_marker(value):
+        return ""
     city = str(value or "").split(",", 1)[0]
     return " ".join(re.sub(r"[^a-z0-9 ]", " ", city.casefold()).split())
+
 
 def location_language_score(role, cand):
     role_location = normalize_location(role.get("location"))
     candidate_location = normalize_location(cand.get("location"))
-    location = 1.0 if role.get("remote_ok") or (
+    location = 1.0 if role.get("remote_ok") is True or (
         role_location and role_location == candidate_location
     ) else 0.0
     language = coverage(role.get("required_languages", []), cand.get("languages", []))
     return location * 0.60 + language * 0.40  # fit-scoring-rubric.md #5.1,#5.2
+
 
 def rate_score(role, cand):
     band = role.get("rate_band", {})
@@ -242,6 +454,7 @@ def rate_score(role, cand):
         return 0.60     # fit-scoring-rubric.md #6.2
     return 0.20         # fit-scoring-rubric.md #6.3
 
+
 def rate_rule(role, cand):
     band = role.get("rate_band", {})
     if cand.get("rate") in (None, ""):
@@ -257,12 +470,10 @@ def rate_rule(role, cand):
         return "fit-scoring-rubric.md #6.2"
     return "fit-scoring-rubric.md #6.3"
 
+
 def seniority_rule(role_level, cand_level):
     try:
-        diff = abs(
-            SENIORITY_BANDS.index((role_level or "").lower())
-            - SENIORITY_BANDS.index((cand_level or "").lower())
-        )
+        diff = abs(_band_index(role_level) - _band_index(cand_level))
     except ValueError:
         return "fit-scoring-rubric.md #3.4"
     return {
@@ -271,57 +482,41 @@ def seniority_rule(role_level, cand_level):
         2: "fit-scoring-rubric.md #3.3",
     }.get(diff, "fit-scoring-rubric.md #3.4")
 
+
 def continuity_score(role, cand):
-    practice = role.get("industry_context", "").lower()
-    industries = {x.lower() for x in cand.get("industry_experience", [])}
+    practice = role.get("industry_context", "")
+    practice = "" if has_marker(practice) else practice.lower()
+    industries = {x.lower() for x in _usable(cand.get("industry_experience", []))}
     return 1.0 if practice and practice in industries else 0.0
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--roles", required=True)
-    ap.add_argument("--bench", required=True)
-    ap.add_argument("--out", required=True)
-    args = ap.parse_args()
 
-    roles_payload = load(args.roles)
-    bench_payload = load(args.bench)
-    if roles_payload.get("contract_version") != CONTRACT:
-        sys.exit("wrong roles contract")
-    if bench_payload.get("contract_version") != CONTRACT:
-        sys.exit("wrong bench contract")
-
-    safety_escalations = []
+# ---------------------------------------------------------------------------------------------
+# Pure engine.
+# ---------------------------------------------------------------------------------------------
+def score(roles_payload, bench_payload):
+    """Validate, screen and score; returns the scored document. No file I/O."""
+    validate_inputs(roles_payload, bench_payload)
+    safety_escalations = ScreeningLog()
     roles_payload = sanitize_free_text(roles_payload, "roles_input", safety_escalations)
     bench_payload = sanitize_free_text(bench_payload, "bench_input", safety_escalations)
-    candidates = bench_payload.get("bench_candidates", [])
-    candidate_ids = [
-        normalize_candidate_id(candidate.get("candidate_id"))
-        for candidate in candidates
+    candidates = bench_payload["bench_candidates"]
+    screening_holds = [
+        safety_escalations.holds_under(f"bench_input.bench_candidates[{index}]")
+        for index in range(len(candidates))
     ]
-    duplicate_ids = sorted({
-        candidate_id for candidate_id in candidate_ids
-        if candidate_id and candidate_ids.count(candidate_id) > 1
-    })
-    for candidate_id in duplicate_ids:
-        safety_escalations.append(
-            f"{candidate_id}: duplicate candidate ID in bench - resolve before governance"
-        )
     for candidate in candidates:
-        if candidate.get("rate") in (None, ""):
+        if candidate.get("rate") is None:
             safety_escalations.append(
-                f"{candidate.get('candidate_id', 'unknown candidate')}: rate missing - "
+                f"{candidate['candidate_id']}: rate missing - "
                 "rate-band component scored 0; confirm rate before scoring is relied on"
             )
     scored_roles = []
     for role in roles_payload["roles"]:
         candidate_scores = []
-        for cand in candidates:
+        for cand, holds in zip(candidates, screening_holds):
             availability = availability_context(role, cand)
             for warning in availability["calculation_warnings"]:
-                safety_escalations.append(
-                    f"{role.get('role_id', 'unknown role')}/"
-                    f"{cand.get('candidate_id', 'unknown candidate')}: {warning}"
-                )
+                safety_escalations.append(f"{role['role_id']}/{cand['candidate_id']}: {warning}")
             components = {
                 "skills": round(skill_score(role, cand), 3),
                 "seniority": round(seniority_score(role.get("seniority"), cand.get("seniority")), 3),
@@ -359,17 +554,17 @@ def main():
                     role.get("preferred_skills", []), cand.get("skills", [])
                 ),
                 "source": ENGINE,
-                "confidence": min(float(role.get("confidence", 1)), float(cand.get("confidence", 1)), 0.99),
-                "citation": "fit-scoring-rubric.md #7.3; "
-                + safe_citation(cand.get("citation", "bench record")),
+                "confidence": min(float(role["confidence"]), float(cand["confidence"]), 0.99),
+                "citation": "fit-scoring-rubric.md #7.3; " + safe_citation(cand["citation"]),
+                "screening_holds": list(holds),
             })
         scored_roles.append({
             "role_id": role["role_id"],
             "role_title": role["title"],
             "candidate_scores": candidate_scores,
             "source": ENGINE,
-            "confidence": min(float(role.get("confidence", 1)), 0.99),
-            "citation": safe_citation(role.get("citation", "role record")),
+            "confidence": min(float(role["confidence"]), 0.99),
+            "citation": safe_citation(role["citation"]),
         })
 
     out = dict(roles_payload)
@@ -390,12 +585,30 @@ def main():
     provenance["engines"] = [
         engine for engine in engines if not engine.startswith("fit_score/")
     ] + [ENGINE_VERSION]
-    provenance.setdefault("generated_at", "2026-09-23T00:00:00Z")
+    provenance["policies"] = dict(POLICIES)
     out["provenance"] = provenance
-    with open(args.out, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(out, f, indent=2)
-    print(f"fit_score: {len(scored_roles)} role(s), {len(candidates)} candidate(s) -> {args.out}")
+    return out
+
+
+def _main(argv):
+    parser = ArgumentParser(prog="fit_score.py", description="Deterministic candidate fit scoring.")
+    parser.add_argument("--roles", required=True)
+    parser.add_argument("--bench", required=True)
+    parser.add_argument("--out", required=True)
+    args = parser.parse_args(argv)
+    roles_payload = load_json(args.roles, "roles.json")
+    bench_payload = load_json(args.bench, "bench.json")
+    out = score(roles_payload, bench_payload)
+    write_json(args.out, out)
+    print(f"fit_score: {len(out['scored_roles'])} role(s), "
+          f"{len(out['bench_candidates'])} candidate(s) -> scored output written")
     return 0
+
+
+def main(argv=None):
+    """CLI entry point: one clean ``error:`` line and exit 2 on any input error, no output file."""
+    return run(lambda: _main(argv))
+
 
 if __name__ == "__main__":
     sys.exit(main())

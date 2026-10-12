@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""constraint_check - deterministic staffing eligibility Govern engine."""
-import argparse
-import json
+"""constraint_check - deterministic staffing eligibility Govern engine.
+
+``govern(ranked_payload, constraints_payload)`` is the pure engine (no file I/O). The CLI never
+trusts a supplied ranked.json: it re-derives the ranked document from roles.json and bench.json with
+the vendored fit_score and slate_rank engines and refuses any difference
+(independence-eligibility-rules.md #9.8) before governing the re-derived document.
+"""
 import re
 import sys
 from datetime import date
@@ -11,7 +15,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from safety_text import is_suspect, safe_citation, safe_text, sanitize_free_text
+import fit_score
+import slate_rank
+from input_guard import ArgumentParser, InputError, load_json, need, run, same_document, write_json
+from safety_text import ScreeningLog, is_suspect, safe_citation, safe_text, sanitize_free_text
 
 ENGINE = "engine:constraint_check"
 ENGINE_VERSION = "constraint_check/1.1.5"
@@ -34,10 +41,6 @@ KNOWN_TYPES = {
 }
 RESOLVED_FI_STATUSES = {"divested", "resolved", "cleared"}
 RESOLVED_STATUSES = {"closed", "resolved", "cleared", "inactive"}
-
-def load(path):
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
 
 def merge_unique(*groups):
     merged = []
@@ -615,23 +618,20 @@ def review_reason(reasons, citations):
                 return reason, citation.split(";", 1)[0]
     return reasons[0], citations[0].split(";", 1)[0]
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--ranked", required=True)
-    ap.add_argument("--constraints", required=True)
-    ap.add_argument("--out", required=True)
-    args = ap.parse_args()
+def govern(ranked_payload, constraints_payload):
+    """Apply the independence and eligibility rules; returns the governed document. No file I/O.
 
-    payload = load(args.ranked)
-    constraints = load(args.constraints)
-    if payload.get("contract_version") != CONTRACT:
-        sys.exit("wrong ranked contract")
-    if constraints.get("contract_version") != CONTRACT:
-        sys.exit("wrong constraints contract")
+    The inputs are never mutated. ``ranked_payload`` is expected to be a document this plugin's
+    engines produced (the CLI passes the re-derived one), so whole engine markers in it are kept.
+    """
+    need(isinstance(ranked_payload, dict) and ranked_payload.get("contract_version") == CONTRACT,
+         "ranked.json: wrong ranked contract (contract_version)")
+    need(isinstance(constraints_payload, dict) and constraints_payload.get("contract_version") == CONTRACT,
+         "constraints.json: wrong constraints contract (contract_version)")
 
-    safety_escalations = []
-    payload = sanitize_free_text(payload, "ranked_input", safety_escalations)
-    constraints = sanitize_free_text(constraints, "constraints_input", safety_escalations)
+    safety_escalations = ScreeningLog()
+    payload = sanitize_free_text(ranked_payload, "ranked_input", safety_escalations, engine_markers_ok=True)
+    constraints = sanitize_free_text(constraints_payload, "constraints_input", safety_escalations)
     escalations = merge_unique(
         payload.get("escalations", []),
         constraints.get("escalations", []),
@@ -734,11 +734,52 @@ def main():
         if not engine.startswith("constraint_check/")
     ]
     provenance["engines"] = merge_unique(engines, [ENGINE_VERSION])
-    with open(args.out, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(payload, f, indent=2)
+    return payload
+
+
+def rederive_ranked(roles_payload, bench_payload):
+    """The ranked document the plugin's own engines derive from roles.json and bench.json."""
+    return slate_rank.rank(fit_score.score(roles_payload, bench_payload))
+
+
+def _main(argv):
+    parser = ArgumentParser(prog="constraint_check.py", description="Deterministic eligibility governance.")
+    parser.add_argument("--roles", required=True)
+    parser.add_argument("--bench", required=True)
+    parser.add_argument("--ranked", required=True)
+    parser.add_argument("--constraints", required=True)
+    parser.add_argument("--out", required=True)
+    args = parser.parse_args(argv)
+
+    roles_payload = load_json(args.roles, "roles.json")
+    bench_payload = load_json(args.bench, "bench.json")
+    ranked_payload = load_json(args.ranked, "ranked.json")
+    constraints_payload = load_json(args.constraints, "constraints.json")
+    need(ranked_payload.get("contract_version") == CONTRACT,
+         "ranked.json: wrong ranked contract (contract_version)")
+    need(constraints_payload.get("contract_version") == CONTRACT,
+         "constraints.json: wrong constraints contract (contract_version)")
+    expected = rederive_ranked(roles_payload, bench_payload)
+    need(same_document(ranked_payload, expected),
+         "ranked.json does not re-derive from roles.json and bench.json (rule 9.8); re-run fit-score")
+    try:
+        payload = govern(expected, constraints_payload)
+    except SystemExit as error:
+        if isinstance(error.code, str):
+            raise InputError(error.code) from None
+        raise
+    write_json(args.out, payload)
+    governed_roles = payload["governed_roles"]
     refused = sum(1 for r in governed_roles if r["top_provisional_candidate_refused"])
-    print(f"constraint_check: {len(governed_roles)} role(s), {refused} top-candidate refusal(s), {len(gaps)} gap(s) -> {args.out}")
+    print(f"constraint_check: {len(governed_roles)} role(s), {refused} top-candidate refusal(s), "
+          f"{len(payload['gaps'])} gap(s) -> governed output written")
     return 0
+
+
+def main(argv=None):
+    """CLI entry point: one clean ``error:`` line and exit 2 on any input error, no output file."""
+    return run(lambda: _main(argv))
+
 
 if __name__ == "__main__":
     sys.exit(main())

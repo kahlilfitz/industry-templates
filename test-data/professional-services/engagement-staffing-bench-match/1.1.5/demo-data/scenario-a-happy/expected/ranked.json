@@ -85,7 +85,11 @@
     "engines": [
       "fit_score/1.1.5",
       "slate_rank/1.1.5"
-    ]
+    ],
+    "policies": {
+      "fit-scoring-rubric.md": "1.1.5",
+      "independence-eligibility-rules.md": "1.1.5"
+    }
   },
   "bench_candidates": [
     {
@@ -224,6 +228,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan",
+          "screening_holds": [],
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -269,6 +274,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks",
+          "screening_holds": [],
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -314,6 +320,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -368,6 +375,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -417,6 +425,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks",
+          "screening_holds": [],
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -461,6 +470,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh",
+          "screening_holds": [],
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -521,6 +531,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan",
+          "screening_holds": [],
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -566,6 +577,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -611,6 +623,7 @@
           "source": "engine:fit_score",
           "confidence": 0.96,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks",
+          "screening_holds": [],
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -669,6 +682,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks",
+          "screening_holds": [],
           "provisional_rank": 1,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -714,6 +728,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan",
+          "screening_holds": [],
           "provisional_rank": 2,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"
@@ -758,6 +773,7 @@
           "source": "engine:fit_score",
           "confidence": 0.95,
           "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh",
+          "screening_holds": [],
           "provisional_rank": 3,
           "rank_source": "engine:slate_rank",
           "rank_citation": "fit-scoring-rubric.md #7.1,#7.3"

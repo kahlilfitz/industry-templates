@@ -84,7 +84,11 @@
     "demo_scenario": "scenario-a-happy",
     "engines": [
       "fit_score/1.1.5"
-    ]
+    ],
+    "policies": {
+      "fit-scoring-rubric.md": "1.1.5",
+      "independence-eligibility-rules.md": "1.1.5"
+    }
   },
   "bench_candidates": [
     {
@@ -222,7 +226,8 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan",
+          "screening_holds": []
         },
         {
           "candidate_id": "C-102",
@@ -264,7 +269,8 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks",
+          "screening_holds": []
         },
         {
           "candidate_id": "C-103",
@@ -306,7 +312,8 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh",
+          "screening_holds": []
         }
       ],
       "source": "engine:fit_score",
@@ -357,7 +364,8 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-101; profile Ava Morgan",
+          "screening_holds": []
         },
         {
           "candidate_id": "C-102",
@@ -403,7 +411,8 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-102; profile Leo Brooks",
+          "screening_holds": []
         },
         {
           "candidate_id": "C-103",
@@ -444,7 +453,8 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-103; profile Mara Singh",
+          "screening_holds": []
         }
       ],
       "source": "engine:fit_score",

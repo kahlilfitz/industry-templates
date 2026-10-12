@@ -90,7 +90,11 @@
     "demo_scenario": "scenario-b-drama",
     "engines": [
       "fit_score/1.1.5"
-    ]
+    ],
+    "policies": {
+      "fit-scoring-rubric.md": "1.1.5",
+      "independence-eligibility-rules.md": "1.1.5"
+    }
   },
   "bench_candidates": [
     {
@@ -274,7 +278,10 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]"
+          "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
+          "screening_holds": [
+            "bench_candidates[0].citation: instruction-like text withheld (independence-eligibility-rules.md #9.6)"
+          ]
         },
         {
           "candidate_id": "C-202",
@@ -319,7 +326,8 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
+          "screening_holds": []
         },
         {
           "candidate_id": "C-203",
@@ -360,7 +368,8 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.96,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "screening_holds": []
         },
         {
           "candidate_id": "C-204",
@@ -402,7 +411,8 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.95,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
+          "screening_holds": []
         }
       ],
       "source": "engine:fit_score",
@@ -452,7 +462,10 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]"
+          "citation": "fit-scoring-rubric.md #7.3; [FLAGGED: instruction-like source citation redacted; sha256=97cba5deaa1a]",
+          "screening_holds": [
+            "bench_candidates[0].citation: instruction-like text withheld (independence-eligibility-rules.md #9.6)"
+          ]
         },
         {
           "candidate_id": "C-202",
@@ -491,7 +504,8 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-202; profile Owen Ramos",
+          "screening_holds": []
         },
         {
           "candidate_id": "C-203",
@@ -537,7 +551,8 @@
           ],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-203; profile Nico Stone; leave LV-7782; soft-book SB-914",
+          "screening_holds": []
         },
         {
           "candidate_id": "C-204",
@@ -579,7 +594,8 @@
           "matched_preferred_skills": [],
           "source": "engine:fit_score",
           "confidence": 0.94,
-          "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai"
+          "citation": "fit-scoring-rubric.md #7.3; bench export row C-204; profile Priya Desai",
+          "screening_holds": []
         }
       ],
       "source": "engine:fit_score",

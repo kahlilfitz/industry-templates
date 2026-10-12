@@ -4,6 +4,7 @@ Clean one-line input errors that never echo a value or a supplied path, strict J
 (duplicate keys, non-finite numbers and deep nesting refused), typed field access, one canonical
 form for every name and ID comparison, reserved display labels, and atomic LF output writes.
 """
+import argparse
 import json
 import math
 import os
@@ -43,6 +44,16 @@ def run(main):
         print(f"error: unexpected {type(error).__name__} while processing input; fail closed",
               file=sys.stderr, flush=True)
         return 2
+
+
+class ArgumentParser(argparse.ArgumentParser):
+    """argparse that reports a bad command line as one InputError and never echoes an argument."""
+
+    def error(self, message):
+        usage = self.format_usage().strip()
+        usage = usage[len("usage: "):] if usage.startswith("usage: ") else usage
+        usage = " ".join(usage.split())
+        raise InputError(f"command line: missing or unrecognised arguments; usage: {usage}")
 
 
 _JSON_TOKEN = re.compile(r'"(?:[^"\\]|\\.)*"?|[\[\]{}]')
@@ -265,3 +276,18 @@ def duplicate_keys(values):
             repeated.append(key)
         seen.add(key)
     return repeated
+
+
+def same_document(left, right):
+    """Exact deep equality for re-derivation (rule 9.8): same JSON types, same members, same values.
+
+    Unlike ``==`` it never treats ``1``, ``1.0`` and ``true`` as equal and never folds case or
+    whitespace. Member order is not compared (it carries no data).
+    """
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(same_document(left[key], right[key]) for key in left)
+    if isinstance(left, list):
+        return len(left) == len(right) and all(same_document(a, b) for a, b in zip(left, right))
+    return left == right

@@ -1,6 +1,6 @@
 ---
 name: role-intake
-description: "Reads a signed engagement, SOW role extract, mobilisation note or staffing request into the ps.engagement-staffing-bench-match.v1 staffing contract (engagement, client affiliates and roles, each field cited) as the first step of every staffing slate. Use when the user says \"new engagement signed\", \"staff this SOW\", \"mobilise this project\", \"start a staffing slate\" or \"extract the roles from this SOW\". Do NOT use for contract-terms or commercial summaries (contract review is outside this plugin), for scoring, ranking or clearing candidates (use fit-score or constraint-check), or for generic ranking or tool-script requests outside engagement staffing (use tool-scripts)."
+description: "Reads a signed engagement, SOW role extract, mobilisation note or staffing request into the ps.engagement-staffing-bench-match.v1 staffing contract (engagement, client affiliates and roles, each field cited) as the first step of every staffing slate. Use when the user says \"new engagement signed\", \"staff this SOW\", \"mobilise this project\", \"start a staffing slate\" or \"extract the roles from this SOW\". Do NOT use for contract-terms or commercial summaries (contract review is outside this plugin), loading the bench or conflicts register (use bench-query), scoring or ranking candidates (use fit-score), clearing conflicts (use constraint-check), drafting the slate (use slate-draft) or tool-script requests outside engagement staffing (use tool-scripts)."
 license: Proprietary
 compatibility: "Reads user-supplied files (staffing request email, SOW role extract, rate-card excerpt) with the file-read tool; Python 3 optional to build the JSON payload. No bundled engine and no connectors required. Read-only: never writes to a resource or staffing system."
 metadata:
@@ -64,5 +64,7 @@ Every role field cites the SOW clause, staffing email line or rate-card excerpt 
 - Do not copy personal data (salary, home address, government ID) into the contract.
 - Never capture or use protected characteristics such as race, ethnicity, religion, sex, gender identity, sexual orientation, age, disability, pregnancy or marital/family status as staffing criteria.
 - Keep conflict, financial-interest and leave details need-to-know; role-intake records requirements, not sensitive candidate facts.
+- Never send, share or forward the extract; role-intake has no recipients.
+- If a recipient is unknown or ambiguous (for example "the partner" with no name or address), ask for the name or address; never guess, never look one up in a directory and never add an external recipient.
 ## Escalation / uncertainty
-If the start date, allocation, required skill, client identity or rate band is missing, flag it before scoring. Low-confidence extraction below 0.75 is held for human review under `independence-eligibility-rules.md #8.1`.
+If the start date, allocation, required skill, client identity or rate band is missing, flag it before scoring. Low-confidence extraction below 0.75 is held for human review under `independence-eligibility-rules.md #8.1`. If a source file is unreadable or malformed, stop and ask for a readable copy; never reconstruct its content or hand-build `roles.json` from memory.
