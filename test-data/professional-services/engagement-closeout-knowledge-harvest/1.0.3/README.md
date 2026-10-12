@@ -15,7 +15,7 @@ plugin.
 | `tests/test_engines.py` | Engine regression suite (Python 3 standard library `unittest`) |
 | `tests/check_shared_copies.py` | Stand-alone check that the contract, references, `closeout_core.py` and `steering_guard.py` copies are byte-identical across skills, with `steering_guard.py` pinned to the `shared/steering-guard` release hash |
 | `tests/steering-corpus.json` | Byte-identical copy of `shared/steering-guard/corpus.json` (attack, benign and field-pair lines) |
-| `tests/closeout-steering-sets.json` | Closeout sets: 25 attack, 14 paraphrase, 26 benign closeout and lessons lines, 7 attack pairs, 5 benign pairs and 19 recorded detector gaps |
+| `tests/closeout-steering-sets.json` | Closeout sets: 25 attack, 14 paraphrase, 26 benign closeout and lessons lines, 7 attack pairs, 5 benign pairs and 19 recorded detector gaps (with the gap lines the closeout hook vocabulary closes) |
 | `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker (one per 1.0.3 fix) |
 
 ## Running the tests
@@ -60,15 +60,16 @@ finishes (a failing subtest fails its test), prints failure details after the re
 | `integrity` | 9 | Every stage re-derives the previous stage's whole document and refuses edits |
 | `screening` | 13 | Embedded-instruction screen: families, locations, joins, oversize, rendered holds |
 | `steering-corpus` | 5 | Vendored shared detector and corpus scored at the real call site |
-| `steering-sets` | 6 | Closeout attack, paraphrase and benign sets through the real chain |
-| `drafting` | 6 | Knowledge-record skeleton and `record_check.py` refusal codes |
+| `steering-sets` | 9 | Closeout attack, paraphrase and benign sets, and every detector-gap line in every rendered field, ID and draft slot |
+| `render-policy` | 8 | Titles, citations and IDs render only in an allow-shape (#8.6); withheld flags and skeleton markers |
+| `drafting` | 7 | Knowledge-record skeleton and `record_check.py` refusal codes, including short-phrase copies |
 | `derivation` | 1 | Demo inputs re-derive from each scenario's raw pack (G4b) |
 | `goldens` | 1 | Both scenarios reproduce every `expected/` file byte for byte, LF only |
 | `packaging` | 3 | Byte-identical skill copies, the MOS3 package boundary and LF-only packaged text (G3) |
 | `release` | 8 | Guardrails, citations, routing, versions, stand-alone skills and the runner |
 | `harness` | 2 | A crashing test is reported as FAIL |
 
-The full suite (97 tests) takes about 75 seconds.
+The full suite (109 tests) takes about two minutes.
 
 ## What the scenarios cover
 
@@ -85,7 +86,8 @@ The full suite (97 tests) takes about 75 seconds.
   group hold.
 
 The suite also builds hostile and malformed variants of these scenarios in memory: injected,
-obfuscated, split and rendered-only instructions; malformed, duplicated and over-deep input; forged
+obfuscated, split and rendered-only instructions; prose and detector-gap lines in titles, citations
+and IDs; malformed, duplicated and over-deep input; forged
 or edited intermediates; unknown markers and empty terms; and filled drafts that leak held or client
 material. It also checks byte-identical copies, the package boundary, the guardrail block, citations,
 routing and version declarations.

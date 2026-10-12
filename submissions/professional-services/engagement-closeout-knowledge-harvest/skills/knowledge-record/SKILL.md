@@ -39,7 +39,9 @@ rule citation); Sanitisation summary; Credential handoff; Required approvals. Th
 from the governed payload. A slot is refused if it contains an embedded instruction, a withheld
 marker, the client name or descriptor, a sector-and-region pair, a date, the headcount, a
 third-party product, a named person, a held ID or title, copied guidance or copied source wording
-(`references/confidentiality-sanitisation-rules.md` #8.5). The stable handoff object remains in
+(`references/confidentiality-sanitisation-rules.md` #8.5). A `title_withheld` or `citation_withheld`
+marker in the skeleton is a fixed line: keep it as written and never supply the missing text (#8.6).
+The stable handoff object remains in
 `knowledge_record.downstream_handoff` for `credential-case-study-assembly`.
 ## Grounding requirements
 Every asset and lesson paragraph cites governed payload ids and source citations. Every exclusion cites the sanitisation rule that held it.

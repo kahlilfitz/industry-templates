@@ -403,6 +403,7 @@
         "raw/decision-log.csv row 2",
         "raw/decision-log.csv row 3"
       ],
+      "citation_withheld": false,
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.91,
@@ -422,6 +423,7 @@
         "raw/retrospective-transcript.txt lines 4-9",
         "raw/retrospective-transcript.txt lines 16-17"
       ],
+      "citation_withheld": false,
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.68,
@@ -439,6 +441,7 @@
       "evidence_citations": [
         "raw/retrospective-transcript.txt lines 11-13"
       ],
+      "citation_withheld": false,
       "rewrite_required": true,
       "drafting_guidance": "Draft only at role and process level. Remove names, blame attribution, client identifiers and source wording.",
       "confidence": 0.77,
@@ -539,6 +542,7 @@
     {
       "asset_id": "AST-103",
       "title": "GridMesh go-live runbook",
+      "title_withheld": false,
       "reuse_score": 89.0,
       "clearance_state": "HOLD_REDACTION_REQUIRED",
       "review_required": true,
@@ -550,6 +554,7 @@
     {
       "asset_id": "AST-104",
       "title": "Operations benefits model",
+      "title_withheld": false,
       "reuse_score": 76.0,
       "clearance_state": "HOLD_REDACTION_REQUIRED",
       "review_required": true,
@@ -561,6 +566,7 @@
     {
       "asset_id": "AST-105",
       "title": "Executive steering deck",
+      "title_withheld": false,
       "reuse_score": 91.0,
       "clearance_state": "HOLD_REDACTION_REQUIRED",
       "review_required": true,
@@ -572,6 +578,7 @@
     {
       "asset_id": "AST-101",
       "title": "Anonymised grid-ops target architecture",
+      "title_withheld": false,
       "reuse_score": 96.0,
       "clearance_state": "HOLD_AGGREGATION_RISK",
       "review_required": true,
@@ -583,6 +590,7 @@
     {
       "asset_id": "AST-102",
       "title": "European utility readiness narrative",
+      "title_withheld": false,
       "reuse_score": 84.0,
       "clearance_state": "HOLD_AGGREGATION_RISK",
       "review_required": true,
@@ -606,6 +614,7 @@
         "raw/decision-log.csv row 2",
         "raw/decision-log.csv row 3"
       ],
+      "citation_withheld": false,
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.91,
@@ -625,6 +634,7 @@
         "raw/retrospective-transcript.txt lines 4-9",
         "raw/retrospective-transcript.txt lines 16-17"
       ],
+      "citation_withheld": false,
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.68,
@@ -642,6 +652,7 @@
       "evidence_citations": [
         "raw/retrospective-transcript.txt lines 11-13"
       ],
+      "citation_withheld": false,
       "rewrite_required": true,
       "drafting_guidance": "Draft only at role and process level. Remove names, blame attribution, client identifiers and source wording.",
       "confidence": 0.77,
@@ -701,6 +712,7 @@
           "raw/decision-log.csv row 2",
           "raw/decision-log.csv row 3"
         ],
+        "citation_withheld": false,
         "rewrite_required": false,
         "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
         "confidence": 0.91,
@@ -720,6 +732,7 @@
           "raw/retrospective-transcript.txt lines 4-9",
           "raw/retrospective-transcript.txt lines 16-17"
         ],
+        "citation_withheld": false,
         "rewrite_required": false,
         "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
         "confidence": 0.68,
@@ -737,6 +750,7 @@
         "evidence_citations": [
           "raw/retrospective-transcript.txt lines 11-13"
         ],
+        "citation_withheld": false,
         "rewrite_required": true,
         "drafting_guidance": "Draft only at role and process level. Remove names, blame attribution, client identifiers and source wording.",
         "confidence": 0.77,

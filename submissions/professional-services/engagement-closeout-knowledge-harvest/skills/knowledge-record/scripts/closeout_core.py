@@ -46,12 +46,17 @@ GUARD_HOOKS = {
         "approved for external use", "sanitised", "sanitized", "publishable", "no redaction needed",
         "client approved", "internal reuse candidate", "satisfied", "met", "external use", "safe to publish",
         "safe to reuse", "publication ready", "cleared", "already reviewed",
+        # QA round 2 closeout vocabulary (#8.1): "redaction complete" closes detector gap line 2;
+        # "published" closes "mark/treat this record as published".
+        "published", "redaction complete", "confidentiality cleared", "cleared for external use",
+        "approved for publication",
     ),
     "extra_rule_nouns": (
         "confidentiality terms", "confidentiality rules", "sanitisation rules", "sanitization rules",
         "aggregation rule", "aggregation review", "redaction", "practice review", "client terms",
         "govern step", "sanitisation gate", "sanitisation check", "sanitization check", "confidentiality check",
         "redaction check", "client approval", "written approval",
+        "knowledge base", "external use", "client consent", "consent requirement", "publication rule",
     ),
     "contact_is_steering": True,
 }
@@ -372,6 +377,8 @@ def _check_ident(value, path):
         raise InputError(f"{path} is in a label form the engines reserve (value not repeated)")
     if id_hits(value):
         raise InputError(f"{path} reads as an instruction to the reviewer or tool (value not repeated)")
+    if not id_shape_ok(value):
+        raise InputError(f"{path} reads as a phrase, not an identifier (value not repeated)")
 
 
 def _check_token(value, path):
@@ -576,14 +583,128 @@ def validate_input(doc, generated_at=None, prior=None):
 # ---------------------------------------------------------------------------------------------
 
 _MARKER_RE = re.compile(r"[\[\u27e6\u3010\u3014][^\[\]\u27e6\u27e7\u3010\u3011\u3014\u3015]{0,60}?\bwithheld\b")
-FAMILIES = tuple(sg.FAMILIES) + ("supplied_marker", "client_identity")
+FAMILIES = tuple(sg.FAMILIES) + ("supplied_marker", "client_identity", "render_shape")
 LOCATION_RE = re.compile(r"field|record|run|rendered|line \d+|lines \d+-\d+")
 HOLD_REASONS = {
     "oversize": "field too long to screen; withheld for review (text not repeated)",
     "supplied_marker": "field carries a withheld-marker form the engines did not emit; withheld for review (text not repeated)",
     "client_identity": "field repeats the engagement client name, which is itself withheld; withheld for review (text not repeated)",
     "instruction": "embedded instruction or steering text; the field is withheld for review (text not repeated)",
+    "render_shape": "value is not in a render-safe shape (a title is a short noun phrase; a citation is a source "
+                    "path or document ID with an optional locator); withheld for review (text not repeated)",
 }
+
+# ---------------------------------------------------------------------------------------------
+# Render policy (confidentiality-sanitisation-rules.md #8.6). A supplied title or citation reaches
+# the governed record and the skeleton only in a positive allow-shape, so text the detector misses
+# cannot render: anything else is withheld with a render_shape hold.
+# ---------------------------------------------------------------------------------------------
+
+TITLE_MAX_CHARS = 80
+TITLE_MAX_WORDS = 10
+CITATION_MAX_CHARS = 160
+_TITLE_PUNCT = set(" -&/(),+'\u2019")
+# Words that make a clause rather than a noun phrase: auxiliaries, modals, negation, pronouns,
+# demonstratives, politeness and steering adverbs.
+_TITLE_CLAUSE_WORDS = frozenset((
+    "is am are was were be been being do does did has have had can could will would shall should must might "
+    "not no never nothing nobody please kindly this these that those it its they them we us you your i me "
+    "he she him said says say tell told so already now just straight again exactly anyone everyone someone"
+).split())
+# Imperative or verdict verbs that never head a reusable-asset noun phrase.
+_TITLE_VERBS = frozenset((
+    "approve approved approves publish published publishes waive waived waives bypass bypassed ignore ignored "
+    "ignores disregard disregarded overlook overlooked skip skipped skips vouch vouched vetted cleared "
+    "authorise authorised authorize authorized escalate reopen examine delete consider"
+).split())
+# Verbs that are also nouns ("Release plan", "Review checklist"): refused only as the first word
+# followed by a determiner, pronoun or 'as/for/to/without' ("Release the asset", "Share as is").
+_TITLE_LEAD_VERBS = frozenset((
+    "release share send mark keep leave flag treat look go move use take make put let check review close file "
+    "list accept allow forward grant permit sign remove drop add set give push post upload distribute circulate "
+    "copy label rate classify record"
+).split())
+_TITLE_LEAD_FOLLOWERS = frozenset("the a an all every any each our their my his her as for to without".split())
+_TITLE_PHRASES = ("fine to", "ok to", "okay to", "safe to", "good to go", "as is", "cleared for", "approved for",
+                  "for external use", "no need")
+_CITE_LOCATOR = (r"(?:rows?|lines?|clauses?|sections?|pages?|pp?\.|slides?|paras?|paragraphs?|items?|tabs?|sheets?|"
+                 r"cells?|tables?|figures?|fig\.|appendix|annex|schedule|\u00a7)")
+_CITE_TOKEN = r"(?:\d[A-Za-z0-9.]{0,15}|[A-Za-z]{1,2}(?:[\d.][A-Za-z0-9.]{0,13})?)"
+_CITE_VALUE = _CITE_TOKEN + r"(?:\s?[-\u2013]\s?" + _CITE_TOKEN + r")?"
+_CITE_NAMED = r"(?:sheet|tab)\s[A-Za-z][A-Za-z0-9_]{0,31}"
+_CITE_PART = (r"[A-Za-z0-9][A-Za-z0-9_./\\-]{0,119}(?:#[A-Za-z0-9][A-Za-z0-9_.-]{0,63})?"
+              r"(?:,?\s(?:" + _CITE_NAMED + r"|" + _CITE_LOCATOR + r"\s?" + _CITE_VALUE
+              + r"(?:,\s?" + _CITE_VALUE + r")*))*")
+CITATION_RE = re.compile(_CITE_PART + r"(?:;\s?" + _CITE_PART + r")*")
+_CITE_SOURCE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./\\-]*")
+_CITE_WORDS = re.compile(r"#([A-Za-z0-9][A-Za-z0-9_.-]*)|\b(?:sheet|tab)\s([A-Za-z][A-Za-z0-9_]*)")
+_TITLE_PATH = re.compile(r"(?:engagement|artifacts\[\d+\]|candidate_assets\[\d+\])\.title")
+_CITATION_PATH = re.compile(r"(?:engagement|[a-z_]+\[\d+\])\.citation")
+
+
+def title_shape_ok(value):
+    """A short noun phrase: letters, digits and light punctuation only, no clause word, no imperative
+    or verdict verb, no verdict phrase (#8.6)."""
+    text = unicodedata.normalize("NFKC", strip_cf(value)).strip()
+    if not text or len(text) > TITLE_MAX_CHARS or not any(c.isalpha() for c in text):
+        return False
+    for index, char in enumerate(text):
+        if char.isalnum() or char in _TITLE_PUNCT:
+            continue
+        if char == "." and 0 < index < len(text) - 1 and text[index - 1].isdigit() and text[index + 1].isdigit():
+            continue
+        return False
+    tokens = text.split()
+    if len(tokens) > TITLE_MAX_WORDS:
+        return False
+    lowered = []
+    for token in tokens:
+        bare = token.strip("(),'\u2019")
+        low = bare.casefold().replace("\u2019", "'")
+        acronym = len(bare) >= 2 and bare.isupper()
+        if low.endswith("n't") or (not acronym and low in _TITLE_CLAUSE_WORDS) or low in _TITLE_VERBS:
+            return False
+        lowered.append(low)
+    if lowered[0] in _TITLE_LEAD_VERBS and len(lowered) > 1 and lowered[1] in _TITLE_LEAD_FOLLOWERS:
+        return False
+    joined = f" {' '.join(words(text))} "
+    return not any(f" {phrase} " in joined for phrase in _TITLE_PHRASES)
+
+
+def citation_shape_ok(value):
+    """A source path or document ID (no spaces; it carries a '.', '/', '\\' or a digit) with an optional
+    #anchor and row, line, clause, section, page or named-sheet locators, ';'-separated. No path
+    segment, anchor or sheet name may spell a clause word or verb, as an identifier may not (#8.6)."""
+    text = value.strip()
+    if not text or len(text) > CITATION_MAX_CHARS or not CITATION_RE.fullmatch(text):
+        return False
+    for part in text.split(";"):
+        source = _CITE_SOURCE.match(part.strip())
+        if not source or not any(c in "./\\" or c.isdigit() for c in source.group(0)):
+            return False
+        if not id_shape_ok(re.sub(r"[/\\]", ".", source.group(0))):
+            return False
+    return all(id_shape_ok(anchor or sheet) for anchor, sheet in _CITE_WORDS.findall(text))
+
+
+def id_shape_ok(value):
+    """An identifier renders as itself, so it may not spell a clause: no '-', '_' or '.' separated
+    segment is a clause word or an imperative or verdict verb (#8.6). Upper-case acronyms pass."""
+    for segment in re.split(r"[-_.]+", value):
+        low = segment.casefold()
+        acronym = len(segment) >= 2 and segment.isupper()
+        if (not acronym and low in _TITLE_CLAUSE_WORDS) or low in _TITLE_VERBS:
+            return False
+    return True
+
+
+def shape_hits(path, value):
+    """The render-policy screen for one supplied value: ("render_shape",) or ()."""
+    if _TITLE_PATH.fullmatch(path):
+        return () if title_shape_ok(value) else ("render_shape",)
+    if _CITATION_PATH.fullmatch(path):
+        return () if citation_shape_ok(value) else ("render_shape",)
+    return ()
 
 
 def marker_shaped(text):
@@ -737,6 +858,8 @@ def screen(doc, prior=None, forced=None):
             held[path] = prior[path]
         else:
             found, location = field_hits(value)
+            if not found:
+                found, location = shape_hits(path, value), "field"
             if found:
                 held[path] = (found, location)
     terms = identity_terms(doc["engagement"]["client_name"])  # harvested before any redaction (A16)
@@ -814,6 +937,8 @@ def make_hold(number, path, found, location):
         reason, citation = HOLD_REASONS["supplied_marker"], "confidentiality-sanitisation-rules.md #8.4"
     elif "client_identity" in found:
         reason, citation = HOLD_REASONS["client_identity"], "confidentiality-sanitisation-rules.md #8.3"
+    elif found == ("render_shape",):
+        reason, citation = HOLD_REASONS["render_shape"], "confidentiality-sanitisation-rules.md #8.6"
     else:
         reason, citation = HOLD_REASONS["instruction"], "confidentiality-sanitisation-rules.md #8.1"
     if location == "rendered":
@@ -1178,6 +1303,7 @@ def stage_sanitize_check(doc):
         rec = {
             "asset_id": asset["asset_id"],
             "title": asset["title"],
+            "title_withheld": asset["title"] == WITHHELD,
             "reuse_score": asset["reuse_score"],
             "clearance_state": state,
             "review_required": DEFAULT_REVIEW_REQUIRED,
@@ -1275,6 +1401,7 @@ def stage_sanitize_check(doc):
             "review_candidate": cluster["review_candidate"],
             "evidence_ids": list(cluster["evidence_ids"]),
             "evidence_citations": list(cluster["evidence_citations"]),
+            "citation_withheld": WITHHELD in cluster["evidence_citations"],
             "rewrite_required": rewrite,
             "drafting_guidance": guidance,
             "confidence": min(float(cluster["confidence"]), 0.91),
@@ -1353,6 +1480,8 @@ def stage_sanitize_check(doc):
 
 CONTEXT_SLOT = "<<CONTEXT: generalized engagement context that follows engagement_context_guidance>>"
 NO_CONTEXT_LINE = "No generalized context drafted: the client identity could not be screened (see Held or excluded material)."
+TITLE_WITHHELD_MARK = "title_withheld"
+CITATION_WITHHELD_MARK = "citation_withheld"
 
 
 def lesson_slot(cluster_id):
@@ -1400,7 +1529,8 @@ def skeleton(doc):
         add("| Asset ID | Title | Reuse score | Clearance state | Rule citation |")
         add("|---|---|---|---|---|")
         for asset in kr["reusable_assets"]:
-            add(f"| {asset['asset_id']} | {asset['title']} | {_num(asset['reuse_score'])} | "
+            title = TITLE_WITHHELD_MARK if asset["title"] == WITHHELD else asset["title"]
+            add(f"| {asset['asset_id']} | {title} | {_num(asset['reuse_score'])} | "
                 f"{asset['clearance_state']} | {asset['citation']} |",
                 contributors=[f"candidate_assets[{asset_index[asset['asset_id']]}].title"])
     else:
@@ -1410,8 +1540,9 @@ def skeleton(doc):
     if not kr["lessons"]:
         add("No lesson themes clustered.")
     for lesson in kr["lessons"]:
+        citations = [CITATION_WITHHELD_MARK if c == WITHHELD else c for c in lesson["evidence_citations"]]
         tail = (f" - evidence {', '.join(lesson['evidence_ids'])}; "
-                f"{'; '.join(lesson['evidence_citations'])}")
+                f"{'; '.join(citations)}")
         head = f"- {lesson['cluster_id']} ({lesson['category']}): "
         contributors = [cite_paths[e] for e in lesson["evidence_ids"]]
         if unscreenable:

@@ -42,6 +42,43 @@ def phrase_in(phrase, text):
     return bool(needle) and f" {needle} " in f" {' '.join(core.words(text))} "
 
 
+SOURCE_SHINGLE = 6
+# Single-word source values that carry no wording of their own (a register's status or filler).
+STRUCTURAL_TOKENS = frozenset({
+    "n/a", "na", "none", "nil", "tbc", "tbd", "yes", "no", "true", "false", "pending", "complete", "completed",
+    "draft", "open", "closed", "unknown", "other", "various", "see", "above", "below",
+})
+_ID_TOKEN = re.compile(r"[A-Za-z0-9]+(?:[._:-][A-Za-z0-9]+)*")
+
+
+def trivial_source(value):
+    """A source value too short to carry wording: a single ID-shaped token or a structural word."""
+    stripped = value.strip().strip(".").strip()
+    if stripped.lower() in STRUCTURAL_TOKENS:
+        return True
+    tokens = core.words(core.strip_placeholders(value))
+    if not tokens:
+        return True
+    if len(tokens) > 1 and not _ID_TOKEN.fullmatch(stripped):
+        return False
+    return bool(_ID_TOKEN.fullmatch(stripped)) and any(c.isdigit() for c in stripped)
+
+
+def source_rules(values):
+    """Adaptive copy rule (#8.5): a source value of SOURCE_SHINGLE words or more is matched by its
+    6-word shingles; a shorter one by an exact normalised whole-phrase match."""
+    shingle_set, phrases = set(), set()
+    for value in values:
+        if not value or not _live(value) or trivial_source(value):
+            continue
+        tokens = core.words(core.strip_placeholders(value))
+        if len(tokens) >= SOURCE_SHINGLE:
+            shingle_set |= shingles(value, SOURCE_SHINGLE)
+        else:
+            phrases.add(" ".join(tokens))
+    return shingle_set, phrases
+
+
 def _live(value):
     return value != core.WITHHELD
 
@@ -74,7 +111,7 @@ def draft_rules(doc):
     source += [item["text"] for item in doc["retrospective_inputs"]]
     source += [a["description"] for a in doc["candidate_assets"]]
     source += [t["summary"] for t in doc["confidentiality_terms"]]
-    rules["source"] = set().union(set(), *(shingles(s, 6) for s in source if s and _live(s)))
+    rules["source"], rules["source_phrases"] = source_rules(source)
     return rules
 
 
@@ -115,7 +152,9 @@ def slot_codes(filled, rules):
         codes.append("held_item")
     if shingles(filled, 5) & rules["guidance"]:
         codes.append("stage_guidance")
-    if shingles(filled, 6) & rules["source"]:
+    canon_filled = f" {' '.join(core.words(filled))} "
+    if (shingles(filled, SOURCE_SHINGLE) & rules["source"]
+            or any(f" {phrase} " in canon_filled for phrase in rules["source_phrases"])):
         codes.append("source_text")
     return codes
 

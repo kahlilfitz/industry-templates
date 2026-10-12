@@ -504,6 +504,9 @@
               "type": "string"
             }
           },
+          "citation_withheld": {
+            "type": "boolean"
+          },
           "summary_seed": {
             "type": "string"
           },
@@ -667,6 +670,9 @@
           "asset_id": {
             "type": "string"
           },
+          "title_withheld": {
+            "type": "boolean"
+          },
           "clearance_state": {
             "const": "RELEASE_CANDIDATE_SANITISED"
           },
@@ -707,6 +713,9 @@
           "asset_id": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+          },
+          "title_withheld": {
+            "type": "boolean"
           },
           "clearance_state": {
             "enum": [

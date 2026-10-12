@@ -296,6 +296,7 @@
       "evidence_citations": [
         "raw/decision-log.csv row 2"
       ],
+      "citation_withheld": false,
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.65,
@@ -315,6 +316,7 @@
         "raw/decision-log.csv row 3",
         "raw/retrospective-transcript.txt lines 29-34"
       ],
+      "citation_withheld": false,
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.91,
@@ -332,6 +334,7 @@
       "evidence_citations": [
         "raw/retrospective-transcript.txt lines 8-10"
       ],
+      "citation_withheld": false,
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.71,
@@ -381,6 +384,7 @@
     {
       "asset_id": "AST-001",
       "title": "Cutover readiness checklist",
+      "title_withheld": false,
       "reuse_score": 91.0,
       "clearance_state": "RELEASE_CANDIDATE_SANITISED",
       "review_required": true,
@@ -392,6 +396,7 @@
     {
       "asset_id": "AST-002",
       "title": "Role-based training storyboard",
+      "title_withheld": false,
       "reuse_score": 71.0,
       "clearance_state": "RELEASE_CANDIDATE_SANITISED",
       "review_required": true,
@@ -405,6 +410,7 @@
     {
       "asset_id": "AST-003",
       "title": "Client-specific routing configuration workbook",
+      "title_withheld": false,
       "reuse_score": 44.0,
       "clearance_state": "HOLD_REDACTION_REQUIRED",
       "review_required": true,
@@ -426,6 +432,7 @@
       "evidence_citations": [
         "raw/decision-log.csv row 2"
       ],
+      "citation_withheld": false,
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.65,
@@ -445,6 +452,7 @@
         "raw/decision-log.csv row 3",
         "raw/retrospective-transcript.txt lines 29-34"
       ],
+      "citation_withheld": false,
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.91,
@@ -462,6 +470,7 @@
       "evidence_citations": [
         "raw/retrospective-transcript.txt lines 8-10"
       ],
+      "citation_withheld": false,
       "rewrite_required": false,
       "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
       "confidence": 0.71,
@@ -478,6 +487,7 @@
       {
         "asset_id": "AST-001",
         "title": "Cutover readiness checklist",
+        "title_withheld": false,
         "reuse_score": 91.0,
         "clearance_state": "RELEASE_CANDIDATE_SANITISED",
         "review_required": true,
@@ -489,6 +499,7 @@
       {
         "asset_id": "AST-002",
         "title": "Role-based training storyboard",
+        "title_withheld": false,
         "reuse_score": 71.0,
         "clearance_state": "RELEASE_CANDIDATE_SANITISED",
         "review_required": true,
@@ -518,6 +529,7 @@
         "evidence_citations": [
           "raw/decision-log.csv row 2"
         ],
+        "citation_withheld": false,
         "rewrite_required": false,
         "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
         "confidence": 0.65,
@@ -537,6 +549,7 @@
           "raw/decision-log.csv row 3",
           "raw/retrospective-transcript.txt lines 29-34"
         ],
+        "citation_withheld": false,
         "rewrite_required": false,
         "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
         "confidence": 0.91,
@@ -554,6 +567,7 @@
         "evidence_citations": [
           "raw/retrospective-transcript.txt lines 8-10"
         ],
+        "citation_withheld": false,
         "rewrite_required": false,
         "drafting_guidance": "Draft a generalized lesson from the category and evidence IDs only. Do not quote, reconstruct or paraphrase source text.",
         "confidence": 0.71,
