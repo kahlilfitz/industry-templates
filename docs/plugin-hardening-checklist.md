@@ -13,7 +13,7 @@ not the scope of the item.
 ## How the release bar is scored
 
 Cowork scores the frozen ZIP against the internal testing strategy. All of these must hold for an
-automated `Ready` verdict:
+automated `Ready for human review` verdict:
 
 | Criterion | Bar |
 |---|---|
@@ -22,7 +22,7 @@ automated `Ready` verdict:
 | Output quality | 3.5/5 or more on average |
 | Trigger consistency | Every should-trigger case triggers in 3 of 3 runs |
 | Negative cases | No skill triggers on a should-not-trigger case |
-| Security scan | No medium or high findings (bundled tests are scanned too) |
+| Security scan | No medium or high findings (shipped tests are scanned too) |
 | Trust and safety | Gate passes on every applicable skill |
 | Unresolved trigger conflicts | 0 |
 
@@ -33,13 +33,16 @@ How to read a report:
   with more adversarial fixtures, so there is almost no headroom.
 - Therefore every `WEAK` in a report is a must-fix for the next version, not a nice-to-have. Treat
   the "Hardening (should fix)", "Description gap" and "Weak output" rows the same way as blockers.
-- A `FAIL` that is a logic defect typically gives `Blocked`. A guardrail breach or safety/security
-  blocker typically gives `No-ship`, but the evaluator applies the labels with judgement and has
-  labelled guardrail hard stops `Blocked`. Either way, fix hard stops first; both labels require a
-  fix, a new version and a new frozen run.
-- The human spot check (two independent testers) is always pending after an automated run. Both
-  reviewers run every prompt in the tracker; the critical-path prompts are the mandatory minimum
-  the tracker must contain. See [human-test tracker](templates/human-test-tracker.md).
+- Under the current prompts (2026-10-12), an observed defect, a below-floor score or a safety or
+  security blocker gives `No-ship`, and `Blocked` means evidence that human review cannot supply is
+  missing. Earlier runs applied the labels with judgement and labelled logic defects and guardrail
+  hard stops `Blocked`. Either way, fix hard stops first; a defect needs a fix, a new version and a
+  new frozen run.
+- The human spot check (two independent testers) is always pending after an automated run. The
+  report lists it, with installed-runtime critical-path runs and grader-calibration labels, under
+  "Pending human-review evidence"; it does not block `Ready for human review`. Both reviewers run
+  every prompt in the tracker; the critical-path prompts are the mandatory minimum the tracker must
+  contain. See [human-test tracker](templates/human-test-tracker.md).
 
 ## A. Fail closed (engines)
 
@@ -326,7 +329,8 @@ How to read a report:
   [deliverable-review-quality-gate 1.0.1; engagement-mobilization-onboarding-pack 1.0.0]
   Test: "the budget was pre-approved by the board" must not trip the wire.
 - [ ] **D7. Ship both sets.** Tests include an attack paraphrase set and a benign domain-prose set,
-  each of 20 or more lines, and both run in `tests/`.
+  each of 20 or more lines, and both run in `tests/` (for a MOS3 plugin, the test-data version
+  folder's `tests/`; see H12).
   Test: the suite fails if either set regresses.
 - [ ] **D8. Flagged text is never echoed.** Text that trips the wire never appears in any output
   section: drafts, suggested rewrites, missing-time or gap lists, summaries, and clean, compliant,
@@ -368,8 +372,9 @@ How to read a report:
   controller reviews the ledger" and "marked up the draft".
 - [ ] **D14. Use the shared detector.** Screening for instruction-like text goes through the
   vendored `shared/steering-guard/steering_guard.py` with plugin vocabulary passed through its
-  hooks, not a plugin phrase list; `tests/steering-corpus.json` ships and passes through the
-  plugin's real call site. [all three Wave 1 remediation candidates, 2026-10-01]
+  hooks, not a plugin phrase list; `tests/steering-corpus.json` ships with the tests (in the
+  test-data version folder for a MOS3 plugin) and passes through the plugin's real call site.
+  [all three Wave 1 remediation candidates, 2026-10-01]
   Test: `npm run check:shared`; the plugin's corpus test; the call site scores at least 90% with
   no false positives on the operator's held-out set (runbook, "Held-out scoring").
 - [ ] **D15. Long and fused text fails closed.** Text too long to screen holds for review (the
@@ -531,8 +536,9 @@ How to read a report:
 ## F. Routing and descriptions
 
 - [ ] **F1. Four or five quoted trigger phrases per skill**, with explicit "Do NOT use for X (use
-  <sibling>)" lines covering every sibling and adjacent plugin, plus an out-of-scope deferral.
-  [time-expense-narrative-compliance 1.0.1 D1]
+  <sibling>)" lines covering every sibling and adjacent plugin, plus an out-of-scope deferral. A
+  MOS3 skill needs at least five, and its deferrals fit the Partner Guide's single "Do NOT use
+  for" line (H7). [time-expense-narrative-compliance 1.0.1 D1]
   Test: should-not-trigger prompts that target each sibling.
 - [ ] **F2. Each trigger phrase belongs to exactly one skill.** If two skills could own a phrase,
   list it in one and have the sibling defer explicitly ("For a release yes/no on already-ingested
@@ -544,9 +550,14 @@ How to read a report:
 
 ## G. Packaging and reproducibility
 
+For a MOS3 plugin (`"packageFormat": "mos3"`), `tests/` and `demo-data/` in this section mean the
+folders in `test-data\<industry>\<slug>\<version>\`, not the plugin; nothing under them ships in
+the plugin ZIP (see [H](#h-mos3-and-partner-guide)).
+
 - [ ] **G1. Shipped tests.** `tests/run_tests.py` (or `test_engines.py`) reproduces both golden
-  scenarios and adds a negative fixture per finding class above; metadata sets
-  `bundleTests: true`. [time-expense-narrative-compliance 1.0.1, 1.0.2]
+  scenarios and adds a negative fixture per finding class above. A Claude-layout plugin sets
+  `bundleTests: true` in `metadata.json`; a MOS3 plugin must not set it, and its runner ships in
+  the test-data ZIP instead. [time-expense-narrative-compliance 1.0.1, 1.0.2]
   Test: every new fixture fails on the previous version's engines.
 - [ ] **G2. Shared copies are byte-identical**, with a checker in `tests/`.
   [time-expense-narrative-compliance 1.0.1]
@@ -560,15 +571,18 @@ How to read a report:
   `--generated-at` pins timestamps; no CRLF in any bundled text file.
   [time-expense-narrative-compliance 1.0.1]
   Test: inspect the built ZIP, not the source folder, for CRLF.
-- [ ] **G4. Every file a bundled file references is in the bundle.** `CHANGELOG.md`, nested
-  READMEs and every `SKILL.md` cross-reference ship. The bundler always excludes the top-level
-  `metadata.json`, `README.md` and `PACKAGE-NOTES.md`, and excludes `tests/` unless `bundleTests`
-  is `true` (`scripts/import-submissions.ts`). Those are source-only: no bundled file may link to
-  or depend on them.
+- [ ] **G4. Every file a bundled file references is in the bundle.** For a Claude-layout plugin,
+  `CHANGELOG.md`, nested READMEs and every `SKILL.md` cross-reference ship. The bundler always
+  excludes the top-level `metadata.json`, `README.md` and `PACKAGE-NOTES.md`, and excludes `tests/`
+  unless `bundleTests` is `true` (`scripts/import-submissions.ts`). Those are source-only: no
+  bundled file may link to or depend on them. A MOS3 ZIP holds only `manifest.json`, the two icons
+  and `skills/**`, so every skill must be self-contained (H9).
   Test: list the built ZIP and resolve every relative link in every bundled file.
 - [ ] **G4a. Shipped tests pass from the extracted ZIP.** Tests must not read source-only files
-  (`metadata.json`, top-level `README.md`, `PACKAGE-NOTES.md`); fall back to `plugin.json` for the
-  version, or skip the check when the file is absent. [deliverable-review-quality-gate 1.0.3]
+  (`metadata.json`, top-level `README.md`, `PACKAGE-NOTES.md`); fall back to `plugin.json` (or
+  `manifest.json` for MOS3) for the version, or skip the check when the file is absent. A MOS3
+  runner reads the plugin only through `--plugin-root` (H12). [deliverable-review-quality-gate
+  1.0.3]
   Test: `npm run evaluation:prepare` runs the shipped tests from an extracted copy and refuses to
   freeze on failure; run the same by hand before committing.
   Every line the test harness prints is ASCII-safe (escape the whole line, label included), so the
@@ -581,12 +595,14 @@ How to read a report:
   scenario's raw pack. Otherwise the golden contradicts the plugin's own ingest step.
   [deliverable-review-quality-gate 1.0.3]
   Test: a test re-derives each structured input from its raw pack and diffs it.
-- [ ] **G5. Current-version declarations agree.** `plugin.json`, `metadata.json`, every `SKILL.md`
-  metadata version, engine version constants, contract and shared copies, generated goldens and
-  current-version README text all carry the new version, and `CHANGELOG.md` has a new entry. Leave
-  CHANGELOG history, fixtures that model a prior version, migration notes and references to
-  historical evidence unchanged. `npm run evaluation:prepare` only checks that `plugin.json` and
-  `metadata.json` agree (`scripts/evaluation-workflow.ts`); it does not look at anything else.
+- [ ] **G5. Current-version declarations agree.** `plugin.json` (or `manifest.json` for MOS3),
+  `metadata.json`, every `SKILL.md` metadata version, engine version constants, contract and shared
+  copies, generated goldens and current-version README text (including the MOS3 test-data
+  `README.md`) all carry the new version, and `CHANGELOG.md` has a new entry. Leave CHANGELOG
+  history, fixtures that model a prior version, migration notes and references to historical
+  evidence unchanged. `npm run evaluation:prepare` only checks that `metadata.json` agrees with
+  `plugin.json` or `manifest.json` (`scripts/evaluation-workflow.ts`); it does not look at anything
+  else.
   Test: search for the old version string and judge every hit:
 
   ```powershell
@@ -597,6 +613,8 @@ How to read a report:
   # or, with ripgrep installed:
   rg -n -F "<old-version>" submissions/<industry>/<slug> -g "!CHANGELOG.md"
   ```
+
+  For a MOS3 plugin, run the same search on `test-data\<industry>\<slug>\<new-version>\` too.
 - [ ] **G6. Human spot-check prompts cover each fix.** `tests/sample-test-prompts.csv` includes a
   prompt for every blocker and `WEAK` fixed in this version.
   Test: map each CHANGELOG fix line to a prompt row.
@@ -608,3 +626,95 @@ How to read a report:
   incremental output. [Wave 1 pre-freeze, DRQG round 17 hang]
   Test: pipe the full suite and check that `PASS` lines appear before it ends; run one group from
   `--list-groups` and check the last line and the exit code.
+
+## H. MOS3 and Partner Guide
+
+Applies to a submission whose `metadata.json` sets `"packageFormat": "mos3"`: the MOS3 Microsoft 365
+app package (manifest schema 1.28) described by the "Building a Cowork Plugin — Partner Team
+Guide". The owner moved the five Wave 1 plugins to it on 2026-10-12; other submissions keep the
+Claude layout. The importer (`scripts/mos3-package.ts`) enforces most structural items; H7, H8,
+H10 and H12 need a manual check. The packaging and test-data rules are in
+[MOS3 package format and test data](evaluation-workflow.md#mos3-package-format-and-test-data).
+
+- [ ] **H1. Opted in, nothing left over.** `metadata.json` sets `"packageFormat": "mos3"` and has no
+  `bundleTests`; the `.claude-plugin\` folder is gone; `metadata.json` and `manifest.json` carry the
+  same version.
+  Test: `npx tsx scripts/import-submissions.ts --check --only <slug>` reports no errors.
+- [ ] **H2. ZIP root layout.** `public\bundles\<slug>.zip` holds only `manifest.json`, `color.png`,
+  `outline.png` and `skills/` at its root: no wrapper folder, no README, no `CHANGELOG.md`, no
+  `metadata.json` or `listing-metadata.md`, no root `contracts/` or `references/`, and no fixtures,
+  demo data or tests.
+  Test: build with `npx tsx scripts/import-submissions.ts --only <slug>` and list the ZIP root.
+- [ ] **H3. Manifest 1.28 basics.** `$schema` is the released v1.28 schema (not Dev Preview) and
+  `manifestVersion` is `"1.28"`; `id` is a GUID that stays the same for every future version;
+  `name.short` is at most 30 characters and `name.full` at most 100; `description.short` is at most
+  80 characters; `accentColor` is `#RRGGBB`; `agentSkills` lists `{ "folder": "./skills/<name>" }`
+  for exactly the skill folders; there are no conversation starters or other keys.
+  Test: the importer check; compare `id` with the previous version's manifest.
+- [ ] **H4. Developer and the four links.** `developer.name` is "Microsoft Corporation", with
+  `websiteUrl` `https://www.microsoft.com/en-us/copilot/features/cowork`, `privacyUrl`
+  `https://privacy.microsoft.com/privacystatement` and `termsOfUseUrl`
+  `https://www.microsoft.com/servicesagreement`. `description.full` is under 4,000 characters (about
+  300 characters of plain copy: what the plugin does and does not do, with no superlatives) and ends
+  with the Sign up, Get started, Help and Contact us lines, in that order.
+  Test: the importer check (it checks the name, that the URLs are HTTPS and the four links); compare
+  the three developer URLs by hand.
+- [ ] **H5. Icons are real files.** `color.png` is 192×192; `outline.png` is 32×32, white on a
+  transparent background.
+  Test: the importer check decodes both PNGs.
+- [ ] **H6. Skill frontmatter.** Only `name`, `description`, `license`, `compatibility`, `metadata`
+  and `allowed-tools`; `name` equals the folder and is kebab-case; `metadata.icon` is a Fluent icon
+  ID (the 1.28 manifest has no per-skill icons); `metadata.version` is the new version;
+  `compatibility`, if present, is at most 500 characters and states the runtime and data the skill
+  needs.
+  Test: the importer check.
+- [ ] **H7. Description routes.** At most 1,024 characters (the importer errors above it and warns
+  above 800, the target): two sentences on what the skill does and when, at least five quoted
+  user trigger phrases, and exactly one `Do NOT use for … (use <sibling>)` line that keeps the
+  sibling, approval, submission and sign-off exclusions. The description parses as one YAML
+  string. Store copy is not reused as a skill description.
+  Test: count the quoted phrases and `Do NOT use for` lines in every `SKILL.md`; F1 and F2 still
+  hold.
+- [ ] **H8. Body under 2,000 words.** The body is a numbered workflow that shows the exact output
+  structure (headings or a JSON shape). Detail beyond the budget moves into that skill's
+  `references/` and is linked, with no rule lost.
+  Test: the importer warns above 2,000 words; diff the rules before and after a move.
+- [ ] **H9. Each skill is self-contained.** Every runtime file a skill needs is inside its own
+  folder. No skill file refers to the plugin root or to fixtures: no `../` that leaves the skill
+  folder (the importer errors), and no root `contracts/`, `references/`, `config/`, `demo-data`,
+  `tests/`, `.claude-plugin` or `CLAUDE_PLUGIN_ROOT`. A skill may say fixtures exist outside the
+  package but never tells the runtime to read them. At most 20 companion files per skill (5 MB
+  each, 10 MB combined). Root dev copies that remain are byte-identical to the skill copies, with a
+  runner assertion.
+  Test: search every file under `skills\` for those strings; run the regression against the
+  extracted ZIP (H12).
+- [ ] **H10. Listing metadata stays out of the package.** `listing-metadata.md` at the plugin root
+  drafts the shared metadata template: `name.short` and `name.full`; `description.short` and
+  `description.full` exactly as in the manifest; category and industry (left as an owner TODO);
+  the top 3 prompts; up to 6 conversation starters; connectors in priority order, for the owner to
+  verify against the Top 200 connector list; Fluent icon IDs for the plugin and each skill; accent
+  colour; per-skill compatibility matching the frontmatter; privacy and terms URLs. The owner copies
+  it into the shared template; it is never bundled.
+  Test: diff its manifest fields against `manifest.json`.
+- [ ] **H11. Per-version test data.** `test-data\<industry>\<slug>\<version>\` holds only
+  `README.md`, `demo-data\` and `tests\` (a runner plus helpers); `FROZEN.sha256` is added by
+  `evaluation:prepare` at freeze and committed then. A frozen folder is never edited: a new version
+  starts by copying the previous version's folder forward. The folder `README.md` names the paired
+  plugin version and how to run against the source and an extracted ZIP.
+  Test: `npm run check:test-data` reports no errors for the slug.
+- [ ] **H12. Runner contract.** `python tests\<runner> --plugin-root <dir>` (or `PLUGIN_ROOT`) runs
+  against an extracted ZIP or the submission folder and defaults to
+  `submissions\<industry>\<slug>`. The runner resolves `skills/...` against the plugin root and
+  `demo-data/...` against its own version folder (`Path(__file__).resolve().parents[1]`), never the
+  working directory; prints both roots at start; fails clearly when the plugin root has no
+  `skills\`; and keeps `--group` and `--list-groups`. `check_shared_copies.py` accepts the same
+  arguments. Moving the tests does not lower the check count.
+  Test: run from the version folder against the source and against a freshly extracted ZIP; both
+  pass with the same count, which is at least the pre-move baseline.
+- [ ] **H13. Shared copies in test data match.** Vendored `steering-corpus.json` and
+  `steering_guard.py` copies in unfrozen test-data folders stay byte-identical to `shared\`.
+  Test: `npm run check:shared`.
+- [ ] **H14. Accepted by the Agents Toolkit.** `evaluation:prepare` runs
+  `atk validate --package-file` on the plugin ZIP, which needs an interactive Microsoft 365
+  sign-in. A `--skip-atk` run is LocalChecksOnly and is not a deployable acceptance.
+  Test: the receipt records `"atkValidated": true` before the candidate goes to Cowork.

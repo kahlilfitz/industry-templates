@@ -74,7 +74,8 @@ The command:
 1. Validates every submission, and that every vendored copy of a `shared/` module matches its
    source (`npm run check:shared`).
 2. Rebuilds all reproducible bundles.
-3. Confirms the submission and plugin-manifest versions agree.
+3. Confirms the submission and plugin-manifest versions agree (`.claude-plugin/plugin.json`, or the
+   root `manifest.json` for a MOS3 submission).
 4. Extracts the built ZIP to a temporary folder and runs any shipped `tests/run_tests.py`,
    `tests/test_engines.py` and `tests/check_shared_copies.py` there with `python`, so tests that
    depend on source-only files (such as `metadata.json`) fail before freezing, not in Cowork.
@@ -85,6 +86,11 @@ The command:
 6. Records the SHA-256, Git commit, dirty-worktree state, artifact version, and Cowork task name.
 7. Generates a ready-to-paste Cowork prompt.
 8. Refuses to replace an existing candidate for the same plugin version.
+
+Preparation always validates and rebuilds every submission; it has no `--only`. While several
+plugins are changing in parallel, check or build one submission with
+`npx tsx scripts/import-submissions.ts --check --only <plugin-slug>` (or without `--check` to build
+only that bundle and leave the others in place), and prepare once every submission passes.
 
 Each shipped runner has a 30-minute timeout. A runner that exceeds it is stopped, and preparation
 fails with an error naming the runner. If the suite is only slow, raise the limit with the flag or
@@ -211,8 +217,8 @@ npm run evaluation:watch -- --slug <plugin-slug>
 The watcher reads the frozen run receipt, finds every Cowork task carrying the input ZIP's SHA-256
 rather than relying on its display name, and searches those task folders for a stable report set
 that explicitly affirms the evaluated ZIP matches the frozen digest. Stale, incomplete and
-artifact-mismatch output is ignored. The matching set is passed to `evaluation:archive`. Useful
-options are:
+artifact-mismatch output is ignored. The matching set is passed to `evaluation:archive`, which also
+copies the frozen test-data ZIP for a MOS3 candidate. Useful options are:
 
 ```powershell
 npm run evaluation:watch -- `
@@ -312,7 +318,8 @@ For a `Ready for human review` evaluation:
 
 Only when the tracker's publish gate reads `PASS` and the owner decision is `Publish` should the
 archived ZIP be copied to the plugin folder as the current versioned distributable. That copy must
-remain byte-identical to the ZIP under `Evaluation/`. See the
+remain byte-identical to the ZIP under `Evaluation/`. For a MOS3 candidate only the plugin ZIP is
+promoted; the test-data ZIP stays in `Evaluation/` as evidence. See the
 [Ready path](operator-runbook.md#ready-path-human-gate-and-promotion) for the other decisions.
 
 ## Failure and retry rules
@@ -349,7 +356,16 @@ before. The importer (`npm run build`, or `npm run check:submissions` to validat
 then requires a root `manifest.json`, `color.png` (192×192) and `outline.png` (32×32, white on
 transparent), and one `skills\<name>\SKILL.md` per `agentSkills` entry. It fails if `.claude-plugin\`
 remains or `bundleTests` is set. `public\bundles\<plugin-slug>.zip` holds `manifest.json`,
-`color.png`, `outline.png` and `skills/**` at the ZIP root, with no wrapper folder.
+`color.png`, `outline.png` and `skills/**` at the ZIP root, with no wrapper folder. Everything else
+in the submission folder (`metadata.json`, `README.md`, `CHANGELOG.md`, `listing-metadata.md` and
+any root `contracts\`, `references\`, `config\` or `scripts\`) stays out of the ZIP, so each skill
+must be self-contained. The importer also validates the 1.28 manifest (schema, GUID `id`,
+"Microsoft Corporation" developer, field lengths, the four closing links in `description.full`,
+`accentColor`, `agentSkills`), every skill's frontmatter (`metadata.icon` and `metadata.version`
+required, description at most 1,024 characters), companion-file limits, symlinks and `../`
+references that leave a skill folder. It warns when a description exceeds 800 characters or a body
+exceeds 2,000 words. Quoted triggers and the "Do NOT use for" line are checked by hand: see
+[hardening checklist H](plugin-hardening-checklist.md#h-mos3-and-partner-guide).
 
 Test data for a MOS3 plugin lives outside the plugin, one folder per version:
 

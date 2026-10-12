@@ -21,6 +21,12 @@ jobs:
       - name: Validate submissions
         run: npm run check:submissions
 
+      - name: Check per-version test data
+        run: npm run check:test-data
+
+      - name: Check vendored shared modules
+        run: npm run check:shared
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

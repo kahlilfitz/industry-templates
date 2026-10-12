@@ -11,7 +11,8 @@ and generates the download packages.
 ## The submission shape
 
 Every submission is a `submissions/<industry>/<slug>/` folder: a `metadata.json` sidecar, an optional
-`README.md`, optional `tests/`, and the **unpacked package** itself.
+`README.md`, optional `tests/`, and the **unpacked package** itself. Unless it opts into the
+[MOS3 app package](#mos3-app-package-opt-in), the package uses the Claude plugin layout:
 
 ```
 submissions/<industry>/<slug>/
@@ -34,6 +35,41 @@ submissions/<industry>/<slug>/
 Copy [`submissions/_template/`](submissions/_template) to get started. The `<slug>` is the
 leaf folder name — lowercase and hyphenated, e.g. `quality-inspection` → `/templates/quality-inspection`. The industry folder above it must match `metadata.json`'s `industry` (`Retail & CPG` → `retail-and-cpg`); the importer fails the build if they disagree.
 
+### MOS3 app package (opt-in)
+
+A submission can instead build as a **MOS3 Microsoft 365 app package** (manifest schema 1.28), the
+format in the "Building a Cowork Plugin — Partner Team Guide". Opt in with
+`"packageFormat": "mos3"` in `metadata.json`; without it the layout above applies. The five
+Professional Services Wave 1 plugins use it; every other submission is unchanged.
+
+```
+submissions/<industry>/<slug>/
+├── metadata.json            # sidecar, never bundled ("packageFormat": "mos3", no bundleTests)
+├── README.md, CHANGELOG.md  # never bundled
+├── listing-metadata.md      # store listing draft for the shared metadata template, never bundled
+└── the package (the only files in the ZIP, at its root, no wrapper folder):
+    ├── manifest.json        # 1.28 manifest: GUID id, "Microsoft Corporation" developer,
+    │                        # description.full ending with the four required links
+    ├── color.png            # 192×192
+    ├── outline.png          # 32×32, white on transparent
+    └── skills/<name>/       # SKILL.md with metadata.icon; self-contained scripts/, references/…
+
+test-data/<industry>/<slug>/<version>/   # one folder per plugin version, never bundled
+├── README.md
+├── demo-data/
+└── tests/                   # runners take --plugin-root <dir> or PLUGIN_ROOT
+```
+
+`.claude-plugin/` must be removed and `bundleTests` must not be set. Each skill must stand alone:
+nothing outside `skills/<name>/` reaches the package, so a skill may not refer to root
+`contracts/`, `references/`, demo data or tests. Skill descriptions stay within 1,024 characters
+(target 800) with at least five quoted triggers and one "Do NOT use for" line, and bodies stay
+under 2,000 words. Fixtures never go into the submission folder: they live in the test-data
+version folder, which is frozen (`FROZEN.sha256`) when that version is evaluated and never edited
+afterwards; a new version copies the previous folder forward. See
+[MOS3 package format and test data](docs/evaluation-workflow.md#mos3-package-format-and-test-data)
+and section H of the [hardening checklist](docs/plugin-hardening-checklist.md#h-mos3-and-partner-guide).
+
 > **A submission holds two kinds of file.** Everything **agent-facing** is bundled into the
 > download verbatim — the bundle *is* the package the agent loads. The **human-facing** files
 > (`metadata.json`, `README.md`, `tests/`, `PACKAGE-NOTES.md`) are never bundled, so they cost
@@ -52,8 +88,10 @@ leaf folder name — lowercase and hyphenated, e.g. `quality-inspection` → `/t
 | `author`      | yes      | Person or team who wrote the template. |
 
 Optional: `authorUrl`, `authorGithub`, `version`, `createdAt`, `updatedAt`, `coverColor`,
-`featured`, `agentDescription`. `authorGithub` is derived from an `authorUrl` that points at a
-GitHub profile when it is not supplied explicitly.
+`featured`, `agentDescription`, `bundleTests` and `packageFormat`. `authorGithub` is derived from an
+`authorUrl` that points at a GitHub profile when it is not supplied explicitly. `bundleTests: true`
+ships `tests/` in a Claude-layout bundle; it is not allowed with `packageFormat: "mos3"`, which
+requires `version`.
 
 **Adding a new industry?** Add it to `INDUSTRIES` in
 [`scripts/import-submissions.ts`](scripts/import-submissions.ts).
@@ -100,7 +138,17 @@ read from a single URL. Two consequences worth knowing:
 ```bash
 npm install
 npm run check:submissions   # validate metadata only, writes nothing
+npm run check:test-data     # MOS3 per-version test data is complete; frozen folders unchanged
+npm run check:shared        # vendored shared modules match shared/
 npm run build               # recreate public/bundles/
+```
+
+While several submissions are changing at once, check or build just yours (other bundles are left
+in place):
+
+```bash
+npx tsx scripts/import-submissions.ts --check --only <slug>
+npx tsx scripts/import-submissions.ts --only <slug>
 ```
 
 ## What CI does
@@ -108,7 +156,8 @@ npm run build               # recreate public/bundles/
 On a pull request, [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 
 1. Validates every submission and fails with an itemised message if metadata or package layout
-   is invalid.
+   is invalid, then checks MOS3 test data (`check:test-data`) and vendored shared modules
+   (`check:shared`).
 2. Recreates `public/bundles/<slug>.zip` for every submission.
 3. Exercises the flattened catalog export and uploads the bundles as a workflow artifact.
 
@@ -124,10 +173,11 @@ repository as `sharepoint\` with `npm run sharepoint:link` — see
 ## Evaluate a release candidate
 
 Before treating a plugin as publishable, follow the
-[Cowork evaluation workflow](docs/evaluation-workflow.md). It defines how to freeze the exact ZIP,
-run the manual Cowork task, archive the three required HTML reports, preserve failed runs, and
-complete the independent human-review gate. Operators running the whole workstream (evaluation,
-remediation, human gate, promotion and status) should start with the
+[Cowork evaluation workflow](docs/evaluation-workflow.md). It defines how to freeze the exact ZIP
+(and, for MOS3, its test-data ZIP), run the manual Cowork task, archive the three required HTML
+reports, preserve failed runs, and complete the independent human-review gate. The passing
+automated verdict is `Ready for human review`; it is never a publish signal. Operators running the
+whole workstream (evaluation, remediation, human gate, promotion and status) should start with the
 [operator runbook](docs/operator-runbook.md).
 
 By contributing you agree your template is shared under the repository's [MIT license](LICENSE).

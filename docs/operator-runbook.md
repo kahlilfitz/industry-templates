@@ -1,9 +1,10 @@
 # Operator runbook
 
-This is the entry point for anyone running the industry-plugin workstream: building Cowork
-(Claude-format) plugins under `submissions/`, freezing release candidates, evaluating them in
-Microsoft Copilot Cowork, archiving the evidence to the SharePoint library, remediating until the
-automated verdict is `Ready`, running the human spot check, promoting the distributable and keeping
+This is the entry point for anyone running the industry-plugin workstream: building Cowork plugins
+under `submissions/` (Claude-format, or the MOS3 Microsoft 365 app package that the Wave 1 plugins
+moved to on 2026-10-12), freezing release candidates, evaluating them in Microsoft Copilot Cowork,
+archiving the evidence to the SharePoint library, remediating until the automated verdict is
+`Ready for human review`, running the human spot check, promoting the distributable and keeping
 status current.
 
 Read it once end to end. After that, the [lifecycle loop](#the-lifecycle-loop) is the page you work
@@ -17,7 +18,7 @@ from.
 | [Plugin hardening checklist](plugin-hardening-checklist.md) | Failure classes to check before every freeze |
 | [SharePoint sync](sharepoint-sync.md) | Linking the OneDrive-synced library as `sharepoint\` |
 | [Authoring templates](authoring-templates.md) and [CONTRIBUTING](../CONTRIBUTING.md) | Package shape, engine/model split, demo scenarios, metadata |
-| [Deployment-doc template](templates/plugin-details-and-deployment.md) | `PLUGIN-DETAILS-AND-DEPLOYMENT.md` for a Ready plugin |
+| [Deployment-doc template](templates/plugin-details-and-deployment.md) | `PLUGIN-DETAILS-AND-DEPLOYMENT.md` for a plugin evaluated `Ready for human review` |
 | [Human-test tracker spec](templates/human-test-tracker.md) | The `<slug>-human-test-tracker.xlsx` workbook |
 | [Professional Services Wave 1](professional-services/wave-1.md) | Wave 1 scenarios, definition of done, version and verdict history, current state |
 | `sharepoint\Industry-Templates-Plugin-Testing-Strategy.docx` | The release bar. It is the authority when anything here disagrees with it |
@@ -36,7 +37,7 @@ Typical elapsed time per iteration:
 | Activity | Time |
 |---|---|
 | Fix, test and commit a remediation | Hours, depending on the findings |
-| `evaluation:prepare` | About 5–15 minutes (it rebuilds every bundle, then runs the plugin's shipped tests from the ZIP) |
+| `evaluation:prepare` | About 5–15 minutes (it rebuilds every bundle, then runs the plugin's shipped tests from the ZIP). A MOS3 candidate adds the Agents Toolkit sign-in and validation |
 | Cowork evaluation | Usually 1–3 hours |
 | Watcher detect and archive | Within about a minute of the reports settling |
 | Human spot check | Depends on reviewer availability; plan for days, not hours |
@@ -66,10 +67,14 @@ name in each plugin's tracker workbook in SharePoint.
    Office (see [Tracker workbooks](#tracker-workbooks-and-sensitivity-labels)).
 6. Open `sharepoint\Industry-Templates-Plugin-Testing-Strategy.docx` and read the release bar. You
    attach this document to every Cowork evaluation.
-7. Confirm the toolchain:
+7. For MOS3 candidates, have a work account that can sign in to Microsoft 365 from an interactive
+   session. `evaluation:prepare` fetches the Microsoft 365 Agents Toolkit CLI with `npx` and its
+   `validate` step opens a sign-in window.
+8. Confirm the toolchain:
 
    ```powershell
    npm run check:submissions    # ends with "All submissions valid."
+   npm run check:test-data      # per-version test data for MOS3 submissions
    npm run test:evaluation      # evaluation and SharePoint script tests
    ```
 
@@ -77,11 +82,12 @@ name in each plugin's tracker workbook in SharePoint.
 
 | Location | Contents | In git? |
 |---|---|---|
-| `submissions\<industry>\<slug>\` | Plugin source, `metadata.json`, `README.md`, `CHANGELOG.md`, `tests\` | Yes |
-| `public\bundles\<slug>.zip` | Generated, mutable bundles. Never attach these to Cowork | No |
-| `evaluation-inbox\<slug>\<version>\` | Frozen ZIP, `evaluation-run.json` receipt, `cowork-prompt.txt` | No (local only) |
+| `submissions\<industry>\<slug>\` | Plugin source, `metadata.json`, `README.md`, `CHANGELOG.md`; `tests\` for Claude-layout plugins; `manifest.json`, icons and `listing-metadata.md` for MOS3 plugins | Yes |
+| `test-data\<industry>\<slug>\<version>\` | MOS3 only: `README.md`, `demo-data\`, `tests\` and, once frozen, `FROZEN.sha256` | Yes |
+| `public\bundles\<slug>.zip`, `public\test-data\` | Generated, mutable plugin and test-data ZIPs. Never attach these to Cowork | No |
+| `evaluation-inbox\<slug>\<version>\` | Frozen ZIP (and, for MOS3, the frozen test-data ZIP), `evaluation-run.json` receipt, `cowork-prompt.txt` | No (local only) |
 | `<OneDrive>\Documents\Cowork\Tasks\<task>\` | Cowork's `input\` (attached files) and `output\` (reports) | No |
-| `sharepoint\<Industry>\<slug>\Evaluation\<version>\` | Archived evaluated ZIP and three reports, immutable | No (SharePoint) |
+| `sharepoint\<Industry>\<slug>\Evaluation\<version>\` | Archived evaluated ZIP (plus the test-data ZIP for MOS3) and three reports, immutable | No (SharePoint) |
 | `sharepoint\<Industry>\<slug>\` | `PLUGIN-DETAILS-AND-DEPLOYMENT.md`, tracker workbook, promoted `<slug>-plugin-v<version>.zip` | No (SharePoint) |
 | `sharepoint\<Industry>\README.md` | Industry status table shared with the team | No (SharePoint) |
 | `docs\professional-services\wave-1.md` | Wave log in the repository | Yes |
@@ -119,9 +125,12 @@ Work through these steps for one plugin version. Steps 1–4 are serial per work
 overlap across plugins.
 
 1. **Build or fix** the plugin under `submissions\<industry>\<slug>\`. For a fix, follow
-   [Remediation conventions](#remediation-conventions) first. Apply the
+   [Remediation conventions](#remediation-conventions) first. For a MOS3 plugin, start a new
+   version by copying the previous version's test-data folder forward (see
+   [MOS3 test data](#mos3-test-data)). Apply the
    [plugin hardening checklist](plugin-hardening-checklist.md) before you freeze.
-2. **Test.** From the plugin folder run its own suite, then validate the repository:
+2. **Test.** Run the plugin's own suite, then validate the repository. For a Claude-layout plugin,
+   from the plugin folder:
 
    ```powershell
    Push-Location submissions\<industry>\<slug>
@@ -132,8 +141,26 @@ overlap across plugins.
    npm run check:shared                      # vendored shared modules match shared/
    ```
 
-   Every check must pass. Older plugins use `unittest` files instead of `run_tests.py`; use
-   whichever the plugin ships.
+   For a MOS3 plugin, from its test-data version folder, against the source and then against the
+   built ZIP:
+
+   ```powershell
+   npx tsx scripts/import-submissions.ts --only <slug>       # builds public\bundles\<slug>.zip only
+   $zip = Join-Path $env:TEMP "<slug>-zip"
+   Expand-Archive public\bundles\<slug>.zip $zip -Force
+   Push-Location test-data\<industry>\<slug>\<version>
+   python tests\run_tests.py                                 # source: defaults to submissions\<industry>\<slug>
+   python tests\run_tests.py --plugin-root $zip              # extracted ZIP: same count
+   python tests\check_shared_copies.py --plugin-root $zip    # where the version ships one
+   Pop-Location
+   npx tsx scripts/import-submissions.ts --check --only <slug>
+   npm run check:test-data
+   npm run check:shared                      # also covers unfrozen test-data folders
+   ```
+
+   Every check must pass. Older plugins use `unittest` files instead of `run_tests.py`, and some
+   MOS3 versions use `test_engines.py`; use whichever the plugin ships. When several plugins are
+   changing at once, see [Parallel work](#parallel-work-on-several-plugins).
 3. **Commit** only the plugin folder you changed, on a branch. Prefer a clean worktree before
    freezing: `evaluation:prepare` records `gitDirty: true` if `git status --porcelain` prints
    anything, including untracked files. A dirty run is still hash-protected but is not traceable to
@@ -151,9 +178,27 @@ overlap across plugins.
    and refuses to freeze if they fail there (usually a test reading a source-only file such as
    `metadata.json`). Note the printed task name, SHA-256 and prompt path. Optionally inspect the
    frozen ZIP (see [Inspecting a frozen ZIP](#inspecting-a-frozen-zip)).
+
+   Prepare has no `--only`: it validates every submission, runs `check:shared` and
+   `check:test-data`, and rebuilds every bundle, so it fails while any other plugin is mid-change.
+   Freeze once parallel work has landed.
+
+   **Freezing a MOS3 candidate** adds three things (details in
+   [MOS3 candidates](evaluation-workflow.md#mos3-candidates)):
+
+   - Run prepare from an interactive session and complete the Microsoft 365 sign-in that
+     `atk validate --package-file` opens; it is stopped after 15 minutes. `--skip-atk` prints
+     `LocalChecksOnly: not a deployable acceptance result` and records `"atkValidated": false`; use
+     it only for local iteration and never send that candidate to Cowork.
+   - Prepare builds `<slug>-test-data-<version>.zip` and runs the test-data runners against the
+     extracted plugin ZIP with `--plugin-root`.
+   - Prepare writes `FROZEN.sha256` into the test-data version folder. Commit it straight away,
+     on its own: `git add -- "test-data\<industry>\<slug>\<version>\FROZEN.sha256"`. From then on
+     `check:test-data` fails if anything in that folder changes.
 5. **Launch Cowork** by hand, following [Cowork operating rules](#cowork-operating-rules): a new
    task named with `coworkTaskName` from `evaluation-run.json`, the frozen ZIP from
-   `evaluation-inbox\<slug>\<version>\`, the testing-strategy document, and the full contents of
+   `evaluation-inbox\<slug>\<version>\` (for MOS3, both frozen ZIPs: the plugin ZIP and
+   `<slug>-test-data-<version>.zip`), the testing-strategy document, and the full contents of
    `cowork-prompt.txt`.
 6. **Watch and archive** in a separate terminal:
 
@@ -165,8 +210,12 @@ overlap across plugins.
    See [Watcher operations](#watcher-operations).
 7. **Read the verdict** from the archive output and from `full-report.html` (see
    [Reading a verdict](#reading-a-verdict)).
-   - `Ready`: go to [Ready path](#ready-path-human-gate-and-promotion).
-   - `Blocked` or `No-ship`: the evidence is already archived. Go back to step 1 with a new version.
+   - `Ready for human review`: go to [Ready path](#ready-path-human-gate-and-promotion).
+   - `Blocked`: read the reason. If the only reason is human-review evidence that should have been
+     listed under "Pending human-review evidence", raise it with the owner before remediating.
+     Otherwise fix the cause (for example the stage that did not run) and re-evaluate as a new
+     version; the evidence is already archived and each version gets one formal run.
+   - `No-ship`: the evidence is already archived. Go back to step 1 with a new version.
 8. **Update status** in `sharepoint\<Industry>\README.md` and `docs\professional-services\wave-1.md`
    after every verdict, not only at the end.
 
@@ -192,6 +241,55 @@ print("CRLF files:", len(crlf), crlf[:5]); print("litter:", litter or "none")
 If it shows CRLF files or missing tests, do not launch. Fix the source, bump the version and
 freeze again; the frozen folder cannot be replaced.
 
+A MOS3 plugin ZIP ships no tests, so `tests shipped: False` is correct for it. Check instead that
+its root holds only `manifest.json`, `color.png`, `outline.png` and `skills/`, and run the same
+CRLF check on `<slug>-test-data-<version>.zip`.
+
+### Parallel work on several plugins
+
+When several plugins change at once (for example one agent per plugin), a plugin that is mid-change
+makes `npm run check:submissions` and `npm run build` fail for everyone, and `npm run build` deletes
+every bundle in `public\bundles\` before rebuilding. Work on one plugin with `--only`:
+
+```powershell
+npx tsx scripts/import-submissions.ts --check --only <slug>   # validate one submission
+npx tsx scripts/import-submissions.ts --only <slug>           # build one bundle, keep the others
+```
+
+`--only` cannot be combined with `--catalog-output`. `npm run check:test-data` and
+`npm run check:shared` still scan the whole repository; read only the lines for your slug while
+others are mid-change. Freezing has no `--only` (see step 4): prepare candidates serially once every
+submission passes.
+
+### MOS3 test data
+
+A MOS3 plugin ships only its manifest, icons and skills. Its README, demo data and regression live
+in `test-data\<industry>\<slug>\<version>\`, one folder per plugin version:
+
+- The folder holds only `README.md`, `demo-data\` and `tests\` (a runner, `run_tests.py` or
+  `test_engines.py`, plus helpers such as `check_shared_copies.py`, `steering-corpus.json` and
+  `sample-test-prompts.csv`). `evaluation:prepare` adds `FROZEN.sha256`; never create it by hand.
+- **A frozen folder is never edited**, not even to fix a typo. `check:test-data` fails if any file
+  listed in `FROZEN.sha256` changes, or a file is added or removed.
+- **A new version copies the previous folder forward**, without its `FROZEN.sha256`, then changes
+  the copy:
+
+  ```powershell
+  Copy-Item test-data\<industry>\<slug>\<old-version> test-data\<industry>\<slug>\<new-version> -Recurse
+  Remove-Item test-data\<industry>\<slug>\<new-version>\FROZEN.sha256
+  ```
+
+- Fixtures never go into `submissions\<slug>\` for a MOS3 plugin.
+- **Runner contract:** `python tests\<runner> --plugin-root <dir>`, or the `PLUGIN_ROOT` variable.
+  The plugin root is an extracted plugin ZIP or the submission folder; without either, it defaults
+  to `submissions\<industry>\<slug>`. The runner finds `demo-data\` from its own location, not the
+  working directory.
+- `npm run check:test-data` requires the current version's folder for every MOS3 submission, warns
+  about other unfrozen versions, and fails on test data with no submission.
+- The test-data ZIP is evidence, not part of the candidate. Cowork gets it as a second attachment
+  for the regression only, the archive keeps it next to the plugin ZIP, and it is never promoted
+  or distributed.
+
 ## Cowork operating rules
 
 These rules come from real runs. Follow them every time.
@@ -204,8 +302,10 @@ These rules come from real runs. Follow them every time.
   - Report filenames are fixed, so old and new reports can mix in `output\`. Only
     `full-report.html` is checked for the slug, version and hash; the other two are not.
   - The earlier verdict stays in the conversation and can bias the evaluator.
-- **Attach only the frozen ZIP** from `evaluation-inbox\`, never `public\bundles\`. Attach the
-  testing-strategy document and paste the whole prompt unchanged.
+- **Attach only the frozen ZIP** from `evaluation-inbox\`, never `public\bundles\`. For a MOS3
+  candidate, attach two files from the same inbox folder: `<slug>.zip` (the candidate) and
+  `<slug>-test-data-<version>.zip` (the regression and its fixtures only, never installed). Attach
+  the testing-strategy document and paste the whole prompt unchanged.
 - **Resuming a stalled run of the same version is fine.** In the same task, type
   `continue and produce the 3 reports`. Nothing about the artifact changed, so the hash still
   matches.
@@ -229,19 +329,19 @@ These rules come from real runs. Follow them every time.
 | Behaviour | Detail |
 |---|---|
 | Receipt | Reads `evaluation-inbox\<slug>\<version>\evaluation-run.json`. `<version>` defaults to the submission's current version; pass `--version` for an older frozen candidate. The receipt must still be `prepared` |
-| Task match | Every folder under the tasks root whose `input\<slug>.zip` has the frozen SHA-256, newest first. The task name is not used |
+| Task match | Every folder under the tasks root whose `input\<slug>.zip` has the frozen SHA-256, newest first. The task name is not used, and the test-data ZIP never selects a task |
 | Report set | `output\` must hold `plugin-health.html`, `behavioral-test-report.html` and `full-report.html`, all non-empty and unchanged in size over 15 seconds |
-| Identity | `full-report.html` must mention the slug and version and affirm the hash (for example `SHA-256 check: MATCH`). Otherwise it logs `Reports in <task> do not affirm the matching version/hash; continuing to search.` |
+| Identity | `full-report.html` must mention the slug and version and affirm the hash (for example `SHA-256 check: MATCH`). Otherwise it logs `Reports in <task> do not affirm the matching version/hash; continuing to search.` For MOS3, the archive step also requires the frozen test-data SHA-256 in the report |
 | Polling | Every 30 seconds (`--poll-seconds`); stability window `--stable-seconds` (15) |
 | Timeout | 180 minutes by default (`--timeout-minutes`) |
-| On match | Logs `All three reports are present and stable.` and runs `evaluation:archive` |
+| On match | Logs `All three reports are present and stable.` and runs `evaluation:archive`, which copies the frozen plugin ZIP (and, for MOS3, the frozen test-data ZIP) next to the reports |
 
 Exit messages:
 
 | Outcome | What you see |
 |---|---|
-| `Ready` | `Automated verdict: Ready`, then `Next gate: two independent human reviewers must complete the critical-path checks.` |
-| `Blocked` or `No-ship` | The verdict, then `Do not publish this artifact. Fix the reported blockers and prepare a new version.` |
+| `Ready for human review` | `Automated verdict: Ready for human review`, then `Next: two independent reviewers install this exact ZIP and complete the tracker tab; publication still needs the Publish gate and the owner decision.` |
+| `Blocked` or `No-ship` | The verdict, then `Do not publish this artifact. Fix the reported blockers and prepare a new version.` A `Blocked` verdict adds a note to raise it with the owner if missing human-review evidence is the only reason |
 | Timeout | `Evaluation watcher failed: timed out after 180 minutes waiting for Cowork reports` |
 | Already archived | `Evaluation watcher failed: frozen evaluation manifest is not a prepared run for this slug/version` |
 
@@ -264,17 +364,22 @@ Operating rules:
 
 ### Verdicts
 
+The current prompts (2026-10-12) define the three verdicts explicitly:
+
 | Verdict | Meaning | Next |
 |---|---|---|
-| `Ready` | Internal bar items 1–7 are met; item 8 (human spot check) is pending | [Ready path](#ready-path-human-gate-and-promotion) |
-| `Blocked` | One or more bar items missed, typically logic defects, weak outputs or a quality shortfall, with no guardrail, safety or security breach. Reports say so explicitly ("Blocked, not No-ship") | Remediate in a new version |
-| `No-ship` | A hard stop: a trust-and-safety, security or guardrail breach | Remediate the hard stop first, then everything else, in a new version |
+| `Ready for human review` | Every measured bar is met (identity and SHA-256, package structure, every skill at its floor, behavioral, trust and safety, security, trigger conflicts, shipped regression). The only open items are evidence the two-reviewer human review supplies: installed-runtime critical-path runs, grader-calibration labels and spot checks, listed under "Pending human-review evidence" | [Ready path](#ready-path-human-gate-and-promotion). It is never a publish signal |
+| `Blocked` | Evidence is missing that human review cannot supply (for example a stage that did not run, or an ambiguous artifact identity), or a gate failed closed without an observed plugin defect | Fix the cause and re-evaluate as a new version. If missing human-review evidence is the only reason given, raise it with the owner first |
+| `No-ship` | An observed defect, a below-floor score, or a safety or security blocker | Remediate in a new version, hard stops first |
 
-The evaluator applies these labels with judgement, and the boundary is not strict: a run with
-guardrail hard stops has been labelled `Blocked`. Treat `Blocked` and `No-ship` the same
-operationally. Neither may be published, both are archived as evidence, both are fixed in a new
-version, and hard stops are fixed first whatever the label. The archive script also maps a report
-verdict of `Stop` to `No-ship`.
+Missing human-supplied evidence alone does not block `Ready for human review`. Publication still
+needs both reviewers, the tracker's Publish gate at `PASS` and an owner decision of `Publish`.
+
+Runs before 2026-10-12 used `Ready` and applied `Blocked` and `No-ship` with judgement: logic
+defects and guardrail hard stops were labelled `Blocked`, and some candidates that met every
+measured bar were held `Blocked` or `No-ship` only for missing human-review evidence. Historical
+verdicts stay as recorded. The archive and watch scripts read a bare legacy `Ready` as
+`Ready for human review` and a `Stop` as `No-ship`.
 
 ### The internal bar
 
@@ -287,25 +392,29 @@ The full report scores each item from the testing strategy:
 | 3 | Output quality of 3.5/5 or more | Average across model-run cases |
 | 4 | Trigger consistency 3 of 3 on every should-trigger case | |
 | 5 | Negative cases stay out | No skill triggers when it should not |
-| 6 | Security scan with no medium or high findings | Includes bundled tests |
+| 6 | Security scan with no medium or high findings | Includes shipped tests |
 | 7 | Trust-and-safety gate passes on all applicable skills | |
-| 8 | Human spot check: two testers per critical-path prompt | Always pending in an automated run. In this workstream both reviewers run every prompt in the tracker; the critical-path prompts are the mandatory minimum the tracker must contain |
+| 8 | Human spot check: two testers per critical-path prompt | Always pending in an automated run, and listed under "Pending human-review evidence"; it does not block `Ready for human review`. In this workstream both reviewers run every prompt in the tracker; the critical-path prompts are the mandatory minimum the tracker must contain |
 
 The practical consequence of item 2: with around 50 behavioral cases, at most two may be anything
 other than `PASS`. Remediation must therefore fix every `WEAK` case, not only the `FAIL`s. A run
-with zero failures and six weak cases is `Blocked`.
+with zero failures and six weak cases is not `Ready for human review`.
 
 ### Where to look in `full-report.html`
 
 1. **Release record**: slug, version, run label, expected and observed SHA-256, `SHA-256 check`,
-   and the final verdict with a one-line reason.
+   and the final verdict with a one-line reason. A MOS3 report also gives the test-data SHA-256
+   with its own check, the package-structure result and the six Partner Team Guide Step 2 checks.
 2. **Internal bar** table: items 1–8 with `MET`, `NOT MET` or `PENDING` and evidence.
 3. **Blockers** table: class (hard stop, logic defect and so on), component and detail, in fix
    order.
-4. **Required follow-up and suggested changes**: rows such as *Required before re-evaluation*,
+4. **Pending human-review evidence**: what the two reviewers must supply (installed-runtime
+   critical paths, grader-calibration labels, spot checks). Copy it into the tracker tab, not into
+   the fix list.
+5. **Required follow-up and suggested changes**: rows such as *Required before re-evaluation*,
    *Hardening*, *Description gap*, *Routing conflict*, *Weak output*. Fix all of them, not only
    the required rows; advisory items often become blockers on the next run.
-5. **Per-skill cards** and `behavioral-test-report.html`: each `WEAK` and `FAIL` case with the
+6. **Per-skill cards** and `behavioral-test-report.html`: each `WEAK` and `FAIL` case with the
    fixture, expected and observed behaviour. Every one becomes a regression test.
 
 ### Extracting report text
@@ -333,7 +442,8 @@ your own words.
   `evaluation:prepare` refuses an existing `evaluation-inbox\<slug>\<version>\`, and archiving
   refuses an existing `Evaluation\<version>\`.
 - **Update the current-version declarations, and nothing historical.** Update:
-  - `.claude-plugin\plugin.json` and `metadata.json` (must match; preparation fails otherwise)
+  - `.claude-plugin\plugin.json`, or the root `manifest.json` for a MOS3 plugin, and `metadata.json`
+    (must match; preparation fails otherwise). A MOS3 manifest keeps its `id` across versions
   - `metadata.json` `updatedAt` (it pins the ZIP entry timestamps)
   - `version:` in each `skills\*\SKILL.md` frontmatter
   - engine version constants such as `ENGINE_VERSION` in `scripts\*.py`
@@ -344,8 +454,9 @@ your own words.
 
   Do not change CHANGELOG history, fixtures that deliberately model a prior version, migration
   notes, or references to historical evidence (for example "the 1.0.1 report found ...").
-  `evaluation:prepare` only checks that `plugin.json` and `metadata.json` agree
-  (`scripts/evaluation-workflow.ts`), so find the rest yourself and judge each hit:
+  `evaluation:prepare` only checks that `metadata.json` agrees with `plugin.json` or `manifest.json`
+  (`scripts/evaluation-workflow.ts`), so find the rest yourself (for MOS3, in the new test-data
+  folder too) and judge each hit:
 
   ```powershell
   Get-ChildItem submissions\<industry>\<slug> -Recurse -File |
@@ -364,10 +475,14 @@ your own words.
   the plugin's shipped `tests\check_shared_copies.py`.
 - **LF line endings only** (`.gitattributes` sets `eol=lf`, but editors and tools can still write
   CRLF). No `__pycache__` or `.pyc` in the source tree.
-- **Ship tests** by setting `"bundleTests": true` in `metadata.json` when the evaluator should run
-  them; otherwise `tests\` is excluded from the ZIP. `metadata.json`, the top-level `README.md` and
-  `PACKAGE-NOTES.md` are always source-only (`scripts/import-submissions.ts`), so no bundled file may
-  depend on them. `CHANGELOG.md` and nested READMEs are bundled.
+- **Ship tests.** For a Claude-layout plugin, set `"bundleTests": true` in `metadata.json` when the
+  evaluator should run them; otherwise `tests\` is excluded from the ZIP. `metadata.json`, the
+  top-level `README.md` and `PACKAGE-NOTES.md` are always source-only
+  (`scripts/import-submissions.ts`), so no bundled file may depend on them. `CHANGELOG.md` and
+  nested READMEs are bundled. A MOS3 plugin must not set `bundleTests` (the build fails): its tests
+  and demo data live in the new version's test-data folder, copied forward from the previous one
+  (see [MOS3 test data](#mos3-test-data)), and its ZIP holds only `manifest.json`, the icons and
+  `skills/**`.
 - **Apply the [plugin hardening checklist](plugin-hardening-checklist.md)** to the whole plugin, not
   only the reported area, before freezing.
 - **Record superseded versions.** If a version was frozen but never evaluated (for example you found
@@ -394,7 +509,8 @@ review round found new paraphrases they missed (checklist D13 to D15).
 **Vendoring rules**
 
 - Copy `steering_guard.py` byte-for-byte into each skill's `scripts\` folder that screens text,
-  and `corpus.json` as `tests\steering-corpus.json`. Never edit a vendored copy.
+  and `corpus.json` as `tests\steering-corpus.json` (for a MOS3 plugin, in its test-data version
+  folder's `tests\`). Never edit a vendored copy.
 - Plugin vocabulary goes through the hooks (`extra_verdict_words`, `extra_rule_nouns`,
   `contact_is_steering`, `trusted_domains`), never into the module.
 - Multi-field records use `scan_fields`, so an instruction split across fields still trips.
@@ -491,6 +607,8 @@ not generalisation.
    ```
 
    It exits non-zero if any held-out line is already there. Rewrite those lines, not the corpus.
+   The check does not yet search `test-data\`, where MOS3 plugins keep their tests; until it does,
+   search that folder for the held-out lines yourself.
 7. **Score the baseline** before anyone changes the detector, and record only counts (for example
    "38/40, 0/30 false positives, held-out 2026-10-01") in the wave log, never the lines.
 8. **Rotate it.** Once you have described a missed class to a build agent, those lines are partly
@@ -501,12 +619,16 @@ not generalisation.
 
 ## Ready path: human gate and promotion
 
+Follow this path after a `Ready for human review` verdict (or a legacy `Ready`). The verdict is not a
+publish signal; this path is the publication gate.
+
 1. **Create the deployment doc** at `sharepoint\<Industry>\<slug>\PLUGIN-DETAILS-AND-DEPLOYMENT.md`
    from the [deployment-doc template](templates/plugin-details-and-deployment.md). Record the
    evaluated SHA-256.
 2. **Create or update the tracker** `sharepoint\<Industry>\<slug>\<slug>-human-test-tracker.xlsx`
    from the [tracker spec](templates/human-test-tracker.md): one workbook per plugin, a new tab per
-   version.
+   version, keyed to that version's evaluated SHA-256. Add the report's "Pending human-review
+   evidence" items to the tab.
 3. **Recruit two independent reviewers.** They record their own names in the tracker's `T1 name`
    and `T2 name` columns. Reviewers work separately, ideally not the person who built the version.
 4. **Reviewers run every prompt in the tracker** and record results there. The critical-path
@@ -533,7 +655,8 @@ not generalisation.
    ```
 
    Both hashes must be identical and equal `artifactSha256` in the receipt. Never rebuild the
-   distributable.
+   distributable. For a MOS3 plugin, promote only the plugin ZIP; the test-data ZIP stays in
+   `Evaluation\<version>\` as evidence.
 8. **Update status** in `sharepoint\<Industry>\README.md` and the repository wave log. In the wave
    log, record only that the gate passed and the plugin was promoted; reviewer names, per-prompt
    results and the owner's reasoning stay in SharePoint.
@@ -654,6 +777,32 @@ instruction-like text in data fields, including reworded variants, text split ac
 look-alike letters. Do not edit files.
 ```
 
+**MOS3 plugins.** The tests and fixtures are not in the plugin, so QA and fix prompts must name the
+test-data folder and say how to verify. Add to the review prompt:
+
+```text
+The regression and fixtures for this version are in test-data\<industry>\<slug>\<version>\.
+Run reproducers from that folder with python tests\<runner> --plugin-root <dir>, where <dir> is
+submissions\<industry>\<slug> or a fresh extraction of public\bundles\<slug>.zip. Do not copy
+tests or fixtures into the plugin folder. That folder is unfrozen; any folder with FROZEN.sha256
+is read-only.
+```
+
+Fix prompt skeleton for a MOS3 plugin:
+
+```text
+Fix the confirmed defects below in <slug> <version>. Touch only submissions\<industry>\<slug>\ and
+test-data\<industry>\<slug>\<version>\; never edit a version folder that has FROZEN.sha256, and
+never put fixtures or tests into the plugin folder. Add a regression test for each defect in the
+test-data tests\. Iterate from the version folder with python tests\<runner> --group <name> (the
+plugin root defaults to the submission folder). Before committing, run the full
+runner once against the source and once with --plugin-root set to a fresh extraction of the ZIP
+built by npx tsx scripts/import-submissions.ts --only <slug>; both must pass with the same count.
+Then run npx tsx scripts/import-submissions.ts --check --only <slug>, npm run check:test-data and
+npm run check:shared. Commit with explicit git add -- <path>. Do not invoke skills; work from this
+prompt and the repository.
+```
+
 ### Running suites and agents
 
 In Wave 1 the large suites grew from about 1 minute to 7–10 minutes, partly because several ran at
@@ -662,7 +811,8 @@ over 90 minutes each, and a slow agent looked the same as a hung one.
 
 - Run full suites one at a time per machine.
 - Fix agents iterate with `python tests\run_tests.py --group <name>` (list groups with
-  `--list-groups`) and run the full suite once before committing.
+  `--list-groups`) and run the full suite once before committing. For a MOS3 plugin they run it
+  from the test-data version folder with `--plugin-root`.
 - Start long runs asynchronously and poll at most every 10 minutes.
 - Agents commit their own plugin folder when they finish (explicit paths, never `git add -A`), so
   finished work is never left only in the working tree.
@@ -676,7 +826,12 @@ over 90 minutes each, and a slow agent looked the same as a hung one.
 |---|---|---|
 | `no SharePoint root configured`, `plain local folder` or `broken link` | `sharepoint\` link missing or wrong | `npm run sharepoint:doctor`, then `npm run sharepoint:link` |
 | `frozen evaluation candidate already exists` | That version is already frozen | Bump the version; never delete the inbox folder to retry |
-| `version mismatch: metadata …, manifest …` | `plugin.json` and `metadata.json` disagree | Make them match |
+| `version mismatch: metadata …, manifest …` | `plugin.json` (or MOS3 `manifest.json`) and `metadata.json` disagree | Make them match |
+| `Microsoft 365 Agents Toolkit validation failed … no result within 15 minutes` | The toolkit's Microsoft 365 sign-in was not completed, or prepare ran from a non-interactive session | Rerun prepare from an interactive terminal and complete the sign-in. Do not send a `--skip-atk` candidate to Cowork |
+| `check:test-data`: `… is frozen but … has changed since it was frozen` (or `was added after`, `is listed but missing`) | Someone edited a frozen test-data folder | Restore it from git (`git checkout -- <folder>`, then remove added files). Put the change in the next version's folder instead |
+| `check:test-data`: `test-data\…\<version>\ is missing` | A MOS3 submission's version was bumped without copying its test data forward | Copy the previous version's folder forward (see [MOS3 test data](#mos3-test-data)) |
+| `bundleTests is not allowed with packageFormat mos3` or `.claude-plugin/ must be removed` | A MOS3 conversion left Claude-layout pieces behind | Remove them; tests belong in the test-data folder |
+| `No submission named "<slug>" under submissions/.` | `--only` was given a wrong slug | Use the leaf folder name under `submissions\<industry>\` |
 | Watcher never logs `Matched Cowork task` | Wrong ZIP attached (for example from `public\bundles\`), attachment saved as `<slug> (1).zip` in a reused task, or the task folder has not synced | Check `<task>\input\`; compare `Get-FileHash` with the receipt; start a new task with the frozen ZIP |
 | `--tasks-root is required` | No OneDrive environment variable | Pass `--tasks-root "<OneDrive>\Documents\Cowork\Tasks"` |
 | `do not affirm the matching version/hash` | Stale reports from an earlier version, or the report omits `SHA-256 check: MATCH` | Use a new task per version; if the run is current, ask Cowork in the same task to add the missing release-record lines |
@@ -758,7 +913,7 @@ Day one:
 
    `prepared` means frozen but not archived: find its Cowork task and start a watcher.
 4. Check `git status`, `git log` and open pull requests for uncommitted, unpushed or unmerged work.
-5. For each `Ready` plugin, check the tracker for reviewer progress, the publish gate and the owner
-   decision, and chase the owner for reviewers or a decision.
+5. For each `Ready for human review` plugin, check the tracker for reviewer progress, the publish
+   gate and the owner decision, and chase the owner for reviewers or a decision.
 6. For each `Blocked` or `No-ship` plugin, read the latest `full-report.html` and the plugin's
    `CHANGELOG.md`, then pick up the remediation loop.

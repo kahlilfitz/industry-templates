@@ -10,7 +10,8 @@ stream lives in the [operator runbook](../operator-runbook.md). The failure clas
 hardened against live in the [plugin hardening checklist](../plugin-hardening-checklist.md). This
 file is the history and the current position; it does not repeat those procedures.
 
-State as of 2026-10-05, about 19:00 PT.
+State as of 2026-10-12. The five plugins are being converted to the MOS3 app package as new
+candidate versions; see the [2026-10-12 owner decision](#owner-decision-mos3-packaging-per-version-test-data-and-verdict-rename-2026-10-12).
 
 ## Contents
 
@@ -33,7 +34,7 @@ Update this file whenever one of these happens:
 
 | Event | What to change |
 |---|---|
-| A candidate is frozen (`evaluation:prepare`) | Add a row to the plugin's version history with the version, commit, SHA-256 and "In Cowork evaluation". Add the full SHA-256 to the [frozen artefact register](#frozen-artefact-register). |
+| A candidate is frozen (`evaluation:prepare`) | Add a row to the plugin's version history with the version, commit, SHA-256 and "In Cowork evaluation". Add the full SHA-256 to the [frozen artefact register](#frozen-artefact-register). For a MOS3 candidate, also commit the test-data folder's `FROZEN.sha256` and note the test-data ZIP's SHA-256. |
 | A Cowork verdict is archived | Fill in the result, headline figures, key findings and archive path for that row. Update the status board. |
 | A human reviewer signs off | Update the status board's done-conditions columns and the plugin's next action. Record only gate status (not started, in progress, passed, failed); reviewer names, per-prompt results and the owner's reasoning stay in the tracker. |
 | The owner records a decision | Update the plugin's state and next action only: promoted, back to a new version, or stopped (not published). The decision record itself (who decided, when and why) stays in the tracker. |
@@ -60,7 +61,8 @@ Where things live:
 | Item | Location |
 |---|---|
 | Plugin source | `submissions\professional-services\<slug>\` |
-| Frozen candidate and receipt (gitignored, local) | `evaluation-inbox\<slug>\<version>\` (`<slug>.zip`, `evaluation-run.json`, `cowork-prompt.txt`) |
+| Test data (MOS3 versions) | `test-data\professional-services\<slug>\<version>\` (`README.md`, `demo-data\`, `tests\`, and `FROZEN.sha256` once frozen) |
+| Frozen candidate and receipt (gitignored, local) | `evaluation-inbox\<slug>\<version>\` (`<slug>.zip`, for MOS3 `<slug>-test-data-<version>.zip`, `evaluation-run.json`, `cowork-prompt.txt`) |
 | Archived evidence | `sharepoint\Professional Services\<slug>\Evaluation\<version>\` |
 | Deployment doc and tracker | `sharepoint\Professional Services\<slug>\PLUGIN-DETAILS-AND-DEPLOYMENT.md` and `<slug>-human-test-tracker.xlsx` |
 | Promoted distributable | `sharepoint\Professional Services\<slug>\<slug>-plugin-v<version>.zip` |
@@ -86,13 +88,13 @@ A plugin is done when all five conditions hold. Wave 1 is done when all five plu
 
 | Condition | Meaning |
 |---|---|
-| C1 | The automated Cowork verdict is **Ready**, and the three hash-matched reports plus the evaluated ZIP are archived under `Evaluation\<version>\`. |
+| C1 | The automated Cowork verdict is **Ready for human review** (recorded as **Ready** before 2026-10-12), and the three hash-matched reports plus the evaluated ZIP (and, for a MOS3 candidate, its test-data ZIP) are archived under `Evaluation\<version>\`. Evidence that only the two-reviewer human review can supply (installed-runtime critical-path runs, grader-calibration labels, spot checks) does not block C1; the report lists it under "Pending human-review evidence" and C2 supplies it. |
 | C2 | Two independent human testers have each run every prompt in `<slug>-human-test-tracker.xlsx`, on a tab for that version (the critical-path prompts are the mandatory minimum the tracker must contain), the tab's publish gate reads `PASS`, and the accountable owner's decision on that tab is `Publish`. |
 | C3 | `PLUGIN-DETAILS-AND-DEPLOYMENT.md` exists and records the evaluated SHA-256. |
 | C4 | Only after C2: the distributable `<slug>-plugin-v<version>.zip` is promoted to the plugin folder and is byte-identical to the evaluated ZIP. |
 | C5 | The Professional Services `README.md` status table shows the plugin as published. |
 
-An automated Ready is not a publication decision. C2 is the publication gate, and C4 and C5 only
+An automated Ready for human review is not a publication decision. C2 is the publication gate, and C4 and C5 only
 happen after it. An owner decision of `Fix and re-evaluate` sends the plugin back to a new version;
 `Do not publish` stops it, and the plugin is recorded as not published rather than done.
 
@@ -104,11 +106,11 @@ human testers).
 
 | # | Plugin (slug) | Current version | State | C1 | C2 | C3 | C4 | C5 | Next action | Owner |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 01 | `engagement-closeout-knowledge-harvest` | 1.0.2 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.0.2 tracker tab | reviewers |
-| 02 | `engagement-staffing-bench-match` | 1.1.4 | Ready, archived; awaiting human gate | Yes | No | Yes | No | No | Two reviewers complete the 1.1.4 tracker tab | reviewers |
-| 03 | `engagement-mobilization-onboarding-pack` | 1.0.2 evaluated | 1.0.0 Blocked (trust-and-safety gate); 1.0.1 **No-ship** 2026-10-07 (complete-chain functional case failed); 1.0.2 frozen 2026-10-07 (`C49C8EA7…A378`, receipt `9d27925`, clean) after QA round 3 (cap); evaluated **Blocked** 2026-10-08 on missing grader-calibration evidence only (no human reference labels); every measured bar met and the 1.0.1 defect did not recur; owner accepted 2026-10-08, no re-version | No | No | Yes | No | No | Two reviewers install the 1.0.2 ZIP and complete the 1.0.2 tracker tab; then decide on re-evaluating this exact ZIP | reviewers |
-| 04 | `time-expense-narrative-compliance` | 1.0.3 evaluated; 1.0.4 frozen | 1.0.3 Blocked (trust-and-safety gate); 1.0.4 frozen 2026-10-07 (`1E1380E3…10B4`, receipt `f9518fd`, clean) after QA round 15 (cap, `e6925e4`); evaluated **No-ship** 2026-10-07 on missing grader-calibration evidence only (no human reference labels); every measured bar met; owner accepted 2026-10-08, no re-version | No | No | Yes | No | No | Two reviewers install the 1.0.4 ZIP and complete the 1.0.4 tracker tab; then decide on re-evaluating this exact ZIP | reviewers |
-| 05 | `deliverable-review-quality-gate` | 1.0.3 evaluated; 1.0.4 frozen | 1.0.3 Blocked (B1 demo inputs not derivable from raw packs; B2 shipped tests read `metadata.json`), every measured gate met; 1.0.4 frozen 2026-10-07 (`4AE31530…316B`, receipt `f9518fd`, clean) after QA round 17 (cap, `1d20138`) and the T&E round 15 class sweep; evaluated **Blocked** 2026-10-07 on missing release evidence only (installed-runtime critical-path and independent grader calibration); every measured bar met; owner accepted 2026-10-07, no re-version | No | No | Yes | No | No | Two reviewers install the 1.0.4 ZIP and complete the 1.0.4 tracker tab; then decide on re-evaluating this exact ZIP | reviewers |
+| 01 | `engagement-closeout-knowledge-harvest` | 1.0.3 (MOS3 conversion in progress) | 1.0.3 **MOS3 conversion in progress**, not frozen; supersedes 1.0.2 (Ready, archived; human gate not completed) | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Finish the 1.0.3 MOS3 conversion, then freeze and evaluate it | operator |
+| 02 | `engagement-staffing-bench-match` | 1.1.5 (MOS3 conversion in progress) | 1.1.5 **MOS3 conversion in progress**, not frozen; supersedes 1.1.4 (Ready, archived; human gate not completed) | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Finish the 1.1.5 MOS3 conversion, then freeze and evaluate it | operator |
+| 03 | `engagement-mobilization-onboarding-pack` | 1.0.3 (MOS3 conversion in progress); 1.0.2 evaluated | 1.0.3 **MOS3 conversion in progress**, not frozen; supersedes 1.0.2. History: 1.0.0 Blocked (trust-and-safety gate); 1.0.1 **No-ship** 2026-10-07 (complete-chain functional case failed); 1.0.2 frozen 2026-10-07 (`C49C8EA7…A378`, receipt `9d27925`, clean) after QA round 3 (cap); evaluated **Blocked** 2026-10-08 on missing grader-calibration evidence only (no human reference labels); every measured bar met and the 1.0.1 defect did not recur; owner accepted 2026-10-08, no re-version | No | No | No (1.0.2: Yes) | No | No | Finish the 1.0.3 MOS3 conversion, then freeze and evaluate it | operator |
+| 04 | `time-expense-narrative-compliance` | 1.0.5 (MOS3 conversion in progress); 1.0.4 evaluated | 1.0.5 **MOS3 conversion in progress**, not frozen; supersedes 1.0.4. History: 1.0.3 Blocked (trust-and-safety gate); 1.0.4 frozen 2026-10-07 (`1E1380E3…10B4`, receipt `f9518fd`, clean) after QA round 15 (cap, `e6925e4`); evaluated **No-ship** 2026-10-07 on missing grader-calibration evidence only (no human reference labels); every measured bar met; owner accepted 2026-10-08, no re-version | No | No | No (1.0.4: Yes) | No | No | Finish the 1.0.5 MOS3 conversion, then freeze and evaluate it | operator |
+| 05 | `deliverable-review-quality-gate` | 1.0.5 (MOS3 conversion in progress); 1.0.4 evaluated | 1.0.5 **MOS3 conversion in progress**, not frozen; supersedes 1.0.4. History: 1.0.3 Blocked (B1 demo inputs not derivable from raw packs; B2 shipped tests read `metadata.json`), every measured gate met; 1.0.4 frozen 2026-10-07 (`4AE31530…316B`, receipt `f9518fd`, clean) after QA round 17 (cap, `1d20138`) and the T&E round 15 class sweep; evaluated **Blocked** 2026-10-07 on missing release evidence only (installed-runtime critical-path and independent grader calibration); every measured bar met; owner accepted 2026-10-07, no re-version | No | No | No (1.0.4: Yes) | No | No | Finish the 1.0.5 MOS3 conversion, then freeze and evaluate it | operator |
 
 Notes on the board:
 
@@ -122,6 +124,43 @@ Notes on the board:
   any plugin, because C5 means promoted and recorded.
 - No Wave 1 distributable has been promoted yet. Only the Wave 2 `client-status-qbr` folder holds a
   promoted ZIP.
+- Since 2026-10-12 the C columns refer to the new MOS3 candidate version. The value in brackets is
+  the superseded candidate's, kept for the record. The new versions have no SHA, verdict or freeze
+  date yet; each gets a row in its version history when it is frozen, and its tracker gets a new tab
+  keyed to the new SHA. The superseded candidates' tracker tabs are not completed.
+
+### Owner decision: MOS3 packaging, per-version test data and verdict rename (2026-10-12)
+
+On 2026-10-12 the owner decided three changes for Wave 1. Wave 2 and the published
+`client-status-qbr` are unchanged.
+
+1. **MOS3 packaging.** The five Wave 1 plugins move from the Claude `.claude-plugin` layout to the
+   MOS3 Microsoft 365 app package (manifest schema 1.28), following the "Building a Cowork Plugin —
+   Partner Team Guide". The change is opt-in through `"packageFormat": "mos3"` in `metadata.json`.
+   The ZIP holds only `manifest.json`, `color.png`, `outline.png` and `skills/` at the root; each
+   skill is self-contained. Store listing metadata lives in a per-plugin `listing-metadata.md` that
+   is not bundled. Acceptance requires `atk validate --package-file`, which `evaluation:prepare` runs.
+   This reverses the earlier deferral "Do not add `manifest.json` or change install identity
+   without an owner decision" (see the T&E notable decisions).
+2. **Per-version test data.** README, demo data and tests move out of the plugin into
+   `test-data\professional-services\<slug>\<version>\`. Runners take `--plugin-root <dir>` or
+   `PLUGIN_ROOT`. `evaluation:prepare` builds `<slug>-test-data-<version>.zip` and writes
+   `FROZEN.sha256`, which is committed; a frozen folder never changes, and a new version copies it
+   forward. Cowork gets two attachments: the plugin ZIP (the candidate) and the test-data ZIP
+   (regression only). Archive and watch keep both under `Evaluation\<version>\`.
+3. **Verdict rename.** The passing automated verdict is now **Ready for human review**: every
+   measured bar is met, and the only open items are evidence that the two-reviewer human review
+   supplies (installed-runtime critical paths, grader-calibration labels, spot checks), listed under
+   "Pending human-review evidence". **Blocked** means missing evidence that human review cannot
+   supply; **No-ship** means an observed defect, a below-floor score, or a safety or security
+   blocker. Ready for human review is never a publish signal; publication still needs C2. Verdict
+   rows recorded before this date stay as written, and a recorded "Ready" reads as Ready for human
+   review.
+
+New candidate versions, in progress and not yet frozen: Closeout 1.0.3, Staffing 1.1.5,
+Mobilization 1.0.3, T&E 1.0.5 and DRQG 1.0.5. They supersede Closeout 1.0.2 and Staffing 1.1.4
+(both Ready) and DRQG 1.0.4, T&E 1.0.4 and Mobilization 1.0.2 (evaluated, and accepted by the owner
+with missing evidence).
 
 ### Wave 1 QA exit waiver (2026-10-05)
 
@@ -208,15 +247,20 @@ From the 1.0.2 report:
 
 ### Next action
 
-1. Two independent reviewers each run every prompt on the `1.0.2` tab of the tracker. The
+1. Superseded (2026-10-12) by 1.0.3; the 1.0.2 tab is not to be completed. Was: two independent
+   reviewers each run every prompt on the `1.0.2` tab of the tracker. The
    critical-path prompts it must contain are: the Scenario B end-to-end chain (assemble, identify,
    cluster, Govern, draft); a claimed partner or legal approval asking to release a HOLD; a publish
    or send request on the knowledge record; and the aggregation-risk descriptor request.
-2. Only when the tab's publish gate reads `PASS` and the owner decision is `Publish`, copy
+2. Superseded (2026-10-12) by 1.0.3; 1.0.2 is not promoted. Was: only when the tab's publish gate reads `PASS` and the owner decision is `Publish`, copy
    `Evaluation\1.0.2\engagement-closeout-knowledge-harvest.zip` to
    `engagement-closeout-knowledge-harvest-plugin-v1.0.2.zip` in the plugin folder, confirm its
    SHA-256 is `5F5F8123…1782`, and update the industry README. For the other owner decisions, follow
    the runbook's [Ready path](../operator-runbook.md#ready-path-human-gate-and-promotion).
+3. 1.0.3: **MOS3 conversion in progress** (see the
+   [2026-10-12 owner decision](#owner-decision-mos3-packaging-per-version-test-data-and-verdict-rename-2026-10-12)).
+   Then apply the [hardening checklist](../plugin-hardening-checklist.md), including section H,
+   freeze, evaluate with both attachments, and create a 1.0.3 tracker tab keyed to the new SHA.
 
 ## 02 Engagement Staffing & Bench Match
 
@@ -263,13 +307,18 @@ worktree. The 1.1.4 source was committed afterwards as `e1c10e1`. There is no `C
 
 ### Next action
 
-1. Two independent reviewers each run every prompt on the `1.1.4` tab of the tracker. The tracker's
+1. Superseded (2026-10-12) by 1.1.5; the 1.1.4 tab is not to be completed. Was: two independent
+   reviewers each run every prompt on the `1.1.4` tab of the tracker. The tracker's
    publish gate reads PASS only when both testers pass every row.
-2. Only when the publish gate reads `PASS` and the owner decision is `Publish`, promote
+2. Superseded (2026-10-12) by 1.1.5; 1.1.4 is not promoted. Was: only when the publish gate reads `PASS` and the owner decision is `Publish`, promote
    `Evaluation\1.1.4\engagement-staffing-bench-match.zip` as
    `engagement-staffing-bench-match-plugin-v1.1.4.zip`, confirm its SHA-256 is `4BDE82D9…9C06`, and
    update the industry README. For the other owner decisions, follow the runbook's
    [Ready path](../operator-runbook.md#ready-path-human-gate-and-promotion).
+3. 1.1.5: **MOS3 conversion in progress** (see the
+   [2026-10-12 owner decision](#owner-decision-mos3-packaging-per-version-test-data-and-verdict-rename-2026-10-12)).
+   Then apply the [hardening checklist](../plugin-hardening-checklist.md), including section H,
+   freeze, evaluate with both attachments, and create a 1.1.5 tracker tab keyed to the new SHA.
 
 ## 03 Engagement Mobilization & Onboarding Pack
 
@@ -390,9 +439,15 @@ Accepted residuals from pre-freeze QA rounds 15 to 19 (low or by design under th
     1.0.4. No candidate change is requested, so do not re-version. Deployment doc and a 1.0.2
     tracker tab (55 prompts, 9 critical paths, grader-label columns) created in the library, and
     the industry README updated.
-12. Two reviewers install the 1.0.2 ZIP in Cowork and complete the 1.0.2 tracker tab. Their
+12. Superseded (2026-10-12) by 1.0.3; the 1.0.2 tab is not to be completed. Was: two reviewers
+    install the 1.0.2 ZIP in Cowork and complete the 1.0.2 tracker tab. Their
     per-prompt results and quality scores supply the human labels the report asks for (C2). Then
     decide whether to re-evaluate this exact ZIP.
+13. 1.0.3: **MOS3 conversion in progress** (see the
+    [2026-10-12 owner decision](#owner-decision-mos3-packaging-per-version-test-data-and-verdict-rename-2026-10-12)).
+    Then apply the [hardening checklist](../plugin-hardening-checklist.md), including section H,
+    freeze, evaluate with both attachments, and create a 1.0.3 tracker tab keyed to the new SHA.
+    Under the new verdict definitions, missing grader labels alone no longer block.
 
 ## 04 Time & Expense Narrative Compliance
 
@@ -427,6 +482,10 @@ exception packet. It never submits time, alters WIP or sends anything.
   checks failed when run against them), so the tests prove the fixes rather than just pass.
 - **Deferred:** renaming the plugin to drop "expense" (expenses are out of scope), and MOS3 store
   packaging. Do not add `manifest.json` or change the install identity without an owner decision.
+  The owner decided this on 2026-10-12: MOS3 packaging (with `manifest.json`) is adopted for all
+  five Wave 1 plugins from the new candidate versions, T&E from 1.0.5 (see the
+  [2026-10-12 owner decision](#owner-decision-mos3-packaging-per-version-test-data-and-verdict-rename-2026-10-12)).
+  The rename is still deferred.
 - **1.0.3 fixed what was reported but not what was probed next.** 1.0.3 fixed B1 to B4 (it also
   made BH910 reachable for billing hygiene, based the period caveat on actual data dates and grew
   the tests from 50 to 72 checks), and its logic and quality figures cleared the bar. The run then
@@ -477,9 +536,15 @@ Accepted residuals from pre-freeze QA rounds 12 to 14 (low or by design under th
    candidate change is requested, so do not re-version. Deployment doc and a 1.0.4 tracker tab
    (53 prompts, 9 critical paths, grader-label columns) created in the library, and the industry
    README updated.
-7. Two reviewers install the 1.0.4 ZIP in Cowork and complete the 1.0.4 tracker tab. Their
+7. Superseded (2026-10-12) by 1.0.5; the 1.0.4 tab is not to be completed. Was: two reviewers
+   install the 1.0.4 ZIP in Cowork and complete the 1.0.4 tracker tab. Their
    per-prompt results and quality scores supply the human labels the report asks for (C2). Then
    decide whether to re-evaluate this exact ZIP.
+8. 1.0.5: **MOS3 conversion in progress** (see the
+   [2026-10-12 owner decision](#owner-decision-mos3-packaging-per-version-test-data-and-verdict-rename-2026-10-12)).
+   Then apply the [hardening checklist](../plugin-hardening-checklist.md), including section H,
+   freeze, evaluate with both attachments, and create a 1.0.5 tracker tab keyed to the new SHA.
+   Under the new verdict definitions, missing grader labels alone no longer block.
 
 ## 05 Deliverable Review & Quality Gate
 
@@ -586,9 +651,16 @@ Accepted residuals from pre-freeze QA rounds 13 to 15 (low or by design under th
 8. Done (2026-10-07): owner accepted the evidence block. No candidate change is requested, so do
    not re-version. Deployment doc and a 1.0.4 tracker tab created in the library, and the industry
    README updated.
-9. Two reviewers install the 1.0.4 ZIP in Cowork and complete the 1.0.4 tracker tab. Their
+9. Superseded (2026-10-12) by 1.0.5; the 1.0.4 tab is not to be completed. Was: two reviewers
+   install the 1.0.4 ZIP in Cowork and complete the 1.0.4 tracker tab. Their
    installed runs supply the installed-runtime critical-path evidence and the human labels the
    report asks for (C2). Then decide whether to re-evaluate this exact ZIP.
+10. 1.0.5: **MOS3 conversion in progress** (see the
+    [2026-10-12 owner decision](#owner-decision-mos3-packaging-per-version-test-data-and-verdict-rename-2026-10-12)).
+    Then apply the [hardening checklist](../plugin-hardening-checklist.md), including section H,
+    freeze, evaluate with both attachments, and create a 1.0.5 tracker tab keyed to the new SHA.
+    Under the new verdict definitions, missing installed-runtime evidence or grader labels alone no
+    longer block.
 
 ## Lessons that changed the process
 
@@ -606,7 +678,7 @@ Each lesson below came from a specific Wave 1 finding. The resulting checks are 
 | Tripwires need both an attack set and a benign set. | DRQG and Mobilization tripwires were either noisy or porous; Staffing 1.1.3 was evaded by Unicode tricks. | Normalise format characters and look-alikes, scan every free-text field, target text addressed to the assistant, and ship both sets as tests. |
 | Review sub-agent output independently before freezing. | The Mobilization build agent reported green tests on a build with fail-open gates and a broken tripwire. | Probe the build yourself before committing; agent-reported test counts are not evidence. |
 | Cross-plugin adapters must be tested against the sibling's real output. | Mobilization's Closeout adapter assumed fields that do not exist. | Adapters validate the real demo output of 01 and 02 in tests. |
-| Ship tests in the ZIP. | T&E 1.0.1 cited tests that the bundle excluded. | `bundleTests: true` in `metadata.json`. |
+| Ship tests in the ZIP. | T&E 1.0.1 cited tests that the bundle excluded. | `bundleTests: true` in `metadata.json` (Claude layout). From 2026-10-12 MOS3 candidates ship tests in the per-version test-data ZIP attached alongside the plugin instead. |
 | Line endings and timestamps must be fixed. | CRLF in ZIPs broke reproducibility on Linux; goldens drifted. | LF everywhere, `--generated-at` pinned for goldens, ZIP inspected before Cowork. |
 | Description structure drives skill health. | Closeout 1.0.0 had 0 of 5 skills at floor. | Every SKILL.md has Guardrails, When NOT to use, one-to-one `Do NOT … use <sibling>` deferrals, output format and an example. |
 | Earn the higher floor rather than strip guardrail words. | Naming invoice, delete or send moves a skill into a higher risk tier. | Keep the words when the skill handles that material, and meet the 80 floor. |
@@ -644,9 +716,9 @@ first, as was done for DRQG. The four 1.0.0 builds predate every lesson above.
 
 | Risk | Effect | Mitigation |
 |---|---|---|
-| Human reviewer availability | 01 and 02 are blocked on two independent reviewers, and no reviewers have been named. Every later Ready plugin joins the same queue. | Line up reviewers before more plugins reach Ready. The trackers and critical paths are ready to hand over. |
+| Human reviewer availability | Every plugin that reaches Ready for human review needs two independent reviewers, and no reviewers have been named. (01 and 02 waited on reviewers at their superseded Ready candidates.) | Line up reviewers before the new MOS3 candidates reach Ready for human review. The trackers and critical paths are ready to hand over; each new version gets a new tab. |
 | Evaluator stochasticity | Reruns of the same ZIP can disagree, as T&E 1.0.1 showed. | The canonical hash-matched run is authoritative. If a verdict is disputed, fix and re-version; do not rerun the same version for a better answer. |
-| Evaluator evidence gates vary by run | On 2026-10-07, DRQG 1.0.4 was Blocked solely because installed-runtime evidence and human grader labels were missing. T&E 1.0.4 was No-ship solely for the missing grader labels. The Mobilization 1.0.1 run the same day applied neither gate, but Mobilization 1.0.2 (2026-10-08) was Blocked solely for the missing grader labels. Any candidate can be held this way regardless of quality, under either verdict label. | Record such a block as "missing evidence", not a plugin defect, and do not re-version for it. Installed-runtime evidence and human labels both come from the two-reviewer critical-path runs (C2). |
+| Evaluator evidence gates vary by run | On 2026-10-07, DRQG 1.0.4 was Blocked solely because installed-runtime evidence and human grader labels were missing. T&E 1.0.4 was No-ship solely for the missing grader labels. The Mobilization 1.0.1 run the same day applied neither gate, but Mobilization 1.0.2 (2026-10-08) was Blocked solely for the missing grader labels. Any candidate can be held this way regardless of quality, under either verdict label. | Record such a block as "missing evidence", not a plugin defect, and do not re-version for it. Installed-runtime evidence and human labels both come from the two-reviewer critical-path runs (C2). From 2026-10-12 the Cowork prompt defines the verdicts explicitly: evidence that only the human review can supply is listed under "Pending human-review evidence" and does not stop **Ready for human review**, so this risk should fall away for the new candidates; keep watching for it. |
 | Mobilization value framing | The scenario has no external quantification, so a reviewer may push for figures. | Frame value as cycle time and risk avoided. Do not invent percentages or hours. |
 | DRQG over-escalation perception | The broad `is_definitive_conclusion` rule and fail-closed registers raise more release blockers (Scenario B has 6). A judge or reviewer may read this as noise. | The rule is deliberate. If a run marks it down, tune with evidence from the report; do not quietly relax fail-closed behaviour. |
 | Thin health margin on Closeout `sanitize-check` | 82 against an 80 floor; a rerun could fall below. | Backlog item 4 in [01](#open-backlog-non-blocking-candidates-for-an-optional-103). |

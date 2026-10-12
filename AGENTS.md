@@ -44,3 +44,17 @@ Rules:
   (through `npm run evaluation:archive`/`evaluation:watch`) and documents the user asks for. Never
   delete, rename or overwrite other people's files, and never delete recursively through the link.
 - Never commit, copy into `submissions/`, or bundle anything from `sharepoint\`.
+
+## Test data (`test-data\`)
+
+`test-data\<industry>\<slug>\<version>\` holds the `README.md`, `demo-data\` and `tests\` for one
+version of a MOS3 plugin ([docs/operator-runbook.md](docs/operator-runbook.md#mos3-test-data)).
+
+- A folder with `FROZEN.sha256` is frozen: never edit, add or remove anything in it, and never
+  create `FROZEN.sha256` by hand (`evaluation:prepare` writes it).
+- A new version starts by copying the previous version's folder forward, without its
+  `FROZEN.sha256`.
+- For MOS3 plugins, fixtures, demo data and tests never go into `submissions\<slug>\`.
+- Runners take the plugin as `python tests\<runner> --plugin-root <dir>` (or `PLUGIN_ROOT`): the
+  submission folder or an extracted plugin ZIP. Verify against both, from the version folder, and
+  run `npm run check:test-data`.
