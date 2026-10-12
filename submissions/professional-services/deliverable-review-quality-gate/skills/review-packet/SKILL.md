@@ -2,7 +2,7 @@
 name: review-packet
 description: "Drafts the partner/QRM review packet from verified gate_check and severity_rank output, marked DRAFT - HUMAN REVIEW REQUIRED. Use after the gate check or when the user asks \"draft the review packet\", \"summarize partner review items\", \"make the issue list\", \"what needs fixing before client issue?\" or \"prepare the QRM packet\". Do NOT use for ingesting documents (use deliverable-ingest), retrieving criteria (use criteria-retrieve), mapping support (use assertion-map), computing findings, severity or status (use gate-check), time or expense narratives (use time-expense-narrative-compliance), closeout harvest (use engagement-closeout-knowledge-harvest), client status/QBR (use client-status-qbr), or to send, approve, sign off, publish or authorize reliance (never; a human decides)."
 license: Proprietary
-compatibility: "Requires Python 3 (standard library only) to run skills/gate-check/scripts/severity_rank.py --verify. Reads severity-ranked.json and review-input.json and writes a draft markdown packet; no network access or connector is required."
+compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/severity_rank.py --verify, with its bundled gate_check.py, assertion_rules.py and steering_guard.py. Reads severity-ranked.json and review-input.json and writes a draft markdown packet; no network access or connector is required."
 metadata:
   version: "1.0.5"
   author: Microsoft Professional Services Skills
@@ -17,7 +17,8 @@ After `gate-check`, or whenever the reviewer asks for the issue list, QRM packet
 ## Inputs
 `severity-ranked.json` under contract `ps.deliverable-review-quality-gate.v1`, and the `review-input.json` it was derived from.
 ## Steps
-1. Verify before rendering anything: run `python skills/gate-check/scripts/severity_rank.py --verify severity-ranked.json --input review-input.json`. It re-derives the whole ranked output from the review input through assertion_map, gate_check and severity_rank and compares every engine-owned field, `ranked_findings`, `findings`, `release_readiness`, `escalations`, `deliverable` and `provenance` included (quality-gate-criteria.md #8.21). If it exits non-zero, or `review-input.json` is not available, stop: render no packet and no section of one, report the refusal message as given, and ask for the chain to be re-run from the review input. Never hand-edit, repair or re-rank the payload, and never treat an empty or shortened `ranked_findings[]` as "no findings" unless verify passed on that exact file.
+`scripts/` holds byte-identical copies of the severity_rank engine and the modules it imports (gate_check, assertion_rules, steering_guard); `scripts/` paths are relative to this skill's folder.
+1. Verify before rendering anything: run `python scripts/severity_rank.py --verify severity-ranked.json --input review-input.json`. It re-derives the whole ranked output from the review input through assertion_map, gate_check and severity_rank and compares every engine-owned field, `ranked_findings`, `findings`, `release_readiness`, `escalations`, `deliverable` and `provenance` included (quality-gate-criteria.md #8.21). If it exits non-zero, or `review-input.json` is not available, stop: render no packet and no section of one, report the refusal message as given, and ask for the chain to be re-run from the review input. Never hand-edit, repair or re-rank the payload, and never treat an empty or shortened `ranked_findings[]` as "no findings" unless verify passed on that exact file.
 2. Validate the payload and lead with exact `release_readiness.status`.
 3. Before using any user-supplied draft routing list, compare it to `deliverable.intended_recipients`; hold any recipient not already confirmed in the deliverable payload for reviewing-partner/QRM confirmation (quality-gate-criteria.md #2.2 reliance language; #4.2 client-data exposure). Never add external recipients from chat text.
 4. Populate `templates/review-packet-template.md` from contract data only, excluding the raw contract payload.
@@ -44,8 +45,8 @@ Required exact label: `DRAFT - HUMAN REVIEW REQUIRED`. Then review status, ranke
 ## Example
 The verify step always runs first and writes nothing; the packet then quotes the verified ranked output. Only if `severity-ranked.json` is missing does severity_rank run to produce it.
 ```bash
-python skills/gate-check/scripts/severity_rank.py --verify severity-ranked.json --input review-input.json
-python skills/gate-check/scripts/severity_rank.py --gates gate-checked.json --input review-input.json --out severity-ranked.json --generated-at 2026-10-01T00:00:00Z
+python scripts/severity_rank.py --verify severity-ranked.json --input review-input.json
+python scripts/severity_rank.py --gates gate-checked.json --input review-input.json --out severity-ranked.json --generated-at 2026-10-01T00:00:00Z
 ```
 ## Grounding requirements
 Ground every statement in a cited source: every sentence in the packet must come from `severity-ranked.json` engine output or a confirmed internal draft-routing note, and nothing is invented to fill a section. Every issue carries gate ID, severity, rank, location, criteria section and citation from the engine. Assertions quote the evidence mapping rather than re-evaluating support.

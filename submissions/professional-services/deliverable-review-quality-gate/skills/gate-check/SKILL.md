@@ -2,7 +2,7 @@
 name: gate-check
 description: "Runs the explicit Govern step: deterministic gate_check and severity_rank set gate results, release blockers and review status. Use after assertion-map or when the user asks \"run the quality gate\", \"what blocks client issue?\", \"can this go to the client?\", \"rank the review findings\", \"check required reliance language\" or \"list the release blockers\". Do NOT use for ingesting documents (use deliverable-ingest), retrieving criteria (use criteria-retrieve), mapping assertion support (use assertion-map), the packet narrative (use review-packet), time or expense narratives (use time-expense-narrative-compliance), closeout harvest (use engagement-closeout-knowledge-harvest), client status/QBR (use client-status-qbr), or to approve, sign off, send or authorize reliance (never; a human decides)."
 license: Proprietary
-compatibility: "Requires Python 3 (standard library only) for scripts/gate_check.py and scripts/severity_rank.py, and for skills/assertion-map/scripts/assertion_map.py when assertion-mapped.json is missing. Reads review-input.json and engine output; no network access or connector is required."
+compatibility: "Requires Python 3 (standard library only) for the bundled scripts/gate_check.py and scripts/severity_rank.py, and scripts/assertion_map.py when assertion-mapped.json is missing; every script it runs is inside this skill. Reads review-input.json and engine output; no network access or connector is required."
 metadata:
   version: "1.0.5"
   author: Microsoft Professional Services Skills
@@ -15,11 +15,12 @@ Apply QRM gate criteria deterministically and rank issues for partner/QRM review
 ## When to use
 After `assertion-map` in every run, and on any question about blockers, required language, third-party recipients, prior-finding closure or issue ranking.
 ## Inputs
-`assertion-mapped.json` under contract `ps.deliverable-review-quality-gate.v1`, and the `review-input.json` it was mapped from (both engines need it to re-derive their input). If `assertion-mapped.json` is missing but `review-input.json` is available, run `assertion-map` first with the same `--generated-at` value. If `review-input.json` is not available, stop and report the missing upstream artifact.
+`assertion-mapped.json` under contract `ps.deliverable-review-quality-gate.v1`, and the `review-input.json` it was mapped from (both engines need it to re-derive their input). If `assertion-mapped.json` is missing but `review-input.json` is available, run the bundled `scripts/assertion_map.py` (a byte-identical copy of the assertion-map engine) first with the same `--generated-at` value. If `review-input.json` is not available, stop and report the missing upstream artifact.
 ## Steps
-1. If `assertion-mapped.json` is missing and `review-input.json` exists, run `python skills/assertion-map/scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at <ISO timestamp>`.
-2. Run `python skills/gate-check/scripts/gate_check.py --mapped assertion-mapped.json --input review-input.json --out gate-checked.json --generated-at <ISO timestamp>`.
-3. Run `python skills/gate-check/scripts/severity_rank.py --gates gate-checked.json --input review-input.json --out severity-ranked.json --generated-at <ISO timestamp>`.
+Every engine this skill runs is bundled in its own `scripts/`; `scripts/` paths are relative to this skill's folder.
+1. If `assertion-mapped.json` is missing and `review-input.json` exists, run `python scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at <ISO timestamp>`.
+2. Run `python scripts/gate_check.py --mapped assertion-mapped.json --input review-input.json --out gate-checked.json --generated-at <ISO timestamp>`.
+3. Run `python scripts/severity_rank.py --gates gate-checked.json --input review-input.json --out severity-ranked.json --generated-at <ISO timestamp>`.
 4. If any engine exits non-zero, stop and report; never hand-compute findings, counts, severity, order or status.
 5. Quote gate statuses, findings, severity, rank and `release_readiness.status` verbatim.
 6. Pass ranked output to `review-packet`.
@@ -34,8 +35,8 @@ Release readiness: `<release_readiness.status>`
 ```
 ## Example
 ```bash
-python skills/gate-check/scripts/gate_check.py --mapped assertion-mapped.json --input review-input.json --out gate-checked.json --generated-at 2026-10-01T00:00:00Z
-python skills/gate-check/scripts/severity_rank.py --gates gate-checked.json --input review-input.json --out severity-ranked.json --generated-at 2026-10-01T00:00:00Z
+python scripts/gate_check.py --mapped assertion-mapped.json --input review-input.json --out gate-checked.json --generated-at 2026-10-01T00:00:00Z
+python scripts/severity_rank.py --gates gate-checked.json --input review-input.json --out severity-ranked.json --generated-at 2026-10-01T00:00:00Z
 ```
 ## Grounding requirements
 Ground every statement in a cited source: every finding, severity, count and status comes from `gate_check.py`/`severity_rank.py` output, and every explanation cites the finding's criteria section and source; never invent a finding or a reason. Every finding includes gate ID, severity, location, criteria section, confidence, source and citation. Worst severity controls the review status. Release blockers rank first and cannot be downgraded by the model, prose polish, schedule pressure or disclaimers.

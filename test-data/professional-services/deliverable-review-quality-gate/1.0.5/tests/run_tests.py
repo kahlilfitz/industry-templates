@@ -35,7 +35,9 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
+import subprocess
 import sys
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
@@ -1961,7 +1963,8 @@ def steering_guard_tests(tmp):
           digests and all(value == shared.STEERING_GUARD_SHA256 for value in digests)
           and any(os.path.samefile(sg.__file__, vendored) for vendored in copies)
           and os.path.samefile(gate.rules.sg.__file__, sg.__file__)
-          and {"skills/assertion-map/scripts/steering_guard.py", "skills/gate-check/scripts/steering_guard.py"} <= set(shared.steering_guard_copies()), digests)
+          and {"skills/assertion-map/scripts/steering_guard.py", "skills/gate-check/scripts/steering_guard.py",
+               "skills/review-packet/scripts/steering_guard.py"} <= set(shared.steering_guard_copies()), digests)
     check("SG phrase-list detector removed: gate_check screens only through steering_guard",
           not any(hasattr(gate, name) for name in ("INSTRUCTION_PATTERNS", "STEERING_PATTERNS", "VOCATIVE_PATTERNS",
                                                    "LOOSE_STEERING_PATTERNS", "has_confusable_mixed_token")))
@@ -2455,9 +2458,10 @@ def skill_doc_tests():
           "quality-gate-criteria.md #1-#8" in criteria
           and "Example output:" in criteria
           and "assertion_map.py" not in criteria)
-    check("Non-blocking gate-check documents upstream assertion-map recovery",
+    check("Non-blocking gate-check documents upstream assertion-map recovery with its own bundled engine copy",
           "If `assertion-mapped.json` is missing" in gate
-          and "skills/assertion-map/scripts/assertion_map.py" in gate)
+          and "python scripts/assertion_map.py --input review-input.json --out assertion-mapped.json" in gate
+          and "skills/assertion-map/" not in gate)
     check("Advisory 1 deliverable-ingest documents criteria_sections seeding and paragraph numbering, including unpaginated sources",
           "Seed `criteria` before `criteria-retrieve` runs" in ingest and "criteria_sections` starts as the shipped floor" in ingest
           and "Number paragraphs from 1 on each page" in ingest and "number paragraphs from 1 from the top of the document" in ingest)
@@ -4406,9 +4410,9 @@ def qa104_round10_tests(tmp):
     # 5. Static check: every message in the plugin's scripts formats only engine constants, field paths, indexes and counts.
     found, scanned = check_messages.violations()
     names = sorted({os.path.basename(path) for path in scanned})
-    check("QR10-5 static check: no raise, print, stderr write or problem report formats input values (engines, rules and tests tools)",
+    check("QR10-5 static check: no raise, print, stderr write or problem report formats input values (engines, rules, their vendored per-skill copies and tests tools: 11 scripts)",
           not found and {"assertion_map.py", "gate_check.py", "severity_rank.py", "assertion_rules.py", "derive_review_input.py", "check_shared_copies.py"} <= set(names)
-          and len(scanned) == 7, (found, names))
+          and len(scanned) == 11, (found, names))
     planted = os.path.join(tmp, "qr10-planted.py")
     with open(planted, "w", encoding="utf-8", newline="\n") as fh:
         fh.write("\n".join([
@@ -7756,6 +7760,147 @@ def r15_sweep_tests(tmp):
     check("R15-C control: both shipped demo packs still derive from their raw packs", demos == [[], []], demos)
 
 
+def documented_commands(skill):
+    """The `python scripts/...` commands a SKILL.md documents (inline steps and fenced examples), in order, with the
+    <ISO timestamp> placeholder pinned to FIXED_TS and exact repeats dropped."""
+    text = read_text(os.path.join(PLUGIN_ROOT, "skills", skill, "SKILL.md"))
+    commands = []
+    for match in re.finditer(r"python3? ([^`\n]+)", text):
+        argv = shlex.split(match.group(1).replace("<ISO timestamp>", FIXED_TS).strip())
+        if argv and argv[0].endswith(".py") and argv not in commands:
+            commands.append(argv)
+    return commands
+
+
+def mos3_skill_isolation_tests(tmp):
+    """MOS3 (QA round 1 on 1.0.5): the package ships only skills/, so each skill must run alone. Every script a skill
+    runs, and every module it imports, is vendored byte for byte into that skill's scripts/ from one canonical copy
+    (tests/check_shared_copies.py), and each skill's documented commands are run from a lone copy of its folder."""
+    shared = load_shared_copies()
+    problems, checked = shared.check(PLUGIN_ROOT)
+    check(f"MOS3-1 every shared contract, reference and engine copy is byte-identical to its canonical copy ({len(checked)} copies)",
+          not problems and len(checked) >= 20, problems)
+    pairs = set(shared.copy_pairs(PLUGIN_ROOT))
+    expected = {("skills/assertion-map/scripts/assertion_map.py", "skills/gate-check/scripts/assertion_map.py"),
+                ("skills/assertion-map/scripts/assertion_rules.py", "skills/gate-check/scripts/assertion_rules.py"),
+                ("skills/assertion-map/scripts/assertion_rules.py", "skills/review-packet/scripts/assertion_rules.py"),
+                ("skills/gate-check/scripts/gate_check.py", "skills/review-packet/scripts/gate_check.py"),
+                ("skills/gate-check/scripts/severity_rank.py", "skills/review-packet/scripts/severity_rank.py")}
+    check("MOS3-1 the copy map registers gate-check's assertion_map/assertion_rules and review-packet's severity_rank, "
+          "gate_check and assertion_rules copies", expected <= pairs, sorted(expected - pairs))
+
+    # The checker catches drift, a missing copy and an unregistered copy.
+    work = os.path.join(tmp, "mos3-drift")
+    shutil.copytree(os.path.join(PLUGIN_ROOT, "skills"), os.path.join(work, "skills"), ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    with open(os.path.join(work, "skills", "review-packet", "scripts", "gate_check.py"), "a", encoding="utf-8", newline="\n") as fh:
+        fh.write("# drift\n")
+    os.remove(os.path.join(work, "skills", "gate-check", "scripts", "assertion_map.py"))
+    os.makedirs(os.path.join(work, "skills", "criteria-retrieve", "scripts"))
+    with open(os.path.join(work, "skills", "criteria-retrieve", "scripts", "severity_rank.py"), "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("# stale copy\n")
+    found, _ = shared.check(work)
+    check("MOS3-2 check_shared_copies reports a drifted, a missing and an unregistered stale engine copy",
+          "DRIFT   skills/review-packet/scripts/gate_check.py (differs from its canonical copy)" in found
+          and "MISSING skills/gate-check/scripts/assertion_map.py" in found
+          and "DRIFT   skills/criteria-retrieve/scripts/severity_rank.py (differs from its canonical copy)" in found, found)
+
+    left = [name for name in (".claude-plugin", "contracts", "references", "config", "scripts", "tests", "demo-data")
+            if os.path.exists(os.path.join(PLUGIN_ROOT, name))]
+    check("MOS3-3 the plugin root carries no Claude layout or root contracts/, references/, config/, scripts/, tests/ or demo-data/", not left, left)
+
+    skills = sorted(name for name in os.listdir(os.path.join(PLUGIN_ROOT, "skills")) if os.path.isdir(os.path.join(PLUGIN_ROOT, "skills", name)))
+    escapes = []
+    for skill in skills:
+        for folder, dirs, files in os.walk(os.path.join(PLUGIN_ROOT, "skills", skill)):
+            dirs[:] = [d for d in dirs if d != "__pycache__"]
+            for name in files:
+                path = os.path.join(folder, name)
+                rel = os.path.relpath(path, PLUGIN_ROOT).replace(os.sep, "/")
+                if name.endswith(".md"):
+                    text = read_text(path)
+                    if "../" in text or "skills/" in text:
+                        escapes.append(rel)
+                elif name.endswith(".py"):
+                    tree = ast.parse(read_text(path))
+                    docstrings = {id(node.body[0].value) for node in ast.walk(tree)
+                                  if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                                  and node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant)}
+                    for node in ast.walk(tree):
+                        if (isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings
+                                and ("skills/" in node.value or "../" in node.value or node.value == "..")):
+                            escapes.append(f"{rel}:{node.lineno}")
+                        elif isinstance(node, ast.Attribute) and node.attr == "pardir":
+                            escapes.append(f"{rel}:{node.lineno}")
+    check("MOS3-4 no SKILL.md, reference, template or script string names another skill's path or leaves its skill folder", not escapes, escapes[:8])
+
+    commands = {skill: documented_commands(skill) for skill in skills}
+    scripts = {skill: sorted({argv[0] for argv in argvs}) for skill, argvs in commands.items()}
+    check("MOS3-5 each SKILL.md documents only skill-local scripts it bundles: assertion-map runs assertion_map; gate-check runs "
+          "assertion_map, gate_check and severity_rank; review-packet runs severity_rank (--verify); ingest and criteria run none",
+          scripts == {"assertion-map": ["scripts/assertion_map.py"],
+                      "criteria-retrieve": [],
+                      "deliverable-ingest": [],
+                      "gate-check": ["scripts/assertion_map.py", "scripts/gate_check.py", "scripts/severity_rank.py"],
+                      "review-packet": ["scripts/severity_rank.py"]}
+          and all(os.path.isfile(os.path.join(PLUGIN_ROOT, "skills", skill, *script.split("/"))) for skill in skills for script in scripts[skill])
+          and any("--verify" in argv for argv in commands["review-packet"]), scripts)
+
+    env = {key: value for key, value in os.environ.items() if key != "PLUGIN_ROOT"}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+    def run_alone(skill, scenario, seeds, label):
+        """Copy only this skill's folder to an empty package, seed an unrelated working directory with the given demo
+        files and run every documented command in order with scripts/ resolved against the lone copy."""
+        base = os.path.join(tmp, "mos3-iso", f"{skill}-{scenario}-{label}")
+        package = os.path.join(base, "pkg")
+        shutil.copytree(os.path.join(PLUGIN_ROOT, "skills", skill), os.path.join(package, skill), ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        cwd = os.path.join(base, "cwd")
+        os.makedirs(cwd)
+        for source, name in seeds:
+            shutil.copyfile(source, os.path.join(cwd, name))
+        results = []
+        for argv in commands[skill]:
+            proc = subprocess.run([sys.executable, os.path.join(package, skill, *argv[0].split("/")), *argv[1:]], cwd=cwd, env=env,
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
+            results.append((proc.returncode, proc.stdout, proc.stderr.strip()[:200]))
+        return cwd, results
+
+    def same(cwd, scenario, name):
+        golden = os.path.join(DATA_ROOT, "demo-data", scenario, "expected", name)
+        produced = os.path.join(cwd, name)
+        return os.path.exists(produced) and read_text(produced) == read_text(golden)
+
+    for scenario in ("scenario-a-happy", "scenario-b-drama"):
+        demo = os.path.join(DATA_ROOT, "demo-data", scenario)
+        review = (os.path.join(demo, "review-input.json"), "review-input.json")
+        expected = lambda name: (os.path.join(demo, "expected", name), name)  # noqa: E731
+
+        cwd, results = run_alone("assertion-map", scenario, [review], "chain")
+        check(f"MOS3-6 {scenario}: assertion-map alone runs its documented command and reproduces assertion-mapped.json",
+              [code for code, _, _ in results] == [0] and same(cwd, scenario, "assertion-mapped.json"), [r[0::2] for r in results])
+
+        cwd, results = run_alone("gate-check", scenario, [review], "chain")
+        log = "".join(stdout for _, stdout, _ in results)
+        check(f"MOS3-7 {scenario}: gate-check alone, from the review input only, recovers assertion-mapped.json with its bundled "
+              "assertion_map copy and reproduces all three goldens and engine-run.log",
+              [code for code, _, _ in results] == [0, 0, 0] and all(same(cwd, scenario, name) for name in ("assertion-mapped.json", "gate-checked.json", "severity-ranked.json"))
+              and log == read_text(os.path.join(demo, "expected", "engine-run.log")), [r[0::2] for r in results])
+
+        cwd, results = run_alone("review-packet", scenario, [review, expected("gate-checked.json"), expected("severity-ranked.json")], "verify")
+        check(f"MOS3-8 {scenario}: review-packet alone verifies severity-ranked.json with its bundled severity_rank copy and "
+              "regenerates it byte for byte",
+              results and all(code == 0 for code, _, _ in results) and same(cwd, scenario, "severity-ranked.json"), [r[0::2] for r in results])
+
+        tampered = os.path.join(tmp, "mos3-iso", f"tampered-{scenario}.json")
+        packet = read(os.path.join(demo, "expected", "severity-ranked.json"))
+        status = packet["release_readiness"]["status"]
+        packet["release_readiness"]["status"] = "partner_review_required_advisories_only" if status == "not_ready_for_release" else "not_ready_for_release"
+        write(tampered, packet)
+        cwd, results = run_alone("review-packet", scenario, [review, expected("gate-checked.json"), (tampered, "severity-ranked.json")], "tampered")
+        check(f"MOS3-8 {scenario}: review-packet alone refuses an edited severity-ranked.json at --verify",
+              results and results[0][0] != 0 and "Traceback" not in results[0][2], [r[0::2] for r in results])
+
+
 def seed_inputs():
     """The demo goldens map to their scenario's review input, so a test that edits a golden is compared with it."""
     for scenario in ("scenario-a-happy", "scenario-b-drama"):
@@ -7774,7 +7919,7 @@ TMP_GROUPS = (golden_tests, negative_tests, register_tests, page_label_tests, g8
               tne_round10_sweep_tests, mobilization_round13_sweep_tests, qa104_round12_tests,
               qa104_round13_tests, qa104_round13_sweep_tests, qa104_round14_tests, qa104_round15_tests, mobilization_round17_sweep_tests,
               mobilization_round18_sweep_tests, qa104_round16_tests, mobilization_round20_sweep_tests, qa104_round17_tests,
-              r15_sweep_tests)
+              r15_sweep_tests, mos3_skill_isolation_tests)
 PLAIN_GROUPS = (recipient_classifier_tests, tripwire_tests, packet_template_tests, skill_doc_tests,
                 skill_trigger_tests, version_tests, shared_copy_tests)
 GROUP_NAMES = [group.__name__ for group in TMP_GROUPS + PLAIN_GROUPS]

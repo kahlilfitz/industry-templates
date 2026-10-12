@@ -8,7 +8,7 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
-import assertion_rules as rules  # noqa: E402  byte-identical copy of skills/assertion-map/scripts/assertion_rules.py
+import assertion_rules as rules  # noqa: E402  byte-identical copy of the assertion-map skill's canonical assertion_rules.py
 import steering_guard as sg  # noqa: E402  vendored shared detector; never edit (tests/check_shared_copies.py pins its SHA-256)
 
 ENGINE = "engine:gate_check"
@@ -92,7 +92,7 @@ def require_contract(payload):
         if key in payload and not isinstance(payload[key], list):
             raise InputError(f"{key} must be an array")
     if "assertion_mappings" not in payload:
-        raise InputError("assertion_mappings missing: run skills/assertion-map/scripts/assertion_map.py first; gate_check runs on assertion_map output only")
+        raise InputError("assertion_mappings missing: run assertion_map.py first; gate_check runs on assertion_map output only")
     if payload.get("criteria") is not None and not isinstance(payload["criteria"], dict):
         raise InputError("criteria must be an object when supplied (absent or null means the criteria register was not loaded)")
     for index, entry in enumerate(payload.get("escalations", [])):

@@ -44,9 +44,10 @@ Markdown summary plus JSON path: deliverable_id, title, version, recipient list,
 Payload: review-input.json
 ```
 ## Example
-Only structure the intake; engines make all verdicts later.
-```bash
-python skills/assertion-map/scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at 2026-10-01T00:00:00Z
+Only structure the intake; engines make all verdicts later. This skill runs no script: it hands `review-input.json` to `criteria-retrieve` and then to `assertion-map`, which runs its own bundled engine.
+```text
+Intake complete: review-input.json (<deliverable_id> <version>; <n> recipients; <n> evidence items; <n> assertions; <n> prior findings).
+Next: criteria-retrieve, then assertion-map.
 ```
 ## Grounding requirements
 Ground every statement in a cited source: every payload value must come from the source material or a documented rule in the steps above. Never invent page numbers, sample or population sizes, recipients or register states. Every assertion must carry a deliverable location and citation. Every evidence item must carry source identity, type, confidence and citation. Missing evidence index, criteria list, recipient list, client-data register, brand checks, licensed-content register or prior-findings register is not an empty list; it is a missing input that downstream engines must hold or reject.

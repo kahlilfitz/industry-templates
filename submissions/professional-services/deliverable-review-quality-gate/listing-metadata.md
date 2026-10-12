@@ -73,8 +73,8 @@ Owner: verify each against the Top 200 connector list.
 | `deliverable-ingest` | No scripts of its own. Reads the user-supplied draft deliverable, evidence index, recipient list, registers and prior review notes read-only (for example from an engagement workspace, SharePoint or OneDrive); no connector is required. Produces review-input.json for assertion-map, whose engine needs Python 3. |
 | `criteria-retrieve` | No scripts. Reads its bundled references/ and contracts/ plus the user-supplied criteria extract, required-language register and prior-review tracker read-only; no connector is required. |
 | `assertion-map` | Requires Python 3 (standard library only) for scripts/assertion_map.py. Reads review-input.json supplied by the user or deliverable-ingest and writes assertion-mapped.json; no network access or connector is required. |
-| `gate-check` | Requires Python 3 (standard library only) for scripts/gate_check.py and scripts/severity_rank.py, and for skills/assertion-map/scripts/assertion_map.py when assertion-mapped.json is missing. Reads review-input.json and engine output; no network access or connector is required. |
-| `review-packet` | Requires Python 3 (standard library only) to run skills/gate-check/scripts/severity_rank.py --verify. Reads severity-ranked.json and review-input.json and writes a draft markdown packet; no network access or connector is required. |
+| `gate-check` | Requires Python 3 (standard library only) for the bundled scripts/gate_check.py and scripts/severity_rank.py, and scripts/assertion_map.py when assertion-mapped.json is missing; every script it runs is inside this skill. Reads review-input.json and engine output; no network access or connector is required. |
+| `review-packet` | Requires Python 3 (standard library only) to run the bundled scripts/severity_rank.py --verify, with its bundled gate_check.py, assertion_rules.py and steering_guard.py. Reads severity-ranked.json and review-input.json and writes a draft markdown packet; no network access or connector is required. |
 
 ## Privacy and terms
 

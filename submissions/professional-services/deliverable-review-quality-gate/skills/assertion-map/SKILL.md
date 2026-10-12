@@ -17,7 +17,7 @@ After `deliverable-ingest` and `criteria-retrieve`, before `gate-check`; also fo
 ## Inputs
 `review-input.json` under contract `ps.deliverable-review-quality-gate.v1`, including explicit `criteria.criteria_sections`, `assertions[]` and `evidence_set[]`.
 ## Steps
-1. Run `python skills/assertion-map/scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at <ISO timestamp>`.
+1. Run `python scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at <ISO timestamp>`.
 2. If the engine exits non-zero, stop and report the input error; never hand-compute support.
 3. Quote `support_status`, `support_score`, linked evidence IDs, best evidence ID, rationale and citations verbatim. Citations include every linked evidence item, not just the best evidence item.
 4. Pass unsupported and limited assertion findings to `gate-check`.
@@ -31,7 +31,7 @@ Markdown table: assertion_id, class, location, evidence_ids, best_evidence_id, s
 ```
 ## Example
 ```bash
-python skills/assertion-map/scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at 2026-10-01T00:00:00Z
+python scripts/assertion_map.py --input review-input.json --out assertion-mapped.json --generated-at 2026-10-01T00:00:00Z
 ```
 ## Grounding requirements
 Ground every statement in a cited source: every support verdict, score and escalation comes from the engine, and every explanation cites the linked evidence ID and criteria section; never invent evidence, scores or rationales. Best evidence is selected for relevance to the assertion class before confidence, so scope documents do not outrank the actual support sample. Quantified claims require traceable analytical evidence; stakeholder verbal support is insufficient. No linked evidence means unsupported, never supported.

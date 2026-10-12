@@ -1,8 +1,9 @@
 """assertion_rules - shared assertion-support rules and input schemas.
 
-Canonical copy: skills/assertion-map/scripts/assertion_rules.py. skills/gate-check/scripts/ ships a
-byte-identical copy (verified by tests/check_shared_copies.py) so gate_check can recompute exactly what
-assertion_map emits and never has to trust a self-declared source tag (quality-gate-criteria.md #8.4).
+Canonical copy: the assertion-map skill's scripts/assertion_rules.py. The gate-check and review-packet skills
+ship byte-identical copies in their own scripts/ (verified by the test data's check_shared_copies.py), so each skill
+runs on its own and gate_check can recompute exactly what assertion_map emits and never has to trust a
+self-declared source tag (quality-gate-criteria.md #8.4).
 
 Type rule: a field of the wrong JSON type is a clean InputError; values are never coerced, so a string
 "false" is never read as a boolean and a page label "iv" is never read as a page number.

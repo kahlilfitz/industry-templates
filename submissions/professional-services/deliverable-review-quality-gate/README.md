@@ -36,6 +36,19 @@ A field too long to screen is held for review, never passed.
 
 Version 1.0.5 changes packaging only. The plugin is now a Microsoft 365 (MOS3) app package: `manifest.json`, `color.png`, `outline.png` and `skills/`. Each skill carries its own contract and references, and gate, severity and output behaviour are unchanged. Demo data and tests no longer ship in the plugin.
 
+### Bundled engine copies
+
+Each skill runs only scripts inside its own folder, so a skill installed on its own still works. `gate-check` bundles the `assertion_map` engine it runs to recover a missing `assertion-mapped.json`, and `review-packet` bundles the `severity_rank` engine and the modules it imports for `--verify`. `deliverable-ingest` runs no script; it hands `review-input.json` to `assertion-map`. Change the canonical copy, then copy it byte-for-byte to the others; `tests/check_shared_copies.py` and the runner's `mos3_skill_isolation_tests` group fail on any drift, missing copy or stale copy.
+
+| File | Canonical copy | Byte-identical copies |
+|------|----------------|-----------------------|
+| `contracts/deliverable-review-quality-gate.contract.json` | `skills/gate-check/` | the other four skills |
+| `references/quality-gate-criteria.md`, `references/partner-review-packet-format.md` | `skills/gate-check/` | the other four skills |
+| `scripts/assertion_map.py` | `skills/assertion-map/` | `gate-check` |
+| `scripts/assertion_rules.py` | `skills/assertion-map/` | `gate-check`, `review-packet` |
+| `scripts/gate_check.py`, `scripts/severity_rank.py` | `skills/gate-check/` | `review-packet` |
+| `scripts/steering_guard.py` | `shared/steering-guard/` (repository) | `assertion-map`, `gate-check`, `review-packet` |
+
 ## Tests and demo data
 
 Demo scenarios, goldens and tests live in [`test-data/professional-services/deliverable-review-quality-gate/1.0.5/`](../../../test-data/professional-services/deliverable-review-quality-gate/1.0.5/README.md). From that folder:

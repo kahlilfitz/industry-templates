@@ -42,9 +42,14 @@ Each scenario holds a raw pack (`raw/`), the structured `review-input.json` that
 ## Helpers in `tests/`
 
 - `run_tests.py`: the regression runner (engines, contract, skill documents, goldens, injection tripwire benign and
-  attack sets, versions and package layout).
-- `check_shared_copies.py`: the contract and shared references in `skills/gate-check/` are byte-identical in every other
-  skill, both `assertion_rules.py` copies match, and the vendored `steering_guard.py` copies match `shared/steering-guard/`.
+  attack sets, versions and package layout). Its `mos3_skill_isolation_tests` group copies each script-running skill
+  alone into a temporary folder and runs its documented commands against the goldens.
+- `check_shared_copies.py`: every vendored file is byte-identical to its canonical copy (20 copies). The contract and
+  shared references are canonical in `skills/gate-check/` and copied to every other skill. `assertion_map.py` and
+  `assertion_rules.py` are canonical in `skills/assertion-map/` (copied to `gate-check`, and `assertion_rules.py` to
+  `review-packet`). `gate_check.py` and `severity_rank.py` are canonical in `skills/gate-check/` (copied to
+  `review-packet`). The vendored `steering_guard.py` copies in `assertion-map`, `gate-check` and `review-packet` match
+  `shared/steering-guard/`.
 - `derive_review_input.py`: re-derives each scenario's `review-input.json` from its raw pack and lists any value with no
   raw source or documented ingest rule.
 - `check_messages.py`: scans the engine and helper scripts so no message formats review-input text.

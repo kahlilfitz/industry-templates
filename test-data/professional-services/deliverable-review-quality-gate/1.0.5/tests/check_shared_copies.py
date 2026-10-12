@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
-"""Fail when per-skill copies of shared files drift from their source of truth.
+"""Fail when a per-skill copy of a shared file drifts from its canonical copy.
 
-Each skill in the MOS3 package carries its own copy of the shared contract and rule references, so a skill works on
-its own. The gate-check skill's copies are the source of truth (the package has no root contracts/ or references/):
+Each skill in the MOS3 package must run on its own, so every file a skill reads or runs lives in that skill's folder.
+Files used by more than one skill are vendored byte for byte from one canonical copy (the package has no root
+contracts/ or references/):
 
-  skills/gate-check/contracts/ps.deliverable-review-quality-gate.v1.json -> skills/*/contracts/
-  skills/gate-check/references/{quality-gate-criteria,severity-rules}.md -> skills/*/references/
-  skills/assertion-map/scripts/assertion_rules.py                        -> skills/gate-check/scripts/
-  STEERING_GUARD_SHA256 (vendored shared detector)                       -> every skills/*/scripts/steering_guard.py
+  canonical                                                        copies
+  skills/gate-check/contracts/ps.deliverable-review-quality-gate.v1.json  every other skill's contracts/
+  skills/gate-check/references/quality-gate-criteria.md            every other skill's references/
+  skills/gate-check/references/severity-rules.md                   every other skill's references/
+  skills/assertion-map/scripts/assertion_rules.py                  gate-check, review-packet scripts/
+  skills/assertion-map/scripts/assertion_map.py                    gate-check scripts/
+  skills/gate-check/scripts/gate_check.py                          review-packet scripts/
+  skills/gate-check/scripts/severity_rank.py                       review-packet scripts/
+  shared/steering-guard/steering_guard.py (STEERING_GUARD_SHA256)  assertion-map, gate-check, review-packet scripts/
 
-Skill-specific references (for example skills/gate-check/references/g8-withholding-and-input-rules.md) are not shared.
+Any other file found at a canonical file's path in another skill is checked too, so an unregistered copy cannot
+drift. Skill-specific files (for example skills/gate-check/references/g8-withholding-and-input-rules.md) are not
+shared.
 
   python tests/check_shared_copies.py [--plugin-root DIR]
 
@@ -24,11 +32,16 @@ import sys
 
 PLUGIN_SLUG = "deliverable-review-quality-gate"
 DATA_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCE_SKILL = "gate-check"
-SHARED_FILES = (
-    "contracts/ps.deliverable-review-quality-gate.v1.json",
-    "references/quality-gate-criteria.md",
-    "references/severity-rules.md",
+EVERY_OTHER = "*"
+# (canonical file, skills that carry a byte-identical copy); EVERY_OTHER is every skill but the canonical one.
+SHARED_COPIES = (
+    ("skills/gate-check/contracts/ps.deliverable-review-quality-gate.v1.json", EVERY_OTHER),
+    ("skills/gate-check/references/quality-gate-criteria.md", EVERY_OTHER),
+    ("skills/gate-check/references/severity-rules.md", EVERY_OTHER),
+    ("skills/assertion-map/scripts/assertion_rules.py", ("gate-check", "review-packet")),
+    ("skills/assertion-map/scripts/assertion_map.py", ("gate-check",)),
+    ("skills/gate-check/scripts/gate_check.py", ("review-packet",)),
+    ("skills/gate-check/scripts/severity_rank.py", ("review-packet",)),
 )
 
 
@@ -53,7 +66,8 @@ ROOT = plugin_root_from(sys.argv[1:])
 # The one pin for the vendored shared detector steering_guard.py. It is copied byte-for-byte and never edited here;
 # to take a new release, copy the file into every folder in STEERING_GUARD_COPIES and update this constant only.
 STEERING_GUARD_SHA256 = "825d0550190150e78fd3a66fc3b8c8b6e5f4867e6620e47ed7381b0d796f4123"
-STEERING_GUARD_COPIES = ("skills/assertion-map/scripts/steering_guard.py", "skills/gate-check/scripts/steering_guard.py")
+STEERING_GUARD_COPIES = ("skills/assertion-map/scripts/steering_guard.py", "skills/gate-check/scripts/steering_guard.py",
+                         "skills/review-packet/scripts/steering_guard.py")
 
 
 def emit(line=""):
@@ -61,9 +75,10 @@ def emit(line=""):
     print(str(line).encode("ascii", "backslashreplace").decode("ascii"))
 
 
-def steering_guard_copies():
+def steering_guard_copies(root=None):
     """Every vendored copy: the registered ones plus any other skills/*/scripts/steering_guard.py."""
-    found = {os.path.relpath(path, ROOT).replace(os.sep, "/") for path in glob.glob(os.path.join(ROOT, "skills", "*", "scripts", "steering_guard.py"))}
+    root = root or ROOT
+    found = {os.path.relpath(path, root).replace(os.sep, "/") for path in glob.glob(os.path.join(root, "skills", "*", "scripts", "steering_guard.py"))}
     return sorted(found | set(STEERING_GUARD_COPIES))
 
 
@@ -72,47 +87,57 @@ def digest(path):
         return hashlib.sha256(fh.read()).hexdigest()
 
 
+def copy_pairs(root=None):
+    """(canonical, copy) relative paths: the registered copies plus any file found at a canonical file's path in
+    another skill."""
+    root = root or ROOT
+    skills = sorted(name for name in os.listdir(os.path.join(root, "skills")) if os.path.isdir(os.path.join(root, "skills", name)))
+    pairs = []
+    for canonical, holders in SHARED_COPIES:
+        _, owner, rest = canonical.split("/", 2)
+        wanted = [name for name in skills if name != owner] if holders == EVERY_OTHER else list(holders)
+        wanted += [name for name in skills if name != owner and name not in wanted and os.path.exists(os.path.join(root, "skills", name, *rest.split("/")))]
+        pairs.extend((canonical, f"skills/{name}/{rest}") for name in wanted)
+    return pairs
+
+
+def check(root=None):
+    """(problem lines, copies checked) for every shared copy and every vendored steering_guard.py."""
+    root = root or ROOT
+    problems, checked = [], []
+    for canonical, copy in copy_pairs(root):
+        checked.append(copy)
+        src, dst = os.path.join(root, *canonical.split("/")), os.path.join(root, *copy.split("/"))
+        if not os.path.exists(src):
+            rel = canonical
+            problems.append(f"MISSING {rel} (canonical copy)")
+        elif not os.path.exists(dst):
+            rel = copy
+            problems.append(f"MISSING {rel}")
+        elif digest(src) != digest(dst):
+            rel = copy
+            problems.append(f"DRIFT   {rel} (differs from its canonical copy)")
+    for rel in steering_guard_copies(root):
+        checked.append(rel)
+        path = os.path.join(root, *rel.split("/"))
+        if not os.path.exists(path):
+            problems.append(f"MISSING {rel}")
+        elif digest(path) != STEERING_GUARD_SHA256:
+            problems.append(f"DRIFT   {rel} (does not match STEERING_GUARD_SHA256)")
+    return problems, checked
+
+
 def main():
     if not os.path.isdir(os.path.join(ROOT, "skills")):
         emit(f"check_shared_copies: plugin root {ROOT} has no skills folder; pass --plugin-root or set PLUGIN_ROOT")
         return 2
     emit(f"plugin root: {ROOT}")
     emit(f"data root:   {DATA_ROOT}")
-    skills = sorted(path for path in glob.glob(os.path.join(ROOT, "skills", "*")) if os.path.isdir(path))
-    source = os.path.join(ROOT, "skills", SOURCE_SKILL)
-    pairs = []
-    for rel in SHARED_FILES:
-        src = os.path.join(source, *rel.split("/"))
-        pairs.extend((src, os.path.join(skill, *rel.split("/"))) for skill in skills if skill != source)
-    # gate_check recomputes assertion_map output, so both engines must classify with identical rules.
-    pairs.append((os.path.join(ROOT, "skills", "assertion-map", "scripts", "assertion_rules.py"),
-                  os.path.join(ROOT, "skills", "gate-check", "scripts", "assertion_rules.py")))
-    drift = 0
-    for src, copy in pairs:
-        if not os.path.exists(src):
-            rel = os.path.relpath(src, ROOT)
-            emit(f"MISSING {rel} (source of truth)")
-            drift += 1
-            continue
-        rel = os.path.relpath(copy, ROOT)
-        if not os.path.exists(copy):
-            emit(f"MISSING {rel}")
-            drift += 1
-        elif digest(src) != digest(copy):
-            emit(f"DRIFT   {rel}")
-            drift += 1
-    vendored = steering_guard_copies()
-    for rel in vendored:
-        path = os.path.join(ROOT, *rel.split("/"))
-        if not os.path.exists(path):
-            emit(f"MISSING {rel}")
-            drift += 1
-        elif digest(path) != STEERING_GUARD_SHA256:
-            emit(f"DRIFT   {rel} (does not match STEERING_GUARD_SHA256)")
-            drift += 1
-    total = len(pairs) + len(vendored)
-    emit(f"{total - drift}/{total} shared copies identical to their source")
-    return 1 if drift else 0
+    problems, checked = check(ROOT)
+    for line in problems:
+        emit(line)
+    emit(f"{len(checked) - len(problems)}/{len(checked)} shared copies identical to their source")
+    return 1 if problems else 0
 
 
 if __name__ == "__main__":
