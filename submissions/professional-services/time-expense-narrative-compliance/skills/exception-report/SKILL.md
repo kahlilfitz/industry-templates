@@ -1,9 +1,11 @@
 ---
 name: exception-report
-description: "Turns guideline-check output into a draft pre-bill exception packet for the engagement manager and billing coordinator: rejects, needs-review items, code mismatches, privacy exclusions and missing time, each with the engine flag and citation. Use when the user says \"show me the pre-bill exceptions\", \"what needs fixing before billing?\", \"build the WIP cleanup list\" or \"summarize rejected narratives\". Always a draft: nothing is sent without explicit confirmation. Do NOT use for gathering activity (use activity-pull), drafting narratives (use narrative-draft), task codes (use code-map), one entry's compliance or missing time (use guideline-check), client invoices or emails (use the built-in email), or approving pre-bills. Do NOT use for expense reports or receipts."
+description: 'Turns guideline-check output into a DRAFT pre-bill exception packet for the engagement manager and billing coordinator (rejects, holds, privacy exclusions and missing time, with flags and citations) and refuses every submit, approve or write-off request; nothing is sent without explicit confirmation. Use when the user says "show me the pre-bill exceptions", "what needs fixing before billing?", "build the WIP cleanup list", "summarize rejected narratives" or "draft the pre-bill packet". Do NOT use for gathering activity (use activity-pull), drafting narratives (use narrative-draft), task codes (use code-map), an entry''s compliance or missing time (use guideline-check), client invoices or emails (use the built-in email), approving pre-bills, or expense reports and receipts (out of scope).'
 license: Proprietary
+compatibility: 'Requires Python 3 (standard library only) to run scripts/exception_report.py on governed.json from guideline-check and activity.json from activity-pull; reads the config/signal-sources.json, contracts/ and references/ in this skill folder and writes a local Markdown draft (exception-report.md). No connectors, network access or send capability.'
 metadata:
-  version: "1.0.4"
+  version: "1.0.5"
+  icon: ic_fluent_clipboard_error_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -13,7 +15,7 @@ Turn governed engine output into a concise DRAFT review packet: rejectable narra
 ## When to use
 After `guideline-check`, when the user wants the pre-bill exception list, WIP cleanup list or engagement-manager review packet, including requests to share that list internally.
 ## Inputs
-`governed.json` from `guideline-check` and `activity.json` from `activity-pull` (the packet the chain started from), under contract `ps.time-expense-narrative-compliance.v1`, and the period the user asked about.
+`governed.json` from `guideline-check` and `activity.json` from `activity-pull` (the packet the chain started from), under contract `ps.time-expense-narrative-compliance.v1`, and the period the user asked about. The engine re-applies the signal policy in this skill's `config/signal-sources.json`.
 ## Steps
 1. Run `python3 scripts/exception_report.py --activity activity.json --governed governed.json --out exception-report.md --requested-start YYYY-MM-DD --requested-end YYYY-MM-DD`.
 2. Show the draft. It is headed "DRAFT - not sent, not approved", groups rejects, holds, needs-review, missing time and privacy exclusions, and quotes every engine flag with its citation.
@@ -30,7 +32,25 @@ This skill owns the refusal for every submit, approve or write-off request in th
 ## Output
 A Markdown pre-bill exception packet for the engagement manager and billing coordinator, marked DRAFT, with cited findings ready for human review.
 ## Output format
-Markdown sections: Summary, Rejects (table), Held for review (table), Needs review (table), Missing time (table), Privacy exclusions (bullets), Compliant drafts, Next steps. Header line reads "DRAFT - not sent, not approved".
+The engine writes `exception-report.md` in exactly this structure; show it as written. An empty section reads "None."
+```markdown
+# DRAFT - not sent, not approved
+**Pre-bill exception packet** - <client> / <matter> (<engagement_id>)
+- Prepared for: engagement manager and billing coordinator (review only)
+- Period covered by the governed data: <start> to <end> (...)
+## Summary
+## Rejects - rewrite or remove before pre-bill
+| Entry | Person | Date | Hours | Engine flags (verbatim) |
+## Held for review
+| Entry | Person | Date | Hours | Flag (verbatim) |
+## Needs review
+| Entry | Person | Date | Hours | Flag (verbatim) |
+## Missing time
+| Activity | Person | Date | Hours | Subject | Citations |
+## Privacy exclusions
+## Compliant drafts
+## Next steps (human decisions)
+```
 ## Example
 Only tool needed: python3 running the bundled engine (stdlib only). The engine writes a local file and has no send capability.
 ```bash

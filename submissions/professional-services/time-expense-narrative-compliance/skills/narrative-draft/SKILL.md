@@ -1,9 +1,11 @@
 ---
 name: narrative-draft
-description: "Drafts grounded time-entry narratives for entries that have none and offers cited suggested rewrites beside existing narratives without replacing them. Use when the user says \"write up my time\", \"draft my time entries\", \"turn my calendar into narratives\" or \"suggest a better narrative for this entry\". If no activity packet exists yet, run activity-pull first. Never invents roles, attendees or purpose. Do NOT use for gathering raw activity (use activity-pull), for choosing task codes (use code-map), for judging whether an entry will be rejected (use guideline-check), or for sending or submitting anything. Do NOT use for expense reports or receipts."
+description: 'Drafts grounded time-entry narratives for entries that have none and offers cited suggested rewrites beside existing narratives without replacing them, never inventing roles, attendees or purpose. Use it after activity-pull (run that first if no activity packet exists) when the user says "write up my time", "draft my time entries", "turn my calendar into narratives", "suggest a better narrative for this entry" or "draft narratives from my week". Do NOT use for gathering raw activity (use activity-pull), choosing task codes (use code-map), judging whether an entry will be rejected (use guideline-check), sending, submitting or approving anything (exception-report answers those requests), or expense reports and receipts (out of scope: time entries only).'
 license: Proprietary
+compatibility: 'Requires Python 3 (standard library only) to run scripts/narrative_draft.py on activity.json from activity-pull (plus the raw exports for a team view); reads the config/signal-sources.json, contracts/ and references/ in this skill folder and writes drafted.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.4"
+  version: "1.0.5"
+  icon: ic_fluent_compose_24_regular
   author: Microsoft Professional Services Skills
   category: writing
 ---
@@ -13,7 +15,7 @@ Create client-facing narrative drafts from engagement activity while preserving 
 ## When to use
 After `activity-pull` and before `code-map`, for "write up my time", "draft narratives from my week" or "suggest a better narrative for this entry".
 ## Inputs
-`activity.json` from activity-pull (contract `ps.time-expense-narrative-compliance.v1`) and the signal policy `config/signal-sources.json`.
+`activity.json` from activity-pull (contract `ps.time-expense-narrative-compliance.v1`) and the signal policy `config/signal-sources.json` in this skill folder.
 ## Steps
 1. If there is no activity packet yet, run activity-pull first.
 2. Run the engine: `python3 scripts/narrative_draft.py --activity activity.json --out drafted.json`. It validates the contract, re-applies the signal policy and drafts each entry.
@@ -25,7 +27,14 @@ After `activity-pull` and before `code-map`, for "write up my time", "draft narr
 ## Output
 `drafted.json`: each time entry carries the preserved or generated `draft.narrative`, optional `draft.suggested_rewrites[]`, status, review reasons, linked, covered and excluded activity IDs, confidence, source and citations.
 ## Output format
-Markdown table: entry_id, date, hours, preserved/generated narrative, optional suggested rewrites, status, linked activity IDs, citations; then a bullet list of entries held for review and why.
+Markdown in exactly this structure:
+```markdown
+| entry_id | date | hours | narrative (preserved or generated) | suggested rewrites (optional) | status | linked activity IDs | citations |
+|---|---|---|---|---|---|---|---|
+### Held for review
+- <entry_id>: <draft.status> - <draft.review_reasons>
+```
+Each `time_entries[].draft` in `drafted.json`: `narrative`, `status`, `needs_review`, `review_reasons`, `word_count`, `sufficiency`, `linked_activity_ids`, `covered_activity_ids`, `excluded_activity_ids`, `confidence`, `source`, `citations`, `suggested_rewrites[]`.
 ## Example
 Only tool needed: python3 running the bundled engine (stdlib only).
 ```bash

@@ -1,5 +1,29 @@
 # Changelog - time-expense-narrative-compliance
 
+## 1.0.5 - 2026-10-12
+
+Packaging release: the plugin moves from the Claude `.claude-plugin` layout to the MOS3 Microsoft 365 app package (manifest 1.28). 1.0.4 was the evaluated candidate (No-ship on missing grader labels only, owner-accepted). No change to the rules engine, the contract `ps.time-expense-narrative-compliance.v1`, the output contracts or the pre-bill packet; every golden is unchanged.
+
+### MOS3 package
+- New `manifest.json` (manifest 1.28, new GUID `id`, `name.short` "Time Entry Narrative Check", accent `#7B3FA0`, `color.png`/`outline.png` icons, five `agentSkills`). The short name says "Time Entry" because the plugin handles time entries only; expense reports and receipts stay out of scope, as the descriptions and `description.full` say.
+- `.claude-plugin/` removed; `metadata.json` gets `packageFormat: mos3`, drops `bundleTests` and moves to 1.0.5.
+- New `listing-metadata.md` (not bundled): the draft for the shared listing template.
+
+### Test data moved out of the plugin
+- `demo-data/` and `tests/` moved to `test-data/professional-services/time-expense-narrative-compliance/1.0.5/` with a README. The package ships no demo data or tests.
+- `tests/run_tests.py` and `tests/check_shared_copies.py` take `--plugin-root DIR` (or `PLUGIN_ROOT`), default to the submission folder, resolve `skills/...` against the plugin root and `demo-data/...` against the version folder, print both roots and exit 2 when the plugin root has no `skills/`. The runner no longer depends on the current directory (r18 read one engine path relative to it).
+- New checks: every skill's `config/signal-sources.json` is byte-identical to the canonical copy; each engine loads only its own skill's copy; a config above the skill folder is ignored (narrow default, mailbox off); package boundary (no demo data, tests, `.claude-plugin` or root dev folders, no reference outside a skill folder).
+
+### Self-contained skills (runtime-path change)
+- Each skill now carries `config/signal-sources.json`, byte-identical in all five; the canonical copy is `skills/activity-pull/config/signal-sources.json`.
+- `signal_policy.find_plugin_config` (byte-identical in all five skills) reads only `<skill>/config/signal-sources.json` next to the engine's `scripts/` folder instead of walking up to six folders for a plugin-root `config/`. Fail-closed behaviour is unchanged: a malformed copy is refused, and a skill without its copy runs on the narrow default floor (mailbox sources off). Provenance still records it as `config/signal-sources.json`.
+- Root `config/`, `contracts/` and `references/` removed: nothing outside the skills used them, and every skill already carried identical copies. Canonical copies are in `skills/activity-pull/` (`billing_rules.py`: `skills/guideline-check/scripts/`); `check_shared_copies.py` checks the others against them (34 pairs, config included).
+- Engine version stamps (`activity_pull/1.0.4` and the others in provenance and the report) stay at 1.0.4 because the engines did not change and the goldens record them.
+
+### Skill descriptions
+- Every SKILL.md: frontmatter adds `compatibility` and `metadata.icon`, `metadata.version` is "1.0.5". Descriptions are rewritten to two sentences, five or more quoted triggers and one `Do NOT use for ... (use <sibling>)` sentence that keeps the sibling, safety (submit, approve, send) and expense exclusions. New triggers: "build my activity packet for this period", "draft narratives from my week", "recommend phase codes for my entries", "draft the pre-bill packet".
+- "Output format" sections now show the exact output structure (Markdown skeletons and JSON fields); bodies say the config is in the skill's own folder. No guardrail wording changed.
+
 ## 1.0.4 - 2026-10-01
 
 Fix release after the v1.0.3 evaluation (`evaluate-time-expense-narrative-compliance-v1.0.3-2026-10-01`, verdict **Blocked**: trust-and-safety gate 76 held / 9 violated of 85 probes; skills, behavioral, security and conflicts passed). Contract remains `ps.time-expense-narrative-compliance.v1` (backward-compatible additions only).

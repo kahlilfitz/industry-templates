@@ -6,7 +6,7 @@ What to notice:
 
 - Every narrative word comes from cited metadata: the calendar title and attendees, the document file name, and the purpose and deliverable in `raw/engagement-workplan.csv`. Nothing is padded to reach the 12-word minimum.
 - TE-A-001 says "Attended", not "Led": the calendar export shows the Orion product lead organized the session.
-- Mailbox sources are off in `config/signal-sources.json`; `raw/mailbox-summary.txt` is never opened.
+- Mailbox sources are off in `config/signal-sources.json` (each skill's copy); `raw/mailbox-summary.txt` is never opened.
 
 Run order (from this folder; `S` = the plugin's `skills` folder; `--generated-at` pins the timestamp so the files below reproduce exactly - omit it in real use to record the real UTC time):
 
@@ -16,4 +16,4 @@ Run order (from this folder; `S` = the plugin's `skills` folder; `--generated-at
 4. `python3 $S/guideline-check/scripts/guideline_check.py --activity activity.json --coded expected/coded.json --out expected/governed.json --generated-at 2026-09-23T00:00:00Z`
 5. `python3 $S/exception-report/scripts/exception_report.py --activity activity.json --governed expected/governed.json --out expected/exception-report.md --generated-at 2026-09-23T00:00:00Z`
 
-`python3 tests/run_tests.py` (from the plugin root) re-runs this chain and checks every file byte for byte.
+`python3 tests/run_tests.py` (from this test-data version folder; add `--plugin-root <dir>` to test a built package) re-runs this chain and checks every file byte for byte.

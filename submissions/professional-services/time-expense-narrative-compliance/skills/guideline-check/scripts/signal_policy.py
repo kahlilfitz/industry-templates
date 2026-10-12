@@ -5,8 +5,9 @@
    filter_packet() before it uses activity evidence, so a signal from a disabled or unknown
    source can never reach a narrative, a code mapping or a compliance verdict - even when a
    hand-built packet contains one. Policy resolution is most-restrictive-wins: a source is
-   usable only when it is enabled in EVERY policy that is available. When the plugin-level
-   policy is unavailable (for example, when a skill runs stand-alone), the documented narrow
+   usable only when it is enabled in EVERY policy that is available. When the plugin config
+   (the skill's own config/signal-sources.json copy) is unavailable (for example, when a skill is
+   copied without its config/ folder), the documented narrow
    default is the mandatory floor and a packet policy may narrow it but can never enable
    mailbox access.
 2. Timekeeper scope (client-billing-guidelines.md #12.1). A packet holds only the requesting
@@ -295,17 +296,13 @@ def exclusion_texts(record, packet):
 
 
 def find_plugin_config(start_dir):
-    """Walk up from start_dir looking for config/signal-sources.json (the plugin root copy)."""
-    current = os.path.abspath(start_dir)
-    for _ in range(6):
-        candidate = os.path.join(current, "config", "signal-sources.json")
-        if os.path.isfile(candidate):
-            return candidate
-        parent = os.path.dirname(current)
-        if parent == current:
-            break
-        current = parent
-    return None
+    """The skill's own config/signal-sources.json: <skill>/config/ next to the scripts/ folder start_dir names.
+
+    Each skill ships a byte-identical copy, so the engine never walks up out of its skill folder: a file above it
+    (outside the installed package) cannot stand in for the plugin config. None when the skill copy is absent, and the
+    caller then applies the narrow default floor (mailbox sources off)."""
+    candidate = os.path.join(os.path.dirname(os.path.abspath(start_dir)), "config", "signal-sources.json")
+    return candidate if os.path.isfile(candidate) else None
 
 
 def error_text(exc):
