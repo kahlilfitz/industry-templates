@@ -170,6 +170,7 @@ class ConstraintCheckTests(unittest.TestCase):
             "availability_context": {
                 "effective_available_pct": 100,
                 "requested_allocation_pct": 50,
+                "evidence_complete": True,
             },
         }
 

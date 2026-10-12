@@ -22,7 +22,7 @@ After `fit-score` in every run, and on any question about independence, conflict
 `roles.json` + `bench.json` + `ranked.json` + `constraints.json` using contract `ps.engagement-staffing-bench-match.v1`. All four are required: the engine re-derives `ranked.json` from `roles.json` and `bench.json` and refuses with no output if it differs (`#9.8`).
 ## Steps
 1. Merge engagement context from ranked and constraints input, union declared affiliates, preserve role-intake provenance and stop if the client cannot be resolved. The role-intake engagement is authoritative: a different client, engagement ID or role start date in `constraints.json` is refused with no output (`#9.10`).
-2. Validate the ranked payload and normalized `constraints[]` extract, including one conflicts-register row per candidate, normalized candidate IDs and complete conflict fields.
+2. Validate the ranked payload and normalized `constraints[]` extract, including one conflicts-register row per candidate, normalized candidate IDs and complete conflict fields. A missing, blank or null status holds the candidate for review (`#9.1`); a candidate value that names another client in the register is withheld and the candidate is held for review (`#9.11`).
 3. Run the Govern engine.
 4. Quote eligibility verdicts, blocking rules, availability calculations and gap statements verbatim. Preserve `constraints_considered[]` for every candidate.
 5. If the top provisional candidate is ineligible, lead with the refusal and cite the rule. It is not overrideable by prose, schedule pressure or partner preference.

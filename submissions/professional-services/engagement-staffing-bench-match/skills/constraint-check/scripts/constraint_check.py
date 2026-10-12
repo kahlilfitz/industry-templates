@@ -102,6 +102,12 @@ CARRIED_KEYS = (
     "rank_citation",
 )
 FOREIGN_LABEL = "another client (name withheld)"
+FOREIGN_RULE = "independence-eligibility-rules.md #9.11"
+FOREIGN_VALUE = f"withheld: names another client ({FOREIGN_RULE})"
+FOREIGN_REASON = "candidate record names another client; values withheld"
+# Carried members never screened for another client's identity: the key itself and engine hold paths.
+FOREIGN_SKIP = {"candidate_id", "screening_holds"}
+PASSTHROUGH_SECTIONS = ("bench_candidates", "scored_roles", "ranked_roles")
 REVIEW_FALLBACK = "conflicts, screening or availability evidence requires independence review"
 ENTITY_SUFFIXES = {"llc", "inc", "ltd", "plc", "corp", "corporation", "co", "company", "the"}
 _ENGINE_MARKER_DIGEST = re.compile(r"\[FLAGGED: [^\]]*sha256=([0-9a-f]{12})\]")
@@ -364,13 +370,15 @@ def foreign_item(item, index, disposition, reason, default_source):
     """A row for another client: kept by position and a fixed label only (#9.9)."""
     kind = _text(item, "type").strip().casefold()
     status = _text(item, "status").strip().casefold()
+    role_type = normalize_role_type(item.get("role_type")) if isinstance(item.get("role_type"), str) else ""
+    # Only fixed vocabulary is kept, so slate_validate can re-check a valid row without its free text.
     return {
         "type": kind if kind in KNOWN_TYPES else "",
         "client_name": FOREIGN_LABEL,
         "status": status if status in CLEAR_STATUSES | FI_STATUSES | WALL_STATUSES | DATED_STATUSES else "",
         "material": materiality_value(item),
-        "role_type": "",
-        "process": "",
+        "role_type": role_type if role_type in ROLE_TYPES else ("other" if role_type else ""),
+        "process": "withheld" if _text(item, "process").strip() else "",
         "end_date": _text(item, "end_date") if _valid_date(item.get("end_date")) else "",
         "resolved_date": _text(item, "resolved_date") if _valid_date(item.get("resolved_date")) else "",
         "applies_to_engagement": disposition != "not_applicable",
@@ -397,12 +405,13 @@ def foreign_row_problems(item):
     if kind == "clear":
         return status not in CLEAR_STATUSES
     if kind == "financial_interest":
-        if status not in FI_STATUSES or item.get("material") not in (None, True, False):
+        material = item.get("material")
+        if status not in FI_STATUSES or not (material is None or isinstance(material, bool)):
             return True
         return status == "divested" and not _valid_date(item.get("resolved_date"))
     if kind == "ethical_wall":
         return status not in WALL_STATUSES
-    if status and status not in DATED_STATUSES:
+    if status not in DATED_STATUSES:
         return True
     if kind == "prior_client_role":
         return not _valid_date(item.get("end_date")) or not normalize_role_type(item.get("role_type"))
@@ -451,9 +460,10 @@ class _Verdict:
             self.considered.append(item)
 
 
-def verdict_for(role, row, constraints, held_rows=None):
+def verdict_for(role, row, constraints, held_rows=None, foreign_hold=False):
     """Evaluate one ranked candidate against the register. ``held_rows`` maps a register index to the
-    set of member names a screening hit withheld (``None`` member: the row itself)."""
+    set of member names a screening hit withheld (``None`` member: the row itself). ``foreign_hold``
+    marks a candidate record that named another client (rule 9.11)."""
     held_rows = held_rows or {}
     acc = _Verdict()
     start = _role_start(role, constraints)
@@ -561,6 +571,15 @@ def verdict_for(role, row, constraints, held_rows=None):
             "citation": HOLD_RULE,
         })
 
+    if foreign_hold:
+        acc.add("needs_review", FOREIGN_REASON, FOREIGN_RULE, {
+            "type": "source_screening",
+            "applies_to_engagement": True,
+            "disposition": "needs_review",
+            "reason": FOREIGN_REASON,
+            "citation": FOREIGN_RULE,
+        })
+
     if not acc.reasons:
         acc.reasons.append("no blocking independence, conflict or availability constraint found")
         acc.citations.append(f"{RULES} #1.1")
@@ -568,12 +587,32 @@ def verdict_for(role, row, constraints, held_rows=None):
     return acc.verdict, acc.reasons, acc.citations, acc.considered
 
 
-def _status_check(acc, item, status, cite, default_source):
-    """Dated rows decide on dates; a supplied status must still be recognised (A5)."""
-    if status and status not in DATED_STATUSES:
-        reason = "conflicts record status is not recognised"
+def _status_check(acc, item, status, cite, default_source, mark):
+    """Dated rows decide on dates, but the status must be present and recognised (A5, rule 9.1): an
+    absent, blank or null status is missing, never clearance. Runs after the date rule (whose
+    considered items start at ``mark``): a block stands; a settled outcome is replaced by review."""
+    if status not in DATED_STATUSES:
+        added = acc.considered[mark:]
+        if any(entry.get("disposition") == "ineligible" for entry in added):
+            return
+        acc.considered[mark:] = [entry for entry in added if entry.get("disposition") == "needs_review"]
+        reason = "conflicts record status is missing or not recognised"
         acc.add("needs_review", reason, f"{RULES} #9.1; " + cite,
                 considered_item(item, True, "needs_review", reason, default_source))
+
+
+def status_problem(item):
+    """True when a register row's status is missing (absent, blank or null) or not recognised for its
+    type (rule 9.1). Rows of an unrecognised type are reported by type instead."""
+    kind = _text(item, "type").strip().casefold()
+    status = _text(item, "status").strip().casefold()
+    if kind == "clear":
+        return status not in CLEAR_STATUSES
+    if kind == "financial_interest":
+        return status not in FI_STATUSES
+    if kind == "ethical_wall":
+        return status not in WALL_STATUSES
+    return kind in KNOWN_TYPES and status not in DATED_STATUSES
 
 
 def _evaluate_row(acc, role, item, start, engagement, cite, default_source):
@@ -623,7 +662,7 @@ def _evaluate_row(acc, role, item, start, engagement, cite, default_source):
         else:
             review("financial interest status is missing or not recognised", "#9.1,#9.3")
     elif kind == "prior_client_role":
-        _status_check(acc, item, status, cite, default_source)
+        mark = len(acc.considered)
         role_type = normalize_role_type(item.get("role_type"))
         if not item.get("end_date") or not role_type:
             review("prior client role is missing role_type or end_date", "#2.2,#8.1")
@@ -637,6 +676,7 @@ def _evaluate_row(acc, role, item, start, engagement, cite, default_source):
                 review(f"prior client role {timing_phrase(days)}", "#2.2")
             else:
                 settle("resolved", "prior role falls outside the review window")
+        _status_check(acc, item, status, cite, default_source, mark)
     elif kind == "ethical_wall":
         if status == "active":
             block("active ethical wall involving client", "#4.1")
@@ -645,7 +685,7 @@ def _evaluate_row(acc, role, item, start, engagement, cite, default_source):
         else:
             review("ethical wall status is missing or not recognised", "#4.1,#8.1,#9.1")
     elif kind == "adverse_matter":
-        _status_check(acc, item, status, cite, default_source)
+        mark = len(acc.considered)
         if not item.get("end_date"):
             review("adverse matter has no end_date", "#4.2,#8.1")
         else:
@@ -658,8 +698,9 @@ def _evaluate_row(acc, role, item, start, engagement, cite, default_source):
                 review(f"adverse matter support {timing_phrase(days)}", "#4.2")
             else:
                 settle("resolved", "adverse matter falls outside the review window")
+        _status_check(acc, item, status, cite, default_source, mark)
     elif kind == "prior_assurance_role":
-        _status_check(acc, item, status, cite, default_source)
+        mark = len(acc.considered)
         process = _text(item, "process").strip()
         if not process or not item.get("end_date"):
             review("prior assurance role process or end_date is missing or ambiguous", "#5.2")
@@ -678,6 +719,7 @@ def _evaluate_row(acc, role, item, start, engagement, cite, default_source):
                 )
             else:
                 settle("resolved", "prior assurance role falls outside the lookback window")
+        _status_check(acc, item, status, cite, default_source, mark)
 
 
 def _evaluate_availability(acc, row):
@@ -688,7 +730,7 @@ def _evaluate_availability(acc, row):
     requested = confidence_value(availability.get("requested_allocation_pct"), None)
     warnings = availability.get("calculation_warnings", [])
     row_cite = safe_cite(row.get("citation") or "fit score record")
-    if availability.get("evidence_complete") is False or warnings:
+    if availability.get("evidence_complete") is not True or warnings:
         reason = "availability evidence is incomplete or uses a conservative assumption"
         acc.add("needs_review", reason, f"{RULES} #6.3,#8.1", {
             "type": "availability_evidence",
@@ -749,6 +791,7 @@ def review_reason(reasons, citations):
     review_rules = (
         "#9.6",
         "#9.7",
+        "#9.11",
         "#2.2",
         "#3.2",
         "#4.2",
@@ -1029,6 +1072,40 @@ def _names_foreign(text, foreign):
     return any(f" {name} " in words for name in foreign)
 
 
+def withhold_foreign(value, foreign, skip=frozenset()):
+    """A16/D12/D24 (rule 9.11): every string under ``value`` that names another client becomes the
+    neutral FOREIGN_VALUE. Returns (new value, number of strings withheld); top-level members in
+    ``skip`` are kept as they are at every depth. The input is never mutated."""
+    if isinstance(value, str):
+        return (FOREIGN_VALUE, 1) if _names_foreign(value, foreign) else (value, 0)
+    if isinstance(value, dict):
+        out, hits = {}, 0
+        for key, item in value.items():
+            if key in skip:
+                out[key] = item
+                continue
+            out[key], count = withhold_foreign(item, foreign, skip)
+            hits += count
+        return out, hits
+    if isinstance(value, list):
+        out, hits = [], 0
+        for item in value:
+            new, count = withhold_foreign(item, foreign, skip)
+            out.append(new)
+            hits += count
+        return out, hits
+    return value, 0
+
+
+def withhold_foreign_sections(payload, foreign):
+    """Rule 9.11: the candidate records carried through unchanged (bench, scored and ranked sections)
+    are screened the same way, so a value naming another client never reaches any output."""
+    for section in PASSTHROUGH_SECTIONS:
+        if section in payload:
+            payload[section], _hits = withhold_foreign(payload[section], foreign, FOREIGN_SKIP)
+    return payload
+
+
 def govern(ranked_payload, constraints_payload):
     """Apply the independence and eligibility rules; returns the governed document. No file I/O.
 
@@ -1098,12 +1175,38 @@ def govern(ranked_payload, constraints_payload):
             candidate_held = {index: held_rows[index] for index, _item in register_rows if index in held_rows}
             ranked_holds = log.holds_under(f"ranked_input.ranked_roles[{r_index}].candidate_slate[{c_index}]")
             holds = merge_unique(row.get("screening_holds") or [], ranked_holds)
-            verdict_row = dict(row, screening_holds=holds)
-            verdict, reasons, citations, considered = verdict_for(role, verdict_row, constraints, candidate_held)
-            for item in considered:
-                if "client_name" in item and item.get("applies_to_engagement") is not False \
-                        and _names_foreign(item.get("citation"), foreign):
-                    item["citation"] = f"conflicts register citation withheld: names another client ({RULES} #9.9)"
+            # Rule 9.11: a carried candidate value naming another client is withheld before any rule
+            # or message reads it, and the candidate is held for review.
+            row, foreign_hits = withhold_foreign(row, foreign, FOREIGN_SKIP)
+
+            def evaluate(hold):
+                verdict_row = dict(row, screening_holds=holds)
+                result = verdict_for(role, verdict_row, constraints, candidate_held, foreign_hold=hold)
+                for item in result[3]:
+                    if "client_name" in item and item.get("applies_to_engagement") is not False \
+                            and _names_foreign(item.get("citation"), foreign):
+                        item["citation"] = f"conflicts register citation withheld: names another client ({RULES} #9.9)"
+                parts, late = withhold_foreign(list(result), foreign)
+                return parts, late
+
+            (verdict, reasons, citations, considered), late_hits = evaluate(bool(foreign_hits))
+            if late_hits and not foreign_hits:
+                (verdict, reasons, citations, considered), late_hits = evaluate(True)
+            foreign_held = bool(foreign_hits or late_hits)
+            if foreign_held:
+                escalations.add(
+                    f"{role_id}: {row['candidate_id']} - {FOREIGN_REASON}; independence review required "
+                    f"({FOREIGN_RULE})",
+                    FOREIGN_RULE,
+                )
+            for index, item in register_rows:
+                if index not in candidate_held and status_problem(item) \
+                        and applies_to_client(item, constraints.get("engagement") or {}) is not False:
+                    escalations.add(
+                        f"{row['candidate_id']}: {_row_label(index)} status is missing or not recognised "
+                        f"- independence review required ({RULES} #9.1)",
+                        f"{RULES} #9.1",
+                    )
             fit = float(row["fit_score"])
             recommendation_status = "not_recommended"
             if verdict == "eligible" and fit >= MIN_RECOMMENDABLE_SCORE:
@@ -1115,20 +1218,22 @@ def govern(ranked_payload, constraints_payload):
                 reason, blocking_rule = blocking_reason(reasons, citations)
                 if top:
                     top_refused = True
-                    escalations.add(screened(
+                    fallback = (f"{role_id}: refused top provisional candidate at provisional rank 1 "
+                                f"({blocking_rule}; {RULES} #7.1)")
+                    escalations.add(fallback if foreign_held else screened(
                         f"{role_id}: refused top provisional candidate {row['candidate_name']} - {reason} "
                         f"({blocking_rule}; {RULES} #7.1)",
-                        f"{role_id}: refused top provisional candidate at provisional rank 1 "
-                        f"({blocking_rule}; {RULES} #7.1)",
+                        fallback,
                     ))
             elif verdict == "needs_review":
                 reason, blocking_rule = review_reason(reasons, citations)
                 if top:
-                    escalations.add(screened(
+                    fallback = (f"{role_id}: withheld top provisional candidate at provisional rank 1 "
+                                f"({blocking_rule}; {RULES} #1.2)")
+                    escalations.add(fallback if foreign_held else screened(
                         f"{role_id}: withheld top provisional candidate {row['candidate_name']} "
                         f"- {reason} ({blocking_rule}; {RULES} #1.2)",
-                        f"{role_id}: withheld top provisional candidate at provisional rank 1 "
-                        f"({blocking_rule}; {RULES} #1.2)",
+                        fallback,
                     ))
             else:
                 blocking_rule = None
@@ -1185,9 +1290,16 @@ def govern(ranked_payload, constraints_payload):
             "citation": f"{RULES} #1.1-#8.1",
         })
 
+    withhold_foreign_sections(payload, foreign)
     payload["governed_roles"] = governed_roles
     payload["gaps"] = gaps
-    payload["escalations"] = escalations.render()
+    rendered = []
+    for text in escalations.render():
+        if _names_foreign(text, foreign):
+            text = f"escalation withheld: names another client ({FOREIGN_RULE})"
+        if text not in rendered:
+            rendered.append(text)
+    payload["escalations"] = rendered
     provenance = payload.setdefault("provenance", {})
     engines = [
         engine for engine in provenance.get("engines", [])

@@ -43,6 +43,7 @@ from input_guard import (
     is_num,
     is_reserved_label,
     load_json,
+    mentions_id,
     need,
     run,
     same_document,
@@ -99,6 +100,8 @@ TEXT_HOLD_PROBLEM = (
 MARKER_HOLD_PROBLEM = "source text held for review is present in the candidate record"
 COMPOSED_HOLD_PROBLEM = "recommendation evidence withheld for review"
 ESCALATION_HOLD_PROBLEM = "an open escalation names this candidate"
+FOREIGN_RULE = constraint_check.FOREIGN_RULE
+FOREIGN_REASON = constraint_check.FOREIGN_REASON
 DRAFT_BANNER = (
     "DRAFT - HUMAN REVIEW REQUIRED",
     "DRAFT - pending partner approval and independence/resource-management review",
@@ -798,10 +801,11 @@ def _is_screening_escalation(escalation):
 
 
 def _names_candidate(escalation, candidate):
-    text = canonical(escalation)
-    key = id_key(candidate["candidate_id"])
-    if any(id_key(token) == key for token in re.split(r"[^\w\-.]+", text) if token):
+    """A10: the escalation names this candidate by ID in canonical form (rule 9.5; whitespace or any
+    dash between the ID's parts) or by its whole display name."""
+    if mentions_id(escalation, candidate["candidate_id"]):
         return True
+    text = canonical(escalation)
     name = candidate["candidate_name"]
     if not isinstance(name, str) or has_marker(name):
         return False
@@ -825,11 +829,40 @@ def _named_by_escalation(escalations, role, role_keys, candidate):
     return False
 
 
-def validate(governed_payload, intake_engagements=()):
+def _governed_foreign(document, engagement):
+    """Other-client names a hand-built governed document still carries in its not_applicable rows."""
+    names = set()
+    for role in document["governed_roles"]:
+        for slate in ("candidate_slate", "recommended_candidates"):
+            for candidate in role[slate]:
+                for item in candidate["constraints_considered"]:
+                    name = item.get("client_name")
+                    if (item.get("applies_to_engagement") is False and isinstance(name, str)
+                            and name != constraint_check.FOREIGN_LABEL
+                            and matches_engagement(item, engagement) is False):
+                        key = normalize_entity_name(name)
+                        if key:
+                            names.add(key)
+    return names
+
+
+def _withhold_foreign_escalations(escalations, foreign):
+    out = []
+    for text in escalations:
+        if constraint_check._names_foreign(text, foreign):
+            text = f"escalation withheld: names another client ({FOREIGN_RULE})"
+        if text not in out:
+            out.append(text)
+    return out
+
+
+def validate(governed_payload, intake_engagements=(), foreign_names=()):
     """Secondary safety check of a governed document; returns the validated document. No file I/O.
 
     The input is never mutated. ``intake_engagements`` is an optional sequence of
     (label, engagement object) pairs from the raw inputs; any identity mismatch is refused (C5).
+    ``foreign_names`` are canonical other-client names harvested from constraints.json; any carried
+    candidate value naming one is withheld and the candidate is held for review (rule 9.11).
     """
     try:
         engagement, roles = _check_structure(governed_payload)
@@ -849,6 +882,23 @@ def validate(governed_payload, intake_engagements=()):
     hit_scopes = _hit_scopes(governed_payload, log)
     held |= hit_scopes
     escalations = merge_unique(payload["escalations"], log)
+    foreign = set(foreign_names) | _governed_foreign(governed_payload, governed_payload["engagement"])
+    foreign_held = set()
+    for role_index, role in enumerate(payload["governed_roles"]):
+        for index, candidate in enumerate(role["candidate_slate"]):
+            # Register rows are governed by #9.9 upstream; rule 9.11 screens the candidate's own values.
+            scrubbed, hits = constraint_check.withhold_foreign(
+                candidate, foreign, constraint_check.FOREIGN_SKIP | {"constraints_considered"})
+            if hits:
+                candidate.clear()
+                candidate.update(scrubbed)
+                foreign_held.add((role_index, index))
+                escalations.append(
+                    f"governed_roles[{role_index}].candidate_slate[{index}]: {FOREIGN_REASON}; "
+                    f"independence review required ({FOREIGN_RULE})"
+                )
+    constraint_check.withhold_foreign_sections(payload, foreign)
+    escalations = _withhold_foreign_escalations(escalations, foreign)
     open_escalations = list(governed_payload["escalations"])
     role_keys = {id_key(role["role_id"]) for role in governed_payload["governed_roles"]}
     gaps = list(payload["gaps"])
@@ -874,6 +924,8 @@ def validate(governed_payload, intake_engagements=()):
                     candidate["screening_holds"] = merge_unique(candidate.get("screening_holds", []), new_holds)
             if _named_by_escalation(open_escalations, original, role_keys, original["candidate_slate"][index]):
                 problems.append((ESCALATION_HOLD_PROBLEM, RULE_VERDICT))
+            if (role_index, index) in foreign_held:
+                problems.append((FOREIGN_REASON, FOREIGN_RULE))
             problems = _unique_pairs(problems)
             if problems:
                 _withhold(candidate, role, role_index, index, problems, escalations, log)
@@ -904,7 +956,7 @@ def validate(governed_payload, intake_engagements=()):
             existing_gap_roles.add(role_key)
 
     payload["gaps"] = gaps
-    payload["escalations"] = merge_unique(escalations, log)
+    payload["escalations"] = _withhold_foreign_escalations(merge_unique(escalations, log), foreign)
     provenance = payload["provenance"]
     engines = [
         engine for engine in provenance.get("engines", [])
@@ -1187,7 +1239,8 @@ def _main(argv):
         )
         if isinstance(payload, dict)
     ]
-    payload = validate(expected, intake)
+    foreign = constraint_check._foreign_names(constraints_payload, expected["engagement"])
+    payload = validate(expected, intake, foreign)
     draft = render_draft(payload)
     write_outputs(args.out, payload, args.draft_out, draft)
     print(f"slate_validate: {len(payload['governed_roles'])} role(s) -> validated output and slate draft written")

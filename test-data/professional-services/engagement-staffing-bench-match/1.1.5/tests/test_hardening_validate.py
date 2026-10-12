@@ -616,3 +616,23 @@ class ValidateHardeningTests(unittest.TestCase):
         with self.subTest(cli="forged value"):
             result, out, draft = self.chain("scenario-a-happy", governed=document)
             self.assert_cli_refused(result, (out, draft), contains="rule 9.8", probes=(PROBE, "Ava Morgan"))
+
+    # --- QA round 1: candidate IDs in escalation text match after canonical folding (A10/#9.5) ---
+    def test_qa1_escalation_id_spellings_hold_the_candidate(self):
+        for spelling in ("C 101", "C\u2011101", "C\u2013101", "C\u2014101", "C\u00a0101", "c_101",
+                         "\uff23\uff0d\uff11\uff10\uff11", "C\u200b-101", "C - 101"):
+            document = self.a()
+            document["escalations"].append(f"{spelling}: independence review pending")
+            with self.subTest(spelling=ascii(spelling)):
+                result = slate_validate.validate(document)
+                self.assertEqual(["C-103"], self.recommended_ids(result, 0))
+                record = self.slate_record(result, 0, "C-101")
+                self.assertEqual("not_recommended", record["eligibility"]["recommendation_status"])
+                self.assertIn(slate_validate.ESCALATION_HOLD_PROBLEM,
+                              record["secondary_validation"]["unresolved_constraints"])
+        # Never part of a longer ID: these escalations name other candidates, not C-101.
+        for other in ("C-10", "C-1010", "C 1012", "XC-101", "C-101A", "C-101-2"):
+            document = self.a()
+            document["escalations"].append(f"{other}: independence review pending")
+            with self.subTest(other=other):
+                self.assertEqual(["C-101", "C-103"], self.recommended_ids(slate_validate.validate(document), 0))

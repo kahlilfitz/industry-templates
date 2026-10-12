@@ -84,6 +84,41 @@ the hardening phases change engine behaviour, but output contracts change only a
   still fails by design: it records gaps in the shared instruction detector pending an owner
   decision on `shared/steering-guard`.
 
+### QA round 1 (phase 2)
+
+- **QA round 1 fixes (three High defects).**
+  - **Missing status (rule 9.1).** A dated register row (prior client role, adverse matter, prior
+    assurance role) with an absent, blank, whitespace-only or null `status` no longer leaves the
+    candidate eligible. The candidate needs review, is never recommended, and the row is escalated
+    by position. A row whose dates already block stays ineligible. The same missing-versus-falsy
+    gaps are closed elsewhere:
+    - A row for another client with no status is malformed (#9.9).
+    - A financial-interest `material` of `1` or `0` on such a row is malformed.
+    - Availability evidence passes only when `evidence_complete` is `true`.
+  - **IDs in escalation text (A10, rule 9.5).** `slate_validate` matches candidate IDs in free text
+    with the new `input_guard.mentions_id`. Matching uses the canonical form, with whitespace or any
+    Unicode dash between the parts. So `C 101`, `C‑101`, `C–101` and fullwidth spellings hold
+    C-101. `C-10`, `C-1010` and `C-101A` do not.
+  - **Another client's identity in candidate fields (new rule 9.11, A16/D12/D24).** Any carried or
+    rendered candidate value that names a client the register establishes as another client is
+    withheld with neutral text. This covers name, citation, location and any other field, in the
+    governed slate and in the bench, scored and ranked sections of `governed.json`,
+    `validated.json` and `slate-draft.md`. The candidate needs review citing #9.11, is never
+    recommended, and is escalated by ID without the value.
+  - **Valid foreign rows re-check cleanly.** A valid other-client `prior_client_role` or
+    `prior_assurance_role` row now keeps a fixed-vocabulary `role_type` and a `withheld` `process`
+    placeholder. Before, `slate_validate`'s row re-check wrongly held the candidate.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies) gains new row 9.11 and
+  wording in 9.1 and 9.5. `constraint-check/SKILL.md` step 2 mentions #9.1 and #9.11.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are three new regression tests, each failing on `9517b5f`:
+  - `ConstraintHardeningTests.test_qa1_missing_blank_null_status_needs_review_and_escalates`
+  - `ConstraintHardeningTests.test_qa1_foreign_identity_in_candidate_fields_is_withheld`
+  - `ValidateHardeningTests.test_qa1_escalation_id_spellings_hold_the_candidate`
+
+  The hand-built `ConstraintCheckTests.base_row` payload now sets `evidence_complete: true`, as
+  fit_score always does; no assertion changed.
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

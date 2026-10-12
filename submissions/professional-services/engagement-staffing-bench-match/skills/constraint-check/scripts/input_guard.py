@@ -145,6 +145,22 @@ def id_key(value):
     return folded or None
 
 
+_ID_SEP = r"[\s\-_.\u2010-\u2015\u2212]"
+_ID_JOIN = r"[\-_.\u2010-\u2015\u2212]"
+
+
+def mentions_id(text, value):
+    """True when free text names the ID ``value`` in id_key()'s canonical form (rule 9.5): any run of
+    whitespace, '-', '_', '.' or a Unicode dash may separate its parts. Part of a longer ID never
+    matches (C-1 is not found in C-10, C-101 or C-1.5)."""
+    key = id_key(value)
+    if key is None or not isinstance(text, str):
+        return False
+    body = (_ID_SEP + "+").join(re.escape(part) for part in key.split("-"))
+    pattern = rf"(?<!\w)(?<!\w{_ID_JOIN}){body}(?!\w)(?!{_ID_JOIN}\w)"
+    return re.search(pattern, canonical(text)) is not None
+
+
 RESERVED_WORDS = {
     "unknown", "unknown candidate", "unknown role", "none", "null", "n/a", "na", "tbd", "redacted",
     "withheld", "flagged", "anonymous", "candidate", "role", "bench record", "role record",
