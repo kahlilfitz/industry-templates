@@ -626,7 +626,21 @@ _TITLE_LEAD_VERBS = frozenset((
 ).split())
 _TITLE_LEAD_FOLLOWERS = frozenset("the a an all every any each our their my his her as for to without".split())
 _TITLE_PHRASES = ("fine to", "ok to", "okay to", "safe to", "good to go", "as is", "cleared for", "approved for",
-                  "for external use", "no need")
+                  "for external use", "no need", "do not", "does not", "did not", "no one", "they are", "as it is")
+# The collapsed-form check (#8.6) searches a value's lower-case letters and digits, run together,
+# for every forbidden verb, these steering words and every clause phrase with its spaces removed.
+# Needles shorter than FUSED_MIN_CHARS ("skip", "okto", "asis") would hit ordinary words, so they
+# match only as whole split tokens. A hit wholly inside one split token that is one of the
+# _FUSED_NOUNS ("Approver matrix", "Fee waiver") is a noun, not a clause.
+FUSED_MIN_CHARS = 5
+_FUSED_WORDS = ("already", "exactly", "kindly", "please", "nothing", "nobody")
+_FUSED_NEEDLES = tuple(sorted(
+    {needle for needle in _TITLE_VERBS.union(_FUSED_WORDS) if len(needle) >= FUSED_MIN_CHARS}
+    | {phrase.replace(" ", "") for phrase in _TITLE_PHRASES if len(phrase.replace(" ", "")) >= FUSED_MIN_CHARS}))
+_FUSED_NOUNS = frozenset((
+    "approver approvers waiver waivers voucher vouchers publisher publishers publishing consideration "
+    "considerations examiner examiners"
+).split())
 _CITE_LOCATOR = (r"(?:rows?|lines?|clauses?|sections?|pages?|pp?\.|slides?|paras?|paragraphs?|items?|tabs?|sheets?|"
                  r"cells?|tables?|figures?|fig\.|appendix|annex|schedule|\u00a7)")
 _CITE_TOKEN = r"(?:\d[A-Za-z0-9.]{0,15}|[A-Za-z]{1,2}(?:[\d.][A-Za-z0-9.]{0,13})?)"
@@ -642,10 +656,72 @@ _TITLE_PATH = re.compile(r"(?:engagement|artifacts\[\d+\]|candidate_assets\[\d+\
 _CITATION_PATH = re.compile(r"(?:engagement|[a-z_]+\[\d+\])\.citation")
 
 
+def has_cf(value):
+    """True when the value carries a Unicode format (Cf) character such as a zero-width space."""
+    return any(unicodedata.category(char) == "Cf" for char in value)
+
+
+def _case_parts(run):
+    """Split one letter-and-digit run at case and digit boundaries: 'PublishThisRecord' gives
+    Publish, This, Record; 'APIGateway' gives API, Gateway; 'Section4' gives Section, 4."""
+    parts, start = [], 0
+    for index in range(1, len(run)):
+        prev, char = run[index - 1], run[index]
+        following = run[index + 1] if index + 1 < len(run) else ""
+        if (char.isdigit() != prev.isdigit() or (char.isupper() and prev.islower())
+                or (char.isupper() and prev.isupper() and following.islower())):
+            parts.append(run[start:index])
+            start = index
+    parts.append(run[start:])
+    return parts
+
+
+def spells_clause(value, separators):
+    """The canonical token check for every rendered title, ID, citation path segment, anchor and
+    sheet or tab name (#8.6). True when the value spells a clause:
+    - it carries a format (Cf) character, which is refused, never stripped;
+    - a separator token is a clause word (an upper-case acronym excepted), a forbidden verb or ends
+      in n't;
+    - a part split at any non-alphanumeric character and at case boundaries is a forbidden verb, or
+      the parts in order spell a clause phrase;
+    - the collapsed lower-case alphanumeric form contains a forbidden verb, steering word or clause
+      phrase of FUSED_MIN_CHARS letters or more, other than inside a listed noun (_FUSED_NOUNS)."""
+    if has_cf(value):
+        return True
+    text = unicodedata.normalize("NFKC", value)
+    for token in re.split(separators, text):
+        bare = token.strip("(),'\u2019")
+        low = bare.casefold().replace("\u2019", "'")
+        acronym = len(bare) >= 2 and bare.isupper()
+        if low.endswith("n't") or (not acronym and low in _TITLE_CLAUSE_WORDS) or low in _TITLE_VERBS:
+            return True
+    parts = [part.casefold() for run in re.findall(r"[^\W_]+", text) for part in _case_parts(run)]
+    if any(part in _TITLE_VERBS for part in parts):
+        return True
+    joined = f" {' '.join(parts)} "
+    if any(f" {phrase} " in joined for phrase in _TITLE_PHRASES):
+        return True
+    collapsed, spans = "", []
+    for part in parts:
+        spans.append((len(collapsed), len(collapsed) + len(part), part))
+        collapsed += part
+    for needle in _FUSED_NEEDLES:
+        start = collapsed.find(needle)
+        while start >= 0:
+            end = start + len(needle)
+            if not any(first <= start and end <= last and part in _FUSED_NOUNS for first, last, part in spans):
+                return True
+            start = collapsed.find(needle, start + 1)
+    return False
+
+
 def title_shape_ok(value):
-    """A short noun phrase: letters, digits and light punctuation only, no clause word, no imperative
-    or verdict verb, no verdict phrase (#8.6)."""
-    text = unicodedata.normalize("NFKC", strip_cf(value)).strip()
+    """A short noun phrase: letters, digits and light punctuation only, no format character and
+    nothing the canonical token check reads as a clause (#8.6). The value is checked as supplied
+    (NFKC only), never as a stripped copy."""
+    if has_cf(value):
+        return False
+    text = unicodedata.normalize("NFKC", value).strip()
     if not text or len(text) > TITLE_MAX_CHARS or not any(c.isalpha() for c in text):
         return False
     for index, char in enumerate(text):
@@ -655,47 +731,33 @@ def title_shape_ok(value):
             continue
         return False
     tokens = text.split()
-    if len(tokens) > TITLE_MAX_WORDS:
+    if len(tokens) > TITLE_MAX_WORDS or spells_clause(text, r"\s+"):
         return False
-    lowered = []
-    for token in tokens:
-        bare = token.strip("(),'\u2019")
-        low = bare.casefold().replace("\u2019", "'")
-        acronym = len(bare) >= 2 and bare.isupper()
-        if low.endswith("n't") or (not acronym and low in _TITLE_CLAUSE_WORDS) or low in _TITLE_VERBS:
-            return False
-        lowered.append(low)
-    if lowered[0] in _TITLE_LEAD_VERBS and len(lowered) > 1 and lowered[1] in _TITLE_LEAD_FOLLOWERS:
-        return False
-    joined = f" {' '.join(words(text))} "
-    return not any(f" {phrase} " in joined for phrase in _TITLE_PHRASES)
+    lowered = [token.strip("(),'\u2019").casefold() for token in tokens]
+    return not (lowered[0] in _TITLE_LEAD_VERBS and len(lowered) > 1 and lowered[1] in _TITLE_LEAD_FOLLOWERS)
 
 
 def citation_shape_ok(value):
     """A source path or document ID (no spaces; it carries a '.', '/', '\\' or a digit) with an optional
-    #anchor and row, line, clause, section, page or named-sheet locators, ';'-separated. No path
-    segment, anchor or sheet name may spell a clause word or verb, as an identifier may not (#8.6)."""
+    #anchor and row, line, clause, section, page or named-sheet locators, ';'-separated. No path,
+    anchor or sheet name may spell a clause under the canonical token check, as an identifier may
+    not (#8.6)."""
     text = value.strip()
-    if not text or len(text) > CITATION_MAX_CHARS or not CITATION_RE.fullmatch(text):
+    if has_cf(value) or not text or len(text) > CITATION_MAX_CHARS or not CITATION_RE.fullmatch(text):
         return False
     for part in text.split(";"):
         source = _CITE_SOURCE.match(part.strip())
         if not source or not any(c in "./\\" or c.isdigit() for c in source.group(0)):
             return False
-        if not id_shape_ok(re.sub(r"[/\\]", ".", source.group(0))):
+        if spells_clause(source.group(0), r"[-_./\\]+"):
             return False
     return all(id_shape_ok(anchor or sheet) for anchor, sheet in _CITE_WORDS.findall(text))
 
 
 def id_shape_ok(value):
-    """An identifier renders as itself, so it may not spell a clause: no '-', '_' or '.' separated
-    segment is a clause word or an imperative or verdict verb (#8.6). Upper-case acronyms pass."""
-    for segment in re.split(r"[-_.]+", value):
-        low = segment.casefold()
-        acronym = len(segment) >= 2 and segment.isupper()
-        if (not acronym and low in _TITLE_CLAUSE_WORDS) or low in _TITLE_VERBS:
-            return False
-    return True
+    """An identifier renders as itself, so it may not spell a clause: the canonical token check with
+    '-', '_' and '.' as separators (#8.6). Upper-case acronym segments pass the clause-word test."""
+    return not spells_clause(value, r"[-_.]+")
 
 
 def shape_hits(path, value):
