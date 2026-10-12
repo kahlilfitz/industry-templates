@@ -1,9 +1,11 @@
 ---
 name: lesson-cluster
-description: Clusters cited decisions and retrospective inputs with the deterministic lesson_cluster engine. Use after asset-identify for "lessons learned", "cluster the retrospective", "what did we learn?", or "group the closeout lessons". Do NOT retrieve raw closeout sources or score assets - use artifact-assemble or asset-identify. Do NOT decide confidentiality or draft the reusable record - use sanitize-check or knowledge-record.
+description: 'Clusters cited decisions and retrospective inputs into ranked lesson themes with the deterministic lesson_cluster engine, after asset-identify and before sanitize-check. Use when the user asks for "lessons learned", "cluster the retrospective", "what did we learn?", "group the closeout lessons", "theme the decision log" or "rank the lessons by priority". Do NOT use for loading raw sources (use artifact-assemble), scoring assets (use asset-identify), deciding whether a lesson may be shared or rewriting named-person blame (use sanitize-check) or drafting the final narrative (use knowledge-record).'
 license: Proprietary
+compatibility: 'Requires Python 3 (standard library only) to run scripts/lesson_cluster.py on asset_shortlist.json from asset-identify; writes lessons_clustered.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
+  icon: ic_fluent_lightbulb_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -29,6 +31,23 @@ After `asset-identify`, before `sanitize-check`, for every closeout knowledge ha
 Run `scripts/lesson_cluster.py` with the shell tool and read its JSON output with the file-read tool. No connector writes or outbound actions.
 ## Output format
 `lessons_clustered.json` with `lesson_clusters[]`, evidence citations, sensitivity signals and provenance.
+The engine copies every input key forward and adds (one cluster shown; clusters are sorted by
+`priority_score`, highest first):
+
+```json
+{
+  "lesson_clusters": [{ "cluster_id": "", "category": "<lesson-taxonomy category or unclassified>",
+    "priority_score": 0, "review_candidate": false, "evidence_ids": [], "evidence_citations": [],
+    "summary_seed": "", "sensitivity_signals": [], "confidence": 0.0,
+    "source": "engine:lesson_cluster", "citation": "lesson-taxonomy.md #..." }],
+  "provenance": { "engines": ["asset_identify/<engine version>", "lesson_cluster/<engine version>"] }
+}
+```
+
+Report to the user as a table quoting the engine values, with no lesson prose yet:
+
+| Cluster | Category | Priority | Review candidate | Evidence IDs | Citation |
+|---|---|---|---|---|---|
 ## Grounding requirements
 Every lesson cluster cites the decision or retrospective inputs that produced it and the taxonomy section applied.
 ## Guardrails

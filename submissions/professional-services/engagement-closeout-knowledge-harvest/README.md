@@ -28,9 +28,25 @@ This is the upstream dependency for **Credential & Case Study Assembly** (`crede
 
 The handoff is intentionally conservative. Credential assembly may read the record, but it does not inherit permission to publish, quote a client, use a logo, disclose figures or waive terms.
 
+**Engagement Mobilization & Onboarding Pack** (`engagement-mobilization-onboarding-pack`) also reads this record through its Scenario 01 adapter: only `knowledge_record`, `released_assets` and provenance/citations, never `held_assets` or raw `candidate_assets`. The `ps.engagement-closeout-knowledge-harvest.v1` contract is unchanged in 1.0.3.
+
 ## What you bring
 
-An engagement workspace or SharePoint folder, the deliverable register, decision and risk logs, status history, retrospective notes, confidentiality terms, the firm's knowledge taxonomy and prior knowledge records. The demo scenarios include raw transcript, CSV and terms excerpts alongside structured JSON so the Connect path is real.
+An engagement workspace or SharePoint folder, the deliverable register, decision and risk logs, status history, retrospective notes, confidentiality terms, the firm's knowledge taxonomy and prior knowledge records.
+
+## Package
+
+From 1.0.3 the plugin ships as a MOS3 Microsoft 365 app package (manifest 1.28). The ZIP holds only `manifest.json`, `color.png`, `outline.png` and `skills/`. Each skill is self-contained: it carries its own copy of the contract (`contracts/`), the three rule references (`references/`) and, for the engine skills, its Python engine (`scripts/`). The engines use the Python 3 standard library only and read and write only the paths given by `--input` and `--out`.
+
+## Tests and demo data
+
+Demo data and the regression suite are not in the package. They live, per plugin version, in [`test-data/professional-services/engagement-closeout-knowledge-harvest/1.0.3/`](../../../test-data/professional-services/engagement-closeout-knowledge-harvest/1.0.3/README.md). The two scenarios there include raw transcript, CSV and terms excerpts alongside structured JSON so the Connect path is real.
+
+```powershell
+cd test-data\professional-services\engagement-closeout-knowledge-harvest\1.0.3
+python tests\test_engines.py                                 # against this submission folder
+python tests\test_engines.py --plugin-root <extracted ZIP>   # against a built package
+```
 
 ## Boundaries
 

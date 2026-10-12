@@ -1,9 +1,11 @@
 ---
 name: asset-identify
-description: Scores candidate reusable assets and closeout completeness with the deterministic asset_identify engine. Use after artifact-assemble for "what can we reuse from this?", "find reusable assets", "shortlist closeout assets", or "is the final deliverable package complete?". Do NOT retrieve raw closeout sources - use artifact-assemble. Do NOT cluster lessons, clear confidentiality, or draft the knowledge record - use lesson-cluster, sanitize-check, or knowledge-record.
+description: 'Scores candidate reusable assets and checks final-deliverable completeness with the deterministic asset_identify engine, after artifact-assemble has produced engagement.json. Use when the user asks "what can we reuse from this?", "find reusable assets", "shortlist closeout assets", "is the final deliverable package complete?", "score the reuse value" or "build the final deliverable index". Do NOT use for loading raw sources (use artifact-assemble), clustering lessons (use lesson-cluster), deciding whether an asset is safe to share or clearing it (use sanitize-check; a reuse score is never clearance) or drafting the knowledge record (use knowledge-record).'
 license: Proprietary
+compatibility: 'Requires Python 3 (standard library only) to run scripts/asset_identify.py on the engagement.json payload from artifact-assemble; writes asset_shortlist.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
+  icon: ic_fluent_box_search_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -29,6 +31,27 @@ The contract entry payload (`ps.engagement-closeout-knowledge-harvest.v1`) conta
 Run `scripts/asset_identify.py` with the shell tool and read its JSON output with the file-read tool. No connector writes or outbound actions.
 ## Output format
 `asset_shortlist.json` with `deliverable_index[]`, `reusable_asset_shortlist[]`, `escalations[]` and provenance.
+The engine copies every input key forward and adds these (one item per array shown):
+
+```json
+{
+  "deliverable_index": [{ "artifact_id": "", "title": "", "artifact_type": "", "required": true,
+    "status": "", "completeness_gap": false, "owner": "", "confidence": 0.0, "source": "", "citation": "" }],
+  "reusable_asset_shortlist": [{ "asset_id": "", "title": "", "asset_type": "", "description": "",
+    "reuse_score": 0, "recommendation": "shortlist | retain_for_internal_reference | archive_with_engagement",
+    "reuse_rationale": "", "confidentiality_markers": [], "aggregation_tokens": [],
+    "confidence": 0.0, "source": "engine:asset_identify", "citation": "reuse-asset-rubric.md ..." }],
+  "provenance": { "engines": ["asset_identify/<engine version>"], "generated_at": "" }
+}
+```
+
+Report to the user as a table quoting the engine values:
+
+| Asset | Reuse score | Recommendation | Citation |
+|---|---|---|---|
+
+followed by `Deliverable gaps:` listing each `completeness_gap` row with its register citation, and
+the line `A reuse score is not a clearance decision; sanitize-check decides.`
 ## Grounding requirements
 Every score cites `reuse-asset-rubric.md`; every completeness gap cites the source deliverable register row.
 ## Guardrails

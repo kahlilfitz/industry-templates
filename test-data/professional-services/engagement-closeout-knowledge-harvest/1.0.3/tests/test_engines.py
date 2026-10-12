@@ -1,5 +1,14 @@
+"""Engine regression suite for engagement-closeout-knowledge-harvest.
+
+Runner contract: python tests/test_engines.py [--plugin-root <dir>] (or PLUGIN_ROOT).
+The plugin root is an extracted MOS3 ZIP or the submission folder; skills/... paths resolve
+against it. The data root is this file's parent version folder; demo-data/... resolves there.
+"""
+
+import argparse
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -7,11 +16,56 @@ from pathlib import Path
 from unittest import mock
 
 
-ROOT = Path(__file__).resolve().parents[1]
+SLUG = "engagement-closeout-knowledge-harvest"
+DATA_ROOT = Path(__file__).resolve().parents[1]
+SKILL_NAMES = (
+    "artifact-assemble",
+    "asset-identify",
+    "lesson-cluster",
+    "sanitize-check",
+    "knowledge-record",
+)
+CONTRACT_FILE = "contracts/ps.engagement-closeout-knowledge-harvest.v1.json"
+REFERENCE_FILES = (
+    "references/reuse-asset-rubric.md",
+    "references/lesson-taxonomy.md",
+    "references/confidentiality-sanitisation-rules.md",
+)
+
+
+def ascii_safe(text):
+    return str(text).encode("ascii", "backslashreplace").decode("ascii")
+
+
+def resolve_plugin_root(argv):
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--plugin-root")
+    args, remaining = parser.parse_known_args(argv)
+    if args.plugin_root:
+        root = Path(args.plugin_root)
+    elif os.environ.get("PLUGIN_ROOT"):
+        root = Path(os.environ["PLUGIN_ROOT"])
+    else:
+        root = DATA_ROOT.parents[3] / "submissions" / "professional-services" / SLUG
+    return root.resolve(), remaining
+
+
+PLUGIN_ROOT, UNITTEST_ARGV = resolve_plugin_root(sys.argv[1:])
+sys.dont_write_bytecode = True
+print(ascii_safe(f"Plugin root: {PLUGIN_ROOT}"), flush=True)
+print(ascii_safe(f"Data root:   {DATA_ROOT}"), flush=True)
+if not (PLUGIN_ROOT / "skills").is_dir():
+    sys.stderr.write(
+        ascii_safe(
+            f"ERROR: plugin root {PLUGIN_ROOT} has no skills/ folder; pass --plugin-root "
+            "<extracted MOS3 ZIP or submission folder> or set PLUGIN_ROOT.\n"
+        )
+    )
+    sys.exit(2)
 
 
 def load_module(name, relative_path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / relative_path)
+    spec = importlib.util.spec_from_file_location(name, PLUGIN_ROOT / relative_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -139,7 +193,7 @@ class SanitizationTests(unittest.TestCase):
             asset_path = temp / "asset.json"
             lessons_path = temp / "lessons.json"
             governed_path = temp / "governed.json"
-            source = ROOT / "demo-data" / scenario / "engagement.json"
+            source = DATA_ROOT / "demo-data" / scenario / "engagement.json"
             self.assertEqual(0, run_engine(asset_identify, source, asset_path))
             self.assertEqual(0, run_engine(lesson_cluster, asset_path, lessons_path))
             self.assertEqual(0, run_engine(sanitize_check, lessons_path, governed_path))
@@ -284,34 +338,45 @@ class SanitizationTests(unittest.TestCase):
 
 class SharedCopyTests(unittest.TestCase):
     def test_contract_and_reference_copies_match(self):
-        contract = (
-            ROOT / "contracts/ps.engagement-closeout-knowledge-harvest.v1.json"
-        ).read_bytes()
-        references = {
-            name: (ROOT / "references" / name).read_bytes()
-            for name in (
-                "reuse-asset-rubric.md",
-                "lesson-taxonomy.md",
-                "confidentiality-sanitisation-rules.md",
-            )
-        }
+        # Every skill carries its own copy (MOS3 skills are self-contained); the
+        # artifact-assemble copy is canonical and every other copy must match it byte for byte.
+        skills_dir = PLUGIN_ROOT / "skills"
+        skill_dirs = sorted(path for path in skills_dir.iterdir() if path.is_dir())
+        self.assertEqual(sorted(SKILL_NAMES), [path.name for path in skill_dirs])
+        canonical_dir = skills_dir / SKILL_NAMES[0]
+        for relative in (CONTRACT_FILE, *REFERENCE_FILES):
+            canonical = (canonical_dir / relative).read_bytes()
+            for skill_dir in skill_dirs:
+                with self.subTest(skill=skill_dir.name, file=relative):
+                    self.assertEqual(canonical, (skill_dir / relative).read_bytes())
 
-        for skill_dir in (ROOT / "skills").iterdir():
-            if not skill_dir.is_dir():
-                continue
-            self.assertEqual(
-                contract,
-                (
-                    skill_dir
-                    / "contracts/ps.engagement-closeout-knowledge-harvest.v1.json"
-                ).read_bytes(),
-            )
-            for name, canonical in references.items():
-                self.assertEqual(
-                    canonical,
-                    (skill_dir / "references" / name).read_bytes(),
-                )
+
+class PackageBoundaryTests(unittest.TestCase):
+    def test_no_fixture_data_or_cwd_dependency_in_plugin_root(self):
+        for name in ("demo-data", "tests", ".claude-plugin"):
+            with self.subTest(folder=name):
+                self.assertFalse((PLUGIN_ROOT / name).exists())
+        for path in (PLUGIN_ROOT / "skills").rglob("*"):
+            if path.is_file() and path.suffix in (".md", ".py", ".json"):
+                text = path.read_text(encoding="utf-8")
+                with self.subTest(file=str(path.relative_to(PLUGIN_ROOT))):
+                    for marker in ("../../", "demo-data/", "CLAUDE_PLUGIN_ROOT"):
+                        self.assertNotIn(marker, text)
+
+
+def main():
+    print(ascii_safe(f"Running {SLUG} engine tests"), flush=True)
+    suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
+    result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
+    total = result.testsRun
+    failed = len(result.failures) + len(result.errors) + len(result.unexpectedSuccesses)
+    print(ascii_safe(f"{total - failed}/{total} checks passed"), flush=True)
+    return 0 if result.wasSuccessful() else 1
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if UNITTEST_ARGV:
+        sys.argv = [sys.argv[0], *UNITTEST_ARGV]
+        unittest.main()
+    else:
+        sys.exit(main())

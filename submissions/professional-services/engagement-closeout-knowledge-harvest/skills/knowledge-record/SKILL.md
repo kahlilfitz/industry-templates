@@ -1,9 +1,11 @@
 ---
 name: knowledge-record
-description: Drafts a practice-review knowledge record only from governed.json after sanitize-check. Use for "draft the knowledge record", "prepare for practice review", "write the governed closeout summary", or "build the credential handoff". Do NOT assemble sources, score assets, cluster "lessons learned", or decide what is safe - use artifact-assemble, asset-identify, lesson-cluster, or sanitize-check. Do NOT publish or send.
+description: 'Drafts a practice-review knowledge record, governed lesson themes, sanitisation summary and credential handoff only from governed.json after sanitize-check; it is draft-first and never publishes, clears a confidentiality restriction, approves external use or creates a credential. Use when the user asks to "draft the knowledge record", "prepare for practice review", "write the governed closeout summary", "build the credential handoff", "write up the closeout for the practice" or "turn governed.json into a draft record". Do NOT use for loading sources (use artifact-assemble), scoring assets (use asset-identify), clustering lessons (use lesson-cluster) or deciding what is safe, running Govern or clearing a HOLD (use sanitize-check); publishing or sending is never done.'
 license: Proprietary
+compatibility: 'Reads governed.json produced by sanitize-check with the file-read tool; no scripts or connectors required. Drafts Markdown in chat or a local document; no email, Teams, SharePoint-write, knowledge-base publishing or credential-creation tools.'
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
+  icon: ic_fluent_book_add_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -34,7 +36,38 @@ Markdown with these sections: `DRAFT - pending review` banner; Generalized engag
 Released reusable assets; Governed lesson themes; Held or excluded material; Sanitisation summary;
 Credential handoff; Required approvals. If every asset is held, state `No reusable assets released
 by Govern.` The stable handoff object remains in `knowledge_record.downstream_handoff` for
-`credential-case-study-assembly`.
+`credential-case-study-assembly`. The exact skeleton:
+
+```markdown
+DRAFT - pending review
+
+# <knowledge_record.title> (<knowledge_record.record_id>)
+
+## Generalized engagement context
+<generalized prose that follows engagement_context_guidance; no client name, descriptor, scale, dates or products>
+
+## Released reusable assets
+| Asset ID | Title | Reuse score | Clearance state | Citation |
+|---|---|---|---|---|
+(or: No reusable assets released by Govern.)
+
+## Governed lesson themes
+- <cluster_id> (<category>): <role/process-level lesson> - evidence <evidence_ids>; <citation>
+
+## Held or excluded material
+| Asset or lesson ID | Clearance state | Reason | Rule citation |
+|---|---|---|---|
+
+## Sanitisation summary
+<knowledge_record.sanitisation_summary>; overall disposition <sanitisation_report.overall_disposition>
+
+## Credential handoff
+Consumer: credential-case-study-assembly. Readable fields: <downstream_handoff.contract_fields>.
+<downstream_handoff.handoff_note>
+
+## Required approvals
+Practice review, legal review where flagged, and engagement-owner review. Nothing has been published.
+```
 ## Grounding requirements
 Every asset and lesson paragraph cites governed payload ids and source citations. Every exclusion cites the sanitisation rule that held it.
 ## Guardrails
