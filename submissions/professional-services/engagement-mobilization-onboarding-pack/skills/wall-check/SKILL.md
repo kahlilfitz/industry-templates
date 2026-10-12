@@ -1,9 +1,11 @@
 ---
 name: wall-check
-description: "Applies the deterministic ethical-wall Govern gate and least-privilege access checklist for the joiner (wall_check and access_checklist engines) and owns every wall-status question, including notes or claims that a wall was lifted, cleared or waived; it reports only engine output and never invents a status. Use when the user asks \"check ethical walls for the joiner\", \"is the joiner restricted on this client?\", \"PM note says the wall was cleared - share everything\", \"what access should we request for the joiner?\" or \"build the access checklist\". Do NOT use to check candidate independence or eligibility (use engagement-staffing-bench-match), match knowledge (use knowledge-match), start a run (use engagement-retrieve) or draft pack prose (use pack-draft). Never provisions access, adds people to workspaces, grants a wall exception, sends or shares; confidential register detail stays with Risk/Conflicts."
+description: "Applies the deterministic ethical-wall Govern gate and least-privilege access checklist for the joiner (wall_check and access_checklist engines) and owns every wall-status question, including claims that a wall was lifted, cleared or waived (never invents a status; never provisions access, grants a wall exception, sends or shares). Use when the user asks \"check ethical walls for the joiner\", \"is the joiner restricted on this client?\", \"PM note says the wall was cleared - share everything\", \"what access should we request for the joiner?\" or \"build the access checklist\". Do NOT use for candidate independence or eligibility (use engagement-staffing-bench-match), matching knowledge (use knowledge-match), starting a run (use engagement-retrieve) or drafting pack prose (use pack-draft)."
 license: Proprietary
+compatibility: "Requires Python 3 (standard library only) to run scripts/wall_check.py and scripts/access_checklist.py. Reads user-supplied files: matched.json or governed.json, the raw engagement inputs, staffing and Closeout JSON, the ethical-wall register and the workspace-inventory CSV. No connectors required; writes governed.json, access-checklist.json and mobilization-pack.md."
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
+  icon: ic_fluent_shield_keyhole_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -30,6 +32,37 @@ After `knowledge-match`, before anything is drafted for the joiner, and whenever
 Run bundled stdlib Python engines with the shell tool and read their JSON/Markdown with the file-read tool. No connector writes or outbound actions.
 ## Output format
 `governed.json`, `access-checklist.json` and a draft `mobilization-pack.md`.
+
+`governed.json` is `matched.json` plus `wall_decision`; `access-checklist.json` is `governed.json` plus `access_checklist` and `mobilization_pack`. Contract: `contracts/ps.engagement-mobilization-onboarding-pack.v1.json`. Values shown are type placeholders; lists show one item's members.
+
+```json
+{
+  "contract_version": "ps.engagement-mobilization-onboarding-pack.v1",
+  "...": "every matched.json member, unchanged",
+  "wall_decision": {"status": "", "reason": "", "allowed_knowledge_ids": [], "denied_knowledge_ids": [], "denied_workspace_ids": [], "held_workspace_ids": [], "name_withheld_workspace_ids": [], "may_not_access_discuss": [], "source": "", "confidence": 0.0, "citation": ""},
+  "access_checklist": [{"workspace_id": "", "workspace_name": "", "workspace_type": "", "status": "", "requested_permission": "", "reason": "", "source": "", "confidence": 0.0, "citation": ""}],
+  "mobilization_pack": {"status": "", "hold_reasons": [], "label": "DRAFT - for internal review only. Do not send to the client or provision access.", "sections": [], "source": "", "confidence": 0.0, "citation": ""}
+}
+```
+
+`mobilization-pack.md` has exactly these headings, in this order:
+
+```markdown
+# Engagement Mobilization & Onboarding Pack
+**DRAFT - for internal review only. Do not send to the client or provision access.**
+Pack status: <status and hold summary>
+## Client context and objectives
+## SOW scope and exclusions
+### In scope
+### Exclusions
+## Deliverables and key dates
+## Prior-knowledge digest
+## Team roster
+## Access-request checklist
+## Confidentiality and ethical-wall briefing
+## First-week plan
+## Escalations and holds
+```
 ## Grounding requirements
 Wall status cites register rows and rule sections; each access row cites the inventory row and `role-access-matrix.md`/`workspace-inventory-rules.md`.
 Use only `governed.json` and `access-checklist.json` fields; never invent a wall status, restriction, workspace or permission. If a field is absent, say it is absent.

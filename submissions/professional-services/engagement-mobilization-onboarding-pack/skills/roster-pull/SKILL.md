@@ -1,9 +1,11 @@
 ---
 name: roster-pull
-description: "Explains the engine-built team roster in scope.json: who is confirmed, who is only proposed by Scenario 02, and who is excluded or needs review, using only engine output (never invents names or assignments). Use when the user asks \"who is on the team?\", \"who is confirmed vs proposed?\", \"is Jules assigned yet?\", \"who is the joiner and their point of contact?\" or \"why is someone excluded from the roster?\". Do NOT use to pull the bench, availability or conflicts roster, or to recommend, rank or re-check candidates (use engagement-staffing-bench-match). Do NOT use to start a run or read the SOW (use engagement-retrieve), match knowledge (use knowledge-match), check walls or access (use wall-check) or draft the pack (use pack-draft). Never adds anyone to a team or roster, sends or shares anything; conflict reasons stay confidential."
+description: "Explains the engine-built team roster in scope.json: who is confirmed, who is only proposed by Scenario 02, and who is excluded or needs review, using only engine output (never invents names, adds anyone to a roster, sends or shares; conflict reasons stay confidential). Use when the user asks \"who is on the team?\", \"who is confirmed vs proposed?\", \"is Jules assigned yet?\", \"who is the joiner and their point of contact?\" or \"why is someone excluded from the roster?\". Do NOT use for the bench, availability or conflicts roster, or recommending, ranking or re-checking candidates (use engagement-staffing-bench-match), starting a run or reading the SOW (use engagement-retrieve), knowledge (use knowledge-match), walls or access (use wall-check) or drafting the pack (use pack-draft)."
 license: Proprietary
+compatibility: "Requires Python 3 (standard library only) to run scripts/verify_render.py, which re-derives scope.json from the user-supplied SOW, letter and pursuit extracts, confirmed-roster CSV and Scenario 02 staffing JSON before the roster is shown. No connectors required; writes no files."
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
+  icon: ic_fluent_people_list_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -30,6 +32,12 @@ After `engagement-retrieve`, when a user asks about team composition, the joiner
 Run bundled stdlib Python engines with the shell tool and read their JSON/Markdown with the file-read tool. No connector writes or outbound actions.
 ## Output format
 Markdown table: person, role, status (confirmed / proposed - not assigned / excluded / needs review), point of contact, citation.
+
+```markdown
+| Person | Role | Status | Point of contact | Citation |
+|---|---|---|---|---|
+| <person> | <role> | confirmed | <point of contact> | <citation> |
+```
 ## Grounding requirements
 Rows cite `raw/confirmed-roster.csv` or the Scenario 02 rule; nothing is inferred from names or titles.
 Use only `scope.json` fields; never invent a person, role, assignment, point of contact or verdict. If a field is absent, say it is absent.

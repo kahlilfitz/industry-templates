@@ -1,9 +1,11 @@
 ---
 name: engagement-retrieve
-description: "Starts every Scenario 03 mobilization run, including a cold start: runs the deterministic scope_digest engine over the SOW, engagement letter, pursuit record, confirmed roster and Scenario 02 staffing output, and reports only engine output (never invents scope, dates or names). Use when the user asks \"mobilize this engagement\", \"start the onboarding pack\", \"build an onboarding pack for the new joiner\", \"summarise the SOW for the new joiner\" or \"what is in and out of scope for the joiner?\". Do NOT use for confirmed vs proposed team questions (use roster-pull), prior knowledge (use knowledge-match), any wall-status claim such as a note that the wall was lifted or cleared, or access (use wall-check), or rewording an existing pack (use pack-draft). Do NOT use to recommend or rank staff (use engagement-staffing-bench-match). Never sends, shares or provisions anything; confidential sources stay internal."
+description: "Starts every Scenario 03 mobilization run, including a cold start: runs the deterministic scope_digest engine on the SOW, letter, pursuit record, confirmed roster and Scenario 02 staffing and reports only its output (never invents scope, dates or names; never sends, shares or provisions anything). Use when the user asks \"mobilize this engagement\", \"start the onboarding pack\", \"build an onboarding pack for the new joiner\", \"summarise the SOW for the new joiner\" or \"what is in and out of scope for the joiner?\". Do NOT use for confirmed vs proposed team (use roster-pull), prior knowledge (use knowledge-match), wall status, including a note that the wall was lifted or cleared, or access (use wall-check), rewording a pack (use pack-draft) or ranking staff (use engagement-staffing-bench-match)."
 license: Proprietary
+compatibility: "Requires Python 3 (standard library only) to run scripts/scope_digest.py. Reads user-supplied files: the SOW, engagement-letter and pursuit-record extracts, the confirmed-roster CSV and the Scenario 02 staffing JSON. No connectors required; writes scope.json only."
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
+  icon: ic_fluent_document_search_24_regular
   author: Microsoft Professional Services Skills
   category: retrieval
 ---
@@ -32,6 +34,25 @@ First step of every mobilization run and the owner of every cold start ("start /
 Run bundled stdlib Python engines with the shell tool and read their JSON/Markdown with the file-read tool. No connector writes or outbound actions.
 ## Output format
 `scope.json` with `engagement`, `joiner`, `scope_summary`, `engagement_terms`, `team_roster`, `proposed_staffing`, `staffing_exclusions`, `escalations`, `holds`, `provenance`.
+
+Exact structure, members in engine order. Contract: `contracts/ps.engagement-mobilization-onboarding-pack.v1.json`. Values shown are type placeholders; lists show one item's members.
+
+```json
+{
+  "contract_version": "ps.engagement-mobilization-onboarding-pack.v1",
+  "run_metadata": {"generated_at": "<ISO>", "demo_scenario": "<demo slug>"},
+  "engagement": {"engagement_id": "", "matter_id": "", "title": "", "client_name": "", "affiliates": [], "sector": "", "region": "", "source": "", "confidence": 0.0, "citation": ""},
+  "joiner": {"person": "", "role": "", "responsibilities": [], "point_of_contact": "", "onboarding_status": "", "assignment_status": "", "source": "", "confidence": 0.0, "citation": ""},
+  "scope_summary": {"objectives": [], "in_scope": [], "exclusions": [], "deliverables": [], "key_dates": [], "systems": [], "first_week_focus": [], "source": "", "confidence": 0.0, "citation": ""},
+  "engagement_terms": {"confidentiality_terms": [], "ethical_wall_terms": [], "source": "", "confidence": 0.0, "citation": ""},
+  "team_roster": [{"person": "", "role": "", "responsibilities": [], "point_of_contact": "", "onboarding_status": "", "assignment_status": "", "source": "", "confidence": 0.0, "citation": ""}],
+  "proposed_staffing": [{"candidate_name": "", "role_title": "", "fit_score": 0.0, "assignment_status": "", "source": "", "confidence": 0.0, "citation": ""}],
+  "staffing_exclusions": [{"person": "", "role": "", "reason": "", "blocking_rule": "", "source": "", "confidence": 0.0, "citation": ""}],
+  "escalations": [""],
+  "holds": [{"hold_id": "", "path": "", "reason": "", "source": "", "confidence": 0.0, "citation": ""}],
+  "provenance": {"engines": ["scope_digest/<version>"], "generated_at": "<ISO>", "sources": []}
+}
+```
 ## Grounding requirements
 Every field cites its source file/row or a reference rule; staffing verdicts cite the Scenario 02 rule only.
 Use only `scope.json` fields; never invent scope, dates, names or terms. If a field is absent, say it is absent.

@@ -14,8 +14,8 @@
   ],
   "author": "Kahlil Fitzgerald",
   "authorUrl": "https://github.com/kahlilfitz",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "createdAt": "2026-10-01",
-  "updatedAt": "2026-10-07",
-  "bundleTests": true
+  "updatedAt": "2026-10-12",
+  "packageFormat": "mos3"
 }

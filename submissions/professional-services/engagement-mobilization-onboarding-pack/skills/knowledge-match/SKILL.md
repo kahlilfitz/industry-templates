@@ -1,9 +1,11 @@
 ---
 name: knowledge-match
-description: "Matches released Scenario 01 Closeout knowledge to the engagement with the deterministic knowledge_match engine and reports only engine output (never invents assets, scores or summaries). Use when the user asks \"what prior knowledge can the joiner use?\", \"which reusable assets apply here?\", \"match closeout lessons to this engagement\" or \"which closeout assets were excluded and why?\". Do NOT use to harvest, sanitise or release Closeout knowledge, or for \"is this safe to reuse or share externally?\" (use engagement-closeout-knowledge-harvest). Do NOT use to decide whether the joiner may see an item (use wall-check), to start a run or read the SOW (use engagement-retrieve), or to draft the pack (use pack-draft). Never publishes, sends or shares knowledge; client-confidential material stays internal."
+description: "Matches released Scenario 01 Closeout knowledge to the engagement with the deterministic knowledge_match engine and reports only engine output (never invents assets, scores or summaries, and never publishes, sends or shares knowledge). Use when the user asks \"what prior knowledge can the joiner use?\", \"which reusable assets apply here?\", \"match closeout lessons to this engagement\", \"which closeout assets were excluded and why?\" or \"build the prior-knowledge digest\". Do NOT use for harvesting, sanitising or releasing Closeout knowledge or judging whether it is safe to reuse or share externally (use engagement-closeout-knowledge-harvest), deciding whether the joiner may see an item (use wall-check), starting a run (use engagement-retrieve) or drafting the pack (use pack-draft)."
 license: Proprietary
+compatibility: "Requires Python 3 (standard library only) to run scripts/knowledge_match.py. Reads user-supplied files: scope.json, the raw engagement inputs and staffing JSON, the Scenario 01 Closeout governed JSON and the ethical-wall register CSV. No connectors required; writes matched.json only."
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
+  icon: ic_fluent_book_search_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -28,6 +30,17 @@ After `engagement-retrieve`, when Closeout `governed.json` is available.
 Run bundled stdlib Python engines with the shell tool and read their JSON/Markdown with the file-read tool. No connector writes or outbound actions.
 ## Output format
 `matched.json` with `prior_knowledge_candidates` and `knowledge_digest` (`status`, `items`, `excluded_items`).
+
+Exact structure: every `scope.json` member unchanged (see engagement-retrieve), then the two knowledge members. Contract: `contracts/ps.engagement-mobilization-onboarding-pack.v1.json`. Values shown are type placeholders; lists show one item's members.
+
+```json
+{
+  "contract_version": "ps.engagement-mobilization-onboarding-pack.v1",
+  "...": "every scope.json member, unchanged",
+  "prior_knowledge_candidates": [{"knowledge_id": "", "title": "", "summary": "", "relevance_score": 0.0, "matched_terms": [], "clearance_state": "", "confidentiality_permission": "", "review_status": "", "source": "", "confidence": 0.0, "citations": []}],
+  "knowledge_digest": {"status": "", "items": [{"knowledge_id": "", "...": "same members as a candidate"}], "excluded_items": [{"asset_id": null, "lesson_id": null, "reason": "", "citation": ""}], "source": "", "confidence": 0.0, "citation": ""}
+}
+```
 ## Grounding requirements
 Each item cites the Closeout asset and `knowledge-reuse-rules.md` sections; an excluded lesson carries #2.4 and its own citations.
 Use only `matched.json` fields; never invent an asset, summary, score or review status. If a field is absent, say it is absent.

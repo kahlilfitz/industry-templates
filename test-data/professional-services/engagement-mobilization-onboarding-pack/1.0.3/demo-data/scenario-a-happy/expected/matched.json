@@ -138,9 +138,8 @@
   "holds": [],
   "provenance": {
     "engines": [
-      "scope_digest/1.0.2",
-      "knowledge_match/1.0.2",
-      "wall_check/1.0.2"
+      "scope_digest/1.0.3",
+      "knowledge_match/1.0.3"
     ],
     "generated_at": "2026-10-01T00:00:00Z",
     "sources": [
@@ -209,20 +208,5 @@
     "source": "engine:knowledge_match",
     "confidence": 0.92,
     "citation": "knowledge-reuse-rules.md #1.1-#3.2"
-  },
-  "wall_decision": {
-    "status": "clear",
-    "reason": "wall register marks joiner clear for this client/matter",
-    "allowed_knowledge_ids": [
-      "AST-A-001"
-    ],
-    "denied_knowledge_ids": [],
-    "denied_workspace_ids": [],
-    "held_workspace_ids": [],
-    "name_withheld_workspace_ids": [],
-    "may_not_access_discuss": [],
-    "source": "engine:wall_check",
-    "confidence": 0.98,
-    "citation": "raw/ethical-wall-register.csv row 2"
   }
 }

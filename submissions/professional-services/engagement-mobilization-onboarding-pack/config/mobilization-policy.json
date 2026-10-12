@@ -1,9 +1,0 @@
-{
-  "version": "1.0.2",
-  "draftFirst": true,
-  "unknownWallStatus": "hold",
-  "missingWallRegister": "refuse",
-  "missingWorkspaceInventory": "hold",
-  "malformedWorkspaceInventory": "hold",
-  "staffingSlate": "recommendation_until_confirmed"
-}

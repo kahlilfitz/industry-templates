@@ -138,7 +138,7 @@
   "holds": [],
   "provenance": {
     "engines": [
-      "scope_digest/1.0.2"
+      "scope_digest/1.0.3"
     ],
     "generated_at": "2026-10-01T00:00:00Z",
     "sources": [

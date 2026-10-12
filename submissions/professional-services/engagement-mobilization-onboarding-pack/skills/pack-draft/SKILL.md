@@ -1,9 +1,11 @@
 ---
 name: pack-draft
-description: "Drafts this engagement's internal mobilization pack, joiner briefing and first-week plan only from the governed access-checklist.json and the engine-written mobilization-pack.md, keeping every status, hold and DRAFT banner (never invents content). Use when the user asks \"draft the onboarding pack from the access checklist\", \"write the joiner briefing for this engagement\", \"prepare the first-week plan for the joiner\" or \"turn the access checklist into the mobilization pack\". If no access-checklist.json exists yet, do NOT use - start with engagement-retrieve. Do NOT use to decide wall status, access, roster or knowledge (use wall-check, roster-pull or knowledge-match). Do NOT use for a generic onboarding guide or Word document not tied to this engagement's governed outputs (use docx). Never sends, shares or posts the pack; it stays a confidential internal draft."
+description: "Drafts this engagement's internal mobilization pack, joiner briefing and first-week plan only from the governed access-checklist.json and mobilization-pack.md, keeping every status, hold and DRAFT banner (never invents content, sends, shares or posts it). Use when the user asks \"draft the onboarding pack from the access checklist\", \"write the joiner briefing for this engagement\", \"prepare the first-week plan for the joiner\", \"turn the access checklist into the mobilization pack\" or \"tidy up the mobilization pack wording\". Do NOT use for a cold start with no access checklist yet (start with engagement-retrieve), wall, access, roster or knowledge decisions (use wall-check, roster-pull or knowledge-match), or a generic onboarding guide or Word document not tied to this engagement (use docx)."
 license: Proprietary
+compatibility: "Requires Python 3 (standard library only) to run scripts/verify_render.py, which re-derives access-checklist.json and mobilization-pack.md from the user-supplied raw inputs, staffing and Closeout JSON, wall register and workspace inventory. No connectors required; produces a Markdown draft for review."
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
+  icon: ic_fluent_notepad_person_24_regular
   author: Microsoft Professional Services Skills
   category: writing
 ---
@@ -31,6 +33,25 @@ Last step, after `wall-check` has written `access-checklist.json` and `mobilizat
 Run bundled stdlib Python engines with the shell tool and read their JSON/Markdown with the file-read tool. No connector writes or outbound actions.
 ## Output format
 Markdown pack headed `DRAFT - for internal review only`.
+
+Exact structure (the engine's `mobilization-pack.md`): keep every heading, in this order, and the banner line verbatim.
+
+```markdown
+# Engagement Mobilization & Onboarding Pack
+**DRAFT - for internal review only. Do not send to the client or provision access.**
+Pack status: <status and hold summary>
+## Client context and objectives
+## SOW scope and exclusions
+### In scope
+### Exclusions
+## Deliverables and key dates
+## Prior-knowledge digest
+## Team roster
+## Access-request checklist
+## Confidentiality and ethical-wall briefing
+## First-week plan
+## Escalations and holds
+```
 ## Grounding requirements
 Every sentence traces to a field in `access-checklist.json` or a line in `mobilization-pack.md`; cite them.
 Use only `access-checklist.json` and `mobilization-pack.md`; never invent a section, name, date, permission or knowledge item. If a field is absent, say it is absent.
