@@ -31,8 +31,21 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Test engagement staffing engines
-        run: python -m unittest discover -s submissions/professional-services/engagement-staffing-bench-match/tests -p "test_*.py" -v
+      - name: Test MOS3 plugins against their current-version test data
+        run: |
+          set -euo pipefail
+          for meta in submissions/*/*/metadata.json; do
+            [ "$(node -p "require('./$meta').packageFormat || ''")" = "mos3" ] || continue
+            dir=$(dirname "$meta"); slug=$(basename "$dir"); industry=$(basename "$(dirname "$dir")")
+            version=$(node -p "require('./$meta').version")
+            tests="test-data/$industry/$slug/$version/tests"
+            for runner in run_tests.py test_engines.py; do
+              if [ -f "$tests/$runner" ]; then
+                echo "== $slug $version $runner"
+                python "$tests/$runner" --plugin-root "$dir"
+              fi
+            done
+          done
 
       - name: Build bundles
         run: npm run build
