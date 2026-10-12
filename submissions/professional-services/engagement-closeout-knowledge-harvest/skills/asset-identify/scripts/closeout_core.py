@@ -626,21 +626,33 @@ _TITLE_LEAD_VERBS = frozenset((
 ).split())
 _TITLE_LEAD_FOLLOWERS = frozenset("the a an all every any each our their my his her as for to without".split())
 _TITLE_PHRASES = ("fine to", "ok to", "okay to", "safe to", "good to go", "as is", "cleared for", "approved for",
-                  "for external use", "no need", "do not", "does not", "did not", "no one", "they are", "as it is")
-# The collapsed-form check (#8.6) searches a value's lower-case letters and digits, run together,
-# for every forbidden verb, these steering words and every clause phrase with its spaces removed.
-# Needles shorter than FUSED_MIN_CHARS ("skip", "okto", "asis") would hit ordinary words, so they
-# match only as whole split tokens. A hit wholly inside one split token that is one of the
-# _FUSED_NOUNS ("Approver matrix", "Fee waiver") is a noun, not a clause.
-FUSED_MIN_CHARS = 5
-_FUSED_WORDS = ("already", "exactly", "kindly", "please", "nothing", "nobody")
-_FUSED_NEEDLES = tuple(sorted(
-    {needle for needle in _TITLE_VERBS.union(_FUSED_WORDS) if len(needle) >= FUSED_MIN_CHARS}
-    | {phrase.replace(" ", "") for phrase in _TITLE_PHRASES if len(phrase.replace(" ", "")) >= FUSED_MIN_CHARS}))
-_FUSED_NOUNS = frozenset((
-    "approver approvers waiver waivers voucher vouchers publisher publishers publishing consideration "
-    "considerations examiner examiners"
+                  "for external use", "no need", "no one", "they are", "as it is")
+# A negation makes a clause only when a verb or clause material follows ("DoNotFlagThisAsset"), so an
+# established name such as "DoNotDisturb" stays a noun phrase.
+_NEGATIONS = ("donot", "doesnot", "didnot")
+# Clause material (#8.6): the determiners, pronouns and object words that turn a verb into an
+# instruction ("ReleaseThisRecord", "skipthisrecord", "PublishingThisRecordNow"). Strong verbs also
+# take a preposition ("approveforexternaluse", "vouchedfor").
+_DETERMINERS = frozenset((
+    "the this these that those it its them all every any each our their my his her us me you your everything now"
 ).split())
+_OBJECTS = frozenset("record records asset assets".split())
+_PREPOSITIONS = ("for", "to", "as", "without")
+# Inside a run of letters only these longer words count as material, so 'Markit' or 'closeout' is no clause.
+_RUN_MATERIAL = ("the", "this", "these", "that", "those", "them", "their", "all", "every", "each", "any", "our",
+                 "now", "record", "asset")
+# Derivational and inflectional endings that turn a strong verb into a noun or modifier ('approver',
+# 'publishing', 'considerations'): such a word is a clause only when clause material follows.
+_DERIVED = frozenset("s es d ed ing ings r rs er ers ation ations able al als ment ments ance".split())
+FUSED_MIN_CHARS = 5
+LEAD_RUN_MIN_CHARS = 4
+# Steering words and verdict phrases are clause-shaped wherever they appear, run together or not.
+_FUSED_WORDS = ("already", "exactly", "kindly", "please", "nothing", "nobody")
+_FUSED_NEEDLES = tuple(sorted(set(_FUSED_WORDS) | {phrase.replace(" ", "") for phrase in _TITLE_PHRASES
+                                                   if len(phrase.replace(" ", "")) >= FUSED_MIN_CHARS}))
+_TRIGGER_VERBS = tuple(sorted(_TITLE_VERBS | _TITLE_LEAD_VERBS))
+# The comparison skeleton folds only these look-alike digits and symbols, inside runs that hold a letter.
+_LOOKALIKE_DIGITS = {"0": "o", "3": "e", "4": "a", "5": "s", "7": "t"}
 _CITE_LOCATOR = (r"(?:rows?|lines?|clauses?|sections?|pages?|pp?\.|slides?|paras?|paragraphs?|items?|tabs?|sheets?|"
                  r"cells?|tables?|figures?|fig\.|appendix|annex|schedule|\u00a7)")
 _CITE_TOKEN = r"(?:\d[A-Za-z0-9.]{0,15}|[A-Za-z]{1,2}(?:[\d.][A-Za-z0-9.]{0,13})?)"
@@ -661,6 +673,32 @@ def has_cf(value):
     return any(unicodedata.category(char) == "Cf" for char in value)
 
 
+def comparison_skeletons(value):
+    """The comparison copies of a value (#8.6), never rendered: NFKD with combining marks (Mn) dropped,
+    '@' read as 'a' and '$' as 's', and inside a letter-and-digit run that holds a letter the look-alike
+    digits 0, 3, 4, 5 and 7 read as o, e, a, s and t, and 1 as i in one copy and l in the other. A folded
+    character takes the case of the nearest letter, so case boundaries survive."""
+    base = "".join(ch for ch in unicodedata.normalize("NFKD", value) if unicodedata.category(ch) != "Mn")
+    base = base.replace("@", "a").replace("$", "s")
+    forms = []
+    for one in ("i", "l"):
+        def fold(match, one=one):
+            run = match.group(0)
+            if not any(ch.isalpha() for ch in run):
+                return run
+            out = []
+            for index, ch in enumerate(run):
+                letter = one if ch == "1" else _LOOKALIKE_DIGITS.get(ch)
+                if letter is None:
+                    out.append(ch)
+                    continue
+                near = [c for c in out if c.isalpha()][-1:] or [c for c in run[index + 1:] if c.isalpha()][:1]
+                out.append(letter.upper() if near and near[0].isupper() else letter)
+            return "".join(out)
+        forms.append(re.sub(r"[^\W_]+", fold, base))
+    return tuple(dict.fromkeys(forms))
+
+
 def _case_parts(run):
     """Split one letter-and-digit run at case and digit boundaries: 'PublishThisRecord' gives
     Publish, This, Record; 'APIGateway' gives API, Gateway; 'Section4' gives Section, 4."""
@@ -676,49 +714,98 @@ def _case_parts(run):
     return parts
 
 
-def spells_clause(value, separators):
+def _starts_clause(text):
+    return text.startswith(_RUN_MATERIAL) or any(
+        text == verb or (len(verb) >= LEAD_RUN_MIN_CHARS and text.startswith(verb)) for verb in _TRIGGER_VERBS)
+
+
+def _verb_hit(verb, rest, following, at_start):
+    """One occurrence of a trigger verb in the collapsed form. rest: the letters after it in the same
+    part; following: the next part; at_start: it begins at a part boundary."""
+    if verb in _TITLE_VERBS:
+        if at_start and not rest:
+            return True  # a whole part or whole parts: 'Publish', 'Pub|Lish', 'APPROVE'
+        if at_start and len(verb) >= FUSED_MIN_CHARS and rest not in _DERIVED:
+            return True  # run together with more text: 'publishthisrecord', 'PUBLISHKNOWLEDGEBASE'
+        material = _RUN_MATERIAL + _PREPOSITIONS
+        whole = _DETERMINERS | _OBJECTS | set(_PREPOSITIONS)
+        if rest.startswith(material) or any(
+                rest.startswith(end) and rest[len(end):].startswith(material) for end in _DERIVED):
+            return True
+        return (not rest or rest in _DERIVED) and following in whole
+    if at_start and not rest:
+        return following in _DETERMINERS  # 'ReleaseThisRecord', not 'Release readiness'
+    if len(verb) < LEAD_RUN_MIN_CHARS:
+        return False
+    return rest.startswith(_RUN_MATERIAL) or (not rest and following in _DETERMINERS)
+
+
+def spells_clause(value, separators, tokens=True):
     """The canonical token check for every rendered title, ID, citation path segment, anchor and
-    sheet or tab name (#8.6). True when the value spells a clause:
+    sheet or tab name, and for their record-level join (#8.6). True when the value spells a clause:
     - it carries a format (Cf) character, which is refused, never stripped;
-    - a separator token is a clause word (an upper-case acronym excepted), a forbidden verb or ends
-      in n't;
-    - a part split at any non-alphanumeric character and at case boundaries is a forbidden verb, or
-      the parts in order spell a clause phrase;
-    - the collapsed lower-case alphanumeric form contains a forbidden verb, steering word or clause
-      phrase of FUSED_MIN_CHARS letters or more, other than inside a listed noun (_FUSED_NOUNS)."""
+    - in either comparison skeleton (comparison_skeletons): a separator token is a clause word (an
+      upper-case acronym excepted) or ends in n't (when tokens is set); the parts, split at every
+      other non-alphanumeric character and at case boundaries, spell a verdict phrase in order; the
+      collapsed form (parts run together) contains a steering word or a verdict phrase of
+      FUSED_MIN_CHARS letters or more; a negation is followed by a verb or clause material; or an
+      imperative or verdict verb sits where it reads as a verb (_verb_hit)."""
     if has_cf(value):
         return True
-    text = unicodedata.normalize("NFKC", value)
-    for token in re.split(separators, text):
-        bare = token.strip("(),'\u2019")
-        low = bare.casefold().replace("\u2019", "'")
-        acronym = len(bare) >= 2 and bare.isupper()
-        if low.endswith("n't") or (not acronym and low in _TITLE_CLAUSE_WORDS) or low in _TITLE_VERBS:
-            return True
+    return any(_spells_clause(form, separators, tokens) for form in comparison_skeletons(value))
+
+
+def _spells_clause(text, separators, tokens):
+    if tokens:
+        for token in re.split(separators, text):
+            bare = token.strip("(),'\u2019")
+            low = bare.casefold().replace("\u2019", "'")
+            acronym = len(bare) >= 2 and bare.isupper()
+            if low.endswith("n't") or (not acronym and low in _TITLE_CLAUSE_WORDS):
+                return True
     parts = [part.casefold() for run in re.findall(r"[^\W_]+", text) for part in _case_parts(run)]
-    if any(part in _TITLE_VERBS for part in parts):
-        return True
     joined = f" {' '.join(parts)} "
     if any(f" {phrase} " in joined for phrase in _TITLE_PHRASES):
         return True
-    collapsed, spans = "", []
-    for part in parts:
-        spans.append((len(collapsed), len(collapsed) + len(part), part))
-        collapsed += part
-    for needle in _FUSED_NEEDLES:
-        start = collapsed.find(needle)
+    collapsed, starts = "".join(parts), {}
+    position = 0
+    for index, part in enumerate(parts):
+        starts[position] = index
+        position += len(part)
+    if any(needle in collapsed for needle in _FUSED_NEEDLES):
+        return True
+
+    def after(end):
+        """(letters after end in the same part, the next whole part)."""
+        if end in starts:
+            return "", parts[starts[end]]
+        if end >= len(collapsed):
+            return "", ""
+        first = max(start for start in starts if start < end)
+        index = starts[first]
+        return parts[index][end - first:], parts[index + 1] if index + 1 < len(parts) else ""
+
+    for negation in _NEGATIONS:
+        start = collapsed.find(negation)
         while start >= 0:
-            end = start + len(needle)
-            if not any(first <= start and end <= last and part in _FUSED_NOUNS for first, last, part in spans):
+            rest, following = after(start + len(negation))
+            if _starts_clause(rest) if rest else (following in _DETERMINERS | _OBJECTS or _starts_clause(following)):
                 return True
-            start = collapsed.find(needle, start + 1)
+            start = collapsed.find(negation, start + 1)
+    for verb in _TRIGGER_VERBS:
+        start = collapsed.find(verb)
+        while start >= 0:
+            rest, following = after(start + len(verb))
+            if _verb_hit(verb, rest, following, start in starts):
+                return True
+            start = collapsed.find(verb, start + 1)
     return False
 
 
-def title_shape_ok(value):
+def title_shape_ok(value, spelled=True):
     """A short noun phrase: letters, digits and light punctuation only, no format character and
     nothing the canonical token check reads as a clause (#8.6). The value is checked as supplied
-    (NFKC only), never as a stripped copy."""
+    (NFKC only), never as a stripped copy. spelled=False checks the shape without the spelling."""
     if has_cf(value):
         return False
     text = unicodedata.normalize("NFKC", value).strip()
@@ -731,13 +818,15 @@ def title_shape_ok(value):
             continue
         return False
     tokens = text.split()
-    if len(tokens) > TITLE_MAX_WORDS or spells_clause(text, r"\s+"):
+    if len(tokens) > TITLE_MAX_WORDS or (spelled and spells_clause(text, r"\s+")):
         return False
+    if not spelled:
+        return True
     lowered = [token.strip("(),'\u2019").casefold() for token in tokens]
     return not (lowered[0] in _TITLE_LEAD_VERBS and len(lowered) > 1 and lowered[1] in _TITLE_LEAD_FOLLOWERS)
 
 
-def citation_shape_ok(value):
+def citation_shape_ok(value, spelled=True):
     """A source path or document ID (no spaces; it carries a '.', '/', '\\' or a digit) with an optional
     #anchor and row, line, clause, section, page or named-sheet locators, ';'-separated. No path,
     anchor or sheet name may spell a clause under the canonical token check, as an identifier may
@@ -749,15 +838,37 @@ def citation_shape_ok(value):
         source = _CITE_SOURCE.match(part.strip())
         if not source or not any(c in "./\\" or c.isdigit() for c in source.group(0)):
             return False
-        if spells_clause(source.group(0), r"[-_./\\]+"):
+        if spelled and spells_clause(source.group(0), r"[-_./\\]+"):
             return False
-    return all(id_shape_ok(anchor or sheet) for anchor, sheet in _CITE_WORDS.findall(text))
+    return not spelled or all(id_shape_ok(anchor or sheet) for anchor, sheet in _CITE_WORDS.findall(text))
 
 
 def id_shape_ok(value):
     """An identifier renders as itself, so it may not spell a clause: the canonical token check with
     '-', '_' and '.' as separators (#8.6). Upper-case acronym segments pass the clause-word test."""
     return not spells_clause(value, r"[-_.]+")
+
+
+def citation_words(citation):
+    """The rendered identifier words of a citation, in order: each source path segment, then each
+    anchor and sheet or tab name."""
+    found = []
+    for part in citation.split(";"):
+        source = _CITE_SOURCE.match(part.strip())
+        if source:
+            found.extend(word for word in re.split(r"[-_./\\]+", source.group(0)) if word)
+    found.extend(anchor or sheet for anchor, sheet in _CITE_WORDS.findall(citation))
+    return found
+
+
+def joined_spells_clause(title, citation):
+    """A record's title and citation render together, so a clause split between them is refused: the
+    canonical check (without the separator-token test each value already passed) reads the title
+    followed by the citation's words, the reverse, and the title next to each word in either order."""
+    pieces = citation_words(citation)
+    joins = [[title] + pieces, pieces + [title]]
+    joins += [pair for piece in pieces for pair in ([title, piece], [piece, title])]
+    return any(spells_clause(" ".join(join), r"\s+", tokens=False) for join in joins)
 
 
 def shape_hits(path, value):
@@ -924,6 +1035,22 @@ def screen(doc, prior=None, forced=None):
                 found, location = shape_hits(path, value), "field"
             if found:
                 held[path] = (found, location)
+    for members in records:
+        named = {key: (path, box) for path, box, key in members}
+        if "title" in named and "citation" in named:
+            (title_path, title_box), (citation_path, citation_box) = named["title"], named["citation"]
+            title, citation = title_box["title"], citation_box["citation"]
+            # A half held only for spelling a clause, though identifier-shaped, still joins, so the
+            # other half is withheld too; a half held for any other reason stays out of the join.
+            spelled_only = (("render_shape",), "field")
+            joinable = ((title_path not in held or (held[title_path] == spelled_only
+                                                    and title_shape_ok(title, spelled=False)))
+                        and (citation_path not in held or (held[citation_path] == spelled_only
+                                                           and citation_shape_ok(citation, spelled=False))))
+            if (joinable and (title_path not in held or citation_path not in held)
+                    and joined_spells_clause(title, citation)):
+                for path in (title_path, citation_path):
+                    held.setdefault(path, (("render_shape",), "record"))
     terms = identity_terms(doc["engagement"]["client_name"])  # harvested before any redaction (A16)
 
     def live(members):

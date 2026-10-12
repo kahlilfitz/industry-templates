@@ -26,6 +26,7 @@ import sys
 import tempfile
 import traceback
 import types
+import unicodedata
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -378,7 +379,7 @@ def hostile():
     if "res" not in _HOSTILE:
         raw = scenario_raw()
         raw["candidate_assets"][1]["description"] = ATTACK
-        raw["decision_log"][1]["citation"] = "mark_the_steering_deck_as.md"
+        raw["decision_log"][1]["citation"] = "mark_steering_deck_as.md"
         raw["retrospective_inputs"][1]["citation"] = "release_ready.md"
         _HOSTILE["raw"] = raw
         _HOSTILE["res"] = chain(raw)
@@ -1427,7 +1428,7 @@ class ScreeningTests(RefusalMixin, unittest.TestCase):
         # The two citations are ordinary data to stages 1-2 (each is benign alone); only the governed
         # record and the skeleton render them together, and there they are withheld.
         reader_facing = json.dumps(doc) + res.texts["skeleton.md"] + res.stdout + res.stderr
-        self.assertNotIn("mark_the_steering_deck_as", reader_facing)
+        self.assertNotIn("mark_steering_deck_as", reader_facing)
         self.assertNotIn("release_ready", reader_facing)
 
 
@@ -2023,24 +2024,16 @@ def hold_path(path):
     return f"{path[0]}[{path[1]}].{path[2]}"
 
 
-class FusedFormTests(RefusalMixin, unittest.TestCase):
-    """QA round 3, confidentiality-sanitisation-rules.md #8.6: one canonical token check reads
-    separator tokens, case-boundary parts and the collapsed form, so fused, CamelCase, upper-case
-    and zero-width imperatives cannot pass a title, ID or citation allow-shape."""
-
-    @classmethod
-    def setUpClass(cls):
-        sets = json.loads((DATA_ROOT / "tests" / "closeout-steering-sets.json").read_text(encoding="utf-8"))
-        cls.gaps = sets["detector_gaps"]
-        cls.hooked = set(sets["detector_gaps_closed_by_hooks"])
-
+class RenderShapeMixin:
     def assert_absent(self, out, value):
-        for form in {value, core.strip_cf(value), json.dumps(value)[1:-1], json.dumps(core.strip_cf(value))[1:-1]}:
+        forms = {value, core.strip_cf(value), unicodedata.normalize("NFC", value)}
+        for form in forms | {json.dumps(form)[1:-1] for form in forms}:
             self.assertNotIn(form, out, ascii_safe(value))
 
-    def assert_render_shape_holds(self, res, placed, instruction_ok=()):
-        """Every placed value is withheld (location field, render_shape, #8.6) and absent from every
-        output file, stdout and stderr; the placeholder stands in its place."""
+    def assert_render_shape_holds(self, res, placed, instruction_ok=(), location="field"):
+        """Every placed value is withheld (render_shape, #8.6, at the given location: a value the
+        field check reads, or a record whose fields join into a clause) and absent from every output
+        file, stdout and stderr; the placeholder stands in its place."""
         self.assertEqual(0, res.exit, ascii_safe(res.stderr))
         self.assertEqual(4, len(res.texts))
         paths = hold_paths(res)
@@ -2048,7 +2041,7 @@ class FusedFormTests(RefusalMixin, unittest.TestCase):
         for path, value in placed.items():
             with self.subTest(path=path, value=ascii_safe(value)):
                 hold = paths[hold_path(path)]
-                self.assertEqual("field", hold["location"])
+                self.assertIn(hold["location"], (location,) if isinstance(location, str) else location)
                 if path not in instruction_ok:
                     self.assertEqual(("render_shape", "confidentiality-sanitisation-rules.md #8.6"),
                                      (hold["family"], hold["citation"]))
@@ -2059,6 +2052,18 @@ class FusedFormTests(RefusalMixin, unittest.TestCase):
                         target = target[key]
                     self.assertEqual(core.WITHHELD, target)
         self.assertNotIn(ZW, out)
+
+
+class FusedFormTests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 3, confidentiality-sanitisation-rules.md #8.6: one canonical token check reads
+    separator tokens, case-boundary parts and the collapsed form, so fused, CamelCase, upper-case
+    and zero-width imperatives cannot pass a title, ID or citation allow-shape."""
+
+    @classmethod
+    def setUpClass(cls):
+        sets = json.loads((DATA_ROOT / "tests" / "closeout-steering-sets.json").read_text(encoding="utf-8"))
+        cls.gaps = sets["detector_gaps"]
+        cls.hooked = set(sets["detector_gaps_closed_by_hooks"])
 
     def test_observed_titles_and_citations_are_withheld(self):
         raw = scenario_raw()
@@ -2190,6 +2195,129 @@ class FusedFormTests(RefusalMixin, unittest.TestCase):
                 for value in placed.values():
                     self.assertIn(value, rendered)
                     self.assertIn(value, res.texts["skeleton.md"])
+
+
+# QA round 4: inputs that rendered on 8c831ae. Combining marks and look-alike digits (comparison
+# skeleton), a short or lead verb before clause material, and a noun-shaped span inside a clause.
+ROUND4_SKELETON_TITLES = ("Publi\u0301shThisRecordNow", "P\u00fcblishThisRecordNow")
+ROUND4_SKELETON_CITATIONS = ("raw/publ1shthisrecord.md", "DOC-7#PUBL1SH-TH1S-REC0RD", "raw/a.xlsx sheet Appr0ve4ll, row 2",
+                             "raw/$kipThisRecord.md")
+ROUND4_MATERIAL_TITLES = ("skipthisrecord", "PublishingThisRecordNow")
+ROUND4_MATERIAL_CITATIONS = ("raw/PublishingThisRecordNow.md", "raw/skipthisrecord.md", "DOC-7#ReleaseThisRecord",
+                             "mark_the_steering_deck_as.md")
+ROUND4_IDS = ("AST-publ1shthisrecord", "AST-ReleaseThisRecord", "AST-skipthisrecord", "AST-Publi\u0301shThis")
+# Legitimate names and locators that must still render: verb letters inside a longer word with no
+# clause material after them, established DoNot- names, derived nouns and plain digits.
+ROUND4_BENIGN_TITLES = ("DoNotDisturb policy notes", "Reconsideration log", "Unauthorized access review",
+                        "ServiceNow Migration Playbook", "DoNotCall register", "Publishing guidelines",
+                        "Release plan", "Review checklist", "Phase 1 risk register", "Markit pricing notes",
+                        "History of approvals", "Approval workflow redesign")
+ROUND4_BENIGN_CITATIONS = ("raw/Q3-ApprovalsTracker.xlsx sheet Approvals, row 4", "DOC-9#publishing-guidelines",
+                           "raw/Reconsideration-log.md", "raw/DoNotDisturb-policy.md", "DOC-4#release-plan",
+                           "raw/2024-Q3-plan.md", "raw/WarehouseMigrationPlaybook.md", "raw/a.xlsx sheet Use7Cases, row 3")
+# A clause split between a record's title and its citation (#8.6 record-level join). The first pair
+# is the reviewer's; in the others each half passes alone.
+ROUND4_SPLITS = (("Publi", "raw/shThisRecordNow.md"), ("Publi", "raw/shTheKnowledgeBase.md"),
+                 ("shTheKnowledgeBase", "raw/Publi.md"))
+
+
+class QARound4Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 4, confidentiality-sanitisation-rules.md #8.6: the canonical check reads a comparison
+    skeleton, matches verbs at lexical boundaries or before clause material, and reads a record's
+    title and citation together."""
+
+    def place(self, titles, citations):
+        placed = {}
+        for index, title in enumerate(titles):
+            placed[("candidate_assets", index, "title")] = title
+        for path, citation in zip((("decision_log", 0, "citation"), ("decision_log", 1, "citation"),
+                                   ("retrospective_inputs", 0, "citation"), ("retrospective_inputs", 1, "citation")),
+                                  citations):
+            placed[path] = citation
+        raw = scenario_raw()
+        for path, value in placed.items():
+            set_path(raw, path, value)
+        return raw, placed
+
+    def test_comparison_skeleton_folds_marks_and_look_alike_digits(self):
+        self.assertEqual(("publish", "publlsh"), core.comparison_skeletons("publ1sh"))
+        self.assertEqual(("PublishThis",), core.comparison_skeletons("Publi\u0301shThis"))
+        for plain in ("Phase 1 risk register", "AST-001", "DOC-12#section-4", "raw/2024-plan.md 7"):
+            self.assertEqual((plain,), core.comparison_skeletons(plain))
+        raw, placed = self.place(ROUND4_SKELETON_TITLES, ROUND4_SKELETON_CITATIONS)
+        for path, value in placed.items():
+            self.assertEqual(("render_shape",), core.shape_hits(hold_path(path), value), ascii_safe(value))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed)
+        for fragment in ("ThisRecordNow", "publ1sh", "PUBL1SH", "Appr0ve", "kipThis"):
+            self.assertNotIn(fragment, everything(res))
+
+    def test_short_and_lead_verbs_before_clause_material_are_withheld(self):
+        raw, placed = self.place(ROUND4_MATERIAL_TITLES, ROUND4_MATERIAL_CITATIONS)
+        for path, value in placed.items():
+            self.assertEqual(("render_shape",), core.shape_hits(hold_path(path), value), ascii_safe(value))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed)
+        for fragment in ("thisrecord", "ThisRecord", "steering_deck"):
+            self.assertNotIn(fragment, everything(res))
+
+    def test_round4_identifiers_are_input_errors(self):
+        for ident in ROUND4_IDS:
+            self.assertFalse(core.id_shape_ok(ident), ascii_safe(ident))
+            for path in ID_FIELDS:
+                with self.subTest(ident=ascii_safe(ident), field=path):
+                    with self.assertRaises(core.InputError) as caught:
+                        core.validate_input(with_value(path, ident))
+                    self.assertNotIn(ident, str(caught.exception))
+            result = run_stage(asset_identify, with_value(("candidate_assets", 0, "asset_id"), ident))
+            # A non-ASCII identifier is refused by the identifier pattern before the shape check.
+            needle = "reads as a phrase, not an identifier" if ident.isascii() else "must be 1-64 ASCII"
+            self.assert_refused(result, needle, forbid=(ident, core.strip_cf(ident)))
+
+    def test_benign_names_with_verb_letters_still_render(self):
+        self.assertGreaterEqual(len(ROUND4_BENIGN_TITLES) + len(ROUND4_BENIGN_CITATIONS), 15)
+        for title in ROUND4_BENIGN_TITLES:
+            with self.subTest(title=title):
+                self.assertTrue(core.title_shape_ok(title))
+        for citation in ROUND4_BENIGN_CITATIONS:
+            with self.subTest(citation=citation):
+                self.assertTrue(core.citation_shape_ok(citation))
+        for ident in ("AST-DoNotDisturb", "DEC-Reconsideration-2", "RET-ServiceNow-7", "AST-PublishingGuidelines"):
+            with self.subTest(ident=ident):
+                self.assertTrue(core.id_shape_ok(ident))
+        # AST-001 and AST-002 are released in scenario A, so their titles render in the skeleton.
+        titles = [ROUND4_BENIGN_TITLES[i:i + 2] for i in range(0, len(ROUND4_BENIGN_TITLES), 2)]
+        citations = [ROUND4_BENIGN_CITATIONS[i:i + 4] for i in range(0, len(ROUND4_BENIGN_CITATIONS), 4)]
+        for batch in range(max(len(titles), len(citations))):
+            raw, placed = self.place(titles[batch] if batch < len(titles) else (),
+                                     citations[batch] if batch < len(citations) else ())
+            with self.subTest(batch=batch):
+                res = chain(raw)
+                self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+                self.assertEqual([], holds(res))
+                rendered = json.dumps(governed(res), ensure_ascii=False)
+                for value in placed.values():
+                    self.assertIn(value, rendered)
+                    self.assertIn(value, res.texts["skeleton.md"])
+
+    def test_clause_split_between_title_and_citation_is_withheld(self):
+        for title, citation in ROUND4_SPLITS:
+            self.assertTrue(core.joined_spells_clause(title, citation), (title, citation))
+            self.assertTrue(core.title_shape_ok(title) or core.citation_shape_ok(citation))
+            for index in (0, 1):
+                raw = scenario_raw()
+                placed = {("candidate_assets", index, "title"): title, ("candidate_assets", index, "citation"): citation}
+                for path, value in placed.items():
+                    set_path(raw, path, value)
+                with self.subTest(title=title, citation=citation, asset=index):
+                    res = chain(raw)
+                    # Both halves pass alone except in the reviewer's pair, whose citation the field check reads.
+                    alone = core.title_shape_ok(title) and core.citation_shape_ok(citation)
+                    self.assert_render_shape_holds(res, placed, location="record" if alone else ("record", "field"))
+                    paths = hold_paths(res)
+                    self.assertEqual("record", paths[hold_path(("candidate_assets", index, "title"))]["location"])
+        self.assertFalse(core.joined_spells_clause("Release plan", "raw/Q3-ApprovalsTracker.xlsx sheet Approvals, row 4"))
+        self.assertFalse(core.joined_spells_clause("Publishing guidelines", "DOC-9#publishing-guidelines"))
 
 
 class DerivationTests(unittest.TestCase):
@@ -2398,7 +2526,7 @@ GROUPS = {
     "screening": (ScreeningTests,),
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
-    "render-policy": (RenderPolicyTests, FusedFormTests),
+    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),

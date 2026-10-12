@@ -124,8 +124,8 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 116 tests in 16 groups (97 in 15 before
-  QA round 2, 109 before QA round 3). It ships with:
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 121 tests in 16 groups (97 in 15 before
+  QA round 2, 109 before QA round 3, 116 before QA round 4). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -342,3 +342,53 @@ The fix is inside the plugin; `shared/` and the vendored `steering_guard.py` cop
 
 **Golden differences (QA round 3).** None. Every demo title, citation and ID passes the canonical
 check, and every `expected/` file in both scenarios is byte-for-byte unchanged.
+
+### QA round 4 (comparison skeleton, clause-material rule, boundary matching, joined identifiers)
+
+QA on `8c831ae` found four Medium defects in the canonical token check. All fixes are inside the
+plugin; `shared/` and the vendored `steering_guard.py` copies were not edited.
+
+- **Comparison skeleton.** Combining marks and look-alike digits passed: the title
+  `Publi<U+0301>shThisRecordNow`, the ID `AST-publ1shthisrecord` and the citation
+  `raw/publ1shthisrecord.md` rendered. The check now reads comparison copies (never rendered): NFKD
+  with combining marks (Mn) dropped, `@` as `a`, `$` as `s`, and inside a letter-and-digit run that
+  holds a letter 0, 3, 4, 5 and 7 as o, e, a, s and t and 1 as i or l (two copies). Plain numbers
+  such as `Phase 1` and `AST-001` are unchanged. The ID is now an input error.
+- **Clause-material rule.** Exceptions reopened the shape: `skipthisrecord` (short verb skipped in
+  the collapsed form), `AST-ReleaseThisRecord` (CamelCase parts not checked against lead verbs) and
+  `raw/PublishingThisRecordNow.md` (the noun exemption hid a clause). Short verbs and lead verbs now
+  match in run-together or CamelCase form when clause material follows them (a determiner, pronoun,
+  `now`, or for imperative and verdict verbs also record, asset or a preposition), directly or after
+  an inflection or derivational ending. The listed-noun exemption is gone: a derived form is a noun
+  only while no clause material follows it.
+- **Boundary matching.** `DoNotDisturb policy notes`, `Reconsideration log` and `Unauthorized access
+  review` were withheld. Verb hits now need a lexical boundary (a whole token or CamelCase part, or a
+  long verb starting a part and running on into more letters) or clause material after them. Raw
+  collapsed substrings no longer count. A run-together negation (`donot`, `doesnot`, `didnot`) is a
+  clause only when a verb or clause material follows it, so `DoNotDisturb` renders without an
+  allowance list.
+- **Joined identifiers.** The title `Publi` and the citation `raw/shThisRecordNow.md` rendered
+  separately. For each record with both fields (engagement, artifacts, candidate assets), the check
+  also reads the title followed by the citation's path segments, anchors and sheet names, the
+  reverse, and the title next to each. A clause split between them withholds both fields with
+  `render_shape` holds at location `record`. A half held only because it spells a clause, though
+  otherwise identifier-shaped (the reviewer's citation now is), still joins and withholds the other.
+  A half held for any other reason, such as prose in a citation, stays out of the join.
+- **Reference.** #8.6 in all five byte-identical copies of `confidentiality-sanitisation-rules.md`
+  documents the skeleton, the boundary and clause-material rule, the negation rule, the record join
+  and the known limits.
+- **Tests (121 in 16 groups).** A new `QARound4Tests` class in the `render-policy` group (5 tests):
+  - the skeleton, clause-material and split repros run through the real chain, each withheld with
+    a `render_shape` hold and absent from every output;
+  - the round-4 IDs are refused in every ID field;
+  - 12 benign titles and 8 benign citations render with no hold, among them `DoNotDisturb policy
+    notes`, `ServiceNow Migration Playbook`, `raw/Q3-ApprovalsTracker.xlsx sheet Approvals, row 4`
+    and `DOC-9#publishing-guidelines`.
+
+  All 5 fail on `8c831ae` and pass now. `RenderShapeMixin` now carries the shared assertions. The
+  B6 fixture citation `mark_the_steering_deck_as.md` became `mark_steering_deck_as.md`: the original
+  is now withheld at stage 1 ("mark" before "the"), and B6 still needs a split that only meets on the
+  rendered skeleton. The original is asserted withheld in `QARound4Tests`.
+
+**Golden differences (QA round 4).** None. Every `expected/` file in both scenarios is byte-for-byte
+unchanged.

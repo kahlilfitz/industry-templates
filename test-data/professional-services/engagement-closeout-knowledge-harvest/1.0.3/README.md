@@ -61,7 +61,7 @@ finishes (a failing subtest fails its test), prints failure details after the re
 | `screening` | 13 | Embedded-instruction screen: families, locations, joins, oversize, rendered holds |
 | `steering-corpus` | 5 | Vendored shared detector and corpus scored at the real call site |
 | `steering-sets` | 9 | Closeout attack, paraphrase and benign sets, and every detector-gap line in every rendered field, ID and draft slot |
-| `render-policy` | 15 | Titles, citations and IDs render only in an allow-shape (#8.6), including upper-case, CamelCase, fused and zero-width forms; benign fused locators still render; withheld flags and skeleton markers |
+| `render-policy` | 20 | Titles, citations and IDs render only in an allow-shape (#8.6), including upper-case, CamelCase, fused, zero-width, combining-mark and look-alike-digit forms and clauses split between a title and its citation; benign fused locators still render; withheld flags and skeleton markers |
 | `drafting` | 7 | Knowledge-record skeleton and `record_check.py` refusal codes, including short-phrase copies |
 | `derivation` | 1 | Demo inputs re-derive from each scenario's raw pack (G4b) |
 | `goldens` | 1 | Both scenarios reproduce every `expected/` file byte for byte, LF only |
@@ -69,7 +69,7 @@ finishes (a failing subtest fails its test), prints failure details after the re
 | `release` | 8 | Guardrails, citations, routing, versions, stand-alone skills and the runner |
 | `harness` | 2 | A crashing test is reported as FAIL |
 
-The full suite (116 tests) takes about two minutes.
+The full suite (121 tests) takes about two minutes.
 
 ## What the scenarios cover
 
