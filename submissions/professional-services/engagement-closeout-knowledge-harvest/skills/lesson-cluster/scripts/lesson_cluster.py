@@ -10,7 +10,7 @@ import re
 import sys
 
 ENGINE = "engine:lesson_cluster"
-ENGINE_VERSION = "lesson_cluster/1.0.2"
+ENGINE_VERSION = "lesson_cluster/1.0.3"
 CONTRACT = "ps.engagement-closeout-knowledge-harvest.v1"
 CLUSTER_KEYWORDS = {
     "delivery-governance": ["governance", "sign-off", "signoff", "decision", "escalation", "scope", "steerco", "owner"],
@@ -117,7 +117,7 @@ def main():
     payload["lesson_clusters"] = clusters
     payload.setdefault("provenance", {})["engines"] = payload.setdefault("provenance", {}).get("engines", []) + [ENGINE_VERSION]
     payload["provenance"]["generated_at"] = payload.get("run_metadata", {}).get("generated_at", "2026-09-23T00:00:00Z")
-    with open(args.out, "w", encoding="utf-8") as output_file:
+    with open(args.out, "w", encoding="utf-8", newline="\n") as output_file:
         json.dump(payload, output_file, indent=2)
     review = sum(1 for c in clusters if c["review_candidate"])
     print(f"lesson_cluster: {len(clusters)} cluster(s), {review} review candidate(s)")

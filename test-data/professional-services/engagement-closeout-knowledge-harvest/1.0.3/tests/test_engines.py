@@ -1,16 +1,22 @@
 """Engine regression suite for engagement-closeout-knowledge-harvest.
 
-Runner contract: python tests/test_engines.py [--plugin-root <dir>] (or PLUGIN_ROOT).
-The plugin root is an extracted MOS3 ZIP or the submission folder; skills/... paths resolve
-against it. The data root is this file's parent version folder; demo-data/... resolves there.
+Runner contract:
+    python tests/test_engines.py [--plugin-root <dir>] [--group <name> ...] [--list-groups]
+PLUGIN_ROOT is the alternative to --plugin-root. The plugin root is an extracted MOS3 ZIP or the
+submission folder; skills/... paths resolve against it. The data root is this file's parent
+version folder; demo-data/... resolves there. Each test prints one ASCII-safe PASS or FAIL line as
+it finishes; the last line is "N/M checks passed" and the exit code is 1 on any failure.
 """
 
 import argparse
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import sys
 import tempfile
+import traceback
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -37,31 +43,25 @@ def ascii_safe(text):
     return str(text).encode("ascii", "backslashreplace").decode("ascii")
 
 
-def resolve_plugin_root(argv):
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--plugin-root")
-    args, remaining = parser.parse_known_args(argv)
-    if args.plugin_root:
-        root = Path(args.plugin_root)
+def emit(line):
+    print(ascii_safe(line), flush=True)
+
+
+def resolve_plugin_root(value):
+    if value:
+        root = Path(value)
     elif os.environ.get("PLUGIN_ROOT"):
         root = Path(os.environ["PLUGIN_ROOT"])
     else:
         root = DATA_ROOT.parents[3] / "submissions" / "professional-services" / SLUG
-    return root.resolve(), remaining
+    return root.resolve()
 
 
-PLUGIN_ROOT, UNITTEST_ARGV = resolve_plugin_root(sys.argv[1:])
 sys.dont_write_bytecode = True
-print(ascii_safe(f"Plugin root: {PLUGIN_ROOT}"), flush=True)
-print(ascii_safe(f"Data root:   {DATA_ROOT}"), flush=True)
-if not (PLUGIN_ROOT / "skills").is_dir():
-    sys.stderr.write(
-        ascii_safe(
-            f"ERROR: plugin root {PLUGIN_ROOT} has no skills/ folder; pass --plugin-root "
-            "<extracted MOS3 ZIP or submission folder> or set PLUGIN_ROOT.\n"
-        )
-    )
-    sys.exit(2)
+PLUGIN_ROOT = None
+asset_identify = lesson_cluster = sanitize_check = None
+SCENARIOS = ("scenario-a-happy", "scenario-b-drama")
+ENGINE_VERSION = "1.0.3"
 
 
 def load_module(name, relative_path):
@@ -71,21 +71,24 @@ def load_module(name, relative_path):
     return module
 
 
-asset_identify = load_module(
-    "closeout_asset_identify",
-    Path("skills/asset-identify/scripts/asset_identify.py"),
-)
-lesson_cluster = load_module(
-    "closeout_lesson_cluster",
-    Path("skills/lesson-cluster/scripts/lesson_cluster.py"),
-)
-sanitize_check = load_module(
-    "closeout_sanitize_check",
-    Path("skills/sanitize-check/scripts/sanitize_check.py"),
-)
+def load_engines():
+    global asset_identify, lesson_cluster, sanitize_check
+    asset_identify = load_module(
+        "closeout_asset_identify",
+        Path("skills/asset-identify/scripts/asset_identify.py"),
+    )
+    lesson_cluster = load_module(
+        "closeout_lesson_cluster",
+        Path("skills/lesson-cluster/scripts/lesson_cluster.py"),
+    )
+    sanitize_check = load_module(
+        "closeout_sanitize_check",
+        Path("skills/sanitize-check/scripts/sanitize_check.py"),
+    )
 
 
-def run_engine(module, input_path, output_path):
+def run_engine(module, input_path, output_path, stdout_sink=None):
+    """Run an engine's main(); its stdout is captured (and appended to stdout_sink if given)."""
     argv = [
         f"{module.__name__}.py",
         "--input",
@@ -93,8 +96,13 @@ def run_engine(module, input_path, output_path):
         "--out",
         str(output_path),
     ]
-    with mock.patch.object(sys, "argv", argv):
-        return module.main()
+    buffer = io.StringIO()
+    try:
+        with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(buffer):
+            return module.main()
+    finally:
+        if stdout_sink is not None:
+            stdout_sink.append(buffer.getvalue())
 
 
 class ContractValidationTests(unittest.TestCase):
@@ -328,12 +336,55 @@ class SanitizationTests(unittest.TestCase):
         result = self.run_scenario("scenario-a-happy")
         self.assertEqual(
             [
-                "asset_identify/1.0.2",
-                "lesson_cluster/1.0.2",
-                "sanitize_check/1.0.2",
+                f"asset_identify/{ENGINE_VERSION}",
+                f"lesson_cluster/{ENGINE_VERSION}",
+                f"sanitize_check/{ENGINE_VERSION}",
             ],
             result["provenance"]["engines"],
         )
+        for module in (asset_identify, lesson_cluster, sanitize_check):
+            with self.subTest(module=module.__name__):
+                self.assertTrue(module.ENGINE_VERSION.endswith(f"/{ENGINE_VERSION}"))
+
+
+class GoldenTests(unittest.TestCase):
+    """Both scenarios reproduce their expected/ goldens byte for byte (JSON and stdout), LF only."""
+
+    CHAIN = (
+        ("asset_identify", "engagement.json", "asset_shortlist.json"),
+        ("lesson_cluster", "asset_shortlist.json", "lessons_clustered.json"),
+        ("sanitize_check", "lessons_clustered.json", "governed.json"),
+    )
+
+    def test_scenarios_reproduce_goldens_byte_for_byte(self):
+        engines = {
+            "asset_identify": asset_identify,
+            "lesson_cluster": lesson_cluster,
+            "sanitize_check": sanitize_check,
+        }
+        for scenario in SCENARIOS:
+            scenario_dir = DATA_ROOT / "demo-data" / scenario
+            expected_dir = scenario_dir / "expected"
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp = Path(temp_dir)
+                (temp / "engagement.json").write_bytes(
+                    (scenario_dir / "engagement.json").read_bytes()
+                )
+                for name, input_name, output_name in self.CHAIN:
+                    stdout = []
+                    self.assertEqual(
+                        0,
+                        run_engine(engines[name], temp / input_name, temp / output_name, stdout),
+                    )
+                    produced = (temp / output_name).read_bytes()
+                    with self.subTest(scenario=scenario, file=output_name):
+                        self.assertNotIn(b"\r", produced)
+                        self.assertEqual((expected_dir / output_name).read_bytes(), produced)
+                    with self.subTest(scenario=scenario, file=f"{name}.stdout.txt"):
+                        self.assertEqual(
+                            (expected_dir / f"{name}.stdout.txt").read_text(encoding="utf-8"),
+                            stdout[0],
+                        )
 
 
 class SharedCopyTests(unittest.TestCase):
@@ -364,19 +415,125 @@ class PackageBoundaryTests(unittest.TestCase):
                         self.assertNotIn(marker, text)
 
 
-def main():
-    print(ascii_safe(f"Running {SLUG} engine tests"), flush=True)
-    suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
-    result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
-    total = result.testsRun
-    failed = len(result.failures) + len(result.errors) + len(result.unexpectedSuccesses)
-    print(ascii_safe(f"{total - failed}/{total} checks passed"), flush=True)
-    return 0 if result.wasSuccessful() else 1
+GROUPS = {
+    "contract": (ContractValidationTests,),
+    "lessons": (LessonClusterTests,),
+    "sanitisation": (SanitizationTests,),
+    "goldens": (GoldenTests,),
+    "packaging": (SharedCopyTests, PackageBoundaryTests),
+}
+GROUP_HELP = {
+    "contract": "wrong contract version and missing required arrays fail in every engine",
+    "lessons": "lesson clustering, ranking and taxonomy citations",
+    "sanitisation": "Govern holds, citations, raw-seed exclusion and engine versions",
+    "goldens": "both scenarios reproduce expected/ goldens byte for byte (LF only)",
+    "packaging": "byte-identical skill copies and the MOS3 package boundary",
+}
+
+
+class StreamingResult(unittest.TestResult):
+    """Prints one PASS or FAIL line per test as it finishes; subtest failures fail the test."""
+
+    def __init__(self):
+        super().__init__()
+        self.passed = 0
+        self.failed = 0
+        self.details = []
+        self._current_failed = False
+
+    def startTest(self, test):
+        super().startTest(test)
+        self._current_failed = False
+
+    def _record(self, test, err):
+        self._current_failed = True
+        self.details.append((test, "".join(traceback.format_exception(*err))))
+
+    def addError(self, test, err):
+        super().addError(test, err)
+        self._record(test, err)
+
+    def addFailure(self, test, err):
+        super().addFailure(test, err)
+        self._record(test, err)
+
+    def addSubTest(self, test, subtest, err):
+        super().addSubTest(test, subtest, err)
+        if err is not None:
+            self._record(subtest, err)
+
+    def addUnexpectedSuccess(self, test):
+        super().addUnexpectedSuccess(test)
+        self._current_failed = True
+        self.details.append((test, "unexpected success"))
+
+    def stopTest(self, test):
+        super().stopTest(test)
+        name = f"{type(test).__name__}.{test._testMethodName}"
+        if self._current_failed:
+            self.failed += 1
+            emit(f"FAIL {name}")
+        else:
+            self.passed += 1
+            emit(f"PASS {name}")
+
+
+def build_suite(groups):
+    loader = unittest.TestLoader()
+    suite = unittest.TestSuite()
+    for group in groups:
+        for case in GROUPS[group]:
+            suite.addTests(loader.loadTestsFromTestCase(case))
+    return suite
+
+
+def main(argv=None):
+    global PLUGIN_ROOT
+    parser = argparse.ArgumentParser(description=f"{SLUG} engine regression suite")
+    parser.add_argument("--plugin-root", help="extracted MOS3 ZIP or submission folder (default: PLUGIN_ROOT, then the submission)")
+    parser.add_argument("--group", action="append", choices=sorted(GROUPS), help="run only this group (repeatable)")
+    parser.add_argument("--list-groups", action="store_true", help="list the test groups and exit")
+    args = parser.parse_args(argv)
+
+    grouped = {case for cases in GROUPS.values() for case in cases}
+    ungrouped = [
+        name for name, value in globals().items()
+        if isinstance(value, type) and issubclass(value, unittest.TestCase)
+        and value is not unittest.TestCase and value not in grouped
+    ]
+    if ungrouped:
+        emit(f"ERROR: test classes not assigned to a group: {', '.join(sorted(ungrouped))}")
+        return 2
+
+    if args.list_groups:
+        for group in GROUPS:
+            emit(f"{group} ({build_suite([group]).countTestCases()} tests): {GROUP_HELP[group]}")
+        return 0
+
+    PLUGIN_ROOT = resolve_plugin_root(args.plugin_root)
+    emit(f"Plugin root: {PLUGIN_ROOT}")
+    emit(f"Data root:   {DATA_ROOT}")
+    if not (PLUGIN_ROOT / "skills").is_dir():
+        emit(
+            f"ERROR: plugin root {PLUGIN_ROOT} has no skills/ folder; pass --plugin-root "
+            "<extracted MOS3 ZIP or submission folder> or set PLUGIN_ROOT."
+        )
+        return 2
+    load_engines()
+
+    groups = list(dict.fromkeys(args.group)) if args.group else list(GROUPS)
+    emit(f"Running {SLUG} engine tests: {', '.join(groups)}")
+    suite = build_suite(groups)
+    result = StreamingResult()
+    suite.run(result)
+    for test, detail in result.details:
+        emit(f"--- FAIL detail: {test}")
+        for line in detail.rstrip().splitlines():
+            emit(line)
+    total = result.passed + result.failed
+    emit(f"{result.passed}/{total} checks passed")
+    return 0 if result.failed == 0 and total > 0 else 1
 
 
 if __name__ == "__main__":
-    if UNITTEST_ARGV:
-        sys.argv = [sys.argv[0], *UNITTEST_ARGV]
-        unittest.main()
-    else:
-        sys.exit(main())
+    sys.exit(main())

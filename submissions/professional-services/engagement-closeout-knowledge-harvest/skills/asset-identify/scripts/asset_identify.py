@@ -9,7 +9,7 @@ import json
 import sys
 
 ENGINE = "engine:asset_identify"
-ENGINE_VERSION = "asset_identify/1.0.2"
+ENGINE_VERSION = "asset_identify/1.0.3"
 CONTRACT = "ps.engagement-closeout-knowledge-harvest.v1"
 GENERALISABILITY_WEIGHT = 0.35  # reuse-asset-rubric.md #1.1
 EFFORT_WEIGHT = 0.25             # reuse-asset-rubric.md #2.1
@@ -118,7 +118,7 @@ def main():
     payload["provenance"]["generated_at"] = payload.get("run_metadata", {}).get("generated_at", "2026-09-23T00:00:00Z")
     payload["provenance"]["demo_scenario"] = payload.get("run_metadata", {}).get("demo_scenario", "")
 
-    with open(args.out, "w", encoding="utf-8") as output_file:
+    with open(args.out, "w", encoding="utf-8", newline="\n") as output_file:
         json.dump(payload, output_file, indent=2)
     gaps = sum(1 for d in deliverable_index if d["completeness_gap"])
     shortlisted = sum(1 for a in shortlist if a["recommendation"] == "shortlist")

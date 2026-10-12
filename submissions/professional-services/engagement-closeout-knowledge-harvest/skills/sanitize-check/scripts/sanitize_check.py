@@ -10,7 +10,7 @@ import re
 import sys
 
 ENGINE = "engine:sanitize_check"
-ENGINE_VERSION = "sanitize_check/1.0.2"
+ENGINE_VERSION = "sanitize_check/1.0.3"
 CONTRACT = "ps.engagement-closeout-knowledge-harvest.v1"
 DIRECT_IDENTIFIER_MARKERS = {"client_name", "client_logo", "client_domain", "site_name", "project_codename"}  # confidentiality-sanitisation-rules.md #1.1
 NAMED_PERSON_MARKERS = {"named_individual", "named_person_blame"}  # confidentiality-sanitisation-rules.md #2.1,#2.2
@@ -285,7 +285,7 @@ def main():
     payload.setdefault("provenance", {})["engines"] = payload.setdefault("provenance", {}).get("engines", []) + [ENGINE_VERSION]
     payload["provenance"]["generated_at"] = payload.get("run_metadata", {}).get("generated_at", "2026-09-23T00:00:00Z")
 
-    with open(args.out, "w", encoding="utf-8") as output_file:
+    with open(args.out, "w", encoding="utf-8", newline="\n") as output_file:
         json.dump(payload, output_file, indent=2)
     print(f"sanitize_check: {len(released_assets)} release candidate(s), {len(held_assets)} held asset(s), overall={overall}")
     return 0

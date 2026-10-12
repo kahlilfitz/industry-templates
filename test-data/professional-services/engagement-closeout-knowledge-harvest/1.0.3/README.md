@@ -31,11 +31,26 @@ python tests\test_engines.py --plugin-root <extracted ZIP folder>
 $env:PLUGIN_ROOT = '<extracted ZIP folder>'; python tests\test_engines.py
 ```
 
+```powershell
+# List the groups, then run only some of them (--group is repeatable)
+python tests\test_engines.py --list-groups
+python tests\test_engines.py --group goldens --group sanitisation
+```
+
 With neither `--plugin-root` nor `PLUGIN_ROOT`, the plugin root defaults to
 `<repo>\submissions\professional-services\engagement-closeout-knowledge-harvest`. The runner prints
-both resolved roots, fails with exit code 2 if the plugin root has no `skills\`, streams one line per
-test and ends with `N/M checks passed` (exit 1 on any failure). Extra arguments, such as a test name,
-are passed to `unittest`.
+both resolved roots and fails with exit code 2 if the plugin root has no `skills\` or a group name is
+unknown. It streams an ASCII-safe `PASS <Class.test>` or `FAIL <Class.test>` line per test as the test
+finishes (a failing subtest fails its test), prints failure details after the results, and ends with
+`N/M checks passed`. The exit code is 1 on any failure.
+
+| Group | Tests | Covers |
+|---|---|---|
+| `contract` | 2 | Wrong contract version and missing required arrays fail in every engine |
+| `lessons` | 2 | Lesson clustering, ranking and taxonomy citations |
+| `sanitisation` | 7 | Govern holds, citations, raw-seed exclusion and engine versions (`/1.0.3`) |
+| `goldens` | 1 | Both scenarios reproduce every `expected/` JSON and stdout golden byte for byte, LF only |
+| `packaging` | 2 | Byte-identical skill copies and the MOS3 package boundary |
 
 ## What the scenarios cover
 
