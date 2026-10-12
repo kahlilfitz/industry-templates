@@ -392,7 +392,7 @@ def main():
     ] + [ENGINE_VERSION]
     provenance.setdefault("generated_at", "2026-09-23T00:00:00Z")
     out["provenance"] = provenance
-    with open(args.out, "w", encoding="utf-8") as f:
+    with open(args.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(out, f, indent=2)
     print(f"fit_score: {len(scored_roles)} role(s), {len(candidates)} candidate(s) -> {args.out}")
     return 0

@@ -255,7 +255,7 @@ def main():
     ]
     provenance["engines"] = merge_unique(engines, [ENGINE_VERSION])
 
-    with open(args.out, "w", encoding="utf-8") as handle:
+    with open(args.out, "w", encoding="utf-8", newline="\n") as handle:
         json.dump(payload, handle, indent=2)
     print(f"slate_validate: {len(payload.get('governed_roles', []))} role(s) -> {args.out}")
     return 0

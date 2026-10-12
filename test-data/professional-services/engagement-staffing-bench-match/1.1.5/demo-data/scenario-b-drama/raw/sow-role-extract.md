@@ -8,7 +8,7 @@ Known client affiliate: Aster Foods Holdings
 
 ## 4.1 Roles
 
-| Role ID | Role | Start | Duration | Allocation | Seniority | Required skills | Preferred skills | Location | Rate band |
-|---|---|---:|---:|---:|---|---|---|---|---|
-| PSS-101 | Finance transformation manager | 2026-10-12 | 20 weeks | 60% | Manager | finance transformation; ERP advisory; stakeholder management; CPA | food distribution; risk management | Denver only | USD 225-275/hr |
-| PSS-102 | Spanish-speaking workforce planning analyst | 2026-10-12 | 10 weeks | 80% | Senior consultant | workforce planning; SQL; Spanish-language facilitation | food distribution; Power BI | Denver only | USD 150-205/hr |
+| Role ID | Role | Start | Duration | Allocation | Seniority | Required skills | Preferred skills | Certifications | Location | Rate band |
+|---|---|---:|---:|---:|---|---|---|---|---|---|
+| PSS-101 | Finance transformation manager | 2026-10-12 | 20 weeks | 60% | Manager | finance transformation; ERP advisory; stakeholder management | food distribution; risk management | CPA | Denver only | USD 225-275/hr |
+| PSS-102 | Spanish-speaking workforce planning analyst | 2026-10-12 | 10 weeks | 80% | Senior consultant | workforce planning; SQL; Spanish-language facilitation | food distribution; Power BI | None | Denver only | USD 150-205/hr |

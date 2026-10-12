@@ -734,7 +734,7 @@ def main():
         if not engine.startswith("constraint_check/")
     ]
     provenance["engines"] = merge_unique(engines, [ENGINE_VERSION])
-    with open(args.out, "w", encoding="utf-8") as f:
+    with open(args.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(payload, f, indent=2)
     refused = sum(1 for r in governed_roles if r["top_provisional_candidate_refused"])
     print(f"constraint_check: {len(governed_roles)} role(s), {refused} top-candidate refusal(s), {len(gaps)} gap(s) -> {args.out}")

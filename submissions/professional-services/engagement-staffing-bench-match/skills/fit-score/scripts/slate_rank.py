@@ -48,7 +48,7 @@ def main():
 
     payload["ranked_roles"] = ranked_roles
     append_engine(payload.setdefault("provenance", {}), ENGINE_VERSION)
-    with open(args.out, "w", encoding="utf-8") as f:
+    with open(args.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(payload, f, indent=2)
     print(f"slate_rank: {len(ranked_roles)} role(s) ranked -> {args.out}")
     return 0

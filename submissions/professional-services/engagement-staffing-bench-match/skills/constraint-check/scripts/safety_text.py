@@ -1,66 +1,33 @@
-"""Shared fail-closed sanitizer for untrusted staffing source text."""
+"""Fail-closed redaction of untrusted staffing source text.
+
+Detection is the shared steering_guard detector, vendored byte-for-byte next to this file and never
+edited here; staffing vocabulary reaches it only through its documented hooks (STAFFING_HOOKS).
+This module keeps the plugin's non-detection logic: which fields are free text, how a flagged value
+is replaced by a neutral marker that never echoes it, record-level (split-field) screening, and the
+escalation that names the field path.
+"""
 import hashlib
-import re
-import unicodedata
+
+import steering_guard as sg
 
 
-SUSPECT_PATTERNS = (
-    re.compile(r"\bignore\s+(?:(?:all|any|the|previous|prior)\s+)?instructions?\b", re.I),
-    re.compile(r"\b(?:system|developer)\s+(?:message|prompt|instructions?)\b", re.I),
-    re.compile(
-        r"(?:^|[\s;|])(?:system|developer|assistant|ai|note\s+to\s+(?:ai|assistant))\s*[:,]",
-        re.I,
+STAFFING_HOOKS = {
+    "extra_verdict_words": (
+        "independent",
+        "eligible",
+        "recommended",
+        "conflict free",
+        "released",
     ),
-    re.compile(r"\bpartner\s+override\b", re.I),
-    re.compile(r"\bput\b.{0,80}\bat\s+the\s+top\b.{0,40}\bslate\b", re.I),
-    re.compile(r"\btop\s+of\s+the\s+slate\b", re.I),
-    re.compile(r"\bpre-?approved\b.{0,80}\bindependence\b", re.I),
-    re.compile(r"\bindependence\b.{0,80}\b(?:confirmed|approved|cleared)\b", re.I),
-    re.compile(r"\bcall\b.{0,80}\bindependent\b", re.I),
-    re.compile(
-        r"\b(?i:pick|select|choose|recommend|approve|clear)\s+(?:this\s+)?"
-        r"(?:[Cc]andidate|[Cc]onsultant|[Pp]erson|him|her|them|"
-        r"[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b"
+    "extra_rule_nouns": (
+        "independence rules",
+        "independence check",
+        "conflicts register",
+        "score floor",
+        "eligibility verdict",
     ),
-    re.compile(r"\b(?i:rank|place)\b.{0,80}\b(?i:first|top|#?1)\b"),
-    re.compile(
-        r"\b(?i:mark|label|treat)\b.{0,80}\b"
-        r"(?i:eligible|ineligible|cleared|approved|recommended)\b"
-    ),
-    re.compile(r"\b(?:do not|don't)\s+(?:mention|report|flag|cite)\b", re.I),
-    re.compile(r"\bpre-?cleared\b", re.I),
-    re.compile(
-        r"\boverride\b.{0,80}\b(?:rule|verdict|constraint|conflict|rank|score|eligibility)\b",
-        re.I,
-    ),
-)
-SPLIT_RECORD_PATTERNS = (
-    re.compile(
-        r"\b(?:system|developer|assistant)\s*[:,].{0,160}"
-        r"\b(?:rank|pick|select|choose|recommend|approve|clear|mark|label)\b",
-        re.I,
-    ),
-    re.compile(
-        r"\bignore\b.{0,80}\binstructions?\b.{0,160}"
-        r"\b(?:rank|pick|select|choose|recommend|approve|clear|override)\b",
-        re.I,
-    ),
-    re.compile(
-        r"\bput\b.{0,80}\bat\s+the\s+top\b.{0,80}\bslate\b",
-        re.I,
-    ),
-)
-
-CONFUSABLES = str.maketrans({
-    "А": "A", "В": "B", "Е": "E", "І": "I", "К": "K", "М": "M", "Н": "H",
-    "О": "O", "Р": "P", "С": "C", "Т": "T", "Х": "X", "У": "Y", "Ѕ": "S",
-    "а": "a", "е": "e", "і": "i", "к": "k", "м": "m", "н": "h", "о": "o",
-    "р": "p", "с": "c", "т": "t", "х": "x", "у": "y", "ѕ": "s",
-    "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K",
-    "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X", "Υ": "Y",
-    "α": "a", "β": "b", "ε": "e", "ι": "i", "κ": "k", "ο": "o", "ρ": "p",
-    "τ": "t", "χ": "x", "υ": "y",
-})
+}
+OVERSIZE_REASON = "text too long to screen for embedded instructions; withheld for review"
 STRUCTURAL_FIELDS = {
     "candidate_id",
     "role_id",
@@ -87,49 +54,41 @@ AGGREGATE_ROLE_FIELDS = {
 }
 
 
-def normalized_detection_text(text):
-    normalized = unicodedata.normalize("NFKC", str(text))
-    normalized = "".join(
-        character
-        for character in normalized
-        if unicodedata.category(character) != "Cf"
-    )
-    normalized = normalized.translate(CONFUSABLES)
-    return re.sub(r"\s+", " ", normalized).strip()
+def _hooks(trusted_domains=()):
+    return dict(STAFFING_HOOKS, trusted_domains=tuple(trusted_domains))
 
 
-def has_format_characters(text):
-    return any(unicodedata.category(character) == "Cf" for character in str(text))
+def hits(text, trusted_domains=()):
+    """Family names of every steering_guard hit for one value (``oversize`` included)."""
+    return [hit.family for hit in sg.scan(str(text), **_hooks(trusted_domains))]
 
 
-def has_mixed_script_token(text):
-    for token in re.findall(r"\w+", str(text), flags=re.UNICODE):
-        scripts = set()
-        for character in token:
-            if not character.isalpha():
-                continue
-            name = unicodedata.name(character, "")
-            if name.startswith("LATIN"):
-                scripts.add("latin")
-            elif name.startswith("CYRILLIC"):
-                scripts.add("cyrillic")
-            elif name.startswith("GREEK"):
-                scripts.add("greek")
-        if len(scripts) > 1:
-            return True
-    return False
+def is_suspect(text, trusted_domains=()):
+    return bool(hits(text, trusted_domains))
 
 
-def is_suspect(text):
-    raw = str(text)
-    if has_format_characters(raw) or has_mixed_script_token(raw):
-        return True
-    normalized = normalized_detection_text(raw)
-    return any(pattern.search(normalized) for pattern in SUSPECT_PATTERNS)
+def is_oversize(text):
+    return "oversize" in hits(text)
+
+
+def record_hits(fields, trusted_domains=()):
+    """Split-field screening of one record's free-text values.
+
+    steering_guard.scan_fields covers the spaced and " ; " joins; the fused join (no separator)
+    also goes through the detector so an instruction split mid-word across fields still trips.
+    """
+    values = [str(value) for value in fields]
+    named = {str(index): value for index, value in enumerate(values)}
+    found = [hit.family for hit in sg.scan_fields(named, **_hooks(trusted_domains))]
+    if not found and len(values) > 1:
+        found = ["split" for _ in sg.scan("".join(values), **_hooks(trusted_domains))][:1]
+    return found
 
 
 def _redacted(text, label):
     digest = hashlib.sha256(str(text).encode("utf-8")).hexdigest()[:12]
+    if is_oversize(text):
+        return f"[FLAGGED: oversize source {label} withheld; sha256={digest}]"
     return f"[FLAGGED: instruction-like source {label} redacted; sha256={digest}]"
 
 
@@ -156,25 +115,25 @@ def _record_texts(value, field_name=None):
 
 
 def _record_is_suspect(value):
-    texts = list(_record_texts(value))
-    if any(is_suspect(text) for text in texts):
+    """True when only a join of the record's free-text values trips (single values redact themselves)."""
+    texts = [text for text in _record_texts(value) if text.strip()]
+    if len(texts) < 2 or any(is_suspect(text) for text in texts):
         return False
-    combined = [normalized_detection_text(" ".join(texts))]
-    combined.extend(
-        normalized_detection_text("".join(texts[index:]))
-        for index in range(len(texts))
-    )
-    return any(
-        pattern.search(text)
-        for text in combined
-        for pattern in SPLIT_RECORD_PATTERNS
-    )
+    return bool(record_hits(texts))
 
 
 def _is_scan_record(value):
     if "candidate_id" in value:
         return True
     return "role_id" in value and not AGGREGATE_ROLE_FIELDS.intersection(value)
+
+
+def _safe_key(key, path, escalations):
+    if isinstance(key, str) and is_suspect(key):
+        marker = _redacted(key, "key")
+        escalations.append(f"{path}.{marker}: instruction-like member name withheld; review source record")
+        return marker
+    return key
 
 
 def sanitize_free_text(
@@ -188,16 +147,17 @@ def sanitize_free_text(
         redact_record = force_redact or (
             _is_scan_record(value) and _record_is_suspect(value)
         )
-        return {
-            key: sanitize_free_text(
+        sanitized = {}
+        for key, item in value.items():
+            safe_key = _safe_key(key, path, escalations)
+            sanitized[safe_key] = sanitize_free_text(
                 item,
-                f"{path}.{key}",
+                f"{path}.{safe_key}",
                 escalations,
-                key,
+                safe_key,
                 redact_record and key not in STRUCTURAL_FIELDS,
             )
-            for key, item in value.items()
-        }
+        return sanitized
     if isinstance(value, list):
         return [
             sanitize_free_text(
@@ -216,8 +176,11 @@ def sanitize_free_text(
         else:
             safe = safe_citation(value) if field_name == "citation" else safe_text(value)
         if safe != value.strip():
-            escalations.append(
-                f"{path}: instruction-like text redacted; review source record"
-            )
+            if is_oversize(value):
+                escalations.append(f"{path}: {OVERSIZE_REASON}")
+            else:
+                escalations.append(
+                    f"{path}: instruction-like text redacted; review source record"
+                )
         return safe
     return value
