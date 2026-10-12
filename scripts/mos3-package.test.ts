@@ -232,16 +232,39 @@ test("skill rules: name/folder, frontmatter keys, icon, version, sizes and nesti
 test("skill warnings: a description over 800 characters and a long body", () => {
   withRoot((_root, dir) => {
     const path = join(dir, "skills", "alpha-skill", "SKILL.md");
+    const routing = `Use when asked "a1", "b2", "c3", "d4" or "e5". Do NOT use for other work (use beta-skill). `;
     writeFileSync(
       path,
-      skillMd("alpha-skill").replace(/description: >-\n.*\n.*\n/, `description: "${"word ".repeat(170)}"\n`) +
+      skillMd("alpha-skill").replace(/description: >-\n.*\n.*\n.*\n/, `description: '${routing}${"word ".repeat(150)}'\n`) +
         "word ".repeat(2001),
     );
     const { errors, warnings } = validate(dir);
     assert.deepEqual(errors, []);
     assert.equal(warnings.length, 2, warnings.join("\n"));
-    assert.match(warnings[0], /description is 850 characters; the guide targets 800 or fewer/);
+    assert.match(warnings[0], /description is \d+ characters; the guide targets 800 or fewer/);
     assert.match(warnings[1], /body is \d+ words; the guide targets 2000 or fewer/);
+  });
+});
+
+test("skill routing: exactly one Do NOT use for line, and a warning under five quoted triggers", () => {
+  const withDescription = (text: string) => (dir: string) =>
+    writeFileSync(
+      join(dir, "skills", "alpha-skill", "SKILL.md"),
+      skillMd("alpha-skill").replace(/description: >-\n.*\n.*\n.*\n/, `description: '${text}'\n`),
+    );
+  expectError(
+    withDescription(`Use when asked "a", "b", "c", "d" or "e". Do NOT use to draft (use beta-skill).`),
+    /needs exactly one "Do NOT use for/,
+  );
+  expectError(
+    withDescription(`Use when asked "a", "b", "c", "d" or "e". Do NOT use for x (use beta-skill). Do NOT use for y.`),
+    /needs exactly one "Do NOT use for[^;]*; found 2/,
+  );
+  withRoot((_root, dir) => {
+    withDescription(`Use when asked "a" or "b". Do NOT use for x (use beta-skill).`)(dir);
+    const { errors, warnings } = validate(dir);
+    assert.deepEqual(errors, []);
+    assert.ok(warnings.some((w) => /quotes 2 trigger phrase\(s\); the guide asks for 5 or more/.test(w)), warnings.join("\n"));
   });
 });
 

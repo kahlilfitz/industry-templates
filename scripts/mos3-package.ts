@@ -493,6 +493,14 @@ function validateSkill(dir: string, name: string, version: string, out: Mos3Resu
       } else if (description.length > WARN_DESCRIPTION) {
         warn(`SKILL.md description is ${description.length} characters; the guide targets ${WARN_DESCRIPTION} or fewer`);
       }
+      if (typeof description === "string" && description.trim()) {
+        const exclusions = description.match(/Do NOT use for/g)?.length ?? 0;
+        if (exclusions !== 1) {
+          err(`SKILL.md description needs exactly one "Do NOT use for … (use <skill>)" line; found ${exclusions}`);
+        }
+        const triggers = description.match(/"[^"]+"/g)?.length ?? 0;
+        if (triggers < 5) warn(`SKILL.md description quotes ${triggers} trigger phrase(s); the guide asks for 5 or more`);
+      }
       if (data.compatibility !== undefined) {
         if (typeof data.compatibility !== "string") err("SKILL.md compatibility must be a string");
         else if (data.compatibility.length > MAX_COMPATIBILITY) {
