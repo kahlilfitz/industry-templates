@@ -26,11 +26,35 @@ function walk(dir: string, found: string[] = []): string[] {
   return found;
 }
 
+// test-data/<industry>/<slug>/<version>/ folders vendor shared copies too. Frozen folders
+// (FROZEN.sha256 present) keep the copies they were released with, so only unfrozen ones are checked.
+function unfrozenTestDataFiles(testDataRoot: string): string[] {
+  if (!existsSync(testDataRoot)) return [];
+  const found: string[] = [];
+  for (const industry of readdirSync(testDataRoot)) {
+    const industryDir = join(testDataRoot, industry);
+    if (!statSync(industryDir).isDirectory()) continue;
+    for (const slug of readdirSync(industryDir)) {
+      const slugDir = join(industryDir, slug);
+      if (!statSync(slugDir).isDirectory()) continue;
+      for (const version of readdirSync(slugDir)) {
+        const versionDir = join(slugDir, version);
+        if (!statSync(versionDir).isDirectory() || existsSync(join(versionDir, "FROZEN.sha256"))) continue;
+        walk(versionDir, found);
+      }
+    }
+  }
+  return found;
+}
+
 export function checkSharedModules(root: string = ROOT): SharedFileReport[] {
   const sharedRoot = join(root, "shared");
   const submissionsRoot = join(root, "submissions");
   if (!existsSync(sharedRoot)) return [];
-  const submissionFiles = existsSync(submissionsRoot) ? walk(submissionsRoot) : [];
+  const submissionFiles = [
+    ...(existsSync(submissionsRoot) ? walk(submissionsRoot) : []),
+    ...unfrozenTestDataFiles(join(root, "test-data")),
+  ];
   const reports: SharedFileReport[] = [];
   for (const module of readdirSync(sharedRoot).sort()) {
     const manifestPath = join(sharedRoot, module, "vendor.json");

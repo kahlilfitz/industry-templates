@@ -35,6 +35,27 @@ test("checkSharedModules finds vendored copies by manifest name and flags drift"
   }
 });
 
+test("checkSharedModules checks unfrozen test-data version folders and skips frozen ones", () => {
+  const root = mkdtempSync(join(tmpdir(), "shared-modules-"));
+  try {
+    mkdirSync(join(root, "shared", "guard"), { recursive: true });
+    writeFileSync(join(root, "shared", "guard", "corpus.json"), "{\"v\":2}\n");
+    writeFileSync(join(root, "shared", "guard", "vendor.json"), JSON.stringify({ files: { "corpus.json": "guard-corpus.json" } }));
+    const current = join(root, "test-data", "ind", "a", "1.0.1", "tests");
+    const frozen = join(root, "test-data", "ind", "a", "1.0.0", "tests");
+    for (const dir of [current, frozen]) mkdirSync(dir, { recursive: true });
+    writeFileSync(join(current, "guard-corpus.json"), "{\"v\":1}\n");
+    writeFileSync(join(frozen, "guard-corpus.json"), "{\"v\":1}\n");
+    writeFileSync(join(root, "test-data", "ind", "a", "1.0.0", "FROZEN.sha256"), "");
+
+    const [corpus] = checkSharedModules(root);
+    assert.deepEqual(corpus.copies, [join("test-data", "ind", "a", "1.0.1", "tests", "guard-corpus.json")]);
+    assert.deepEqual(corpus.mismatched, corpus.copies);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("checkSharedModules is a no-op without shared/ and rejects a manifest naming a missing file", () => {
   const root = mkdtempSync(join(tmpdir(), "shared-modules-"));
   try {
