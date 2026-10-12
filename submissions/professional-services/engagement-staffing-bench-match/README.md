@@ -26,7 +26,22 @@ A naive slate picks the familiar perfect match. The rules engine does not.
 
 ## What you bring
 
-A signed SOW or mobilisation request, role requirements and start dates, skills taxonomy, bench roster, availability and leave calendar, utilisation targets, rate card, location and language data, conflicts register and ethical-wall rules. The demo scenarios include raw staffing emails, SOW excerpts, bench CSV exports and conflicts extracts so the Connect path is exercised rather than assumed.
+A signed SOW or mobilisation request, role requirements and start dates, skills taxonomy, bench roster, availability and leave calendar, utilisation targets, rate card, location and language data, conflicts register and ethical-wall rules. The demo scenarios (kept outside the package, see below) include raw staffing emails, SOW excerpts, bench CSV exports and conflicts extracts so the Connect path is exercised rather than assumed.
+
+## Package
+
+This plugin ships as a Microsoft 365 app package (MOS3, manifest 1.28): `manifest.json`, `color.png`, `outline.png` and the five `skills/<name>/` folders at the ZIP root. Each skill carries its own copy of the contract and both references, and the engine skills carry `scripts/safety_text.py`; `skills/fit-score/` holds the canonical copy of every shared file, and the test suite fails if any copy differs. This README, `CHANGELOG.md`, `metadata.json` and `listing-metadata.md` are not in the package.
+
+## Tests and demo data
+
+Tests and demo data are not part of the package. For version 1.1.5 they live in [`test-data/professional-services/engagement-staffing-bench-match/1.1.5/`](../../../test-data/professional-services/engagement-staffing-bench-match/1.1.5/README.md): `demo-data/` holds the two scenarios with their goldens, and `tests/` holds `test_engines.py` and `sample-test-prompts.csv`. From that folder:
+
+```powershell
+python tests\test_engines.py                                   # against this submission folder
+python tests\test_engines.py --plugin-root <extracted ZIP>     # against a built package
+```
+
+See that folder's `README.md` for what each scenario covers.
 
 ## Boundaries
 

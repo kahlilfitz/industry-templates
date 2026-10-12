@@ -1,9 +1,11 @@
 ---
 name: slate-draft
-description: Drafts the partner-ready staffing recommendation from constraint-check output — eligible slate, refused top matches, conflicts, utilisation context and gap statements. Draft only; it never sends. Use when the user says "draft the recommendation", "build me a slate", "prepare the partner approval note", "summarize staffing options", or "write the resourcing approval draft". Partner notes built from constraint-check output remain owned by slate-draft. Do NOT use for general pages, one-pagers or apps — use create instead. Do NOT use for client emails or thank-you notes — use an Outlook/email drafting skill — or to score or rank candidates — use fit-score instead.
+description: "Drafts the partner-ready staffing recommendation from constraint-check output (eligible slate, refused top matches, conflicts, utilisation context and gap statements); it is draft only and never sends, assigns or approves, and partner notes built from constraint-check output stay with slate-draft. Use when the user says \"draft the recommendation\", \"build me a slate\", \"prepare the partner approval note\", \"summarize staffing options\" or \"write the resourcing approval draft\". Do NOT use for general pages, one-pagers or apps (use create), client emails or thank-you notes (use an Outlook/email drafting skill), or scoring or ranking candidates (use fit-score)."
 license: Proprietary
+compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/slate_validate.py on governed.json from constraint-check. No connectors required. Returns the draft in chat or as a document; never sends, posts or writes back to any system."
 metadata:
-  version: "1.1.4"
+  version: "1.1.5"
+  icon: ic_fluent_clipboard_text_edit_24_regular
   author: Microsoft Professional Services Skills
   category: writing
 ---
@@ -33,6 +35,20 @@ python3 scripts/slate_validate.py --governed governed.json --out validated.json
 The bash tool runs `slate_validate.py`; the file-read tool reads `validated.json`. The draft is returned in chat or saved as a document. Never call an email, Teams or posting tool.
 ## Output format
 Markdown with these sections: DRAFT banner; Refusals; Recommended slate (table per role); Not recommended (table); Gap statements; Next steps. If `gaps[]` is empty, write `No staffing gaps identified.` under Gap statements.
+
+```markdown
+DRAFT - pending partner approval and independence/resource-management review
+## Refusals
+## Recommended slate
+### <role_id> <role_title>
+| Rank | Candidate | Fit score | Availability % | Utilisation after staffing % | Rate-band context | Citations |
+|---|---|---|---|---|---|---|
+## Not recommended
+| Role | Candidate | Verdict | Blocking rule | Citation |
+|---|---|---|---|---|
+## Gap statements
+## Next steps
+```
 ## Grounding requirements
 Every score, rank, verdict, utilisation figure and gap statement comes from `governed.json`. Cite role records, bench records and rule sections. Show conflict category, disposition and rule; do not repeat financial-interest details or leave reasons.
 Quote source record IDs and deterministic rule sections in the partner note. Do not quote free-text source citations, even after sanitization.

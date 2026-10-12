@@ -1,9 +1,11 @@
 ---
 name: bench-query
-description: Normalizes bench, availability, rate and conflicts-register data into bench_candidates[] and constraints[] after role-intake. Use when the user says "check the bench", "who is available?", "pull the roster", "include rates", or "load the conflicts extract". Do NOT write job postings or recruiting copy, and do NOT compute fit scores or eligibility — use fit-score and constraint-check. Do NOT use for sales segmentation, general rate analysis or generic tool scripting outside engagement staffing — use d365-sales-segment-analysis or tool-scripts instead.
+description: "Normalizes bench, availability, rate and conflicts-register data into bench_candidates[] and constraints[] after role-intake, keeping every record and its citation without deciding fit or eligibility. Use when the user says \"check the bench\", \"who is available?\", \"pull the roster\", \"include rates\" or \"load the conflicts extract\". Do NOT use for job postings or recruiting copy, for fit scores or eligibility (use fit-score or constraint-check), or for sales segmentation, general rate analysis or generic tool scripting outside engagement staffing (use d365-sales-segment-analysis or tool-scripts)."
 license: Proprietary
+compatibility: "Reads user-supplied roster, availability, leave, rate-card and conflicts-register exports (CSV or JSON) with the file-read tool; Python 3 to normalise them into bench.json and constraints.json. No bundled engine and no connectors required. Read-only: never writes to a resource or staffing system."
 metadata:
-  version: "1.1.4"
+  version: "1.1.5"
+  icon: ic_fluent_people_search_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -33,7 +35,33 @@ After `role-intake`, before `fit-score`, for every staffing slate.
 ## Tools
 Read the roster, calendar and rate files with the file-read tool; normalise with python3. No connector writes.
 ## Output format
-`bench.json` with `bench_candidates[]` and `escalations[]`, plus `constraints.json` with `engagement{}`, `roles[]`, `constraints[]`, provenance and escalations. Summarise candidate records separately from conflict normalization; do not expose sensitive conflict details in a general roster table.
+`bench.json` with `bench_candidates[]` and `escalations[]`, plus `constraints.json` with `engagement{}`, `roles[]`, `constraints[]`, provenance and escalations. The full schema is in `contracts/ps.engagement-staffing-bench-match.v1.json`:
+
+`bench.json`:
+
+```json
+{"contract_version": "ps.engagement-staffing-bench-match.v1", "engagement": {}, "roles": [],
+ "bench_candidates": [{"candidate_id": "", "name": "", "seniority": "", "skills": [], "certifications": [],
+   "industry_experience": [], "location": "", "languages": [], "rate": 0, "current_allocation_pct": 0,
+   "target_utilization_pct": 0, "approved_leave": [], "soft_bookings": [],
+   "source": "", "confidence": 0.0, "citation": ""}],
+ "escalations": []}
+```
+
+`constraints.json`:
+
+```json
+{"contract_version": "ps.engagement-staffing-bench-match.v1", "engagement": {}, "roles": [],
+ "constraints": [{"candidate_id": "", "type": "", "client_name": "", "status": "", "material": null,
+   "role_type": "", "process": "", "end_date": "", "resolved_date": "",
+   "source": "", "confidence": 0.0, "citation": ""}],
+ "source": "", "confidence": 0.0, "citation": ""}
+```
+
+Summarise candidate records separately from conflict normalization; do not expose sensitive conflict details in a general roster table:
+
+| Candidate ID | Name | Seniority | Location | Current allocation % | Leave / soft bookings | Rate | Citation |
+|---|---|---|---|---|---|---|---|
 ## Grounding requirements
 Each candidate's availability, utilisation, rate and profile fields cite the roster, calendar or profile record used.
 ## Guardrails

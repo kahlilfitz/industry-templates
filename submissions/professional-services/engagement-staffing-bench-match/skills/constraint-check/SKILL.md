@@ -1,9 +1,11 @@
 ---
 name: constraint-check
-description: Applies staffing independence, conflict, prior-role, ethical-wall and availability rules to fit-scored candidates and explicitly refuses ineligible ones. Use when the user says "is anyone conflicted?", "can we staff them?", "check independence for this engagement", or "why can't we use the top match?". Prior client board service is in scope; do NOT use for current corporate board, audit-committee or proxy-statement independence, or to score candidates — use fit-score instead. Do NOT use for sales deal catch-up, pipeline prioritization or team pipeline review — use d365-sales-deal-catchup, d365-sales-pipeline-prioritizer or d365-sales-team-pipeline-review instead.
+description: "Applies staffing independence, conflict, prior-role (including prior client board service), ethical-wall and availability rules to fit-scored candidates and explicitly refuses ineligible ones; it never clears a conflict or grants an exception. Use when the user says \"is anyone conflicted?\", \"can we staff them?\", \"check independence for this engagement\", \"why can't we use the top match?\" or \"is this candidate independent of the client?\". Do NOT use for current corporate board, audit-committee or proxy-statement independence, for scoring candidates (use fit-score), or for sales deal catch-up, pipeline prioritization or team pipeline review (use d365-sales-deal-catchup, d365-sales-pipeline-prioritizer or d365-sales-team-pipeline-review)."
 license: Proprietary
+compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/constraint_check.py on ranked.json from fit-score and constraints.json from bench-query. No connectors required. Writes local JSON only; never clears conflicts or writes to a resource, staffing or conflicts system."
 metadata:
-  version: "1.1.4"
+  version: "1.1.5"
+  icon: ic_fluent_person_prohibited_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -32,7 +34,17 @@ python3 scripts/constraint_check.py --ranked ranked.json --constraints constrain
 ## Tools
 The bash tool runs the bundled python3 engine; the file-read tool reads `governed.json`. No connector writes.
 ## Output format
-Lead with a "Refused" section for any top-provisional refusal, then one markdown table per role (candidate, fit score, verdict, blocking rule, citation), then the gap statement verbatim.
+`governed.json` (adds `governed_roles[]` and `gaps[]`). Lead with a "Refused" section for any top-provisional refusal, then one markdown table per role, then the gap statement verbatim:
+
+```markdown
+## Refused
+- <candidate> for <role_id>: <blocking rule> — <citation>
+### <role_id> <role_title>
+| Candidate | Fit score | Verdict | Blocking rule | Citation |
+|---|---|---|---|---|
+## Gap statements
+<gaps[] verbatim, or "No staffing gaps identified.">
+```
 ## Grounding requirements
 Every refusal cites the conflicts record or availability record and the rule section. The model must keep the clause with the candidate name. Unknown types, unresolved financial-interest statuses, blank materiality and ambiguous assurance scope are never described as clear.
 ## Guardrails

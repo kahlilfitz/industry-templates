@@ -1,9 +1,11 @@
 ---
 name: fit-score
-description: Computes deterministic, pre-governance candidate-role fit scores, utilisation context and provisional ranks with fit_score and slate_rank, after bench-query and before constraint-check. Use when the user says "rank the bench", "score the candidates", or "who is the best fit?". Do NOT score RFP responses or vendor proposals, draft the partner-ready slate ("build me a slate"), or decide eligibility/conflicts — use slate-draft or constraint-check instead. Do NOT prioritize sales opportunities or pipeline — use d365-sales-pipeline-prioritizer. Do NOT use for sales meeting preparation or generic ranking/tool-script requests outside engagement staffing — use d365-sales-meeting-prep or tool-scripts instead.
+description: "Computes deterministic, pre-governance candidate-role fit scores, utilisation context and provisional ranks with the fit_score and slate_rank engines, after bench-query and before constraint-check. Use when the user says \"rank the bench\", \"score the candidates\", \"who is the best fit?\", \"compare candidate fit for this role\" or \"show the provisional ranking\". Do NOT use for scoring RFP responses or vendor proposals, drafting the partner-ready slate (\"build me a slate\"; use slate-draft), deciding eligibility or conflicts (use constraint-check), prioritizing sales opportunities or pipeline (use d365-sales-pipeline-prioritizer), sales meeting preparation (use d365-sales-meeting-prep) or generic ranking or tool-script requests outside engagement staffing (use tool-scripts)."
 license: Proprietary
+compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/fit_score.py and scripts/slate_rank.py on roles.json and bench.json from earlier skills or the user. No connectors required. Writes local JSON only; never writes to a resource or staffing system."
 metadata:
-  version: "1.1.4"
+  version: "1.1.5"
+  icon: ic_fluent_data_bar_vertical_star_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -32,7 +34,13 @@ python3 scripts/slate_rank.py --scored scored.json --out ranked.json
 ## Tools
 The bash tool runs the two bundled python3 engines; the file-read tool reads their JSON output. No connector writes.
 ## Output format
-`scored.json` and `ranked.json`. Summarise to the user as one markdown table per role (provisional rank, candidate, fit score, effective available %, utilisation after staffing %), headed "Provisional — pre-governance".
+`scored.json` (adds `scored_roles[]`) and `ranked.json` (adds `ranked_roles[]` with each role's `candidate_slate[]`). Summarise to the user as one markdown table per role, quoting engine values verbatim:
+
+```markdown
+### <role_id> <role_title> — Provisional — pre-governance
+| Provisional rank | Candidate | Fit score | Effective available % | Utilisation after staffing % | Citation |
+|---|---|---|---|---|---|
+```
 ## Grounding requirements
 Every score cites the rubric sections used. Every utilisation figure cites the candidate availability record.
 ## Guardrails

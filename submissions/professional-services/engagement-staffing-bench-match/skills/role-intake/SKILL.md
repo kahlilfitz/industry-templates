@@ -1,9 +1,11 @@
 ---
 name: role-intake
-description: Reads a signed engagement, SOW role extract, mobilisation note or staffing request into the ps.engagement-staffing-bench-match.v1 staffing contract (engagement, client affiliates and roles, each field cited). First step of every staffing slate. Use when the user says "new engagement signed", "staff this SOW", "mobilise this project", or "start a staffing slate". Do NOT use for contract-terms or commercial summaries; contract review is outside this plugin. Do NOT score, rank or clear candidates — use fit-score or constraint-check instead. Do NOT use for generic ranking or tool-script requests outside engagement staffing — use tool-scripts instead.
+description: "Reads a signed engagement, SOW role extract, mobilisation note or staffing request into the ps.engagement-staffing-bench-match.v1 staffing contract (engagement, client affiliates and roles, each field cited) as the first step of every staffing slate. Use when the user says \"new engagement signed\", \"staff this SOW\", \"mobilise this project\", \"start a staffing slate\" or \"extract the roles from this SOW\". Do NOT use for contract-terms or commercial summaries (contract review is outside this plugin), for scoring, ranking or clearing candidates (use fit-score or constraint-check), or for generic ranking or tool-script requests outside engagement staffing (use tool-scripts)."
 license: Proprietary
+compatibility: "Reads user-supplied files (staffing request email, SOW role extract, rate-card excerpt) with the file-read tool; Python 3 optional to build the JSON payload. No bundled engine and no connectors required. Read-only: never writes to a resource or staffing system."
 metadata:
-  version: "1.1.4"
+  version: "1.1.5"
+  icon: ic_fluent_document_briefcase_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
 ---
@@ -31,7 +33,26 @@ At the start of every Engagement Staffing & Bench Match run.
 ## Tools
 Read the source files with the file-read tool; build the JSON payload with python3. No connector writes.
 ## Output format
-`roles.json` (or an equivalent contract payload) with these sections: `engagement{}`, `roles[]`, `escalations[]`. Summarise it to the user as a markdown table with one row per role (role ID, title, seniority, start, allocation, location, rate band, citation).
+`roles.json` (or an equivalent contract payload) with this shape; the full schema is in `contracts/ps.engagement-staffing-bench-match.v1.json`:
+
+```json
+{
+  "contract_version": "ps.engagement-staffing-bench-match.v1",
+  "engagement": {"engagement_id": "", "client_name": "", "affiliates": [], "practice": "", "stage": "",
+                 "source": "skill:role-intake", "confidence": 0.0, "citation": ""},
+  "roles": [{"role_id": "", "title": "", "seniority": "", "start_date": "YYYY-MM-DD", "duration_weeks": 0,
+             "allocation_pct": 0, "location": "", "remote_ok": false, "required_languages": [],
+             "required_skills": [], "preferred_skills": [], "required_certifications": [],
+             "industry_context": "", "rate_band": {"currency": "", "min": 0, "max": 0},
+             "source": "skill:role-intake", "confidence": 0.0, "citation": ""}],
+  "escalations": []
+}
+```
+
+Summarise it to the user as one markdown table:
+
+| Role ID | Title | Seniority | Start | Allocation % | Location | Rate band | Citation |
+|---|---|---|---|---|---|---|---|
 ## Grounding requirements
 Every role field cites the SOW clause, staffing email line or rate-card excerpt it came from. Never fabricate a value the sources do not state.
 ## Guardrails
