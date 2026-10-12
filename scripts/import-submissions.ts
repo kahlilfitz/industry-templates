@@ -30,6 +30,15 @@ const SUBMISSIONS = join(ROOT, "submissions");
 const OUT_BUNDLES = join(ROOT, "public", "bundles");
 
 const CHECK_ONLY = process.argv.includes("--check");
+// `--only <slug>` checks or builds a single submission and leaves the other bundles in place, so
+// work on one plugin is not blocked by another plugin that is mid-change.
+const ONLY = (() => {
+  const i = process.argv.indexOf("--only");
+  if (i === -1) return undefined;
+  const value = process.argv[i + 1];
+  if (!value || value.startsWith("--")) throw new Error("`--only` requires a submission slug");
+  return value;
+})();
 const INDUSTRIES = new Set([
   "Manufacturing",
   "Retail & CPG",
@@ -334,11 +343,25 @@ function main() {
         .filter((slug) => statSync(join(SUBMISSIONS, industryDir, slug)).isDirectory())
         .sort()
         .map((slug) => ({ industryDir, slug })),
-    );
+    )
+    .filter(({ slug }) => ONLY === undefined || slug === ONLY);
+
+  if (ONLY !== undefined) {
+    if (entries.length === 0) {
+      console.error(`No submission named "${ONLY}" under submissions/.`);
+      process.exit(1);
+    }
+    if (process.argv.includes("--catalog-output")) {
+      console.error("`--only` cannot be combined with `--catalog-output`; export the catalog from a full build.");
+      process.exit(1);
+    }
+  }
 
   const catalogDir = CHECK_ONLY ? undefined : catalogOutputDir();
 
-  if (!CHECK_ONLY) {
+  if (!CHECK_ONLY && ONLY !== undefined) {
+    mkdirSync(OUT_BUNDLES, { recursive: true });
+  } else if (!CHECK_ONLY) {
     // Regenerate from scratch so a removed submission does not leave a stale bundle behind.
     rmSync(OUT_BUNDLES, { recursive: true, force: true });
     mkdirSync(OUT_BUNDLES, { recursive: true });
