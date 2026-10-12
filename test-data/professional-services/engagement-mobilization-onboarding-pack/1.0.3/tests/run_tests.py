@@ -4003,7 +4003,12 @@ def mos3_checks(t,ba,bb):
       if pr.returncode: break
     same=[k for k in o if os.path.exists(o[k]) and open(o[k],"rb").read()==open(os.path.join(b,"expected",k),"rb").read()]
     ck(f"MOS3-5 {sc[9].upper()} each stage run from a lone copy of its skill folder, from an unrelated working directory, reproduces the five goldens byte for byte",rcs==[0,0,0,0] and len(same)==5,f"{rcs} {same}")
-  ver=os.path.basename(DATA_ROOT); vs={}
+  # The version folder name is lost when the test-data ZIP is extracted; the README heading travels with it.
+  ver=os.path.basename(DATA_ROOT)
+  if not re.fullmatch(r"\d+\.\d+\.\d+",ver):
+    m_=re.match(r"# Test data: \S+ (\d+\.\d+\.\d+)\s*$",open(os.path.join(DATA_ROOT,"README.md"),encoding="utf-8").readline())
+    ver=m_.group(1) if m_ else ver
+  vs={}
   for s_ in sk:
     fm=open(os.path.join(PLUGIN_ROOT,"skills",s_,"SKILL.md"),encoding="utf-8").read().split("---")[1]
     m_=re.search(r'^\s+version:\s*"([^"]+)"\s*$',fm,re.M); vs[s_]=m_.group(1) if m_ else None
