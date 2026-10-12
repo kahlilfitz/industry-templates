@@ -5,7 +5,7 @@ import json
 import sys
 
 ENGINE = "engine:slate_rank"
-ENGINE_VERSION = "slate_rank/1.1.4"
+ENGINE_VERSION = "slate_rank/1.1.5"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 
 def append_engine(provenance, engine_version):

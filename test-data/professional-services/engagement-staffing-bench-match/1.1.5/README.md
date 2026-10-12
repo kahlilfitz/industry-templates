@@ -17,8 +17,10 @@ ships in the MOS3 package; the package holds only `manifest.json`, the two icons
 
 ## Running the suite
 
-Run from this folder. The runner prints the plugin root and data root it resolved, then the
-unittest result; it exits non-zero on any failure.
+Run from this folder. The runner prints the plugin root and data root it resolved, then an
+ASCII-safe `PASS <group>: <test>` or `FAIL <group>: <test>` line (flushed) as each test finishes,
+with the traceback indented under any `FAIL`. The last line is `N/M checks passed`; the exit code is
+1 if any check failed and 2 for a usage error (unknown group, or no `skills\` under the plugin root).
 
 Against the source submission (the default when neither `--plugin-root` nor `PLUGIN_ROOT` is set):
 
@@ -36,22 +38,31 @@ python tests\test_engines.py --plugin-root $env:TEMP\esbm-zip
 
 `skills/...` paths resolve against the plugin root and `demo-data/...` paths against this folder
 (the parent of `tests\`), so the working directory does not matter. The runner stops with a clear
-error if the plugin root has no `skills\` folder. Other arguments go to `unittest` (for example
-`-v` or `ConstraintCheckTests`).
+error if the plugin root has no `skills\` folder.
+
+To run part of the suite, list the groups and pass `--group` once per group:
+
+```powershell
+python tests\test_engines.py --list-groups
+python tests\test_engines.py --group golden-scenarios --group shared-copies
+```
+
+The groups, in run order, are `constraint-check`, `fit-score`, `slate-validate`, `shared-copies`,
+`package-layout` and `golden-scenarios`.
 
 ## What the suite covers
 
-- **Engine regression** (`ConstraintCheckTests`, `FitScoreTests`, `SlateValidateTests`): fail-closed
+- **Engine regression** (`constraint-check`, `fit-score` and `slate-validate` groups): fail-closed
   conflict and affiliate matching, availability time-weighting, missing-data reviews, score floor,
   injection redaction (including the evaluator's paraphrase, homoglyph, full-width and zero-width
   variants, and benign prose that must not be redacted) and the secondary safety check in
   `slate_validate`.
-- **Shared copies** (`SharedCopyTests`): the contract and both references in every skill are
+- **Shared copies** (`shared-copies`): the contract and both references in every skill are
   byte-identical to the canonical copies in `skills/fit-score/`, and `scripts/safety_text.py` in
   `constraint-check` and `slate-draft` is byte-identical to the `fit-score` copy.
-- **Package layout** (`PackageLayoutTests`): every skill has its `SKILL.md`, carries no demo data
+- **Package layout** (`package-layout`): every skill has its `SKILL.md`, carries no demo data
   or tests and references nothing outside its own folder.
-- **Goldens** (`GoldenScenarioTests`): runs `fit_score` → `slate_rank` → `constraint_check` →
+- **Goldens** (`golden-scenarios`): runs `fit_score` → `slate_rank` → `constraint_check` →
   `slate_validate` from the plugin root on both scenarios, in a fresh working directory, and requires
   each stage to match `expected/*.json` byte for byte (line endings aside: on Windows the engines
   write CRLF, while the goldens are stored with LF).

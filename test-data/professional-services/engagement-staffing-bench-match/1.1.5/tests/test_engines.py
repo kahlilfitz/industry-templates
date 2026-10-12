@@ -2,12 +2,16 @@
 
 Run from the test-data version folder:
 
-    python tests/test_engines.py [--plugin-root <dir>] [unittest options]
+    python tests/test_engines.py [--plugin-root <dir>] [--list-groups] [--group <name> ...]
 
 The plugin root (an extracted MOS3 ZIP or the submission folder) comes from --plugin-root, then
 the PLUGIN_ROOT environment variable, then <repo>/submissions/professional-services/<slug>.
 Every skills/... path resolves against the plugin root; every demo-data/... path resolves
 against the data root, the parent of this tests/ folder. Neither depends on the cwd.
+
+Each test prints an ASCII-safe "PASS <group>: <test>" or "FAIL <group>: <test>" line as soon as
+it finishes. --list-groups prints the group names; --group <name> (repeatable) runs only those
+groups. The last line is "N/M checks passed" and the exit code is 1 if any check failed.
 """
 import argparse
 import importlib.util
@@ -16,6 +20,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import traceback
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -23,33 +28,74 @@ from unittest import mock
 
 SLUG = "engagement-staffing-bench-match"
 DATA_ROOT = Path(__file__).resolve().parents[1]
+# Group name -> TestCase class name, in run order.
+GROUPS = (
+    ("constraint-check", "ConstraintCheckTests"),
+    ("fit-score", "FitScoreTests"),
+    ("slate-validate", "SlateValidateTests"),
+    ("shared-copies", "SharedCopyTests"),
+    ("package-layout", "PackageLayoutTests"),
+    ("golden-scenarios", "GoldenScenarioTests"),
+)
 
 
 def _ascii(text):
     return str(text).encode("ascii", "backslashreplace").decode("ascii")
 
 
-def resolve_plugin_root(argv):
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--plugin-root")
-    known, rest = parser.parse_known_args(argv)
-    if known.plugin_root:
-        root = Path(known.plugin_root)
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description="engagement-staffing-bench-match regression checks.", allow_abbrev=False
+    )
+    parser.add_argument(
+        "--plugin-root",
+        metavar="DIR",
+        help="extracted MOS3 ZIP or submission folder holding skills/ "
+        "(default: PLUGIN_ROOT, else the repository submission)",
+    )
+    parser.add_argument(
+        "--list-groups", action="store_true", help="print the group names, one per line, and exit"
+    )
+    parser.add_argument(
+        "--group",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="run only this group (repeatable); groups run in canonical order",
+    )
+    return parser.parse_args(argv)
+
+
+def resolve_plugin_root(plugin_root):
+    if plugin_root:
+        root = Path(plugin_root)
     elif os.environ.get("PLUGIN_ROOT"):
         root = Path(os.environ["PLUGIN_ROOT"])
     else:
         root = DATA_ROOT.parents[3] / "submissions" / "professional-services" / SLUG
-    return root.resolve(), rest
+    return root.resolve()
 
 
-PLUGIN_ROOT, _UNITTEST_ARGS = resolve_plugin_root(sys.argv[1:])
+ARGS = parse_args(sys.argv[1:] if __name__ == "__main__" else [])
+if ARGS.list_groups:
+    for _name, _ in GROUPS:
+        print(_name)
+    sys.exit(0)
+_unknown = [name for name in ARGS.group if name not in dict(GROUPS)]
+if _unknown:
+    print("unknown group: " + _ascii(", ".join(_unknown)), file=sys.stderr, flush=True)
+    sys.exit(2)
+PLUGIN_ROOT = resolve_plugin_root(ARGS.plugin_root)
 print("plugin root: " + _ascii(PLUGIN_ROOT), flush=True)
 print("data root: " + _ascii(DATA_ROOT), flush=True)
 if not (PLUGIN_ROOT / "skills").is_dir():
-    sys.exit(
+    print(
         "error: plugin root " + _ascii(PLUGIN_ROOT) + " has no skills/ folder; pass "
-        "--plugin-root <extracted ZIP or submission folder> or set PLUGIN_ROOT"
+        "--plugin-root <extracted ZIP or submission folder> or set PLUGIN_ROOT",
+        file=sys.stderr,
+        flush=True,
     )
+    sys.exit(2)
 
 
 def load_module(name, relative_path):
@@ -700,7 +746,7 @@ class ConstraintCheckTests(unittest.TestCase):
 
         self.assertEqual(["ranked issue", "constraints issue"], result["escalations"])
         self.assertEqual(
-            ["fit_score/1.1", "slate_rank/1.1", "constraint_check/1.1.4"],
+            ["fit_score/1.1", "slate_rank/1.1", "constraint_check/1.1.5"],
             result["provenance"]["engines"],
         )
 
@@ -998,7 +1044,7 @@ class FitScoreTests(unittest.TestCase):
 
         self.assertEqual(["role issue", "bench issue"], result["escalations"])
         self.assertEqual(
-            ["role-intake/1.1", "bench-query/1.1", "fit_score/1.1.4"],
+            ["role-intake/1.1", "bench-query/1.1", "fit_score/1.1.5"],
             result["provenance"]["engines"],
         )
 
@@ -1275,7 +1321,7 @@ class SlateValidateTests(unittest.TestCase):
             "R-1: secondary validation withheld Alex Smith - unrecognised record",
             result["escalations"],
         )
-        self.assertEqual("slate_validate/1.1.4", result["provenance"]["engines"][-1])
+        self.assertEqual("slate_validate/1.1.5", result["provenance"]["engines"][-1])
 
 
 SKILL_NAMES = ("role-intake", "bench-query", "fit-score", "constraint-check", "slate-draft")
@@ -1391,5 +1437,93 @@ class GoldenScenarioTests(unittest.TestCase):
         self.run_chain("scenario-b-drama")
 
 
+class StreamingResult(unittest.TestResult):
+    """Prints one flushed, ASCII-safe PASS/FAIL line per test as soon as it finishes."""
+
+    def __init__(self, group_of):
+        super().__init__()
+        self.group_of = group_of
+        self.checks = []
+        self._problems = None
+        self._skipped = None
+
+    def label(self, test):
+        return "%s: %s" % (self.group_of[type(test).__name__], test._testMethodName)
+
+    def startTest(self, test):
+        super().startTest(test)
+        self._problems = []
+        self._skipped = None
+
+    def addError(self, test, err):
+        super().addError(test, err)
+        self._problems.append(("error", None, err))
+
+    def addFailure(self, test, err):
+        super().addFailure(test, err)
+        self._problems.append(("failure", None, err))
+
+    def addSubTest(self, test, subtest, err):
+        super().addSubTest(test, subtest, err)
+        if err is not None:
+            self._problems.append(("failure", subtest._subDescription(), err))
+
+    def addSkip(self, test, reason):
+        super().addSkip(test, reason)
+        self._skipped = reason
+
+    def addUnexpectedSuccess(self, test):
+        super().addUnexpectedSuccess(test)
+        self._problems.append(("unexpected success", None, None))
+
+    def stopTest(self, test):
+        super().stopTest(test)
+        label = self.label(test)
+        if self._skipped is not None and not self._problems:
+            print(_ascii("SKIP %s (%s)" % (label, self._skipped)), flush=True)
+            return
+        details = []
+        for kind, where, err in self._problems:
+            head = kind + (" " + where if where else "")
+            body = "".join(traceback.format_exception(*err)) if err else ""
+            details.append(head + ("\n" + body if body else ""))
+        self.checks.append((label, not details, details))
+        print(_ascii(("PASS " if not details else "FAIL ") + label), flush=True)
+        for detail in details:
+            for line in detail.rstrip().splitlines():
+                print(_ascii("    " + line), flush=True)
+
+
+def main():
+    loader = unittest.TestLoader()
+    group_of = {class_name: name for name, class_name in GROUPS}
+    module = sys.modules[__name__]
+    declared = {
+        name for name, value in vars(module).items()
+        if isinstance(value, type) and issubclass(value, unittest.TestCase)
+    }
+    if declared != set(group_of):
+        print(
+            "error: GROUPS does not list every TestCase class: " + _ascii(sorted(declared ^ set(group_of))),
+            file=sys.stderr,
+            flush=True,
+        )
+        return 2
+    result = StreamingResult(group_of)
+    for name, class_name in GROUPS:
+        if ARGS.group and name not in ARGS.group:
+            continue
+        print("== group " + name, flush=True)
+        loader.loadTestsFromTestCase(getattr(module, class_name)).run(result)
+    failed = [check for check in result.checks if not check[1]]
+    if failed:
+        print("== failures", flush=True)
+        for label, _, _ in failed:
+            print(_ascii("FAIL " + label), flush=True)
+    passed = len(result.checks) - len(failed)
+    print("\n%d/%d checks passed" % (passed, len(result.checks)), flush=True)
+    return 1 if failed or not result.checks else 0
+
+
 if __name__ == "__main__":
-    unittest.main(argv=[sys.argv[0]] + _UNITTEST_ARGS)
+    sys.exit(main())

@@ -14,7 +14,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from safety_text import is_suspect, safe_citation, safe_text, sanitize_free_text
 
 ENGINE = "engine:constraint_check"
-ENGINE_VERSION = "constraint_check/1.1.4"
+ENGINE_VERSION = "constraint_check/1.1.5"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 CONFIDENCE_FLOOR = 0.75       # independence-eligibility-rules.md #8.1
 PRIOR_ROLE_COOLING_DAYS = 365 # independence-eligibility-rules.md #2.1

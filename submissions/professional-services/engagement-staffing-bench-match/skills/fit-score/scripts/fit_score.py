@@ -19,7 +19,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from safety_text import is_suspect, safe_citation, safe_text, sanitize_free_text
 
 ENGINE = "engine:fit_score"
-ENGINE_VERSION = "fit_score/1.1.4"
+ENGINE_VERSION = "fit_score/1.1.5"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 DEFAULT_DURATION_WEEKS = 52
 

@@ -39,9 +39,11 @@ Tests and demo data are not part of the package. For version 1.1.5 they live in 
 ```powershell
 python tests\test_engines.py                                   # against this submission folder
 python tests\test_engines.py --plugin-root <extracted ZIP>     # against a built package
+python tests\test_engines.py --list-groups                     # then --group <name>, repeatable
 ```
 
-See that folder's `README.md` for what each scenario covers.
+Each test prints a `PASS` or `FAIL` line as it finishes; the last line is `N/M checks passed`. See
+that folder's `README.md` for what each group and scenario covers.
 
 ## Boundaries
 
