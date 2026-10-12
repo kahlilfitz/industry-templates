@@ -1,11 +1,13 @@
 ---
 name: criteria-retrieve
-description: "Retrieves the applicable QRM quality framework, gate criteria, required language, brand rules and prior-review findings. Use when the user asks \"which checklist applies?\", \"retrieve the gate criteria\", \"what disclaimer is required?\", \"what did QRM ask us to fix?\" or \"load the review rules\". Do NOT use to ingest documents (use deliverable-ingest), map evidence (use assertion-map), determine findings (use gate-check), or draft the review packet (use review-packet). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or generic policy search outside this plugin."
+description: "Retrieves the applicable QRM quality framework, gate criteria, required language, brand rules and prior-review findings for a deliverable review. Use after intake or when the user asks \"which checklist applies?\", \"retrieve the gate criteria\", \"what disclaimer is required?\", \"what did QRM ask us to fix?\" or \"load the review rules\". Do NOT use for ingesting documents (use deliverable-ingest), mapping evidence (use assertion-map), determining findings (use gate-check), drafting the review packet (use review-packet), time or expense narratives (use time-expense-narrative-compliance), closeout harvest (use engagement-closeout-knowledge-harvest), client status/QBR (use client-status-qbr) or generic policy search outside this plugin (use built-in search)."
 license: Proprietary
+compatibility: "No scripts. Reads its bundled references/ and contracts/ plus the user-supplied criteria extract, required-language register and prior-review tracker read-only; no connector is required."
 metadata:
-  version: "1.0.4"
+  version: "1.0.5"
   author: Microsoft Professional Services Skills
   category: analysis
+  icon: ic_fluent_clipboard_task_list_ltr_24_regular
 ---
 # Criteria Retrieve (Connect)
 ## Purpose
@@ -27,6 +29,13 @@ After `deliverable-ingest` in every run, and whenever a reviewer asks which chec
 Contract payload with `criteria`, `prior_findings`, required language and citations to `quality-gate-criteria.md` and `severity-rules.md`.
 ## Output format
 Markdown table: criteria_set_id, section, purpose, source citation, required language and downstream engine that consumes it; then a prior-findings table.
+```markdown
+| criteria_set_id | Section | Purpose | Source citation | Required language | Consumed by |
+|---|---|---|---|---|---|
+
+| Prior finding | Status | Required fix | Closure evidence | Citation |
+|---|---|---|---|---|
+```
 ## Example
 Criteria retrieval prepares inputs; it does not run a verdict.
 Example output: `criteria.criteria_sections = ["quality-gate-criteria.md #1-#8", "severity-rules.md #1-#4"]`, with a note if the engagement extract was narrower than the shipped floor.

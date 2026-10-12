@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Re-derive a demo scenario's review-input.json from its raw pack (stdlib only).
 
-  python tests/derive_review_input.py [demo-data/<scenario> ...]
+  python tests/derive_review_input.py [--plugin-root DIR] [demo-data/<scenario> ...]
+
+With no scenario, every scenario under this test-data version folder's demo-data/ is checked. The engines' rules
+(skills/assertion-map/scripts/assertion_rules.py) are loaded from the plugin root: --plugin-root, else the PLUGIN_ROOT
+environment variable, else <repo>/submissions/professional-services/deliverable-review-quality-gate (repo is four
+levels above this version folder). The working directory is never used.
 
 Every value in a scenario's structured input must appear in, or follow by a documented
 deliverable-ingest / criteria-retrieve rule from, that scenario's raw pack:
@@ -80,7 +85,31 @@ import re
 import sys
 from decimal import Decimal, InvalidOperation
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skills", "assertion-map", "scripts"))
+PLUGIN_SLUG = "deliverable-review-quality-gate"
+DATA_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def split_plugin_root(argv):
+    """(plugin root, remaining arguments): --plugin-root DIR is taken out of argv; without it the PLUGIN_ROOT
+    environment variable, else the submission folder in this repository, is the plugin root."""
+    value, rest, args = None, [], list(argv)
+    while args:
+        arg = args.pop(0)
+        if arg == "--plugin-root" and args:
+            value = args.pop(0)
+        elif arg.startswith("--plugin-root="):
+            value = arg.partition("=")[2]
+        else:
+            rest.append(arg)
+    value = value or os.environ.get("PLUGIN_ROOT")
+    if not value:
+        repo = os.path.abspath(os.path.join(DATA_ROOT, os.pardir, os.pardir, os.pardir, os.pardir))
+        value = os.path.join(repo, "submissions", "professional-services", PLUGIN_SLUG)
+    return os.path.abspath(value), rest
+
+
+PLUGIN_ROOT = split_plugin_root(sys.argv[1:])[0]
+sys.path.insert(0, os.path.join(PLUGIN_ROOT, "skills", "assertion-map", "scripts"))
 import assertion_rules as rules  # noqa: E402  (the engines' strict loader and canonical comparison forms)
 
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
@@ -911,8 +940,8 @@ def scenario_label(scenario_dir, position):
 
 
 def main(argv):
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    scenarios = argv or [os.path.join(root, "demo-data", name) for name in sorted(os.listdir(os.path.join(root, "demo-data")))]
+    _, argv = split_plugin_root(argv)
+    scenarios = argv or [os.path.join(DATA_ROOT, "demo-data", name) for name in sorted(os.listdir(os.path.join(DATA_ROOT, "demo-data")))]
     failed = False
     for position, scenario_dir in enumerate(scenarios, start=1):
         problems = check_scenario(scenario_dir)

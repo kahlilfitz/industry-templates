@@ -1,11 +1,13 @@
 ---
 name: deliverable-ingest
-description: "Retrieves and structures a draft deliverable, recipient context, evidence index and prior review notes for a quality-gate run. Use when the user asks \"review this deliverable\", \"check this support pack\", \"find unsupported claims\" or \"start a deliverable gate review\". For a release yes/no on already-ingested material, use gate-check. Do NOT use to choose criteria (use criteria-retrieve), determine support (use assertion-map), make gate findings (use gate-check), or draft the partner packet (use review-packet). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or general document editing/summarization (use built-in document tools)."
+description: "Retrieves and structures a draft deliverable, recipients, evidence index, registers and prior review notes for the gate. Use to start a deliverable review or when the user asks \"review this deliverable\", \"check this support pack\", \"find unsupported claims\", \"start a deliverable gate review\" or \"ingest the draft and evidence\". For a release yes/no on already-ingested material, use gate-check. Do NOT use for choosing criteria (use criteria-retrieve), support mapping (use assertion-map), gate findings (use gate-check), the partner packet (use review-packet), time or expense narratives (use time-expense-narrative-compliance), closeout harvest (use engagement-closeout-knowledge-harvest), client status/QBR (use client-status-qbr) or general document editing (use built-in document tools)."
 license: Proprietary
+compatibility: "No scripts of its own. Reads the user-supplied draft deliverable, evidence index, recipient list, registers and prior review notes read-only (for example from an engagement workspace, SharePoint or OneDrive); no connector is required. Produces review-input.json for assertion-map, whose engine needs Python 3."
 metadata:
-  version: "1.0.4"
+  version: "1.0.5"
   author: Microsoft Professional Services Skills
   category: analysis
+  icon: ic_fluent_document_arrow_down_24_regular
 ---
 # Deliverable Ingest (Connect)
 ## Purpose
@@ -28,6 +30,19 @@ Start every Deliverable Review & Quality Gate flow here, especially for requests
 A populated contract input payload with `deliverable`, `criteria`, `assertions`, `evidence_set`, `prior_findings`, confidence, provenance and citations.
 ## Output format
 Markdown summary plus JSON path: deliverable_id, title, version, recipient list, evidence item count, assertion count, prior finding count and any missing-source note. Do not include a client-facing conclusion.
+```markdown
+## Intake summary - <deliverable_id>
+| Field | Value |
+|---|---|
+| Title | <title> |
+| Version | <version> |
+| Recipients | <intended_recipients, exactly as written> |
+| Evidence items | <count> |
+| Assertions | <count> |
+| Prior findings | <count> |
+| Missing sources | <missing-source note, or None> |
+Payload: review-input.json
+```
 ## Example
 Only structure the intake; engines make all verdicts later.
 ```bash

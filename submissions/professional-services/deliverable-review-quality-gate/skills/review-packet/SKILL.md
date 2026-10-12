@@ -1,11 +1,13 @@
 ---
 name: review-packet
-description: "Drafts the partner/QRM review packet from deterministic gate_check and severity_rank output. Use when the user asks \"draft the review packet\", \"summarize partner review items\", \"make the issue list\", \"what needs fixing before client issue?\" or \"prepare the QRM packet\". Do NOT use to ingest documents (use deliverable-ingest), retrieve criteria (use criteria-retrieve), map support (use assertion-map), or compute findings/severity/status (use gate-check). Do NOT use for time or expense narratives (use time-expense-narrative-compliance), closeout knowledge harvest (use engagement-closeout-knowledge-harvest), client status/QBR assembly (use client-status-qbr), or to send, approve, sign off, publish or authorize reliance."
+description: "Drafts the partner/QRM review packet from verified gate_check and severity_rank output, marked DRAFT - HUMAN REVIEW REQUIRED. Use after the gate check or when the user asks \"draft the review packet\", \"summarize partner review items\", \"make the issue list\", \"what needs fixing before client issue?\" or \"prepare the QRM packet\". Do NOT use for ingesting documents (use deliverable-ingest), retrieving criteria (use criteria-retrieve), mapping support (use assertion-map), computing findings, severity or status (use gate-check), time or expense narratives (use time-expense-narrative-compliance), closeout harvest (use engagement-closeout-knowledge-harvest), client status/QBR (use client-status-qbr), or to send, approve, sign off, publish or authorize reliance (never; a human decides)."
 license: Proprietary
+compatibility: "Requires Python 3 (standard library only) to run skills/gate-check/scripts/severity_rank.py --verify. Reads severity-ranked.json and review-input.json and writes a draft markdown packet; no network access or connector is required."
 metadata:
-  version: "1.0.4"
+  version: "1.0.5"
   author: Microsoft Professional Services Skills
   category: writing
+  icon: ic_fluent_document_bullet_list_24_regular
 ---
 # Review Packet (Create)
 ## Purpose
@@ -26,6 +28,19 @@ After `gate-check`, or whenever the reviewer asks for the issue list, QRM packet
 `REVIEW-PACKET-<deliverable_id>.md` or equivalent markdown content for human review.
 ## Output format
 Required exact label: `DRAFT - HUMAN REVIEW REQUIRED`. Then review status, ranked findings table, gate summary, unsupported assertions, required-language/recipient issues, prior-finding closure issues, escalations, provenance and redaction notes. An empty section keeps its heading and uses the template's exact "None: ..." wording; never drop a section or imply that an empty section clears a gate.
+```markdown
+# DELIVERABLE REVIEW PACKET - <deliverable_id> - DRAFT - HUMAN REVIEW REQUIRED
+## Review status
+## Ranked findings for partner review
+| Rank | Severity | Gate | Location | Issue | Criteria |
+## Gate checklist
+| Gate | Status | Highest severity | Evidence |
+## Unsupported and limited assertions
+## Escalations
+## Draft routing hold
+## Required human decision
+## Provenance and redaction notes
+```
 ## Example
 The verify step always runs first and writes nothing; the packet then quotes the verified ranked output. Only if `severity-ranked.json` is missing does severity_rank run to produce it.
 ```bash

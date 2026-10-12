@@ -32,7 +32,19 @@ Version 1.0.4 follows 1.0.3, which was frozen and submitted for evaluation. It c
 
 A field too long to screen is held for review, never passed.
 
-1.0.4 also closes the Cowork 1.0.3 findings. Every value in the demo `review-input.json` files now traces to the scenario's raw pack, including a new `raw/release-registers.md` with the client-data, brand-check and licensed-content registers. `tests/derive_review_input.py` re-derives each input from its raw pack, and the shipped tests pass from the built ZIP.
+1.0.4 also closes the Cowork 1.0.3 findings. Every value in the demo `review-input.json` files now traces to the scenario's raw pack, including a new `raw/release-registers.md` with the client-data, brand-check and licensed-content registers, and a helper re-derives each input from its raw pack.
+
+Version 1.0.5 changes packaging only. The plugin is now a Microsoft 365 (MOS3) app package: `manifest.json`, `color.png`, `outline.png` and `skills/`. Each skill carries its own contract and references, and gate, severity and output behaviour are unchanged. Demo data and tests no longer ship in the plugin.
+
+## Tests and demo data
+
+Demo scenarios, goldens and tests live in [`test-data/professional-services/deliverable-review-quality-gate/1.0.5/`](../../../test-data/professional-services/deliverable-review-quality-gate/1.0.5/README.md). From that folder:
+
+```bash
+python tests/run_tests.py                              # against this source folder
+python tests/run_tests.py --plugin-root <extracted ZIP> # against a built package
+python tests/check_shared_copies.py
+```
 
 ## The case that shows why it exists
 
@@ -50,7 +62,7 @@ A naive reviewer sees a professional report with a disclaimer. The engine starts
 
 ## What you bring
 
-A draft deliverable, its supporting evidence set, the applicable QRM gate criteria and required language, brand/formatting standards, and prior review findings. The demo scenarios include raw markdown drafts (with page markers and a distribution list), evidence indexes, QRM extracts, prior-review notes and release-control registers alongside structured inputs, so the Connect path is visible rather than assumed. Every structured value traces to the raw pack, and `python tests/derive_review_input.py` checks that it does.
+A draft deliverable, its supporting evidence set, the applicable QRM gate criteria and required language, brand/formatting standards, and prior review findings. The demo scenarios include raw markdown drafts (with page markers and a distribution list), evidence indexes, QRM extracts, prior-review notes and release-control registers alongside structured inputs, so the Connect path is visible rather than assumed. Every structured value traces to the raw pack, and `python tests/derive_review_input.py`, run from `test-data/professional-services/deliverable-review-quality-gate/1.0.5/`, checks that it does.
 
 ## Boundaries
 

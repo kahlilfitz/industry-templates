@@ -19,12 +19,38 @@ every returned or yielded message checked.
 
 Not scanned: `run_tests.py` and this file (test harness and checker: they print test names, file names of the plugin
 itself and captured engine output, never review input) and the vendored, read-only `steering_guard.py`.
+
+Scanned roots: the plugin root (--plugin-root, else PLUGIN_ROOT, else the submission folder in this repository) and
+this test-data version folder's tests\\ folder.
 """
 import ast
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PLUGIN_SLUG = "deliverable-review-quality-gate"
+# The test-data version folder (tests/ lives here); the plugin's scripts live under the plugin root's skills/.
+DATA_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def plugin_root_from(argv):
+    """--plugin-root DIR, else PLUGIN_ROOT, else <repo>/submissions/professional-services/<slug> (repo is four levels
+    above the data root)."""
+    value = None
+    args = list(argv)
+    for index, arg in enumerate(args):
+        if arg == "--plugin-root" and index + 1 < len(args):
+            value = args[index + 1]
+        elif arg.startswith("--plugin-root="):
+            value = arg.partition("=")[2]
+    value = value or os.environ.get("PLUGIN_ROOT")
+    if not value:
+        repo = os.path.abspath(os.path.join(DATA_ROOT, os.pardir, os.pardir, os.pardir, os.pardir))
+        value = os.path.join(repo, "submissions", "professional-services", PLUGIN_SLUG)
+    return os.path.abspath(value)
+
+
+ROOT = plugin_root_from(sys.argv[1:])
+SCAN_ROOTS = (ROOT, os.path.join(DATA_ROOT, "tests"))
 EXCLUDED = {"run_tests.py", "check_messages.py", "steering_guard.py"}
 
 # Names audited as field paths, positions, counts or engine constants wherever they are formatted into a message.
@@ -210,7 +236,11 @@ class Checker:
         return False
 
     def report(self, node, expr):
-        shown = os.path.relpath(self.path, ROOT) if os.path.abspath(self.path).startswith(ROOT + os.sep) else os.path.basename(self.path)
+        shown = os.path.basename(self.path)
+        for scan_root in (ROOT, DATA_ROOT):
+            if os.path.abspath(self.path).startswith(scan_root + os.sep):
+                shown = os.path.relpath(self.path, scan_root)
+                break
         self.violations.append(f"{shown}:{node.lineno}: {ast.unparse(expr)[:120]}")
 
     def check_message(self, node, expr):
@@ -345,7 +375,12 @@ def compute_message_params():
 
 
 def plugin_scripts():
-    for folder, dirs, files in os.walk(ROOT):
+    for scan_root in SCAN_ROOTS:
+        yield from scripts_under(scan_root)
+
+
+def scripts_under(scan_root):
+    for folder, dirs, files in os.walk(scan_root):
         dirs[:] = [d for d in dirs if d not in ("__pycache__", "demo-data", "node_modules")]
         for name in sorted(files):
             if name.endswith(".py") and name not in EXCLUDED:
