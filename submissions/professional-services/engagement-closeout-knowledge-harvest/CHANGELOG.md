@@ -124,9 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 142 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 145 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
-  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9). It ships with:
+  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -736,10 +736,59 @@ copies are unchanged.
   All four fail on `6abb7f6` and pass now.
 - **Residual limits.**
   - A fused short verb followed by determiners, an object and more letters in the same part
-    (`ADDTHISRECORDPLAN`) passes, under the round-6 rule that the remainder end at the object.
+    (`ADDTHISRECORDPLAN`) passes, under the round-6 rule that the remainder end at the object. Closed
+    in round 9b, below.
   - The run-together `SafeTomorrow` and `CasinoOne` are withheld.
   - The limits listed for round 8 are unchanged, except that neighbours in rendering order are now
     joined.
 
 **Golden differences (QA round 9).** None. Every `expected/` file in both scenarios is byte-for-byte
 unchanged.
+
+#### QA round 9b (on `6c1ca73`)
+
+- **Short lead verbs with trailing complements inside one value.** This closes the round-9 residual.
+  A 2–3 letter lead verb (`use`, `set`, `add`, `put`, `let`, `go`) at the start of a part now uses the
+  round-8 boundary rule (`_object_start`): it is a clause when what follows begins with determiners
+  and a known object, whatever comes after the object, or with a pronoun object.
+  - **Now held:** `ADDTHISRECORDPLAN`, `Setthissectionv2`, `usethedocumentlist`.
+  - **Pronouns:** `it` and `them` must still end at a part end, because they begin ordinary words
+    (`Addition`, `Release Themes plan`). `everything` may run on, both inside a value and at a
+    boundary (`Addeverythingplan`).
+  - **Unchanged:** the round-7 verb-noun-at-value-start condition and the round-8/9 case-evidence
+    rules.
+- **Sweep.** The 15,265-form sweep script was not kept, so it was rebuilt as a larger generated
+  sweep: 347,880 forms covering trigger verbs, determiners, objects, complements, pronouns, verdict
+  phrases and the 19 detector-gap lines, in six casings, as title, ID, citation path and anchor.
+  - **Lost holds:** none against `3b3a9af`, `6abb7f6` or `6c1ca73`.
+  - **Against `9f122f8`:** of 10,224 forms held there but passing on `6c1ca73`, 72 still pass. All
+    are a short verb run together with `them` and more letters in one lower-case or upper-case part
+    (`gothemplan`, `ADDTHEMPLAN`); `GoThemPlan` is withheld.
+- **False holds:**
+
+  | Set | Held |
+  | --- | --- |
+  | 238-item corpus | 0 |
+  | Title–citation pairs | 0 of 9,810 |
+  | Boundary extra check | 0 of 2,376 |
+  | Neighbour citation→citation pairs | 0 of 8,100 |
+  | Neighbour title→title pairs | 0 of 11,881 |
+  | Round-6 controls and 19 new controls, newly held (`Additions register`, `Gotham office move`, `Putaway process`, `Usetheme library`, `Letitia handover notes`, `Setitems sync log` and others) | 0 |
+
+  Two controls are held, but they were already held on `6c1ca73`: `Setúbal` as a citation, because
+  citations are ASCII only (the title renders), and `Setit pricing`, a verb plus the pronoun `it`.
+  - **Ordinary words:** of 54,488 distinct words from the repository's documents and the Python
+    standard library, each tried in lower, capitalised and upper case as a title, none is newly
+    held. The only new holds are the round-9b example forms quoted in this repository.
+- **Reference.** #8.6 item 5 (short lead verbs), item 8 (pronouns at a boundary) and the known limits
+  are updated in all five byte-identical copies.
+- **Tests (145 in 16 groups).** `QARound9Tests` gains 3 tests:
+  - eight fused short-verb forms with complements are refused as title, ID, citation path, anchor and
+    sheet name, and seven run through the chain with `render_shape` holds;
+  - three of them are refused as asset IDs without echo;
+  - 28 ordinary controls render as title, ID and citation, and a chain with three of them has no
+    holds.
+
+  The first two fail on `6c1ca73`.
+
+**Golden differences (QA round 9b).** None.

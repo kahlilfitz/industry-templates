@@ -666,10 +666,11 @@ _RUN_MATERIAL = ("the", "this", "these", "that", "those", "them", "their", "all"
 _DERIVED = frozenset("s es d ed ing ings r rs er ers ation ations able al als ment ments ance".split())
 FUSED_MIN_CHARS = 5
 LEAD_RUN_MIN_CHARS = 4
-# A lead verb shorter than LEAD_RUN_MIN_CHARS ('use', 'set', 'go') fused into a longer part is a clause
-# only when the rest of the part, with any parts after it, reads in full as one or more determiners and
-# an object ending at a part boundary ('usethisrecord', 'Gothis-Record'), or as a pronoun object
-# ('useit'): 'Gothenburg', 'Setallocations' and 'Usecase' stay names.
+# A lead verb shorter than LEAD_RUN_MIN_CHARS ('use', 'set', 'go') fused at the start of a longer part
+# is a clause only when the rest of the part, with any parts after it, begins with one or more
+# determiners then a known object, whatever follows ('usethisrecord', 'ADDTHISRECORDPLAN'), or with a
+# pronoun object (_object_start, the boundary rule): 'Gothenburg', 'Setallocations' and 'Usecase' stay
+# names.
 _SHORT_DETERMINERS = ("the", "this", "these", "that", "those", "all", "every", "each", "any", "our", "their",
                       "my", "your", "its")
 _SHORT_OBJECTS = ("record", "records", "asset", "assets", "entry", "entries", "item", "items", "section",
@@ -754,7 +755,7 @@ def _starts_clause(text):
 
 
 def _object_run(rest, later):
-    """True when rest (the letters after a short verb in its part), read on through the parts after
+    """True when rest (the letters after a split verb that ends inside a part), read on through the parts after
     it, is clause material in full: determiners then an object, or a pronoun object, optionally
     followed by 'now', ending at a part boundary."""
     later = list(later[:4])
@@ -801,9 +802,11 @@ def _verb_hit(verb, rest, following, at_start, later=()):
         # 'ReleaseThisRecord', 'ReleaseTHISRECORDNOW', not 'Release readiness' or 'Review Allocations'.
         return following in _DETERMINERS or _object_start(later)
     if len(verb) < LEAD_RUN_MIN_CHARS:
-        # Fused at a part boundary only before clause material in full ('usethisrecord', not
-        # 'Gothenburg'); inside a longer part a short verb is a coincidence ('warehouse', 'output').
-        return at_start and _object_run(rest, later)
+        # Fused at a part boundary only before determiners then a known object, whatever follows, or a
+        # pronoun ending at a part end ('usethisrecord', 'ADDTHISRECORDPLAN', 'useit'; not 'Gothenburg',
+        # 'Setallocations' or 'Additions'); inside a longer part a short verb is a coincidence
+        # ('warehouse', 'output').
+        return at_start and _object_start([rest] + list(later))
     return rest.startswith(_RUN_MATERIAL) or (not rest and (following in _DETERMINERS or _object_start(later)))
 
 
@@ -964,16 +967,18 @@ def id_shape_ok(value):
 
 
 def _object_start(parts):
-    """True when parts (what follows a whole verb at a boundary) begin with clause material: one or
-    more determiners then a known object, or a pronoun object ending at a part end ('it', not 'items').
-    Anything may follow the object ('thisrecordpublic')."""
+    """True when parts (what follows a whole verb at a boundary, or a short lead verb at a part start)
+    begin with clause material: one or more determiners then a known object, or a pronoun object.
+    Anything may follow the object ('thisrecordpublic', 'ADDTHISRECORDPLAN'). A pronoun shorter than
+    FUSED_MIN_CHARS must end at a part end ('it', not 'items' or 'Addition'; 'Them', not 'Themes');
+    'everything' may run on ('ADDEVERYTHINGPLAN')."""
     tail = "".join(parts)
     ends, position = set(), 0
     for part in parts:
         position += len(part)
         ends.add(position)
-    if any(tail.startswith(word) and (len(word) in ends or (tail.startswith("now", len(word))
-                                                         and len(word) + 3 in ends))
+    if any(tail.startswith(word) and (len(word) >= FUSED_MIN_CHARS or len(word) in ends
+                                      or (tail.startswith("now", len(word)) and len(word) + 3 in ends))
            for word in _SHORT_PRONOUNS):
         return True
     reached, frontier = set(), [0]

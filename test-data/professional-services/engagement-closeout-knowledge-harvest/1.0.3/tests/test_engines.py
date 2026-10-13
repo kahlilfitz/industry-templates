@@ -2748,6 +2748,18 @@ ROUND9_CLEAR = ("Casino One playbook", "Safe Tomorrow plan", "Failsafe to produc
                 "Record Items list")
 
 
+# QA round 9b (#8.6): a 2-3 letter lead verb fused at a part start before determiners then a known
+# object holds whatever follows the object, as at a boundary (round 8); 'everything' may run on.
+ROUND9B_SHORT = ("ADDTHISRECORDPLAN", "Gotherecordpublic", "letallitemslive", "PUTOURENTRIESFINAL",
+                 "Setthissectionv2", "usethedocumentlist", "Addeverythingplan", "SETEVERYTHINGLIVE")
+ROUND9B_CLEAR = ("Gothenburg", "Setallocations", "Lethbridge", "Addison", "Puttenham", "Set\u00fabal", "Gothic",
+                 "Letterhead", "Settings", "Usecase", "Address", "Output", "Settlement", "Getting started",
+                 "Letter of engagement", "Additions register", "Additive manufacturing notes", "Gotham office move",
+                 "Putaway process", "Letdown review", "Setback log", "Addendum tracker", "Setlist archive",
+                 "Usetheme library", "Letitia handover notes", "Setitems sync log", "Release Themes plan",
+                 "Gothemes")
+
+
 def round9_assets(titles, held):
     """Scenario A with one released-shaped asset per title; the indexes in held carry a client-specific
     configuration marker, so Govern holds them and their neighbours meet in the released table."""
@@ -2853,6 +2865,46 @@ class QARound9Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
         self.assertFalse(written)
         self.assertNotIn("shThisRecord", so + se)
 
+
+    def test_short_lead_verbs_hold_with_trailing_complements(self):
+        """Round 9b: what follows determiners and a known object does not free a fused short verb."""
+        for value in ROUND9B_SHORT:
+            with self.subTest(value=value):
+                self.assertFalse(core.title_shape_ok(value))
+                self.assertFalse(core.id_shape_ok("AST-" + value))
+                for citation in (f"raw/{value}.md", f"DOC-7#{value}", f"raw/a.xlsx sheet {value}, row 2"):
+                    self.assertFalse(core.citation_shape_ok(citation), citation)
+        raw, placed = QARound4Tests.place(self, ROUND9B_SHORT[:3], [f"raw/{ROUND9B_SHORT[3]}.md",
+                                                                     f"DOC-7#{ROUND9B_SHORT[4]}",
+                                                                     f"raw/a.xlsx sheet {ROUND9B_SHORT[5]}, row 2",
+                                                                     f"DOC-8#{ROUND9B_SHORT[6]}"])
+        for path, value in placed.items():
+            self.assertEqual(("render_shape",), core.shape_hits(hold_path(path), value), ascii_safe(value))
+        self.assert_render_shape_holds(chain(raw), placed, location="field")
+
+    def test_short_lead_verb_identifiers_with_complements_are_input_errors(self):
+        for value in ("AST-ADDTHISRECORDPLAN", "AST-Setthissectionv2", "AST-Addeverythingplan"):
+            result = run_stage(asset_identify, with_value(("candidate_assets", 0, "asset_id"), value))
+            self.assert_refused(result, "reads as a phrase, not an identifier", forbid=(value, value.lower()))
+
+    def test_ordinary_words_with_short_verb_heads_still_render(self):
+        for value in ROUND9B_CLEAR:
+            with self.subTest(value=ascii_safe(value)):
+                self.assertTrue(core.title_shape_ok(value))
+                if value.isascii():
+                    slug = value.replace(" ", "-")
+                    self.assertTrue(core.id_shape_ok("PRJ-" + slug))
+                    self.assertTrue(core.citation_shape_ok(f"raw/{slug}.md"))
+                    self.assertTrue(core.citation_shape_ok(f"DOC-7#{slug}"))
+        raw, placed = QARound4Tests.place(self, ROUND9B_CLEAR[:3], ["raw/Setallocations.md", "DOC-7#Usetheme-library",
+                                                                    "raw/a.xlsx sheet Gothenburg, row 2"])
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        for value in ROUND9B_CLEAR[:2]:  # scenario A holds its third asset for client configuration
+            self.assertIn(f"| {value} |", res.texts["skeleton.md"])
+        for citation in ("raw/Setallocations.md", "DOC-7#Usetheme-library", "raw/a.xlsx sheet Gothenburg, row 2"):
+            self.assertIn(citation, res.texts["skeleton.md"])
 
 class DerivationTests(unittest.TestCase):
     def test_g4b_structured_inputs_re_derive_from_each_raw_pack(self):
