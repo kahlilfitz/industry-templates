@@ -15,7 +15,7 @@ from pathlib import Path
 DATA_ROOT = Path(__file__).resolve().parents[1]
 # The one place the vendored shared detector is pinned. After a byte-identical re-copy of a new
 # shared\steering-guard\steering_guard.py release into every engine skill, update only this constant.
-STEERING_GUARD_SHA256 = "2a4300dfc74123cd7e3c50b890b454b7da578915521e40aab2bdf2eb58ebdbe2"
+STEERING_GUARD_SHA256 = "d8120dac2c728f04bfe08c3ffcc67d042c7e43a60e2dc099f7611a401b64e701"
 SKILLS = ("artifact-assemble", "asset-identify", "lesson-cluster", "sanitize-check", "knowledge-record")
 DOC_CANONICAL = "artifact-assemble"
 DOC_FILES = (

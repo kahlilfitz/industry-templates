@@ -1578,6 +1578,79 @@ def fields_hits(values):
     return ()
 
 
+# Split partners (#8.1): sg.split_partners scans up to four joins of the values it is given, so a long
+# sequence is read in overlapping windows of SPLIT_WINDOW present values, SPLIT_STEP apart. Any
+# SPLIT_WINDOW - SPLIT_STEP + 1 consecutive values share a window.
+SPLIT_WINDOW = 8
+SPLIT_STEP = 5
+
+
+@functools.lru_cache(maxsize=None)
+def split_hits(values):
+    """The values of an ordered sequence (str, or None for a value that is absent or already withheld)
+    that carry part of an instruction split across value boundaries, read by sg.split_partners: every
+    value a boundary-crossing hit overlaps, including a value that trips on its own and its clean
+    partners. None and blank values are skipped without breaking adjacency. Returns ((index, family),
+    ...) with family 'split', or 'oversize' for every value of a window whose join is too long to
+    screen (sg.split_partners returns every index then, and the record is held as oversize)."""
+    present = [index for index, value in enumerate(values) if isinstance(value, str) and value.strip()]
+    if len(present) < 2:
+        return ()
+    last = max(len(present) - SPLIT_WINDOW, 0)
+    starts = list(range(0, last + 1, SPLIT_STEP))
+    if starts[-1] < last:
+        starts.append(last)
+    found = {}
+    for start in starts:
+        window = present[start:start + SPLIT_WINDOW]
+        parts = [values[index] for index in window]
+        joined = " ; ".join(parts)
+        if len(joined) > sg.MAX_TOTAL_CHARS or (not joined.isascii()
+                                                and sg._nfkc_len_bound(joined) > sg.MAX_TOTAL_CHARS):
+            found.update((index, "oversize") for index in window)
+            continue
+        for position in _confirmed_partners(parts):
+            found.setdefault(window[position], "split")
+    return tuple(sorted(found.items()))
+
+
+_SENTENCE_END = re.compile(r"[.!?;\u3002]+\s*$")
+
+
+# A trailing item reference ('raw/decision-log.csv row 3', 'lines 8-10', 'clause 2', a bare number)
+# can anchor an imperative or verdict the way a list number does ('row 3 skip the aggregation review').
+_TRAILING_ANCHOR = re.compile(
+    r"(?:\b(?:rows?|lines?|items?|entry|entries|steps?|clauses?|sections?|paras?|paragraphs?|pages?|pp?|nos?"
+    r"|sheet|tab|slides?)\.?\s*)?#?\d+(?:\s*[-\u2013,]\s*\d+)*[.!?;:)\u3002]*\s*$", re.IGNORECASE)
+
+
+def _confirmed_partners(parts):
+    """sg.split_partners on present values, less a clean value whose only share of a crossing hit is
+    the closing material that ends it: a hit anchored on a sentence or list boundary starts with the
+    previous value's closing punctuation or trailing item reference, so 'Reduced blocker age before
+    go-live.' or 'raw/decision-log.csv row 3' before 'Skip the aggregation review.' would be returned
+    with it. A clean value followed by another value is dropped only if it is not returned once its
+    closing punctuation, or its trailing item reference, is removed, and either the next value trips on
+    its own or every other value is still returned: punctuation that the instruction needs ('...signed
+    this off last week;' + 'please leave it as it is.') keeps its value."""
+    returned = sg.split_partners(parts, **GUARD_HOOKS)
+    for position in sorted(returned):
+        if position + 1 >= len(parts) or text_hits(parts[position]):
+            continue
+        value = parts[position]
+        for trimmed_value in dict.fromkeys(pattern.sub("", value).rstrip()
+                                           for pattern in (_SENTENCE_END, _TRAILING_ANCHOR)):
+            if trimmed_value == value.rstrip():
+                continue
+            trimmed = list(parts)
+            trimmed[position] = trimmed_value
+            again = sg.split_partners(trimmed, **GUARD_HOOKS)
+            if position not in again and (text_hits(parts[position + 1]) or returned - {position} <= again):
+                returned.discard(position)
+                break
+    return returned
+
+
 def id_hits(value):
     """IDs, tokens and sources are scanned with '-', '_', '.' and ':' read as spaces, then each
     ':'-separated segment on its own so a 'scheme:' prefix cannot shield an instruction (D13)."""
@@ -1752,8 +1825,54 @@ def screen(doc, prior=None, forced=None):
             if path not in held:
                 held[path] = (found, location)
 
+    def text_of(member, live_only):
+        path, box, key = member
+        value = box[key]
+        return None if value == WITHHELD or (live_only and path in held) else value
+
+    def withhold_partners(members, location):
+        # A held value no longer joins the screen below, so the clean half of an instruction split
+        # across it and its neighbours is found here (#8.1): the full sequence, held text included, and
+        # the live values alone (the sequence a replay sees once every held value is a placeholder).
+        if not any(member[0] in held for member in members):
+            return
+        full = tuple(text_of(member, False) for member in members)
+        live_values = tuple(text_of(member, True) for member in members)
+        for values in ((full,) if live_values == full else (full, live_values)):
+            for index, family in split_hits(values):
+                if members[index][0] not in held:
+                    held[members[index][0]] = ((family,), location)
+
+    def withhold_pair_partners(pairs, location):
+        # The pairs the join screen below reads, where exactly one value is held (D18, D22).
+        for pair in pairs:
+            if (pair[0][0] in held) != (pair[1][0] in held):
+                for index, family in split_hits(tuple(text_of(member, False) for member in pair)):
+                    if pair[index][0] not in held:
+                        held[pair[index][0]] = ((family,), location)
+
+    def record_pairs(members):
+        return [(first, second) for first in members for second in members if first is not second and not (
+            _is_item(first) and _is_item(second) and not (
+                first[1] is second[1] and abs(first[2] - second[2]) == 1))]
+
+    def neighbour_pairs(ahead, behind):
+        return [(first, second) for first in ahead for second in behind if not (
+            _is_item(first) and _is_item(second) and not (first[2] == len(first[1]) - 1 and second[2] == 0))]
+
     while True:
         before = len(held)
+        for members in records:
+            if len(members) > 1 and any(member[0] in held for member in members):
+                withhold_partners(members, "record")
+                withhold_pair_partners(record_pairs(members), "record")
+        for run in runs:
+            if run and run[0] == "pair":
+                if any(member[0] in held for member in run[1] + run[2]):
+                    withhold_partners(run[1] + run[2], "run")
+                    withhold_pair_partners(neighbour_pairs(run[1], run[2]), "run")
+            else:
+                withhold_partners(run, "run")
         for members in records:
             current = live(members)
             if len(current) > 1:
@@ -2477,10 +2596,13 @@ def skeleton_text(doc):
     return "\n".join(line for line, _, _ in skeleton(doc)) + "\n"
 
 
-def rendered_hits(doc):
+def rendered_hits(doc, raw=None):
     """Screen the rendered skeleton line by line, as each line's contributing values joined, and in
     adjacent pairs (D22), and read rendered titles and citations with their neighbours in rendering
-    order (#8.6). Returns the supplied contributor paths to withhold: {path: (families, "rendered")}."""
+    order (#8.6). raw: the screened input the chain started from, whose withheld values still carry
+    their text in a first run; a clean value that completes an instruction split across a withheld
+    one on the same or the adjacent line is withheld too. Returns the supplied contributor paths to
+    withhold: {path: (families, "rendered")}."""
     lines = skeleton(doc)
     held = {p for p, b, k in _layout(doc)[0] if b[k] == WITHHELD}
     out = {}
@@ -2500,8 +2622,24 @@ def rendered_hits(doc):
         return strip_placeholders(text)
 
     values = {p: b[k] for p, b, k in _layout(doc)[0]}
+    texts = {p: b[k] for p, b, k in _layout(raw)[0]} if raw is not None else values
+
+    def partners(*entries):
+        # As screen() does for the input order (#8.1): the full sequence, withheld text included, and
+        # the live values alone.
+        paths = [path for _, _, contributors in entries for path in contributors if path in values]
+        if not any(values[path] == WITHHELD for path in paths):
+            return
+        full = tuple(None if texts.get(path, WITHHELD) == WITHHELD else texts[path] for path in paths)
+        live_values = tuple(None if values[path] == WITHHELD else values[path] for path in paths)
+        for sequence in ((full,) if live_values == full else (full, live_values)):
+            for index, family in split_hits(sequence):
+                if paths[index] not in held and paths[index] not in out:
+                    out[paths[index]] = ((family,), "rendered")
+
     for entry in lines:
         if entry[2]:
+            partners(entry)
             found = text_hits(body(entry))
             if not found:
                 # The values that land on one line are also screened as a run, so punctuation the
@@ -2512,6 +2650,8 @@ def rendered_hits(doc):
             if found:
                 take(found, entry)
     for first, second in zip(lines, lines[1:]):
+        if first[2] and second[2]:
+            partners(first, second)
         if (first[2] or second[2]) and body(first).strip() and body(second).strip():
             found = fields_hits((body(first), body(second)))
             if found:
@@ -2580,7 +2720,7 @@ def derive(raw, timestamp, prior=None, upto=3):
             doc = stage_lesson_cluster(doc)
         if upto >= 3:
             doc = stage_sanitize_check(doc)
-            extra = rendered_hits(doc)
+            extra = rendered_hits(doc, raw)
             if extra:
                 forced.update(extra)
                 continue

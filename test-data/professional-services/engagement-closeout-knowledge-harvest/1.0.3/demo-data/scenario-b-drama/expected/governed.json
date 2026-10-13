@@ -387,7 +387,7 @@
       "lesson-taxonomy.md #1-#4",
       "confidentiality-sanitisation-rules.md #1-#8"
     ],
-    "screening": "steering_guard 1.1.3 (shared, vendored) with the closeout hook profile"
+    "screening": "steering_guard 1.1.5 (shared, vendored) with the closeout hook profile"
   },
   "lesson_clusters": [
     {
