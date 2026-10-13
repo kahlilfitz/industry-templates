@@ -375,27 +375,41 @@ def _rendered_row(item):
     return [v if isinstance(v, str) else (None if v is None else str(v)) for v in values]
 
 
-def withhold_missing_runs(items):
+def withhold_missing_runs(items, activities=None):
     """#11.1 / #11.2 across items: missing-time items are listed side by side, so an instruction split across
     neighbouring items is screened joined (the detector's run screen) - their subjects alone, and every run of the
     values the rows print, in reading order, that crosses from one item to the next, IDs and citations included
-    (D22) - and each item in a tripping run is withheld and held like a flagged one."""
+    (D22) - and each item in a tripping run is withheld and held like a flagged one. 1.0.6: an item withheld on its
+    own drops out of those screens, so the supplied subjects and activity classes (activities, the signals in item
+    order) are also read for split partners (signal_policy.split_partners_seq), and the clean half of an instruction
+    split across a withheld item and its neighbour is withheld too; a run too long to join is held as oversize."""
     texts = [None if item.get("embedded_instruction") else item.get("subject") for item in items]
     bad = set(signal_policy._tripping_seq(texts))
     # QA round 14: the items' activity classes are a column too (listed side by side in missing_time_report).
     classes = signal_policy._tripping_seq([None if item.get("embedded_instruction") else item.get("activity_class")
                                            for item in items])
     bad |= classes
-    bad |= signal_policy.crossing_runs([[(i, v) for v in _rendered_row(item)] for i, item in enumerate(items)])
+    sources = activities if isinstance(activities, list) and len(activities) == len(items) else items
+    flagged = {i for i, item in enumerate(items) if item.get("embedded_instruction")}
+    subjects, over = signal_policy.split_partners_seq([s.get("subject") for s in sources], flagged)
+    split_classes, over_classes = signal_policy.split_partners_seq([s.get("activity_class") for s in sources])
+    bad |= subjects | split_classes
+    classes = set(classes) | split_classes
+    over |= over_classes
+    originals = [[(i, v) for v in _rendered_row(dict(item, subject=sources[i].get("subject")))]
+                 for i, item in enumerate(items)]
+    bad |= signal_policy.crossing_runs([[(i, v) for v in _rendered_row(item)] for i, item in enumerate(items)],
+                                       originals)
     for i in sorted(bad):
         item = items[i]
+        if i in classes:
+            item["activity_class"] = signal_policy.WITHHELD_TEXT
         if item.get("embedded_instruction"):
             continue  # already withheld and held (missing_time_item)
         item["subject"] = signal_policy.WITHHELD_TEXT
-        if i in classes:
-            item["activity_class"] = signal_policy.WITHHELD_TEXT
         item["embedded_instruction"] = True
-        item["finding"] += "; " + SPLIT_MISSING_REASON + "; withheld"
+        reason = signal_policy.OVERSIZE_REASON if i in over else SPLIT_MISSING_REASON
+        item["finding"] += "; " + reason + "; withheld"
         item["citations"] = signal_policy.safe_citations(item["citations"], True)[0] + [
             signal_policy.INJECTION_CITATION, signal_policy.WITHHOLD_CITATION]
 
@@ -652,10 +666,11 @@ def govern(out):
             or ["client-billing-guidelines.md #1.1", "client-billing-guidelines.md #1.2"],
         }
 
-    missing_time = [missing_time_item(a) for a in signals
-                    if signal_policy._id_key(a["activity_id"]) not in used_activity_ids
-                    and a.get("billable_signal") and a.get("duration_hours", 0) >= MISSING_TIME_MIN_HOURS]
-    withhold_missing_runs(missing_time)
+    missing_signals = [a for a in signals
+                       if signal_policy._id_key(a["activity_id"]) not in used_activity_ids
+                       and a.get("billable_signal") and a.get("duration_hours", 0) >= MISSING_TIME_MIN_HOURS]
+    missing_time = [missing_time_item(a) for a in missing_signals]
+    withhold_missing_runs(missing_time, missing_signals)
     exception_list = exception_items(out["time_entries"], missing_time)
 
     out["missing_time_report"] = missing_time

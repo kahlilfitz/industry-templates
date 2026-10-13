@@ -27,7 +27,7 @@ import sys
 
 SLUG = "time-expense-narrative-compliance"
 DATA_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STEERING_GUARD_SHA256 = "2a4300dfc74123cd7e3c50b890b454b7da578915521e40aab2bdf2eb58ebdbe2"  # steering_guard 1.1.3
+STEERING_GUARD_SHA256 = "d8120dac2c728f04bfe08c3ffcc67d042c7e43a60e2dc099f7611a401b64e701"  # steering_guard 1.1.5
 CANONICAL = "activity-pull"
 BILLING_RULES_SKILL = "guideline-check"
 BILLING_RULES_COPIES = ("code-map", "exception-report")  # every other engine that runs the shared rules

@@ -12,7 +12,7 @@ plugin. The plugin handles time entries only; expense reports and receipts are o
 |---|---|
 | `demo-data/scenario-a-happy/` | Raw engagement exports (`raw/`), the activity packet `activity.json`, engine goldens (`expected/`) and a README with the run order |
 | `demo-data/scenario-b-drama/` | Same layout; the skim-proof rejection case |
-| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 38 groups |
+| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 39 groups |
 | `tests/check_shared_copies.py` | Fails when a skill's copy of a shared file drifts from the canonical copy in `skills/activity-pull/` (`billing_rules.py`: `skills/guideline-check/`), or `steering_guard.py` from its pinned SHA-256 |
 | `tests/steering-corpus.json` | Shared embedded-instruction corpus (byte-identical to `shared/steering-guard/`), attack and benign sets |
 | `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker |
