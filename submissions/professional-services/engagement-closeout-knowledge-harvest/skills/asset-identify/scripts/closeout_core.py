@@ -820,18 +820,87 @@ def spells_clause(value, separators, tokens=True):
       collapsed form (parts run together) contains a steering word or a verdict phrase of
       FUSED_MIN_CHARS letters or more; a negation is followed by a verb or clause material; or an
       imperative or verdict verb sits where it reads as a verb (_verb_hit)."""
-    if has_cf(value):
+    if has_cf(value) or _shorthand_hit(value):
         return True
     return any(_spells_clause(form, separators, tokens) for form in comparison_skeletons(value))
 
 
-def _needle_hit(collapsed, starts, boundary=None, case_starts=()):
+# Digit shorthand inside a verdict phrase (#8.6): a lone '2' read as 'to', a lone '4' as 'for'
+# ('safe2reuse', 'good2go', 'cleared4release'). Only verdict phrases are read this way, so 'B2B',
+# 'P2P', 'go2market', 'v2' and 'Q4-2026' stay identifiers.
+_SHORTHAND = {"2": ("\x01", "to"), "4": ("\x02", "for")}
+_SHORTHAND_RE = re.compile(r"(?<![0-9])[24](?![0-9])")
+_SHORTHAND_PHRASES = tuple((words[:index], word, words[index + 1:])
+                           for words in (phrase.split() for phrase in _TITLE_PHRASES)
+                           for index, word in enumerate(words) if word in ("to", "for") and len(words) > 1)
+
+
+def _letter_parts(segment):
+    """The casefolded parts of a stretch of a comparison skeleton, split at separators and case and
+    digit boundaries."""
+    return [part.casefold() for run in re.findall(r"[^\W_]+", segment) for part in _case_parts(run)]
+
+
+def _covers(parts, words, from_end):
+    """True when words, run together, are exactly the first (or last) whole parts, with no part
+    boundary inside a word ('SAFe' is not 'safe')."""
+    target = "".join(words)
+    taken, length = [], 0
+    for part in (reversed(parts) if from_end else parts):
+        if length >= len(target):
+            break
+        taken.append(part)
+        length += len(part)
+    if from_end:
+        taken.reverse()
+    if "".join(taken) != target:
+        return False
+    cuts, position = set(), 0
+    for part in taken[:-1]:
+        position += len(part)
+        cuts.add(position)
+    bounds, position = set(), 0
+    for word in words[:-1]:
+        position += len(word)
+        bounds.add(position)
+    return cuts <= bounds
+
+
+def _shorthand_hit(value):
+    """True when a lone '2' or '4' stands for the 'to' or 'for' of a verdict phrase: the phrase words
+    before it are whole parts ending at the digit, and the words after it are whole parts starting
+    there, within one path segment; a phrase ending in 'to' ('safe to') needs a word after the digit."""
+    if not _SHORTHAND_RE.search(value):
+        return False
+    marked = _SHORTHAND_RE.sub(lambda match: _SHORTHAND[match.group(0)][0], value)
+    markers = {mark: word for mark, word in _SHORTHAND.values()}
+    for form in comparison_skeletons(marked):
+        pieces = re.split("([\x01\x02])", form)
+        for index in range(1, len(pieces), 2):
+            # Both sides stay inside one path segment ('raw/Safe2.md' is no phrase).
+            left = _letter_parts(re.split(r"[./\\#]", pieces[index - 1])[-1])
+            right = _letter_parts(re.split(r"[./\\#]", pieces[index + 1])[0])
+            for before, word, after in _SHORTHAND_PHRASES:
+                if word != markers[pieces[index]] or not right or not right[0][:1].isalpha():
+                    continue
+                if before and not _covers(left, before, True):
+                    continue
+                if after and not _covers(right, after, False):
+                    continue
+                return True
+    return False
+
+
+def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=()):
     """A steering word or verdict phrase in the collapsed form. Inside one part (a run-together word,
     'pleaseapprove') it counts anywhere. Across parts it counts when it starts at a part start and ends
     at a part end ('Plea-se', not 'Roadmap lease'). Inside one value a verdict phrase also counts when a
     case transition inside a letter run (case_starts) falls on one of its own word boundaries, wherever
     its ends fall ('xsafeToReuse', 'ItemnoONENEEDS'): the transition is the evidence of a phrase. A space
-    is no such evidence ('Safe Tomorrow plan'). With a boundary (a join of two values), only an
+    is no such evidence ('Safe Tomorrow plan'), and each of its words must end at a token end, not
+    inside a capitalised word that begins inside the phrase and runs on in lower case (continuing:
+    'Safe|To|olkit', 'No|Need|le'; 'Xgood|to|Go' still counts).
+    With a boundary (a join of two values), only an
     occurrence that straddles it counts, and only by its ends."""
     ends = (set(starts) - {0}) | {len(collapsed)}
     for needle in _FUSED_NEEDLES:
@@ -842,7 +911,11 @@ def _needle_hit(collapsed, starts, boundary=None, case_starts=()):
             inside = not any(first < begin < end for begin in starts)
             straddles = boundary is None or start < boundary < end
             splits = _PHRASE_BOUNDARIES.get(needle, ())
-            evidenced = boundary is None and any(start + offset in case_starts for offset in splits)
+            # A word may not end inside a capitalised word that begins inside the phrase ('Safe|To|olkit').
+            evidenced = (boundary is None and any(start + offset in case_starts for offset in splits)
+                         and not any(start + offset in continuing
+                                     and max(begin for begin in starts if begin < start + offset) > start
+                                     for offset in splits + (len(needle),)))
             if straddles and ((inside and boundary is None) or evidenced or (start in starts and end in ends)):
                 return True
             start = collapsed.find(needle, start + 1)
@@ -857,11 +930,14 @@ def _spells_clause(text, separators, tokens):
             acronym = len(bare) >= 2 and bare.isupper()
             if low.endswith("n't") or (not acronym and low in _TITLE_CLAUSE_WORDS):
                 return True
-    parts, case_starts, position = [], set(), 0
+    parts, case_starts, continuing, position = [], set(), set(), 0
     for run in re.findall(r"[^\W_]+", text):
         for index, part in enumerate(_case_parts(run)):
             if index:
                 case_starts.add(position)
+            if any(char.isupper() for char in part):
+                # Lower-case letters that continue a capitalised word: no token ends before them.
+                continuing.update(position + offset for offset, char in enumerate(part) if offset and char.islower())
             parts.append(part.casefold())
             position += len(part)
     joined = f" {' '.join(parts)} "
@@ -872,7 +948,7 @@ def _spells_clause(text, separators, tokens):
     for index, part in enumerate(parts):
         starts[position] = index
         position += len(part)
-    if _needle_hit(collapsed, starts, case_starts=case_starts):
+    if _needle_hit(collapsed, starts, case_starts=case_starts, continuing=continuing):
         return True
 
     def after(end):

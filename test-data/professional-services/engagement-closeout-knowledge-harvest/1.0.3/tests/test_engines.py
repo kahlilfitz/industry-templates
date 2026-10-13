@@ -2906,6 +2906,81 @@ class QARound9Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
         for citation in ("raw/Setallocations.md", "DOC-7#Usetheme-library", "raw/a.xlsx sheet Gothenburg, row 2"):
             self.assertIn(citation, res.texts["skeleton.md"])
 
+# QA round 10 (#8.6): a lone 2 or 4 read as the 'to' or 'for' of a verdict phrase, and a case-evidenced
+# phrase whose words must end at token ends.
+ROUND10_SHORTHAND = ("safe2reuse", "safe_2_reuse", "fine2ship", "good2go", "Safe2Reuse", "SAFE2REUSE",
+                     "cleared4release", "approved4externaluse", "Ok2Proceed")
+ROUND10_SHORTHAND_CLEAR = ("B2B", "P2P", "R2R", "O2C", "H2R", "Q2C", "peer2peer", "S2P", "M365-2026", "v2", "phase2",
+                           "go2market", "Outlook2Teams", "Book2Go", "Q4-2026", "Wave4Rollout", "ok4release",
+                           "good2gold")
+ROUND10_TOKEN_END_CLEAR = ("SafeToolkit", "SafeTools", "FineTools", "OkayToolkit", "NoNeedle", "OkayTodo",
+                           "GoodTogether", "GoodToolbox", "ItemsafeToolkit", "FineTuning", "ReadyReckoner",
+                           "SetupGuide", "UseCaseCatalog", "GoLivePlan", "ReleaseTrain")
+ROUND10_TOKEN_END_HELD = ("xsafeToReuse", "zzPublishThisRecord", "abcSkipValidation", "SafeToReuse",
+                          "ReleaseTHISRECORDNOW", "ItemsafeTOREUSE", "ItemnoONENEEDS", "XgoodtoGo", "SafeToFail")
+
+
+class QARound10Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 10, confidentiality-sanitisation-rules.md #8.6: digit shorthand inside a verdict phrase
+    is read as the word it stands for, and a case-evidenced phrase counts only when its words end at
+    token ends, not inside a capitalised word that begins inside the phrase."""
+
+    place = QARound4Tests.place
+
+    def test_digit_shorthand_verdicts_are_withheld(self):
+        for value in ROUND10_SHORTHAND:
+            with self.subTest(value=value):
+                self.assertFalse(core.title_shape_ok(value))
+                self.assertFalse(core.id_shape_ok("AST-" + value))
+                for citation in (f"raw/{value}.md", f"DOC-7#{value}", f"raw/a.xlsx sheet {value}, row 2"):
+                    self.assertFalse(core.citation_shape_ok(citation), citation)
+        raw, placed = self.place(("Safe2Reuse", "good2go"), ("raw/safe2reuse.md", "DOC-7#fine2ship",
+                                                            "raw/a.xlsx sheet SAFE2REUSE, row 2"))
+        for path, value in placed.items():
+            self.assertEqual(("render_shape",), core.shape_hits(hold_path(path), value), ascii_safe(value))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        self.assertNotIn("2reuse", everything(res).casefold())
+        result = run_stage(asset_identify, with_value(("candidate_assets", 0, "asset_id"), "AST-safe2reuse"))
+        self.assert_refused(result, "reads as a phrase, not an identifier", forbid=("AST-safe2reuse", "safe2reuse"))
+
+    def test_digit_identifiers_and_versions_still_render(self):
+        for value in ROUND10_SHORTHAND_CLEAR:
+            with self.subTest(value=value):
+                self.assertTrue(core.title_shape_ok(value))
+                self.assertTrue(core.id_shape_ok("PRJ-" + value))
+                self.assertTrue(core.citation_shape_ok(f"raw/{value}.md"))
+                self.assertTrue(core.citation_shape_ok(f"DOC-7#{value}"))
+        self.assertTrue(core.citation_shape_ok("raw/Safe2.md"))
+        raw, placed = self.place(("B2B portal", "Go2Market plan"), ("raw/P2P-process.md", "DOC-7#M365-2026",
+                                                                   "raw/O2C.xlsx sheet Q2C, row 2"))
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        for value in ("| B2B portal |", "| Go2Market plan |", "raw/P2P-process.md", "DOC-7#M365-2026"):
+            self.assertIn(value, res.texts["skeleton.md"])
+
+    def test_case_evidenced_phrases_end_at_token_ends(self):
+        for value in ROUND10_TOKEN_END_CLEAR:
+            with self.subTest(value=value):
+                self.assertTrue(core.title_shape_ok(value))
+                self.assertTrue(core.id_shape_ok("AST-" + value))
+                self.assertTrue(core.citation_shape_ok(f"raw/{value}.md"))
+                self.assertTrue(core.citation_shape_ok(f"DOC-7#{value}"))
+        for value in ROUND10_TOKEN_END_HELD:
+            with self.subTest(value=value):
+                self.assertFalse(core.title_shape_ok(value))
+                self.assertFalse(core.citation_shape_ok(f"DOC-7#{value}"))
+        raw, placed = self.place(("SafeToolkit", "NoNeedle"), ("raw/FineTools.md", "DOC-7#OkayToolkit"))
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        released = [asset["title"] for asset in governed(res)["knowledge_record"]["reusable_assets"]]
+        self.assertEqual(["SafeToolkit", "NoNeedle"], released)
+        for value in ("| SafeToolkit |", "| NoNeedle |", "raw/FineTools.md", "DOC-7#OkayToolkit"):
+            self.assertIn(value, res.texts["skeleton.md"])
+
+
 class DerivationTests(unittest.TestCase):
     def test_g4b_structured_inputs_re_derive_from_each_raw_pack(self):
         for scenario in SCENARIOS:
@@ -3112,7 +3187,7 @@ GROUPS = {
     "screening": (ScreeningTests, QARound5ScreeningTests, QARound6ScreeningTests, QARound7ScreeningTests),
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
-    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests),
+    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests, QARound10Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),

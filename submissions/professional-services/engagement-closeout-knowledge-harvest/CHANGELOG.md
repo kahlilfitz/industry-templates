@@ -124,9 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 145 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 148 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
-  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b). It ships with:
+  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -792,3 +792,96 @@ unchanged.
   The first two fail on `6c1ca73`.
 
 **Golden differences (QA round 9b).** None.
+
+### QA round 10 (on `7a20785`)
+
+Two Medium findings, fixed in the plugin. The knowledge-record output contract and the contract JSON
+copies are unchanged.
+
+- **Digit shorthand in verdict phrases (Medium, escape).** `raw/safe2reuse.md`, `DOC-7#fine2ship`,
+  `safe_2_reuse` and `good2go` completed the chain with no hold.
+  - **Fix:** when matching verdict phrases, and only there, a lone `2` (no digit beside it) reads as
+    `to` and a lone `4` as `for`. The phrase words before the digit must be whole parts ending at it,
+    and the words after it whole parts starting there, all inside one path segment, with no case
+    boundary inside a word. A phrase ending in `to` needs a word after the digit.
+  - **Now withheld** with `render_shape`, as title, ID, path, anchor and sheet name: `safe2reuse`,
+    `safe_2_reuse`, `fine2ship`, `good2go`, `Safe2Reuse`, `SAFE2REUSE`, `cleared4release`,
+    `approved4externaluse` and `Ok2Proceed`.
+  - **Still render:** `B2B`, `P2P`, `R2R`, `O2C`, `H2R`, `Q2C`, `peer2peer`, `S2P`, `M365-2026`, `v2`,
+    `phase2`, `Q4-2026`, `Outlook2Teams` (`ok` begins mid-word), `SAFe 2 rollout` (a case boundary
+    inside `safe`) and `raw/Safe2.md` (the extension is another segment). `ok4release` and
+    `ready4release` render too, as `ok for release` and `ready for release` do: neither is a verdict
+    phrase in the list.
+  - **`go2market` renders.** `go to` is a lead verb with a preposition, not a verdict phrase, and
+    digits are read only inside verdict phrases. Reading `2` as `to` generally would also withhold
+    `go-to-market` names and `B2B`-style IDs. The spaced title `Go to market plan` stays withheld by
+    the existing lead-verb rule.
+  - **Not extended:** the shorthand is not read across a title–citation or neighbour join.
+- **Case-evidenced phrases end at token ends (Medium, false hold).** Case evidence established a
+  verdict phrase even when its last word ran on inside a larger CamelCase word. `SafeToolkit`,
+  `SafeTools`, `FineTools`, `OkayToolkit` and `NoNeedle` were withheld and their assets removed from
+  `reusable_assets`.
+  - **Fix:** a case-evidenced phrase now counts only if no word ends inside a capitalised part that
+    begins inside the phrase and continues in lower case (`Safe|To|olkit`, `No|Need|le`).
+  - **All-caps or all-lower-case continuations are no evidence either way,** so `ItemsafeTOREUSE` and
+    `ItemnoONENEEDS` stay withheld. So does a first word ending inside the part it began in
+    (`XgoodtoGo`, held on `3b3a9af` and `7a20785`).
+  - **Still withheld:** `xsafeToReuse`, `zzPublishThisRecord`, `abcSkipValidation`, `SafeToReuse` and
+    `ReleaseTHISRECORDNOW`. `SafeTomorrow`, withheld again in round 9, now renders; `CasinoOne`
+    stays withheld.
+  - **Analogous paths, checked and unchanged:**
+    - `PublishThisRecordkeeping` stays withheld: a whole verb before the determiner `This` is a clause
+      whatever the object runs into.
+    - A single capitalised word that contains a run-together phrase (`Safetools`, `Okaytoken`) stays
+      withheld under the round-3 collapsed rule, because it cannot be told from `Safetoreuse`.
+  - **Two of the reported names stay withheld:** `ApprovedFormats` and `ClearedForms` are held by the
+    whole-word verdict-verb rule (`approved`, `cleared`), exactly as the spaced `Approved formats` is.
+    The phrase path no longer holds them.
+- **False holds after the fix:**
+
+  | Set | Held |
+  | --- | --- |
+  | 238-item corpus | 0 |
+  | Title–citation pairs | 0 of 9,810 |
+  | Boundary extra check | 0 of 2,376 |
+  | Neighbour citation→citation pairs | 0 of 8,100 |
+  | Neighbour title→title pairs | 0 of 11,881 |
+  | Round-6 controls | 0 (`Setúbal` as a citation only, ASCII rule) |
+  | Ordinary words: 54,529 words × 3 casings | 549 held, identical to `7a20785`: none new, none freed |
+  | New CamelCase name set | 35 of 221, all already held on `7a20785` |
+
+  The 35 CamelCase holds fall into six groups:
+  - **Genuine verdict phrases (7):** `SafeToFail`, `SafeToTry`, `FineToShipChecklist`,
+    `OkToProceedForm`, `GoodToGoList`, `ClearedForReleaseTag`, `ApprovedForUseList`.
+  - **Phrase-list entries (7):** `AsIsProcess`, `AsIsToBe`, `AsIsMapping`, `AsItIsNotes`,
+    `ForExternalUseCases`, `NoOneLeftBehind`, `TheyAreSoft`. The spaced forms, such as `As-is process
+    map`, are withheld on every commit.
+  - **Whole-word verdict or imperative verbs (9):** `ApprovedFormats`, `ApprovedFormatsList`,
+    `ClearedForms`, `ClearedFormsArchive`, `BypassValve`, `IgnoreList`, `DisregardedRisks`,
+    `SkipLogic`, `SkipTracing`.
+  - **Lead verb with a determiner or pronoun (3):** `ShareThePoint`, `PostItWall`,
+    `CloseTheLoopFramework`.
+  - **Steering words (5):** `KindlyProject`, `NothingPhone`, `NobodyStudio`, `AlreadyDone`,
+    `ExactlyOnceDelivery`.
+  - **Run-together phrase inside one capitalised word (4):** `SafetoolsVendor`, `FinetoothComb`,
+    `Okaytoken`, `NoneedleAccess`.
+
+  Changing any of these groups is a policy decision outside this finding. The other 186 names render,
+  including the new benign names (`SafeToolkit`, `ReleaseTrain`, `SetupGuide`, `UseCaseCatalog`,
+  `GoLivePlan`, `OkayTools`, `FineTuning`, `NoNeedle`, `ReadyReckoner`, `GoodToKnow`).
+- **Sweep.** The 347,880-form fused sweep loses no hold against `3b3a9af`, `6abb7f6`, `6c1ca73` or
+  `7a20785`. Against `9f122f8`, the 72 round-9b residual forms (`gothemplan`) are unchanged.
+- **Timings.** 100 assets take 37.8 s (9.2 / 8.9 / 10.1 / 9.5 s per stage). 400 assets take 138.8 s
+  (32.5 / 32.7 / 37.1 / 36.5 s), 3.7 times as long.
+- **Reference.** #8.6 item 4 is updated in all five byte-identical copies.
+- **Tests (148 in 16 groups).** `QARound10Tests` in `render-policy` has 3 tests:
+  - shorthand verdicts are refused as title, ID, path, anchor and sheet name; five run through the
+    chain with `render_shape` holds; `AST-safe2reuse` is refused without echo;
+  - `B2B`-style identifiers, versions, `go2market` and `raw/Safe2.md` render, through the chain with
+    no holds;
+  - `SafeToolkit`-style names render, including through the chain as released assets and lesson
+    citations, while the case-evidenced fixtures stay withheld.
+
+  The first and third fail on `7a20785`.
+
+**Golden differences (QA round 10).** None.
