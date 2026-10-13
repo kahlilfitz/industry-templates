@@ -153,40 +153,54 @@ _ID_TOKEN = re.compile(r"[^\W_]+(?:" + _ID_JOIN + r"+[^\W_]+)*")
 _ID_LIKE = re.compile(r"[^\W\d_]+" + _ID_SEP + r"+\d")
 
 
-def _extends_id(tail):
-    """True when ``tail`` (the text right after a matched ID) continues that ID: punctuation such as
-    '/', ':' or '#' directly followed by a component that holds a digit or is a single character
-    (C-101/2, C-101:2, C-101#2, C-101/A). Another whole ID (C-101/C-102), prose (C-101:review), a
-    space, an apostrophe or the end of a sentence does not."""
-    if len(tail) < 2 or tail[0].isspace() or tail[0] in "'\u2019" or re.match(r"\w", tail[0]):
+_WORD = re.compile(r"\w")
+_ALNUM = re.compile(r"[^\W_]")
+
+
+def _quiet(char):
+    """A neighbour that never joins an ID to a further component: whitespace, an apostrophe or a
+    word character (the match's own lookarounds already exclude the last)."""
+    return char.isspace() or char in "'\u2019" or _WORD.match(char) is not None
+
+
+def _component_counts(text, begin, end):
+    """True when text[begin:end] (one component) holds a digit or is a single character and is not a
+    whole ID such as C-102 (indexes only; nothing is copied)."""
+    if _ID_LIKE.match(text, begin, end):
         return False
-    token = _ID_TOKEN.match(tail[1:])
-    if token is None or _ID_LIKE.match(token.group(0)):
+    return end - begin == 1 or any(text[index].isdigit() for index in range(begin, end))
+
+
+def _extends_id(text, end):
+    """True when the text right after a matched ID (``end`` indexes its first character) continues
+    that ID: punctuation such as '/', ':' or '#' directly followed by a component that holds a digit
+    or is a single character (C-101/2, C-101:2, C-101#2, C-101/A). Another whole ID (C-101/C-102),
+    prose (C-101:review), a space, an apostrophe or the end of a sentence does not. Linear: only
+    the neighbouring component is read."""
+    if len(text) - end < 2 or _quiet(text[end]):
         return False
-    word = token.group(0)
-    return len(word) == 1 or any(char.isdigit() for char in word)
+    token = _ID_TOKEN.match(text, end + 1)
+    return token is not None and _component_counts(text, token.start(), token.end())
 
 
 _ID_PART_CHAR = re.compile(r"[^\W_]|" + _ID_JOIN)
 
 
-def _prefixes_id(head):
-    """True when ``head`` (the text right before a matched ID) makes it part of a longer ID: a
-    component that holds a digit or is a single character directly followed by punctuation such as
-    '/', ':' or '#' (X/C-101, 2:C-101, A#C-101). The whole preceding component is read, however
-    long. Another whole ID (C-100/C-101), prose (re:C-101), a space, an apostrophe, an opening
-    bracket or quote at the start of the text does not."""
-    if len(head) < 2 or head[-1].isspace() or head[-1] in "'\u2019" or re.match(r"\w", head[-1]):
+def _prefixes_id(text, start):
+    """True when the text right before a matched ID (``start`` indexes its first character) makes it
+    part of a longer ID: a component that holds a digit or is a single character directly followed
+    by punctuation such as '/', ':' or '#' (X/C-101, 2:C-101, A#C-101). The whole preceding
+    component is read, however long, by walking back over it by index. Another whole ID
+    (C-100/C-101), prose (re:C-101), a space, an apostrophe, an opening bracket or quote at the start
+    of the text does not."""
+    if start < 2 or _quiet(text[start - 1]) or not _ALNUM.match(text, start - 2):
         return False
-    if not re.match(r"[^\W_]", head[-2]):
-        return False
-    start = len(head) - 2
-    while start > 0 and _ID_PART_CHAR.match(head[start - 1]):
-        start -= 1
-    word = re.sub(r"^(?:" + _ID_JOIN + r")+", "", head[start:-1])
-    if _ID_LIKE.match(word):
-        return False
-    return len(word) == 1 or any(char.isdigit() for char in word)
+    begin = start - 2
+    while begin > 0 and _ID_PART_CHAR.match(text, begin - 1):
+        begin -= 1
+    while not _ALNUM.match(text, begin):
+        begin += 1
+    return _component_counts(text, begin, start - 1)
 
 
 def mentions_id(text, value):
@@ -200,7 +214,7 @@ def mentions_id(text, value):
     pattern = rf"(?<!\w)(?<!\w{_ID_JOIN}){body}(?!\w)(?!{_ID_JOIN}\w)"
     folded = canonical(text)
     return any(
-        not _extends_id(folded[match.end():]) and not _prefixes_id(folded[:match.start()])
+        not _extends_id(folded, match.end()) and not _prefixes_id(folded, match.start())
         for match in re.finditer(pattern, folded)
     )
 

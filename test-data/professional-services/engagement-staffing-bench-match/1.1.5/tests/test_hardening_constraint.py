@@ -924,3 +924,47 @@ class ConstraintHardeningTests(unittest.TestCase):
                 governed, validated, _texts = self.chain(bench, constraints)
                 for document in (governed, validated):
                     self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 5: an engine member is trusted only with exactly the engine's type per member.
+    # ----------------------------------------------------------------------------------------
+    def foreign_row(self, client, row="71"):
+        return {"candidate_id": "C-103", "type": "prior_client_role", "client_name": client,
+                "status": "closed", "role_type": "employee", "end_date": "2020-01-01",
+                "source": "connector:conflicts-register", "confidence": 0.97, "citation": f"conflicts extract row {row}"}
+
+    def test_qa5_engine_member_with_wrong_value_type_is_untrusted(self):
+        constraints = self.with_rows(self.foreign_row("Source Inc."))
+        source = re.compile(r"source[\s\-_.]*inc\b", re.IGNORECASE)
+        for member, value in (
+            ("eligibility", {"source": ["ordinary"]}),
+            ("eligibility", {"source": {"ordinary": 1}}),
+            ("eligibility", {"verdict": ["eligible"], "source": "ordinary"}),
+            ("component_scores", {"source": ["ordinary"]}),
+            ("component_citations", {"source": ["ordinary"]}),
+            ("constraints_considered", [{"source": ["ordinary"]}]),
+        ):
+            with self.subTest(member=member, value=ascii(value)):
+                self.assert_foreign_hold(self.bench_with(**{member: value}), constraints, source)
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 5: engine-emitted fixed vocabulary is never candidate-sourced content (9.11).
+    # ----------------------------------------------------------------------------------------
+    def test_qa5_engine_vocabulary_never_counts_as_foreign(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        for client, field, value in (("Employee Inc.", "role_type", "employee"),
+                                     ("Prior Client Role", "type", "prior_client_role"),
+                                     ("Closed Inc.", "status", "closed")):
+            row = dict(self.foreign_row(client, "72"), candidate_id="C-101")
+            row[field] = value
+            with self.subTest(client=client):
+                governed, validated, _texts = self.chain(bench, self.with_rows(row))
+                for document in (governed, validated):
+                    self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+                    self.assertFalse(any("C-101" in item and "#9.11" in item for item in document["escalations"]),
+                                     ascii_safe(document["escalations"]))  # noqa: F821
+        # Input-derived register text naming another client still holds the candidate.
+        row = {"candidate_id": "C-101", "type": "prior_client_role", "client_name": "Orchard Ridge Clinics",
+               "status": "closed", "role_type": "employee", "end_date": "2010-01-01", "process": "Unrelated Synthetic Client",
+               "source": "connector:conflicts-register", "confidence": 0.97, "citation": "conflicts extract row 73"}
+        self.assert_foreign_hold(bench, self.with_rows(row))

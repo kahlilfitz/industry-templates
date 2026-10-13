@@ -11,6 +11,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -684,3 +685,14 @@ class ValidateHardeningTests(unittest.TestCase):
             document["escalations"].append(named)
             with self.subTest(named=named[:8]):
                 self.assertEqual(["C-103"], self.recommended_ids(slate_validate.validate(document), 0))
+
+    # --- QA round 5: ID matching in free text is linear in the text's length (#9.5) ---
+    def test_qa5_mentions_id_is_linear(self):
+        for text, expected in (("X/C-101 " * 200_000, False),
+                               ("X/C-101 " * 200_000 + "C-101: pending", True),
+                               ("C-101/2 " * 200_000, False),
+                               ("2" + "A" * 1_600_000 + "/C-101", False)):
+            with self.subTest(text=text[:8], size=len(text)):
+                started = time.perf_counter()
+                self.assertIs(expected, slate_validate.mentions_id(text, "C-101"))
+                self.assertLess(time.perf_counter() - started, 8.0)

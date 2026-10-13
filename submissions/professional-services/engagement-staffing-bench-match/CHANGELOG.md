@@ -208,6 +208,38 @@ the hardening phases change engine behaviour, but output contracts change only a
   - `ConstraintHardeningTests.test_qa4_name_repeating_a_word_across_values_holds_candidate`
   - `ValidateHardeningTests.test_qa4_long_leading_component_never_hides_its_digit`
 
+### QA round 5 (phase 2)
+
+- **QA round 5 fixes (one High defect, two Medium).**
+  - **Exact engine shape (High, rule 9.11).** Before, the shape check accepted a string list for
+    every `eligibility` member. Raw C-101 `eligibility: {"source": ["ordinary"]}` plus an
+    established other client named "Source Inc." left C-101 recommended with no #9.11.
+    `component_scores`, `component_citations`, `eligibility` and `constraints_considered` are now
+    trusted only when every member name is the engine's and every value has exactly the type the
+    engine emits for that name. Only `eligibility.reasons` is a list. Any deviation makes the
+    member untrusted passthrough, so its member names and values are screened. The candidate is
+    held and escalated by ID.
+  - **Engine vocabulary (Medium, rule 9.11).** Before, the late scan covered the whole
+    engine-built verdict. An other client named "Employee Inc." therefore matched the
+    engine-emitted `role_type: "employee"` and falsely held C-101 for a valid row that does not
+    apply. The scan now covers only input-derived text: the strings of the candidate's
+    applicable register rows (exact type, status and role-type vocabulary excepted) and the
+    register's source and citation. Engine vocabulary, fixed labels and composed reasons never
+    count. When input-derived text does name another client, the verdict text is scrubbed as
+    before; dispositions, vocabulary and engine entry types are kept.
+  - **Linear ID boundary (Medium, rule 9.5).** `input_guard.mentions_id` (all three copies)
+    sliced the text before and after every match, so its cost was quadratic:
+    `"X/C-101 " * 200_000` took about 76 s. The boundary checks now inspect neighbouring
+    characters by index and walk back over the leading component only, so the same 1.6 MB text
+    takes under half a second. Matching results are unchanged.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): wording in 9.5
+  (linear matching) and 9.11 (exact per-member shape; only input-derived text counts).
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are three new regression tests, each failing on `d64c250`:
+  - `ConstraintHardeningTests.test_qa5_engine_member_with_wrong_value_type_is_untrusted`
+  - `ConstraintHardeningTests.test_qa5_engine_vocabulary_never_counts_as_foreign`
+  - `ValidateHardeningTests.test_qa5_mentions_id_is_linear` (the timing ceiling is a generous 8 s)
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

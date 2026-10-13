@@ -1087,43 +1087,69 @@ def _contains_words(words, part):
 # Top-level members of a candidate record whose names are engine vocabulary; every other member
 # name is screened like a value.
 _ENGINE_MEMBERS = set(CARRIED_KEYS) | {"constraints_considered", "eligibility", "final_eligible_rank"}
-# The shape the engines give the structured members. Member names inside one of these are exempt
-# from screening only when the whole member has exactly this shape (known names, scalar values);
-# anything else, such as a raw bench record carrying a member with an engine name, is screened as
-# untrusted passthrough, member names included. Values are always screened.
-_COMPONENTS = {"skills", "seniority", "availability", "location_language", "rate_band", "continuity"}
-_CONSIDERED_KEYS = {
-    "type", "client_name", "status", "material", "role_type", "process", "end_date", "resolved_date",
-    "applies_to_engagement", "disposition", "reason", "source", "confidence", "citation",
-}
-_ELIGIBILITY_KEYS = {
-    "verdict", "recommendation_status", "blocking_rule", "reasons", "source", "confidence", "citation",
-}
-
-
-def _scalar(value):
-    return value is None or isinstance(value, (str, bool, int, float))
+# The shape the engines give the structured members, as (member name -> type check). Member names
+# inside one of these are exempt from screening only when the whole member has exactly this shape:
+# the engine's member names, each with exactly the type the engine emits. Anything else, such as a
+# raw bench record carrying a member with an engine name, is screened as untrusted passthrough,
+# member names included. Values are always screened.
+_COMPONENTS = ("skills", "seniority", "availability", "location_language", "rate_band", "continuity")
 
 
 def _number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+def _string(value):
+    return isinstance(value, str)
+
+
+def _string_or_none(value):
+    return value is None or isinstance(value, str)
+
+
+def _boolean(value):
+    return isinstance(value, bool)
+
+
+def _boolean_or_none(value):
+    return value is None or isinstance(value, bool)
+
+
+def _strings(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+_ELIGIBILITY_SHAPE = {
+    "verdict": _string, "recommendation_status": _string, "blocking_rule": _string_or_none,
+    "reasons": _strings, "source": _string, "confidence": _number, "citation": _string,
+}
+_CONSIDERED_SHAPE = {
+    "type": _string, "client_name": _string, "status": _string, "material": _boolean_or_none,
+    "role_type": _string, "process": _string, "end_date": _string, "resolved_date": _string,
+    "applies_to_engagement": _boolean, "disposition": _string, "reason": _string, "source": _string,
+    "confidence": _number, "citation": _string,
+}
+# Every register-row entry the engine emits carries at least these members.
+_CONSIDERED_REQUIRED = {"type", "applies_to_engagement", "disposition", "reason", "citation"}
+
+
+def _exact(value, shape, required):
+    return (isinstance(value, dict) and required <= set(value) <= set(shape)
+            and all(shape[key](item) for key, item in value.items()))
+
+
 def _engine_shaped(key, value):
-    """True when the record member ``key`` has the exact shape its engine gives it."""
+    """True when the record member ``key`` has exactly the shape its engine gives it (every member
+    name known and every value of exactly the type the engine emits for that name)."""
     if key == "component_scores":
-        return isinstance(value, dict) and set(value) <= _COMPONENTS and all(map(_number, value.values()))
+        return _exact(value, dict.fromkeys(_COMPONENTS, _number), set(_COMPONENTS))
     if key == "component_citations":
-        return isinstance(value, dict) and set(value) <= _COMPONENTS and all(
-            isinstance(item, str) for item in value.values())
+        return _exact(value, dict.fromkeys(_COMPONENTS, _string), set(_COMPONENTS))
     if key == "eligibility":
-        return isinstance(value, dict) and set(value) <= _ELIGIBILITY_KEYS and all(
-            _scalar(item) or (isinstance(item, list) and all(isinstance(part, str) for part in item))
-            for item in value.values())
+        return _exact(value, _ELIGIBILITY_SHAPE, set(_ELIGIBILITY_SHAPE))
     if key == "constraints_considered":
         return isinstance(value, list) and all(
-            isinstance(item, dict) and set(item) <= _CONSIDERED_KEYS and all(map(_scalar, item.values()))
-            for item in value)
+            _exact(item, _CONSIDERED_SHAPE, _CONSIDERED_REQUIRED) for item in value)
     return False
 
 
@@ -1313,6 +1339,56 @@ def foreign_contributors(record, foreign, skip=FOREIGN_SKIP):
     return found
 
 
+_VOCABULARY = {
+    "type": KNOWN_TYPES,
+    "status": CLEAR_STATUSES | FI_STATUSES | WALL_STATUSES | DATED_STATUSES | RESOLVED_STATUSES,
+}
+
+
+def _vocabulary_value(key, value):
+    """True for a register-row value that is exactly the rules' fixed vocabulary for ``key``."""
+    if not isinstance(value, str):
+        return False
+    if key == "role_type":
+        return normalize_role_type(value) in ROLE_TYPES
+    return value.strip().casefold() in _VOCABULARY.get(key, ())
+
+
+def verdict_sources(constraints, register_rows):
+    """The input-derived texts a candidate's verdict can carry (rule 9.11): every string of each of
+    its register rows that is evaluated for this engagement (a row for another client is carried by
+    fixed label and vocabulary only), except values that are exactly fixed vocabulary, plus the
+    register's own source and, for a candidate with no row, its citation. Engine-composed reasons,
+    citations and fixed vocabulary are never candidate content."""
+    engagement = constraints.get("engagement") or {}
+    texts = []
+    for _index, item in register_rows:
+        if applies_to_client(item, engagement) is False:
+            continue
+        for key, value in item.items():
+            if key != "candidate_id" and not _vocabulary_value(key, value):
+                texts.extend(_value_texts(value, True))
+    for key in ("source",) + (() if register_rows else ("citation",)):
+        if isinstance(constraints.get(key), str):
+            texts.append(constraints[key])
+    return texts
+
+
+# Entry types the engine itself emits in constraints_considered (not register rows).
+_ENGINE_ENTRY_TYPES = {"source_screening", "availability", "availability_evidence", "conflicts_register_coverage"}
+
+
+def _withhold_considered(item, foreign, contributors):
+    """Rule 9.11 for one constraints_considered entry: free text naming another client is withheld;
+    the disposition, fixed vocabulary, engine entry types and the fixed other-client label are kept."""
+    out = {}
+    for key, value in item.items():
+        keep = (not isinstance(value, str) or key == "disposition" or value == FOREIGN_LABEL
+                or _vocabulary_value(key, value) or (key == "type" and value in _ENGINE_ENTRY_TYPES))
+        out[key] = value if keep else withhold_foreign(value, foreign, contributors=contributors)[0]
+    return out
+
+
 def candidate_records(document):
     """Every candidate record carried in the bench, scored and ranked sections of ``document``."""
     for record in document.get("bench_candidates") or []:
@@ -1457,20 +1533,23 @@ def govern(ranked_payload, constraints_payload):
             foreign_hits += hold_hits + register_hits + bool(flagged_values)
             holds = merge_unique(row.get("screening_holds") or [], ranked_holds)
 
-            def evaluate(hold):
-                verdict_row = dict(row, screening_holds=holds)
-                result = verdict_for(role, verdict_row, constraints, candidate_held, foreign_hold=hold)
-                for item in result[3]:
-                    if "client_name" in item and item.get("applies_to_engagement") is not False \
-                            and _names_foreign(item.get("citation"), foreign):
-                        item["citation"] = f"conflicts register citation withheld: names another client ({RULES} #9.9)"
-                parts, late = withhold_foreign(list(result), foreign)
-                return parts, late
-
-            (verdict, reasons, citations, considered), late_hits = evaluate(bool(foreign_hits))
-            if late_hits and not foreign_hits:
-                (verdict, reasons, citations, considered), late_hits = evaluate(True)
-            foreign_held = bool(foreign_hits or late_hits)
+            # Only input-derived text the verdict can carry is screened; engine vocabulary never is.
+            sources = [text for text in verdict_sources(constraints, register_rows)
+                       if _names_foreign(text, foreign)]
+            verdict_row = dict(row, screening_holds=holds)
+            result = verdict_for(role, verdict_row, constraints, candidate_held,
+                                 foreign_hold=bool(foreign_hits or sources))
+            for item in result[3]:
+                if "client_name" in item and item.get("applies_to_engagement") is not False \
+                        and _names_foreign(item.get("citation"), foreign):
+                    item["citation"] = f"conflicts register citation withheld: names another client ({RULES} #9.9)"
+            verdict, reasons, citations, considered = result
+            if sources:
+                contributors = {normalize_entity_name(text) for text in sources} - {""}
+                reasons = withhold_foreign(reasons, foreign, contributors=contributors)[0]
+                citations = withhold_foreign(citations, foreign, contributors=contributors)[0]
+                considered = [_withhold_considered(item, foreign, contributors) for item in considered]
+            foreign_held = bool(foreign_hits or sources)
             if foreign_held:
                 escalations.add(
                     f"{role_id}: {row['candidate_id']} - {FOREIGN_REASON}; independence review required "
