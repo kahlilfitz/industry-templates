@@ -51,7 +51,7 @@ Each skill runs only scripts inside its own folder, so a skill installed on its 
 
 ## Tests and demo data
 
-Demo scenarios, goldens and tests live in [`test-data/professional-services/deliverable-review-quality-gate/1.0.5/`](../../../test-data/professional-services/deliverable-review-quality-gate/1.0.5/README.md). From that folder:
+Demo scenarios, goldens and tests live in [`test-data/professional-services/deliverable-review-quality-gate/1.0.6/`](../../../test-data/professional-services/deliverable-review-quality-gate/1.0.6/README.md). From that folder:
 
 ```bash
 python tests/run_tests.py                              # against this source folder
@@ -75,7 +75,7 @@ A naive reviewer sees a professional report with a disclaimer. The engine starts
 
 ## What you bring
 
-A draft deliverable, its supporting evidence set, the applicable QRM gate criteria and required language, brand/formatting standards, and prior review findings. The demo scenarios include raw markdown drafts (with page markers and a distribution list), evidence indexes, QRM extracts, prior-review notes and release-control registers alongside structured inputs, so the Connect path is visible rather than assumed. Every structured value traces to the raw pack, and `python tests/derive_review_input.py`, run from `test-data/professional-services/deliverable-review-quality-gate/1.0.5/`, checks that it does.
+A draft deliverable, its supporting evidence set, the applicable QRM gate criteria and required language, brand/formatting standards, and prior review findings. The demo scenarios include raw markdown drafts (with page markers and a distribution list), evidence indexes, QRM extracts, prior-review notes and release-control registers alongside structured inputs, so the Connect path is visible rather than assumed. Every structured value traces to the raw pack, and `python tests/derive_review_input.py`, run from `test-data/professional-services/deliverable-review-quality-gate/1.0.6/`, checks that it does.
 
 ## Boundaries
 

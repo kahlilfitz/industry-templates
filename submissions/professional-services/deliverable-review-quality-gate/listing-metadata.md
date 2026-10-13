@@ -1,6 +1,6 @@
 # Listing metadata - Deliverable Review & Quality Gate
 
-Draft values for the shared listing template. Not bundled in the package. Plugin version 1.0.5.
+Draft values for the shared listing template. Not bundled in the package. Plugin version 1.0.6.
 
 ## Name
 

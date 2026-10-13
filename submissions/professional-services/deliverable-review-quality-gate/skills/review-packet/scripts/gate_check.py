@@ -12,7 +12,7 @@ import assertion_rules as rules  # noqa: E402  byte-identical copy of the assert
 import steering_guard as sg  # noqa: E402  vendored shared detector; never edit (tests/check_shared_copies.py pins its SHA-256)
 
 ENGINE = "engine:gate_check"
-ENGINE_VERSION = "1.0.5"
+ENGINE_VERSION = "1.0.6"
 LEDGER_TAG = f"gate_check/{ENGINE_VERSION}"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 RELIANCE_RESTRICTION_REQUIRED_FOR_THIRD_PARTY = True  # quality-gate-criteria.md #2.2
