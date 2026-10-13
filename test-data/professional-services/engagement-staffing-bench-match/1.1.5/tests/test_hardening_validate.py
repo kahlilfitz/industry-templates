@@ -718,3 +718,42 @@ class ValidateHardeningTests(unittest.TestCase):
                 self.assertNotIn("C-101", self.recommended_ids(result, 0))
                 self.assertEqual([], quillon.findall(json.dumps(result)))
                 self.assertTrue(any("#9.11" in item for item in result["escalations"]))
+
+    # --- QA round 7: another client's entry is exempt only in its own client_name (#9.11) ---
+    def foreign_entry_document(self, **members):
+        document = self.a()
+        for role in document["governed_roles"]:
+            for slate in ("candidate_slate", "recommended_candidates"):
+                for candidate in role[slate]:
+                    if candidate["candidate_id"] != "C-103":
+                        continue
+                    for item in candidate["constraints_considered"]:
+                        if item.get("type") == "adverse_matter":
+                            item.update(client_name="Unrelated Synthetic Client", applies_to_engagement=False,
+                                        **members)
+        return document
+
+    def test_qa7_foreign_entry_exempts_only_its_client_name(self):
+        foreign = {"unrelated synthetic client", "quillon varga"}
+        leak = re.compile(r"quillon|varga", re.IGNORECASE)
+        # Control: the entry's own client_name is its fixed representation and never holds.
+        result = slate_validate.validate(self.foreign_entry_document(), (), foreign)
+        self.assertEqual(["C-101", "C-103"], self.recommended_ids(result, 0))
+        for label, members in (
+                ("source, citation and notes", {"source": "Quillon Varga feed", "citation": "Quillon Varga extract",
+                                                 "notes": "Quillon Varga note"}),
+                ("unknown member only", {"notes": "Quillon Varga note"}),
+                ("unknown member name", {"Quillon Varga": "ordinary"}),
+                ("wrong-typed source", {"source": ["Quillon Varga"]}),
+                ("own client in citation", {"citation": "Unrelated Synthetic Client extract"})):
+            with self.subTest(members=label):
+                result = slate_validate.validate(self.foreign_entry_document(**members), (), foreign)
+                self.assertEqual(["C-101"], self.recommended_ids(result, 0))
+                self.assertEqual([], leak.findall(json.dumps(result)))
+                self.assertTrue(any("#9.11" in item for item in result["escalations"]))
+                for role in result["governed_roles"]:
+                    for candidate in role["candidate_slate"]:
+                        for item in candidate["constraints_considered"]:
+                            self.assertNotIn("notes", item)
+                            rest = {key: value for key, value in item.items() if key != "client_name"}
+                            self.assertNotIn("Unrelated Synthetic Client", json.dumps(rest))

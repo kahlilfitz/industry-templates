@@ -1474,37 +1474,63 @@ def _engine_text(value):
     return value in _ENGINE_TEXTS or _ENGINE_ROW_TEXT.fullmatch(value) is not None
 
 
-def _foreign_entry(item, foreign):
-    """True for another client's entry: the fixed label, or (in a hand-built governed document) a
-    not-applicable entry whose client_name is itself one of the established foreign identities."""
+def _own_identity(item, foreign):
+    """For another client's entry in a hand-built governed document (not applicable, client_name
+    itself an established foreign identity), that identity; otherwise None. Only that client_name
+    is the engine's representation of the entry; every other member is screened as usual."""
     name = item.get("client_name")
-    if name == FOREIGN_LABEL:
-        return True
-    return (item.get("applies_to_engagement") is False and isinstance(name, str)
-            and normalize_entity_name(name) in foreign)
+    if item.get("applies_to_engagement") is False and isinstance(name, str) and name != FOREIGN_LABEL:
+        key = normalize_entity_name(name)
+        if key in foreign:
+            return key
+    return None
 
 
-def _input_member(item, key, value, foreign=frozenset()):
+def _untrusted_member(key, value):
+    """A member outside the engine's register-entry shape, or of a type the engine never emits."""
+    return key not in _CONSIDERED_SHAPE or not _CONSIDERED_SHAPE[key](value)
+
+
+def _input_member(item, key, value, own=None):
     """True for a constraints_considered member that carries register input text (not fixed
-    vocabulary, engine text, an entry built from the bench record or another client's entry)."""
+    vocabulary, engine text, an entry built from the bench record, or the client_name that is
+    another client's entry's own identity)."""
     return (isinstance(value, str) and bool(value.strip()) and key in _INPUT_MEMBERS
-            and item.get("type") not in _RECORD_ENTRY_TYPES and not _foreign_entry(item, foreign)
+            and not (key == "client_name" and own is not None)
+            and item.get("type") not in _RECORD_ENTRY_TYPES
             and not _vocabulary_value(key, value) and not _engine_text(value))
+
+
+def _member_texts(key, value):
+    """Every text of an untrusted member: its name and every nested name and value."""
+    return ([key] if isinstance(key, str) else []) + list(_value_texts(value, True))
 
 
 def considered_texts(items, foreign=frozenset()):
     """The register input text a constraints_considered list carries (rule 9.11), in order."""
     if not isinstance(items, list):
         return []
-    return [value for item in items if isinstance(item, dict)
-            for key, value in item.items() if _input_member(item, key, value, foreign)]
+    texts = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        own = _own_identity(item, foreign)
+        for key, value in item.items():
+            if _untrusted_member(key, value):
+                texts.extend(_member_texts(key, value))
+            elif _input_member(item, key, value, own):
+                texts.append(value)
+    return texts
 
 
 def withhold_considered(items, foreign, contributors=(), held=False):
     """Rule 9.11 for a constraints_considered list: register input text naming another client (or
     holding a contributing value) is withheld and counted. For a ``held`` candidate, engine-composed
     text holding a contributing value is withheld too; dispositions, fixed vocabulary, engine entry
-    types and engine text are always kept. Returns (new list, number of input values withheld)."""
+    types and engine text are always kept. A member outside the engine's entry shape is screened and
+    never carried; a known member of the wrong type is screened and withheld on a hit. Another
+    client's entry is screened like any other, except that its client_name is not matched against its
+    own identity. Returns (new list, number of input values withheld)."""
     if not isinstance(items, list):
         return items, 0
     foreign = _as_foreign(foreign)
@@ -1513,12 +1539,22 @@ def withhold_considered(items, foreign, contributors=(), held=False):
         if not isinstance(item, dict):
             out.append(item)
             continue
-        if _foreign_entry(item, foreign):
-            out.append(dict(item))
-            continue
+        own = _own_identity(item, foreign)
         entry = {}
         for key, value in item.items():
-            if _input_member(item, key, value, foreign):
+            if _untrusted_member(key, value):
+                hit = any(_foreign_hit(text, foreign, contributors) for text in _member_texts(key, value))
+                hits += hit
+                if key not in _CONSIDERED_SHAPE:
+                    continue
+                if hit:
+                    value = FOREIGN_VALUE
+            elif key == "client_name" and own is not None:
+                others = ForeignNames(set(foreign) - {own})
+                if _foreign_hit(value, others, ()):
+                    value = FOREIGN_VALUE
+                    hits += 1
+            elif _input_member(item, key, value, own):
                 if _foreign_hit(value, foreign, contributors):
                     value = FOREIGN_VALUE
                     hits += 1

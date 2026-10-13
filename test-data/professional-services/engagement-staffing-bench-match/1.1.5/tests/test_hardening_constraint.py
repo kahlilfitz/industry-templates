@@ -1038,3 +1038,26 @@ class ConstraintHardeningTests(unittest.TestCase):
         governed = constraint_check.govern(ranked, constraints)
         self.assertLess(time.perf_counter() - started, 15.0)
         self.assertEqual(500, len(governed["governed_roles"][0]["candidate_slate"]))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 7: another client's entry carries the register's input-derived source (9.11).
+    # ----------------------------------------------------------------------------------------
+    def test_qa7_global_source_in_foreign_rows_is_screened(self):
+        name = re.compile(r"quillon[\s\-_.]*varga", re.IGNORECASE)
+        for label, source, bench, leak in (
+                ("source names the client", "Quillon Varga register feed", scenario_inputs("scenario-a-happy")[1],
+                 re.compile(r"quillon|varga", re.IGNORECASE)),
+                ("bench name and source", "Varga register feed", self.bench_with(name="Ava Quillon"),
+                 re.compile(r"quillon", re.IGNORECASE))):
+            constraints = self.with_rows(self.foreign_row("Quillon Varga Inc."))
+            constraints["source"] = source
+            with self.subTest(split=label):
+                governed, validated, texts = self.chain(bench, constraints)
+                for text_name, text in texts.items():
+                    self.assertEqual([], name.findall(text), text_name)
+                    self.assertEqual([], leak.findall(text), text_name)
+                for document in (governed, validated):
+                    row = slate_row(document, "PSS-001", "C-101")
+                    self.assert_held(row, "#9.11")
+                    self.assertEqual([], re.findall(r"quillon|varga", json.dumps(row), re.IGNORECASE))
+                    self.assertNotIn("C-101", recommended_ids(document, "PSS-001"))

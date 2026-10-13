@@ -279,6 +279,29 @@ the hardening phases change engine behaviour, but output contracts change only a
     screening and 15 s for a warm `govern()`)
   - `ValidateHardeningTests.test_qa6_validate_screens_constraints_considered`
 
+### QA round 7 (phase 2)
+
+- **Exemption for another client's entry limited to `client_name` (High, rule 9.11).** The
+  round 6 skip trusted a whole `constraints_considered` entry when `applies_to_engagement` was
+  false and its `client_name` was an established other-client identity. Its source, citation,
+  unknown members (for example `notes`) and other clients' names were therefore carried
+  unscreened. Repro: scenario A's C-103 entry with source, citation and notes
+  "Quillon Varga ..." stayed recommended with no #9.11. Constraint-check's own not-applicable
+  rows had the same gap: they carry the register's input-derived `source` as their default, and
+  that value was never screened there. Now only that entry's `client_name` is exempt, and only
+  from matching its own identity. Every other member is screened against every established
+  identity, including the entry's own client, and joins the contributor search. A member outside
+  the engine's register-entry shape is screened and never carried, and a known member of the
+  wrong type is withheld on a hit. Any hit is withheld, and the candidate is held and escalated
+  (#9.11). `test_validator_allows_unrelated_not_applicable_register_record` still passes
+  unchanged.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): 9.11 wording for the
+  narrowed exemption.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are two new regression tests, each failing on `f3e0d9c`:
+  - `ConstraintHardeningTests.test_qa7_global_source_in_foreign_rows_is_screened`
+  - `ValidateHardeningTests.test_qa7_foreign_entry_exempts_only_its_client_name`
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root
