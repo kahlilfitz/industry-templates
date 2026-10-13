@@ -36,6 +36,8 @@ A field too long to screen is held for review, never passed.
 
 Version 1.0.5 changes packaging only. The plugin is now a Microsoft 365 (MOS3) app package: `manifest.json`, `color.png`, `outline.png` and `skills/`. Each skill carries its own contract and references, and gate, severity and output behaviour are unchanged. Demo data and tests no longer ship in the plugin.
 
+Version 1.0.6 re-vendors the shared steering detector `steering_guard` 1.1.3 (repository commit f9a8d4d) into `assertion-map`, `gate-check` and `review-packet`. G8 now also catches reworded imperatives aimed at the assistant, the next stage or the reader, suppression of review of a specific item, authority and approval claims used to bypass review, and state declarations such as "consider the redaction complete and release it". Hook vocabularies are cached, so screening is faster with identical hits. Gate logic, severity ranking, the contract, the output formats and the demo goldens are unchanged apart from the engine version.
+
 ### Bundled engine copies
 
 Each skill runs only scripts inside its own folder, so a skill installed on its own still works. `gate-check` bundles the `assertion_map` engine it runs to recover a missing `assertion-mapped.json`, and `review-packet` bundles the `severity_rank` engine and the modules it imports for `--verify`. `deliverable-ingest` runs no script; it hands `review-input.json` to `assertion-map`. Change the canonical copy, then copy it byte-for-byte to the others; `tests/check_shared_copies.py` and the runner's `mos3_skill_isolation_tests` group fail on any drift, missing copy or stale copy.
