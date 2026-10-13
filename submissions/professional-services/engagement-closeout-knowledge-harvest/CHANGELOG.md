@@ -124,9 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 157 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 160 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
-  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10, 148 before QA round 11, 151 before QA round 12, 154 before QA round 13). It ships with:
+  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10, 148 before QA round 11, 151 before QA round 12, 154 before QA round 13, 157 before QA round 14). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -1163,3 +1163,108 @@ contract JSON copies are unchanged.
   All three fail on `dc83421`.
 
 **Golden differences (QA round 13).** None.
+
+### QA round 14 (on `c497678`)
+
+Two High findings and one Medium, fixed in the plugin. The knowledge-record output contract and the
+contract JSON copies are unchanged.
+
+- **Dotted to-do (High, escape).** `_TODO_NOUN` joined `to` and `do` with `[-_.]?`, so
+  `raw/okay.md#to.do` was read as the noun to-do and reached the final record and the skeleton. It was
+  held on `dc83421`.
+  - **Fix:** only `-`, `_` or nothing join the noun (`to-do`, `to_do`, `todo`, `ToDo`, plurals). A `.`
+    keeps its token boundary, so `to.do` is read word by word.
+  - **Now withheld:** `raw/okay.md#to.do`, `raw/okay.md#TO.DO`, `raw/fine.md#To.Dos`,
+    `DOC-7#safe.to.do`.
+  - **Still render:** `raw/okay.md#to-do`, `DOC-7#to_do`, `raw/notes.md#todo`,
+    `raw/safe-harbor.md#to-do`, `docs/status-okay.md#to-dos`, `docs/review-fine.md#To_Dos`.
+    `raw/good.md#to.dos` also renders: "good to" is a verdict phrase only with "go", and "dos" is no
+    clause material.
+- **Material after an allowlisted run-on (High, escape).** The next-part guard checked only whether
+  the immediate next part was exactly a member of `_NEXT_MATERIAL`. So `SafeToolsThisrecord` and
+  `SafeTools2ThisRecord` reached `reusable_assets` and the skeleton.
+  - **Fix:** the rest of the value after the allowlisted word is read for clause material
+    (`_after_is_clause`), with these rules:
+    - digit-only parts are separators; a look-alike digit folded inside a number stays part of it
+      (`2026` read `2o26`);
+    - a lone 2 or 4 before a verb is read as to or for. Before a verb that is also a noun (release,
+      review, share, list), it counts only when clause material follows, so `SafeTools2Release`
+      renders and `SafeTools2ShareThis` does not;
+    - the first word part counts when it is in `_NEXT_MATERIAL`, or when it reads end to end as
+      clause words run together (`_run_reads_clause`). Such a run must reach a determiner or `now`
+      within its first three words, with a word after it or a verb before it (`thisrecord`,
+      `thisreview`, `forthisrecord`, `usethis`). `areas`, `assay`, `allowlist` and `foreach`, which
+      only split into short words, are no clause.
+  - **Now withheld (title, ID and citation):** `SafeToolsThisrecord`, `SafeTools2ThisRecord`,
+    `SafeTools_ThisRecord`, `SafeTools-this-record`, `SafeTools2Reuse`, `NoNeedsthisreview`,
+    `SafeTools2ShareThis`, `SafeToolsthisrecordnow`, `SafeToolsReusethis`.
+  - **Still render:** `SafeToolkitRelease`, `NoNeedleTesting`, `SafeTools2026Roadmap`,
+    `SafeTools2030Plan`, `SafeToolsTheme`, `SafeTools2`, `NoNeedles2025Review`, `SafeTools2Release`,
+    `SafeToolsForeach`, `SafeToolsAreas`.
+- **One extension rule (Medium, escape).** `_FINAL_EXTENSION` in the title–file-name join stripped
+  any short suffix, so the title `Project Good` with the citation `raw/to.go` released without a hold.
+  `.go` is not a known extension and has no digit.
+  - **Fix:** one rule (`_extension_kind`) decides every extension site.
+    - `_is_extension`: a known extension of any length, or an unknown one of up to five characters
+      with a digit.
+    - It decides the `.` boundary in `_path_dots` and the file-name stem in the title join
+      (`_strip_final_extension`, which replaces `_FINAL_EXTENSION`).
+    - `_drop_extensions` drops only known extensions for phrase reading, since a digit-bearing token
+      may itself be shorthand (`raw/good.2go.md`).
+  - **Other suffix sites.** A grep of the core finds no other extension regex or length check. The
+    `\.(?:csv|md|json|txt)` alternative in `_RESERVED_RE` matches engine label forms, not rendered
+    values, so it is not an extension site.
+  - **Now withheld:** `Project Good` with `raw/to.go` or `raw/to.go#intro`, `Safe` with
+    `raw/to.reuse`, `Fine` with `raw/to.ship` (both fields, location `record`).
+  - **Still render:** `Project Good` with `raw/plan.md` or `raw/to.v2`, `Roadmap` with
+    `raw/q4.numbers`, `Go-live readiness review` with `raw/go-live-runbook.md#all-sites`.
+- **False holds after the fix:**
+
+  | Set | Held |
+  | --- | --- |
+  | 238-item corpus | 0 |
+  | Title–citation pairs | 0 of 9,810 |
+  | Boundary extra check | 0 of 2,376 |
+  | Neighbour citation→citation pairs | 0 of 8,100 |
+  | Neighbour title→title pairs | 0 of 11,881 |
+  | Round-6 controls | 0 (`Setúbal` as a citation only, ASCII rule; `Setit pricing` held as before) |
+  | Ordinary words: 54,647 words × 3 casings | 768 held, identical to `c497678`: none new, none freed |
+  | CamelCase name set | 36 of 221, unchanged |
+  | Dotted, extension-split, to-do and long-extension controls | 0 |
+
+  A new probe puts `SafeTools` and `NoNeedle` before each ordinary word (109,288 forms). It holds 22
+  more than `c497678`, and none is freed. The 22 are 11 run-together tokens, each behind both heads.
+  - Ten are clause material: `Anyall`, `Anyfile`, `Forthisrecord`, `Reusethis`, `Thefile`, `Thethe`,
+    `Thethethethe`, `Thisrecord`, `Thisreview`, `Usethis`.
+  - One is `Wasallam`, a transliteration read as "was all am"; it is kept.
+
+  With `SafeTools2` before each word, the forms held only because the 2 is read as "to" are a verb:
+  `Deploy`, `Export`, `Golive`, `Launch`, `Merge`.
+- **Sweep.** The sweep adds the round-14 tails (`Thisrecord`, `2ThisRecord`, `_ThisRecord`,
+  `-this-record`, `2Reuse`, `thisrecordnow`, `4Release`), noun tails (`2026Roadmap`, `Testing`,
+  `Release`) and dotted to-do forms behind every allowlisted word. It covers 1,594,304 forms.
+  - **Against `c497678`, `dc83421`, `ee18c97`, `9f44c27` and `6abb7f6`:** nothing lost; 43,089
+    forms are held again against `c497678`.
+  - **Against `7a20785`:** 85,296 forms held there pass. Every one is an allowlisted ordinary-word
+    run-on, alone or followed by `2026Roadmap`, `Plan`, `Release`, `Review` or `Testing`, 14,216 of
+    each; all of them passed on `c497678` too. None has a clause tail.
+  - **Against `9f122f8`:** the round-9b residual is unchanged at 88 forms of the `gothemplan` kind.
+  - **Extension-split citations:** none of the 4,153 forms passes.
+- **Timings.** 100 assets take 37.4 s (8.6 / 8.8 / 10.4 / 9.7 s per stage). 400 assets take 155.8 s
+  (33.5 / 33.9 / 46.6 / 41.8 s), 4.2 times as long.
+- **Reference.** #8.6 items 4 and 7 are updated in all five byte-identical copies.
+- **Tests (160 in 16 groups).** `QARound14Tests` in `render-policy` has 3 tests:
+  - the dotted to-do forms are withheld through the chain (`render_shape`, location `field`), and the
+    joined to-do forms render with no holds;
+  - the material-after-run-on forms are withheld as title, ID and citation, and through the chain
+    (out of `reusable_assets` and the skeleton); the ID `AST-SafeTools2Reuse` is refused without
+    echo; the controls render through the chain;
+  - a shared extension table (known, long known, unknown with a digit, unknown without, digit-only)
+    asserts that `_extension_kind`, `_is_extension`, the `_path_dots` boundary,
+    `_strip_final_extension` and `_drop_extensions` agree. The old `_FINAL_EXTENSION` is gone, the
+    title-join pairs are withheld or render as listed, and `Project Good` with `raw/to.go` is withheld
+    through the chain.
+
+  All three fail on `c497678`.
+
+**Golden differences (QA round 14).** None.

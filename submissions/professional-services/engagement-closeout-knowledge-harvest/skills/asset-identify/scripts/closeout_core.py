@@ -844,17 +844,34 @@ _KNOWN_EXTENSIONS = frozenset((
     "pbip twb twbx sav sas dwg dxf bak tmp url lnk key pages numbers mp3 mp4 m4a 7z"
 ).split())
 _PATH_END = re.compile(r"[/\\#;,\s]|$")
-# Every extension matcher is generated from _KNOWN_EXTENSIONS, whatever an entry's length
-# ('.markdown', '.numbers', '.onepkg'); only an unknown extension is limited to five characters.
-_KNOWN_EXTENSION_ALTERNATION = "|".join(sorted(map(re.escape, _KNOWN_EXTENSIONS), key=lambda ext: (-len(ext), ext)))
-_EXTENSION_TOKEN = re.compile(r"\.(" + _KNOWN_EXTENSION_ALTERNATION + r")(?![A-Za-z0-9])", re.IGNORECASE)
-_FINAL_EXTENSION = re.compile(r"\.(?:" + _KNOWN_EXTENSION_ALTERNATION + r"|[A-Za-z0-9]{1,5})$", re.IGNORECASE)
+# One extension rule (_extension_kind) decides every extension site: the '.' boundary of _path_dots,
+# the file-name stem of the title-file join (_strip_final_extension) and the tokens dropped for phrase
+# reading (_drop_extensions). A known extension counts whatever its length ('.markdown', '.numbers',
+# '.onepkg'); an unknown one only with a digit and at most five characters ('.v2'); any other suffix
+# is a word ('raw/to.go'). Only known extensions are dropped for phrase reading, since a digit-bearing
+# token may itself be shorthand ('raw/good.2go.md').
+_EXTENSION_TOKEN = re.compile(r"\.([A-Za-z0-9]+)(?![A-Za-z0-9])")
+
+
+def _extension_kind(token):
+    """'known', 'digit' or None for token, the letters and digits after a '.'."""
+    if token.casefold() in _KNOWN_EXTENSIONS:
+        return "known"
+    if len(token) <= 5 and any(c.isdigit() for c in token):
+        return "digit"
+    return None
 
 
 def _is_extension(token):
-    """True when token (the letters and digits after a '.') is a file extension: a known one, or an
-    unknown one of at most five characters that carries a digit ('.mp4', '.v2')."""
-    return token.casefold() in _KNOWN_EXTENSIONS or (len(token) <= 5 and any(c.isdigit() for c in token))
+    """True when token (the letters and digits after a '.') is a file extension (_extension_kind)."""
+    return _extension_kind(token) is not None
+
+
+def _strip_final_extension(name):
+    """name without a final '.ext' that is a file extension (_is_extension): 'shThisRecord.markdown'
+    gives 'shThisRecord', 'to.go' stays 'to.go'."""
+    match = re.search(r"\.([A-Za-z0-9]+)$", name)
+    return name[:match.start()] if match and _is_extension(match.group(1)) else name
 
 
 def _letter_parts(segment):
@@ -889,7 +906,8 @@ def _covers(parts, words, from_end):
 
 
 def _path_dots(value):
-    """The value with every '.' that is not a real path boundary (_KNOWN_EXTENSIONS) read as '-'."""
+    """The value with every '.' that is not a real path boundary (a final file extension, _is_extension,
+    or a '.' between digits) read as '-'."""
     out = []
     for index, char in enumerate(value):
         if char == ".":
@@ -907,7 +925,8 @@ def _drop_extensions(value):
     """The value with every known file-extension token removed, wherever it stands ('raw/safe.md#reuse'
     reads 'raw/safe#reuse'; 'raw/safe.md.2.reuse' reads 'raw/safe.2.reuse'), so the phrase is read
     across it."""
-    return _EXTENSION_TOKEN.sub("", value)
+    return _EXTENSION_TOKEN.sub(lambda match: "" if _extension_kind(match.group(1)) == "known" else match.group(0),
+                                value)
 
 
 def _shorthand_hit(value):
@@ -982,6 +1001,73 @@ _NEXT_MATERIAL = frozenset(
     | {"safe", "fine", "okay", "ok", "good", "clear", "cleared", "ready", "approved", "reuse", "ship", "proceed"})
 
 
+# Words a lower-case run-together part is read through after an allowlisted run-on ('Thisrecord',
+# 'thisrecordnow'): clause material without the one- and two-letter pronouns that begin ordinary words
+# ('Theme', 'Usher').
+_RUN_AFTER_WORDS = frozenset(
+    (_NEXT_MATERIAL | set(_SHORT_OBJECTS) | {verb for verb in _TRIGGER_VERBS if len(verb) >= LEAD_RUN_MIN_CHARS})
+    - {"i", "me", "us", "we", "he", "my", "a"})
+
+
+def _run_reads_clause(part):
+    """True when part, a run of lower-case letters, reads end to end as words of _RUN_AFTER_WORDS that
+    reach a determiner or 'now' (_RUN_MATERIAL) within its first three words, with a word after it or a
+    verb before it ('thisrecord', 'thisreview', 'forthisrecord', 'reusethis'; 'foreach' is none), so an
+    ordinary word that only splits into short words ('areas', 'assay', 'allowlist') is no clause."""
+    size = len(part)
+    tail = [False] * (size + 1)
+    tail[size] = True
+    for index in range(size - 1, -1, -1):
+        tail[index] = any(tail[index + len(word)] for word in _RUN_AFTER_WORDS if part.startswith(word, index))
+
+    def lead(index, budget, verbal):
+        for word in _RUN_AFTER_WORDS:
+            if not part.startswith(word, index):
+                continue
+            end = index + len(word)
+            if word in _RUN_MATERIAL and tail[end] and (end < size or verbal):
+                return True
+            if budget and lead(end, budget - 1, verbal or word in _TRIGGER_VERBS or word in _SHORTHAND_VERBS):
+                return True
+        return False
+
+    return lead(0, 2, False)
+
+
+# Verbs a lone 2 or 4 ('to', 'for') turns into a clause after an allowlisted run-on, with the trigger verbs.
+_SHORTHAND_VERBS = frozenset("go golive reuse ship proceed use deploy launch merge export".split())
+
+
+def _after_is_clause(parts):
+    """True when the parts after an allowlisted run-on begin clause material (#8.6): digit runs are
+    separators ('SafeTools2026Roadmap'), and a lone 2 or 4 is read as 'to' or 'for' before a verb
+    ('SafeTools2Reuse', 'SafeTools2Publish'), or before a verb that is also a noun only when clause
+    material follows it ('SafeTools2ShareThis'; 'SafeTools2Release' renders); the first word part is clause material when it is a clause word, determiner,
+    pronoun, object, preposition, strong verb or verdict word ('SafeTools_ThisRecord'), or a lower-case
+    run of such words ('SafeToolsThisrecord')."""
+    tokens = []
+    for index, part in enumerate(parts):
+        # A look-alike digit folded inside a number ('2026' read '2o26') stays part of the number.
+        folded = (len(part) == 1 and 0 < index < len(parts) - 1 and parts[index - 1].isdigit()
+                  and parts[index + 1].isdigit())
+        if (part.isdigit() or folded) and tokens and tokens[-1][0] == "number":
+            tokens[-1] = ("number", tokens[-1][1] + part)
+        else:
+            tokens.append(("number" if part.isdigit() else "word", part))
+    shorthand = False
+    for index, (kind, part) in enumerate(tokens):
+        if kind == "number":
+            shorthand = part in ("2", "4")
+            continue
+        if shorthand and (part in _TITLE_VERBS or part in _SHORTHAND_VERBS):
+            return True
+        if shorthand and part in _TITLE_LEAD_VERBS:
+            # A verb that is also a noun after a version number ('SafeTools2Release') needs clause material.
+            return _after_is_clause([text for _, text in tokens[index + 1:]])
+        return part in _NEXT_MATERIAL or _run_reads_clause(part)
+    return False
+
+
 def _rest_is_clause(rest):
     """True when the letters after a verdict phrase's last word, inside the run-on word, begin clause
     material ('as' in 'Areas', 'all' in a 'Goallrecords'-style run)."""
@@ -1004,7 +1090,8 @@ def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=())
     begins inside the phrase and runs on in lower case (continuing) is held unless that whole word is
     an ordinary word (_ordinary_word: 'Safe|Toolkit', 'No|Needle', 'Safe|Tomorrow') whose letters after
     the phrase word begin no clause material (_rest_is_clause: 'They|Are|as' in 'TheyAreasClear') and
-    whose next part is no clause material (_NEXT_MATERIAL: 'NoNeedsToReview'); anything else is held
+    whose following parts begin no clause material (_after_is_clause: 'NoNeedsToReview',
+    'SafeToolsThisrecord', 'SafeTools2Reuse'); anything else is held
     ('SafeToreuse', 'SafeToarchive', 'TheyAreclear'; 'Xgood|to|Go' counts as before). A word
     inside the phrase always runs on into the phrase's next word, so only the phrase's end is read
     this way.
@@ -1023,8 +1110,8 @@ def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=())
         stop = min([begin for begin in starts if begin > end] + [len(collapsed)])
         if not _ordinary_word(collapsed[first:stop]) or _rest_is_clause(collapsed[end:stop]):
             return False
-        following = [begin for begin in starts if begin > stop] + [len(collapsed)]
-        return collapsed[stop:min(following)] not in _NEXT_MATERIAL
+        bounds = sorted(begin for begin in starts if begin >= stop) + [len(collapsed)]
+        return not _after_is_clause([collapsed[a:b] for a, b in zip(bounds, bounds[1:]) if b > a])
     for needle in _FUSED_NEEDLES:
         start = collapsed.find(needle)
         while start >= 0:
@@ -1046,8 +1133,9 @@ def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=())
 # components of a citation part ('docs/status-okay.md#to-dos') and in the separator-token test, where
 # its 'do' is no auxiliary ('DOC-7#to-do', 'raw/notes.md#to-do-list'). A verdict phrase written inside
 # one component is still read word by word ('DOC-7#okay-to-do', 'DOC-7#OkayToDo'). 'to-be' is not a
-# noun here: 'safe to be shared' is a clause.
-_TODO_NOUN = re.compile(r"(?<![A-Za-z0-9])(?:to|To|TO)[-_.]?(?:do|Do|DO)(?:s|es|S|ES)?(?![a-z0-9])")
+# noun here: 'safe to be shared' is a clause. Only '-', '_' or nothing join the two words; a '.' keeps
+# its token boundary ('raw/okay.md#to.do' is read word by word).
+_TODO_NOUN = re.compile(r"(?<![A-Za-z0-9])(?:to|To|TO)[-_]?(?:do|Do|DO)(?:s|es|S|ES)?(?![a-z0-9])")
 
 
 def _spells_clause(text, separators, tokens):
@@ -1320,7 +1408,7 @@ def joined_spells_clause(title, citation):
         return False
     joins = [(title, " ".join(pieces[:4])), (pieces[-1], title)]
     for source, names in _citation_parts(citation):
-        stem = _FINAL_EXTENSION.sub("", re.split(r"[/\\]", source)[-1])
+        stem = _strip_final_extension(re.split(r"[/\\]", source)[-1])
         if stem:
             joins += [(title, " ".join([stem] + names[:3])), (stem, title)]
         joins += [(title, " ".join(names[index:index + 4])) for index in range(len(names))]

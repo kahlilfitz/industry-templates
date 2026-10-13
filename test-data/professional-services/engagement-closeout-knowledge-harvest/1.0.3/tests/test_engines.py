@@ -3238,6 +3238,109 @@ class QARound13Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
             self.assertIn(value, res.texts["skeleton.md"])
 
 
+# QA round 14 (#8.6): only '-', '_' or nothing join the noun 'to-do'; everything after an allowlisted
+# run-on is read for clause material; one extension rule decides every extension site.
+ROUND14_TODO_HELD = ("raw/okay.md#to.do", "raw/okay.md#TO.DO", "raw/fine.md#To.Dos", "DOC-7#safe.to.do")
+ROUND14_TODO_CLEAR = ("raw/okay.md#to-do", "DOC-7#to_do", "raw/notes.md#todo", "raw/safe-harbor.md#to-do",
+                      "docs/status-okay.md#to-dos", "docs/review-fine.md#To_Dos")
+ROUND14_AFTER = ("SafeToolsThisrecord", "SafeTools2ThisRecord", "SafeTools_ThisRecord", "SafeTools-this-record",
+                 "SafeTools2Reuse", "NoNeedsthisreview", "SafeTools2ShareThis", "SafeToolsthisrecordnow",
+                 "SafeToolsReusethis")
+ROUND14_AFTER_CLEAR = ("SafeToolkitRelease", "NoNeedleTesting", "SafeTools2026Roadmap", "SafeTools2030Plan",
+                       "SafeToolsTheme", "SafeTools2", "NoNeedles2025Review", "SafeTools2Release", "SafeToolsForeach",
+                       "SafeToolsAreas")
+# One table for every extension site: (token, _extension_kind).
+ROUND14_EXTENSIONS = (("md", "known"), ("MD", "known"), ("xlsx", "known"), ("markdown", "known"),
+                      ("Markdown", "known"), ("numbers", "known"), ("onepkg", "known"), ("v2", "digit"),
+                      ("mp5", "digit"), ("q4", "digit"), ("2", "digit"), ("2026", "digit"), ("go", None),
+                      ("reuse", None), ("ship", None), ("thisrecord", None), ("doc2go", None), ("Go", None))
+
+
+class QARound14Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 14, confidentiality-sanitisation-rules.md #8.6: 'to.do' is not the noun to-do; an
+    allowlisted run-on is no exemption when anything after it reads as clause material; the '.'
+    boundary, the title-file stem and the phrase-reading drop all follow _extension_kind."""
+
+    place = QARound4Tests.place
+
+    def test_dotted_to_do_is_not_the_noun(self):
+        for citation in ROUND14_TODO_HELD:
+            with self.subTest(citation=citation):
+                self.assertFalse(core.citation_shape_ok(citation))
+        for citation in ROUND14_TODO_CLEAR:
+            with self.subTest(citation=citation):
+                self.assertTrue(core.citation_shape_ok(citation))
+        raw, placed = self.place((), ROUND14_TODO_HELD)
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        self.assertNotIn("to.do", everything(res).lower())
+        raw, placed = self.place((), ROUND14_TODO_CLEAR[:4])
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        for value in placed.values():
+            self.assertIn(value, res.texts["skeleton.md"])
+
+    def test_clause_material_anywhere_after_an_allowlisted_run_on_is_withheld(self):
+        for value in ROUND14_AFTER:
+            with self.subTest(value=value):
+                self.assertFalse(core.title_shape_ok(value))
+                self.assertFalse(core.id_shape_ok("AST-" + value))
+                self.assertFalse(core.citation_shape_ok(f"DOC-7#{value}"))
+                self.assertFalse(core.citation_shape_ok(f"raw/{value}.md"))
+        for value in ROUND14_AFTER_CLEAR:
+            with self.subTest(value=value):
+                self.assertTrue(core.title_shape_ok(value))
+                self.assertTrue(core.id_shape_ok("AST-" + value))
+                self.assertTrue(core.citation_shape_ok(f"DOC-7#{value}"))
+        raw, placed = self.place(ROUND14_AFTER[:2], ("DOC-7#SafeTools_ThisRecord", "raw/SafeTools-this-record.md",
+                                                     "DOC-7#SafeTools2Reuse", "raw/NoNeedsthisreview.md"))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        released = [asset["title"] for asset in governed(res)["knowledge_record"]["reusable_assets"]]
+        for title in ROUND14_AFTER[:2]:
+            self.assertNotIn(title, released)
+            self.assertNotIn(title, res.texts["skeleton.md"])
+        result = run_stage(asset_identify, with_value(("candidate_assets", 0, "asset_id"), "AST-SafeTools2Reuse"))
+        self.assert_refused(result, "candidate_assets[0].asset_id", forbid=("AST-SafeTools2Reuse", "SafeTools2Reuse"))
+        raw, placed = self.place(ROUND14_AFTER_CLEAR[:2], tuple(f"DOC-7#{v}" for v in ROUND14_AFTER_CLEAR[2:6]))
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        for value in placed.values():
+            self.assertIn(value, res.texts["skeleton.md"])
+
+    def test_every_extension_site_follows_one_rule(self):
+        for name in ("_FINAL_EXTENSION", "_KNOWN_EXTENSION_ALTERNATION"):
+            self.assertFalse(hasattr(core, name), name)
+        for token, kind in ROUND14_EXTENSIONS:
+            with self.subTest(token=token):
+                is_extension = kind is not None
+                self.assertEqual(kind, core._extension_kind(token))
+                self.assertEqual(is_extension, core._is_extension(token))
+                self.assertEqual(f"raw/a.{token}" if is_extension else f"raw/a-{token}", core._path_dots(f"raw/a.{token}"))
+                self.assertEqual("a" if is_extension else f"a.{token}", core._strip_final_extension(f"a.{token}"))
+                self.assertEqual("raw/a#x" if kind == "known" else f"raw/a.{token}#x",
+                                 core._drop_extensions(f"raw/a.{token}#x"))
+        for title, citation in (("Project Good", "raw/to.go"), ("Project Good", "raw/to.go#intro"),
+                                ("Safe", "raw/to.reuse"), ("Publi", "raw/shThisRecord.markdown")):
+            with self.subTest(title=title, citation=citation):
+                self.assertTrue(core.title_shape_ok(title))
+                self.assertTrue(core.joined_spells_clause(title, citation))
+        for title, citation in (("Project Good", "raw/plan.md"), ("Roadmap", "raw/q4.numbers"),
+                                ("Project Good", "raw/to.v2"),
+                                ("Go-live readiness review", "raw/go-live-runbook.md#all-sites")):
+            with self.subTest(title=title, citation=citation):
+                self.assertFalse(core.joined_spells_clause(title, citation))
+        raw = scenario_raw()
+        placed = {("candidate_assets", 0, "title"): "Project Good", ("candidate_assets", 0, "citation"): "raw/to.go"}
+        for path, value in placed.items():
+            set_path(raw, path, value)
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="record")
+        self.assertNotIn("raw/to.go", everything(res))
+
+
 class DerivationTests(unittest.TestCase):
     def test_g4b_structured_inputs_re_derive_from_each_raw_pack(self):
         for scenario in SCENARIOS:
@@ -3445,7 +3548,7 @@ GROUPS = {
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
     "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests, QARound10Tests, QARound11Tests,
-                      QARound12Tests, QARound13Tests),
+                      QARound12Tests, QARound13Tests, QARound14Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),
