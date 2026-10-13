@@ -447,6 +447,50 @@ the hardening phases change engine behaviour, but output contracts change only a
     (with a control that has no ambiguous row)
   - `ValidateHardeningTests.test_qa11_register_text_naming_withheld_identity_is_held`
 
+### QA round 12 (phase 2)
+
+- **QA round 12 fixes (two High defects).**
+  - **Unverified hits hold (High, rule 9.9).** In round 11, `withhold_unverified()` replaced the
+    text and escalated, but the verdict was unchanged. C-101 therefore stayed eligible and
+    recommended in governed output, and slate-draft validation then demoted it, so the two stages
+    disagreed. Any hit on a rule 9.9 identity now holds the candidate in constraint-check itself:
+    `verdict_for(..., unverified_hold=True)` adds a needs_review #9.9 entry, plus a positional
+    escalation. Governed and validated verdicts now agree.
+  - **Contributor search for 9.9 identities and format-character boundaries (High, rules 9.9
+    and 9.11).**
+    - Rule 9.9 identities (`ambiguous_names()`, built by new `unverified_names()`) now go through
+      the same multi-value contributor search as rule 9.11. It runs over the same per-candidate
+      collection (record values plus its register rows' carried values) in both engines, so a
+      split such as "Orchard" + "Clinics register row 91" is found. Every contributor is withheld
+      with `UNVERIFIED_VALUE`.
+    - `ForeignNames` gains `allowed` (the client's and affiliates' names) and `value` (the fixed
+      replacement text). An occurrence wholly inside an allowed name never counts, and allowed
+      names never take part in a split. A 9.9 identity is part of, or contains, the client's name,
+      so ordinary text about the client never holds.
+    - Every text and every identity is read in both format-character forms (removed, and read as
+      a word boundary: `_entity_keys()`, `entity_keys()`, `_text_variants()`). Neither
+      "Orchard\u200bClinics" nor "Orch\u200bard Clinics" escapes, under rule 9.9 or 9.11.
+    - `entity_names_match()` treats a row as the client's when either form matches (so the
+      existing zero-width wall test still applies the wall). It treats a row as another client's
+      only when no form matches; otherwise the row is ambiguous.
+    - `withhold_unverified()` and the unused token helpers are removed. slate-draft validation
+      runs the 9.11 and 9.9 screens through one helper (`_withhold_names()`), and takes
+      `UNVERIFIED_REASON`/`UNVERIFIED_RULE` from constraint-check.
+    - A register default source that names a 9.9 identity now also holds every candidate whose
+      entries fall back to it. This follows the round 8 rule that the decision is made on raw
+      input. The round 11 test expectation is updated for this: in that scenario C-103's
+      other-client row uses the default.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): the rules 9.2/9.9
+  note covers the candidate hold, multi-value screening, the client-name exemption and both
+  format-character readings.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are three new regression tests, each failing on `61c5e2c`:
+  - `ConstraintHardeningTests.test_qa12_unverified_hit_holds_candidate_in_constraint_check`
+    (asserts that governed and validated verdicts are equal, with a client-name control)
+  - `ConstraintHardeningTests.test_qa12_split_and_format_character_names_are_found` (with
+    client-name, single-word and zero-width wall controls)
+  - `ValidateHardeningTests.test_qa12_withheld_identity_split_or_with_format_characters_is_held`
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

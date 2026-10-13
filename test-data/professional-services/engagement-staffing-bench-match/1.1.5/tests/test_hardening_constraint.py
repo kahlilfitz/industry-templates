@@ -1305,7 +1305,9 @@ class ConstraintHardeningTests(unittest.TestCase):
                     self.assertEqual([], leak.findall(text), name)
                 for document in (governed, validated):
                     self.assert_held(slate_row(document, "PSS-001", "C-101"), "#9.9")
-                    self.assertEqual(["C-103"], recommended_ids(document, "PSS-001"))
+                    # C-103's row for another client carries the register's default source, so a
+                    # default naming the withheld identity holds C-103 too (QA round 12).
+                    self.assertEqual([] if key == "source" else ["C-103"], recommended_ids(document, "PSS-001"))
                     self.assertTrue(any("#9.9" in item and "register source or citation" in item
                                         for item in document["escalations"]),
                                     ascii_safe(document["escalations"]))  # noqa: F821
@@ -1319,3 +1321,77 @@ class ConstraintHardeningTests(unittest.TestCase):
         governed, validated, texts = self.chain(bench, constraints)
         self.assertIn("Orchard Clinics feed", texts["governed.json"])
         self.assertEqual(["C-101", "C-103"], recommended_ids(governed, "PSS-001"))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 12: a value naming an identity held under rule 9.9 holds the candidate in
+    # constraint-check itself; 9.9 identities go through the contributor search; format
+    # characters are read both as removed and as a word boundary (rules 9.9 and 9.11).
+    # ----------------------------------------------------------------------------------------
+    def ambiguous_c103(self):
+        return {"candidate_id": "C-103", "type": "ethical_wall", "client_name": "Orchard Clinics",
+                "status": "active", "source": "connector:conflicts-register", "confidence": 0.97,
+                "citation": "conflicts extract row 90"}
+
+    def assert_same_verdicts(self, governed, validated):
+        def verdicts(document):
+            return [(role["role_id"], row["candidate_id"], row["eligibility"]["verdict"],
+                     row["eligibility"]["recommendation_status"])
+                    for role in document["governed_roles"] for row in role["candidate_slate"]]
+        self.assertEqual(verdicts(governed), verdicts(validated))
+
+    def assert_unverified_hold(self, bench, constraints, leaks):
+        governed, validated, texts = self.chain(bench, constraints)
+        self.assert_same_verdicts(governed, validated)
+        for name, text in texts.items():
+            for leak in leaks:
+                self.assertNotIn(leak, text, name)
+        for document in (governed, validated):
+            self.assert_held(slate_row(document, "PSS-001", "C-101"), "#9.9")
+            self.assertEqual([], recommended_ids(document, "PSS-001"))
+            self.assertTrue(any(item.startswith("PSS-001: C-101 - ") and "#9.9" in item
+                                for item in document["escalations"]),
+                            ascii_safe(document["escalations"]))  # noqa: F821
+        return governed, validated, texts
+
+    def test_qa12_unverified_hit_holds_candidate_in_constraint_check(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        self.assert_unverified_hold(
+            bench, self.with_rows(self.ambiguous_c103(), self.clear_row("Orchard Clinics register")),
+            ["Orchard Clinics"])
+        # Control: the client's own name in the same place is ordinary register text.
+        governed, validated, texts = self.chain(
+            bench, self.with_rows(self.ambiguous_c103(), self.clear_row("Orchard Ridge Clinics register")))
+        self.assert_same_verdicts(governed, validated)
+        self.assertIn("Orchard Ridge Clinics register", texts["governed.json"])
+        for document in (governed, validated):
+            self.assertEqual(["C-101"], recommended_ids(document, "PSS-001"))
+
+    def test_qa12_split_and_format_character_names_are_found(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        for label, row in (
+                ("split", self.clear_row("Orchard", "Clinics register row 91")),
+                ("zero-width joined", self.clear_row("Orchard\u200bClinics register")),
+                ("zero-width inside", self.clear_row("Orch\u200bard Clinics register"))):
+            with self.subTest(case=label):
+                governed, _validated, _texts = self.assert_unverified_hold(
+                    bench, self.with_rows(self.ambiguous_c103(), row),
+                    ["Clinics register row 91", "Orchard\u200b", "Orch\u200bard", "Orchard Clinics"])
+                entry = [item for item in slate_row(governed, "PSS-001", "C-101")["constraints_considered"]
+                         if item.get("type") == "clear"][-1]
+                self.assertNotIn("Orch", entry["source"])
+        bench_split = self.bench_with(location="Orchard", notes="Clinics site")
+        self.assert_unverified_hold(bench_split, self.with_rows(self.ambiguous_c103()), ["Clinics site"])
+        # Rule 9.11 reads format characters the same way.
+        synthetic = re.compile(r"synthetic", re.IGNORECASE)
+        for value in ("Unrelated\u200bSynthetic Client feed", "Unre\u200blated Synthetic Client feed"):
+            with self.subTest(value=ascii_safe(value)):  # noqa: F821
+                self.assert_foreign_hold(bench, self.with_rows(self.clear_row(value)), synthetic)
+        # Controls: the client's own name, or one shared word alone, never holds.
+        for row in (self.clear_row("Orchard Ridge Clinics register", "Orchard Ridge Clinics extract"),
+                    self.clear_row("Clinics feed")):
+            governed, validated, _texts = self.chain(bench, self.with_rows(self.ambiguous_c103(), row))
+            for document in (governed, validated):
+                self.assertEqual(["C-101"], recommended_ids(document, "PSS-001"))
+        # A wall naming the client with a format character still applies (fail closed).
+        governed = self.governed(self.with_rows(wall_row(client_name="Orchard\u200bRidge Clinics")))
+        self.assertEqual("ineligible", slate_row(governed, "PSS-001", "C-101")["eligibility"]["verdict"])

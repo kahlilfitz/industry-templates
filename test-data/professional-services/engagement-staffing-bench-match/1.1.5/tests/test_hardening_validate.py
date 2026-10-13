@@ -806,3 +806,29 @@ class ValidateHardeningTests(unittest.TestCase):
         # Control: without a withheld identity the same text is ordinary register text.
         result = slate_validate.validate(copy.deepcopy(document), ())
         self.assertEqual(["C-101", "C-103"], self.recommended_ids(result, 0))
+
+    def test_qa12_withheld_identity_split_or_with_format_characters_is_held(self):
+        def with_c101_clear(source, citation=None):
+            document = self.a()
+            for role in document["governed_roles"]:
+                for slate in ("candidate_slate", "recommended_candidates"):
+                    for candidate in role[slate]:
+                        if candidate["candidate_id"] == "C-101":
+                            for item in candidate["constraints_considered"]:
+                                if item.get("type") == "clear":
+                                    item["source"] = source
+                                    if citation is not None:
+                                        item["citation"] = citation
+            return document
+        for source, citation in (("Orchard", "Clinics register row 91"), ("Orchard\u200bClinics feed", None),
+                                 ("Orch\u200bard Clinics feed", None)):
+            with self.subTest(source=ascii_safe(source)):  # noqa: F821
+                result = slate_validate.validate(with_c101_clear(source, citation), (), (), {"orchard clinics"})
+                self.assertEqual(["C-103"], self.recommended_ids(result, 0))
+                self.assertNotIn("Clinics register row 91", json.dumps(result))
+                self.assertNotIn("Orch", json.dumps([item.get("source") for role in result["governed_roles"]
+                                                     for row in role["candidate_slate"]
+                                                     for item in row["constraints_considered"]]))
+        # Control: the client's own name is ordinary register text.
+        result = slate_validate.validate(with_c101_clear("Orchard Ridge Clinics feed"), (), (), {"orchard clinics"})
+        self.assertEqual(["C-101", "C-103"], self.recommended_ids(result, 0))

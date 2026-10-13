@@ -103,8 +103,8 @@ COMPOSED_HOLD_PROBLEM = "recommendation evidence withheld for review"
 ESCALATION_HOLD_PROBLEM = "an open escalation names this candidate"
 FOREIGN_RULE = constraint_check.FOREIGN_RULE
 FOREIGN_REASON = constraint_check.FOREIGN_REASON
-UNVERIFIED_REASON = "conflicts register text names an entity that cannot be matched reliably; withheld"
-UNVERIFIED_RULE = "independence-eligibility-rules.md #9.9"
+UNVERIFIED_REASON = constraint_check.UNVERIFIED_REASON
+UNVERIFIED_RULE = constraint_check.UNVERIFIED_RULE
 DRAFT_BANNER = (
     "DRAFT - HUMAN REVIEW REQUIRED",
     "DRAFT - pending partner approval and independence/resource-management review",
@@ -848,20 +848,54 @@ def _governed_foreign(document, engagement):
                     if (item.get("applies_to_engagement") is False and isinstance(name, str)
                             and name != constraint_check.FOREIGN_LABEL
                             and matches_engagement(item, engagement) is False):
-                        key = normalize_entity_name(name)
-                        if key:
-                            names.add(key)
+                        names.update(constraint_check.entity_keys(name))
     return names
 
 
-def _withhold_foreign_escalations(escalations, foreign):
+def _withhold_foreign_escalations(escalations, foreign, unverified=()):
     out = []
     for text in escalations:
         if constraint_check._names_foreign(text, foreign):
             text = f"escalation withheld: names another client ({FOREIGN_RULE})"
+        elif constraint_check._names_foreign(text, unverified):
+            text = f"escalation withheld: names an entity that cannot be matched reliably ({UNVERIFIED_RULE})"
         if text not in out:
             out.append(text)
     return out
+
+
+def _withhold_names(payload, names, reason, rule, escalations):
+    """Rule 9.11 (other clients' names) or rule 9.9 (identities held as unverified, ``names`` built
+    by unverified_names()): screens the candidate's own values, in its slate rows and in every
+    carried bench, scored and ranked record. A slate row's register entries are read with its values
+    as one collection, by their register input text only (engine vocabulary and engine text never
+    count). Every contributing value is withheld; returns the (role, slate position) pairs held."""
+    held = set()
+    skip = constraint_check.FOREIGN_SKIP | {"constraints_considered"}
+    flagged = constraint_check.foreign_candidates(constraint_check.candidate_records(payload), names)
+    slate_rows = [candidate for role in payload["governed_roles"] for candidate in role["candidate_slate"]]
+    for key, values in constraint_check.foreign_candidates(
+            slate_rows, names, skip,
+            extra=lambda record: constraint_check.considered_texts(
+                record.get("constraints_considered"), names)).items():
+        flagged.setdefault(key, set()).update(values)
+    for role_index, role in enumerate(payload["governed_roles"]):
+        for index, candidate in enumerate(role["candidate_slate"]):
+            values = flagged.get(id_key(candidate["candidate_id"]), ())
+            scrubbed, hits = constraint_check.withhold_foreign(candidate, names, skip, values)
+            scrubbed["constraints_considered"], considered_hits = constraint_check.withhold_considered(
+                scrubbed["constraints_considered"], names, values, held=bool(hits or values))
+            hits += considered_hits
+            if hits or values:
+                candidate.clear()
+                candidate.update(scrubbed)
+                held.add((role_index, index))
+                escalations.append(
+                    f"governed_roles[{role_index}].candidate_slate[{index}]: {reason}; "
+                    f"independence review required ({rule})"
+                )
+    constraint_check.withhold_foreign_sections(payload, names, flagged)
+    return held
 
 
 def validate(governed_payload, intake_engagements=(), foreign_names=(), withheld_names=()):
@@ -895,47 +929,10 @@ def validate(governed_payload, intake_engagements=(), foreign_names=(), withheld
     escalations = merge_unique(payload["escalations"], log)
     foreign = constraint_check.ForeignNames(
         set(foreign_names) | _governed_foreign(governed_payload, governed_payload["engagement"]))
-    foreign_held = set()
-    # Rule 9.11 screens the candidate's own values, in its slate rows and in every carried bench,
-    # scored and ranked record. A slate row's register entries are read with its values as one
-    # collection, by their register input text only (engine vocabulary and engine text never count).
-    skip = constraint_check.FOREIGN_SKIP | {"constraints_considered"}
-    flagged = constraint_check.foreign_candidates(constraint_check.candidate_records(payload), foreign)
-    slate_rows = [candidate for role in payload["governed_roles"] for candidate in role["candidate_slate"]]
-    for key, values in constraint_check.foreign_candidates(
-            slate_rows, foreign, skip,
-            extra=lambda record: constraint_check.considered_texts(
-                record.get("constraints_considered"), foreign)).items():
-        flagged.setdefault(key, set()).update(values)
-    for role_index, role in enumerate(payload["governed_roles"]):
-        for index, candidate in enumerate(role["candidate_slate"]):
-            values = flagged.get(id_key(candidate["candidate_id"]), ())
-            scrubbed, hits = constraint_check.withhold_foreign(candidate, foreign, skip, values)
-            scrubbed["constraints_considered"], considered_hits = constraint_check.withhold_considered(
-                scrubbed["constraints_considered"], foreign, values, held=bool(hits or values))
-            hits += considered_hits
-            if hits or values:
-                candidate.clear()
-                candidate.update(scrubbed)
-                foreign_held.add((role_index, index))
-                escalations.append(
-                    f"governed_roles[{role_index}].candidate_slate[{index}]: {FOREIGN_REASON}; "
-                    f"independence review required ({FOREIGN_RULE})"
-                )
-    unverified = constraint_check.ForeignNames(set(withheld_names))
-    unverified_held = set()
-    for role_index, role in enumerate(payload["governed_roles"]):
-        for index, candidate in enumerate(role["candidate_slate"]):
-            candidate["constraints_considered"], hits = constraint_check.withhold_unverified(
-                candidate["constraints_considered"], unverified)
-            if hits:
-                unverified_held.add((role_index, index))
-                escalations.append(
-                    f"governed_roles[{role_index}].candidate_slate[{index}]: {UNVERIFIED_REASON}; "
-                    f"independence review required ({UNVERIFIED_RULE})"
-                )
-    constraint_check.withhold_foreign_sections(payload, foreign, flagged)
-    escalations = _withhold_foreign_escalations(escalations, foreign)
+    unverified = constraint_check.unverified_names(withheld_names, governed_payload["engagement"])
+    foreign_held = _withhold_names(payload, foreign, FOREIGN_REASON, FOREIGN_RULE, escalations)
+    unverified_held = _withhold_names(payload, unverified, UNVERIFIED_REASON, UNVERIFIED_RULE, escalations)
+    escalations = _withhold_foreign_escalations(escalations, foreign, unverified)
     open_escalations = list(governed_payload["escalations"])
     role_keys = {id_key(role["role_id"]) for role in governed_payload["governed_roles"]}
     gaps = list(payload["gaps"])
