@@ -15,7 +15,7 @@ plugin.
 | `tests/test_engines.py` | Engine regression suite (Python 3 standard library `unittest`) |
 | `tests/check_shared_copies.py` | Stand-alone check that the contract, references, `closeout_core.py` and `steering_guard.py` copies are byte-identical across skills, with `steering_guard.py` pinned to the `shared/steering-guard` release hash |
 | `tests/steering-corpus.json` | Byte-identical copy of `shared/steering-guard/corpus.json` (attack, benign and field-pair lines) |
-| `tests/closeout-steering-sets.json` | Closeout sets: 25 attack, 14 paraphrase, 26 benign closeout and lessons lines, 7 attack pairs, 5 benign pairs and 19 recorded detector gaps (with the gap lines the closeout hook vocabulary closes) |
+| `tests/closeout-steering-sets.json` | Closeout sets: 25 attack, 14 paraphrase, 26 benign closeout and lessons lines, 7 attack pairs, 5 benign pairs, the 19 former detector-gap lines that shared detector 1.1.2 missed and 1.1.3 catches (`detector_gaps_closed_in_1_1_3`, kept as render-policy evidence), the line the closeout hook vocabulary closed first, and 2 probes only the hook vocabulary catches |
 | `tests/closeout-render-corpus.json` | QA round 6 render corpus: 238 realistic titles, IDs and citations (19 reported false-withhold regressions, 13 control words) that must render with no hold (#8.6) |
 | `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker (one per 1.0.3 fix) |
 
@@ -61,7 +61,7 @@ finishes (a failing subtest fails its test), prints failure details after the re
 | `integrity` | 9 | Every stage re-derives the previous stage's whole document and refuses edits |
 | `screening` | 18 | Embedded-instruction screen: families, locations, joins, oversize, rendered holds; single-pass scanning, the screening ceilings (1000 per array or escalations list, 2500 across the arrays and escalations, 200 per list), a timed 100-asset chain and linear scaling from 100 to 400 assets |
 | `steering-corpus` | 5 | Vendored shared detector and corpus scored at the real call site |
-| `steering-sets` | 9 | Closeout attack, paraphrase and benign sets, and every detector-gap line in every rendered field, ID and draft slot |
+| `steering-sets` | 10 | Closeout attack, paraphrase and benign sets; every former detector-gap line caught by shared detector 1.1.3 (default call and closeout hook path) and withheld in every rendered field, ID and draft slot; hook-only probes |
 | `render-policy` | 57 | Titles, citations and IDs render only in an allow-shape (#8.6), including upper-case, CamelCase, fused, zero-width, combining-mark and look-alike-digit forms, short fused lead verbs and clauses split between a title and its citation (source, file name or any anchor or sheet name), a citation's source and anchor, or adjacent citation parts or neighbour records in input and rendering order, read by the token-anchored boundary recogniser; case-evidenced fused phrases; short fused lead verbs with trailing complements; digit shorthand in verdict phrases (`safe2reuse`) while `B2B`-style identifiers render; case-evidenced phrases ending at token ends (`SafeToolkit` renders); dotted shorthand (`DOC-7#safe.2.reuse`) while dotted versions and extensions render; clause material running on after a case-evidenced phrase (`SafeToreuse`, `SafeToarchive`) unless the run-on part is an allowlisted ordinary word (`SafeToolkit`) not followed by clause material (`TheyAreasClear` is withheld); verdict phrases and shorthand split by an extension or anchor (`raw/safe2.md#reuse`, `raw/safe.md#to-reuse`, `raw/safe.markdown#to-reuse`) while noun to-do anchors render (`docs/status-okay.md#to-dos`) and `to.do` does not count as one; clause material anywhere after an allowlisted run-on (`SafeTools2Reuse`, `SafeTools-this-record`), read through every later part of the same token (`SafeTools2ReleaseRoadmapNow`, `SafeToolsPlan2Reuse`) while names with digits render (`SafeTools2ReleaseNotes`, `SafeToolsTeams2Go`); one extension rule at every extension site (`Project Good` with `raw/to.go` is withheld); benign fused locators, the realistic render corpus and its 9,810 title and citation pairs still render; withheld flags and skeleton markers |
 | `drafting` | 7 | Knowledge-record skeleton and `record_check.py` refusal codes, including short-phrase copies |
 | `derivation` | 1 | Demo inputs re-derive from each scenario's raw pack (G4b) |
@@ -70,7 +70,7 @@ finishes (a failing subtest fails its test), prints failure details after the re
 | `release` | 8 | Guardrails, citations, routing, versions, stand-alone skills and the runner |
 | `harness` | 2 | A crashing test is reported as FAIL |
 
-The full suite (163 tests) takes about three minutes.
+The full suite (164 tests) takes about three minutes.
 
 ## What the scenarios cover
 
@@ -87,7 +87,7 @@ The full suite (163 tests) takes about three minutes.
   group hold.
 
 The suite also builds hostile and malformed variants of these scenarios in memory: injected,
-obfuscated, split and rendered-only instructions; prose and detector-gap lines in titles, citations
+obfuscated, split and rendered-only instructions; prose and former detector-gap lines in titles, citations
 and IDs; malformed, duplicated and over-deep input; forged
 or edited intermediates; unknown markers and empty terms; and filled drafts that leak held or client
 material. It also checks byte-identical copies, the package boundary, the guardrail block, citations,
