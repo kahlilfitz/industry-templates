@@ -651,3 +651,20 @@ class ValidateHardeningTests(unittest.TestCase):
             document["escalations"].append(named)
             with self.subTest(named=named):
                 self.assertEqual(["C-103"], self.recommended_ids(slate_validate.validate(document), 0))
+
+    # --- QA round 3: a component joined before the ID by punctuation is a longer ID (#9.5) ---
+    def test_qa3_escalation_id_never_matches_after_a_leading_component(self):
+        for longer in ("X/C-101 requires mapping review", "2:C-101 independence review pending",
+                       "A#C-101 independence review pending", "v2/C-101 independence review pending",
+                       "review X/C-101 and 2:C-101 pending"):
+            document = self.a()
+            document["escalations"].append(longer)
+            with self.subTest(longer=longer):
+                self.assertEqual(["C-101", "C-103"], self.recommended_ids(slate_validate.validate(document), 0))
+        for named in ("(C-101) independence review pending", "re: C-101 independence review pending",
+                      "re:C-101 independence review pending", "C-101: pending", "Pending for C-101.",
+                      "C-100/C-101: independence review pending", "X/C-101 and C-101 pending"):
+            document = self.a()
+            document["escalations"].append(named)
+            with self.subTest(named=named):
+                self.assertEqual(["C-103"], self.recommended_ids(slate_validate.validate(document), 0))

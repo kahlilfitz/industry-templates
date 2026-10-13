@@ -152,6 +152,37 @@ the hardening phases change engine behaviour, but output contracts change only a
   - `ConstraintHardeningTests.test_qa2_foreign_prior_role_with_unknown_role_type_needs_review`
   - `ValidateHardeningTests.test_qa2_escalation_id_never_matches_a_longer_id`
 
+### QA round 3 (phase 2)
+
+- **QA round 3 fixes (two High defects, one Medium).**
+  - **Nested skip keys (High, rule 9.11).** Before, the members `candidate_id` and
+    `screening_holds` were skipped at every depth. So another client's name under a nested
+    `notes.candidate_id`, or in a raw `screening_holds` value on the input bench record, was
+    neither detected nor withheld. Now only a record's own top-level `candidate_id` is skipped.
+    Every nested value, and every member name outside engine vocabulary, is screened.
+    `screening_holds` is screened by the path of each engine hold line, the only part an input
+    can shape; any other value there, a raw input value included, is screened whole. Hold lines
+    are screened before they are carried. The candidate is held and escalated by ID.
+  - **Names across three or more values (High, rule 9.11).** The pair check is replaced by a
+    bounded chain search over each record's normalised values: fields and list items in any
+    order. It finds a sequence that spells the whole other-client name: the first value ends with
+    the name's opening words, any middle values are exactly the next words, and the last value
+    starts with the closing words. Every contributing value is withheld, and the candidate is held
+    and escalated. One shared word, two words that do not complete the name, words out of
+    sequence, or the engagement's own client spelled across values are no hold.
+  - **Leading ID boundary (Medium, rule 9.5).** `input_guard.mentions_id` (all three copies) now
+    applies the trailing check in mirror image. A component holding a digit or a single character,
+    joined before the ID by punctuation, makes a longer ID: `X/C-101`, `2:C-101` and `A#C-101` no
+    longer match C-101. `(C-101)`, `re: C-101`, `re:C-101`, `C-101: pending`, `C-101.` and
+    `C-100/C-101` still match.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): wording in 9.5 and
+  9.11.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are three new regression tests, each failing on `e474ad2`:
+  - `ConstraintHardeningTests.test_qa3_foreign_value_under_skip_named_member_holds_candidate`
+  - `ConstraintHardeningTests.test_qa3_name_across_three_or_more_values_holds_candidate`
+  - `ValidateHardeningTests.test_qa3_escalation_id_never_matches_after_a_leading_component`
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

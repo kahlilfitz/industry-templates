@@ -167,17 +167,37 @@ def _extends_id(tail):
     return len(word) == 1 or any(char.isdigit() for char in word)
 
 
+_ID_TOKEN_END = re.compile(r"[^\W_]+(?:" + _ID_JOIN + r"+[^\W_]+)*$")
+
+
+def _prefixes_id(head):
+    """True when ``head`` (the text right before a matched ID) makes it part of a longer ID: a
+    component that holds a digit or is a single character directly followed by punctuation such as
+    '/', ':' or '#' (X/C-101, 2:C-101, A#C-101). Another whole ID (C-100/C-101), prose (re:C-101),
+    a space, an apostrophe, an opening bracket or quote at the start of the text does not."""
+    if len(head) < 2 or head[-1].isspace() or head[-1] in "'\u2019" or re.match(r"\w", head[-1]):
+        return False
+    token = _ID_TOKEN_END.search(head[-65:-1])
+    if token is None or _ID_LIKE.match(token.group(0)):
+        return False
+    word = token.group(0)
+    return len(word) == 1 or any(char.isdigit() for char in word)
+
+
 def mentions_id(text, value):
     """True when free text names the ID ``value`` in id_key()'s canonical form (rule 9.5): any run of
     whitespace, '-', '_', '.' or a Unicode dash may separate its parts. Part of a longer ID never
-    matches (C-1 is not found in C-10, C-101, C-1.5 or C-1/2)."""
+    matches (C-1 is not found in C-10, C-101, C-1.5, C-1/2 or X/C-1)."""
     key = id_key(value)
     if key is None or not isinstance(text, str):
         return False
     body = (_ID_SEP + "+").join(re.escape(part) for part in key.split("-"))
     pattern = rf"(?<!\w)(?<!\w{_ID_JOIN}){body}(?!\w)(?!{_ID_JOIN}\w)"
     folded = canonical(text)
-    return any(not _extends_id(folded[match.end():]) for match in re.finditer(pattern, folded))
+    return any(
+        not _extends_id(folded[match.end():]) and not _prefixes_id(folded[:match.start()])
+        for match in re.finditer(pattern, folded)
+    )
 
 
 RESERVED_WORDS = {

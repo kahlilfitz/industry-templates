@@ -801,3 +801,67 @@ class ConstraintHardeningTests(unittest.TestCase):
                 governed, validated, _texts = self.chain(bench, self.with_rows(foreign_role(role_type)))
                 for document in (governed, validated):
                     self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 3: only top-level record members are skipped; nested values are always screened.
+    # ----------------------------------------------------------------------------------------
+    def test_qa3_foreign_value_under_skip_named_member_holds_candidate(self):
+        _roles, _bench, constraints = scenario_inputs("scenario-a-happy")
+        for label, fields in (
+            ("nested candidate_id", {"notes": {"candidate_id": "Unrelated Synthetic Client"}}),
+            ("nested screening_holds", {"notes": {"screening_holds": ["Unrelated Synthetic Client"]}}),
+            ("raw top-level screening_holds", {"screening_holds": "Unrelated Synthetic Client"}),
+            ("raw top-level screening_holds list", {"screening_holds": ["Unrelated Synthetic Client"]}),
+            ("forged engine hold path", {"screening_holds": [
+                "Unrelated Synthetic Client: instruction-like text withheld (independence-eligibility-rules.md #9.6)"]}),
+            ("nested member name", {"notes": {"Unrelated Synthetic Client": "former engagement"}}),
+        ):
+            with self.subTest(case=label):
+                governed, validated, _texts = self.assert_foreign_hold(self.bench_with(**fields), constraints)
+                for document in (governed, validated):
+                    self.assertTrue(any("C-101" in item and "#9.11" in item for item in document["escalations"]))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 3: a name spelled across three or more values is still another client (9.11).
+    # ----------------------------------------------------------------------------------------
+    def test_qa3_name_across_three_or_more_values_holds_candidate(self):
+        _roles, _bench, constraints = scenario_inputs("scenario-a-happy")
+
+        def bench_skills(*skills, **fields):
+            bench = self.bench_with(**fields)
+            for candidate in bench["bench_candidates"]:
+                if candidate["candidate_id"] == "C-101":
+                    candidate["skills"] = candidate["skills"] + list(skills)
+            return bench
+
+        withheld = "withheld: names another client (independence-eligibility-rules.md #9.11)"
+        for label, bench, members in (
+            ("name, location, title", bench_skills(name="Ava Unrelated", location="Synthetic", title="Client"),
+             ("name", "location", "title")),
+            ("title, location, name", bench_skills(title="Unrelated", location="Synthetic", name="Client Ava"),
+             ("name", "location", "title")),
+            ("three skills", bench_skills("Unrelated", "Synthetic", "Client"), ()),
+            ("four values", bench_skills("Synthetic", name="Ava", location="Unrelated", practice="Client"),
+             ("location", "practice")),
+        ):
+            with self.subTest(case=label):
+                governed, validated, texts = self.assert_foreign_hold(bench, constraints)
+                for document in (governed, validated):
+                    record = next(item for item in document["bench_candidates"] if item["candidate_id"] == "C-101")
+                    for member in members:
+                        self.assertEqual(withheld, record[member], member)
+                    for word in ("Unrelated", "Synthetic"):
+                        self.assertNotIn(word, record["skills"])
+                    self.assertNotIn("Ava Unrelated", json.dumps(document))
+        # No hold: one shared word, two words that do not complete the name, or the engagement's
+        # own client spelled across values.
+        for label, bench in (
+            ("client alone", bench_skills(location="Client")),
+            ("two of three words", bench_skills("Unrelated", location="Client")),
+            ("words out of sequence", bench_skills("Client", "Synthetic", title="Unrelated Synthetic Data")),
+            ("own client across values", bench_skills("Orchard", location="Ridge", title="Clinics")),
+        ):
+            with self.subTest(case=label):
+                governed, validated, _texts = self.chain(bench, constraints)
+                for document in (governed, validated):
+                    self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))

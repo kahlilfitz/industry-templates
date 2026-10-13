@@ -105,8 +105,16 @@ FOREIGN_LABEL = "another client (name withheld)"
 FOREIGN_RULE = "independence-eligibility-rules.md #9.11"
 FOREIGN_VALUE = f"withheld: names another client ({FOREIGN_RULE})"
 FOREIGN_REASON = "candidate record names another client; values withheld"
-# Carried members never screened for another client's identity: the key itself and engine hold paths.
-FOREIGN_SKIP = {"candidate_id", "screening_holds"}
+# Top-level record members never screened for another client's identity (the record key). Nested
+# members are always screened, and ``screening_holds`` is screened by its input-derived path only.
+FOREIGN_SKIP = {"candidate_id"}
+HOLDS_KEY = "screening_holds"
+_ENGINE_HOLD = re.compile(
+    r"^(?P<path>[^:]+): (?:instruction-like text|oversize text|already-redacted marker text|"
+    r"instruction-like member name) withheld \(independence-eligibility-rules\.md #9\.6\)$"
+)
+# Bound on the chains of values tried per record and other-client name (rule 9.11).
+FOREIGN_CHAIN_BUDGET = 20000
 PASSTHROUGH_SECTIONS = ("bench_candidates", "scored_roles", "ranked_roles")
 REVIEW_FALLBACK = "conflicts, screening or availability evidence requires independence review"
 ENTITY_SUFFIXES = {"llc", "inc", "ltd", "plc", "corp", "corporation", "co", "company", "the"}
@@ -1076,62 +1084,192 @@ def _contains_words(words, part):
     return f" {part} " in f" {words} "
 
 
-def withhold_foreign(value, foreign, skip=frozenset(), contributors=()):
-    """A16/D12/D24 (rule 9.11): every string under ``value`` that names another client, or contains
-    one of the normalised ``contributors`` (values that name another client only when read together),
-    becomes the neutral FOREIGN_VALUE. Returns (new value, number of strings withheld); members in
-    ``skip`` are kept as they are at every depth. The input is never mutated."""
+# Top-level members of a candidate record whose names are engine vocabulary, and members whose
+# nested member names are engine vocabulary; every other member name is screened like a value.
+_ENGINE_MEMBERS = set(CARRIED_KEYS) | {"constraints_considered", "eligibility", "final_eligible_rank"}
+_ENGINE_STRUCTURED = {"component_scores", "component_citations", "constraints_considered", "eligibility"}
+
+
+def _foreign_hit(text, foreign, contributors):
+    if not isinstance(text, str):
+        return False
+    return _names_foreign(text, foreign) or bool(
+        contributors and any(_contains_words(normalize_entity_name(text), part) for part in contributors))
+
+
+def _withhold_value(value, foreign, contributors, screen_keys):
     if isinstance(value, str):
-        hit = _names_foreign(value, foreign) or (
-            contributors and any(_contains_words(normalize_entity_name(value), part) for part in contributors))
-        return (FOREIGN_VALUE, 1) if hit else (value, 0)
+        return (FOREIGN_VALUE, 1) if _foreign_hit(value, foreign, contributors) else (value, 0)
     if isinstance(value, dict):
         out, hits = {}, 0
         for key, item in value.items():
-            if key in skip:
-                out[key] = item
-                continue
-            out[key], count = withhold_foreign(item, foreign, skip, contributors)
+            if screen_keys and _foreign_hit(key, foreign, contributors):
+                hits += 1
+                key = FOREIGN_VALUE
+                number = 2
+                while key in out or key in value:
+                    key = f"{FOREIGN_VALUE} [{number}]"
+                    number += 1
+            out[key], count = _withhold_value(item, foreign, contributors, screen_keys)
             hits += count
         return out, hits
     if isinstance(value, list):
         out, hits = [], 0
         for item in value:
-            new, count = withhold_foreign(item, foreign, skip, contributors)
+            new, count = _withhold_value(item, foreign, contributors, screen_keys)
             out.append(new)
             hits += count
         return out, hits
     return value, 0
 
 
-def _leaf_texts(value, skip):
+def _withhold_holds(value, foreign, contributors):
+    """Rule 9.11 for a record's ``screening_holds``: an engine hold line is screened by its path (the
+    only part an input can shape); anything else, a raw input value included, is screened whole."""
+    if isinstance(value, list):
+        out, hits = [], 0
+        for item in value:
+            match = _ENGINE_HOLD.match(item) if isinstance(item, str) else None
+            if match and not _foreign_hit(match.group("path"), foreign, contributors):
+                out.append(item)
+                continue
+            if match:
+                out.append(FOREIGN_VALUE)
+                hits += 1
+                continue
+            new, count = _withhold_value(item, foreign, contributors, True)
+            out.append(new)
+            hits += count
+        return out, hits
+    return _withhold_value(value, foreign, contributors, True)
+
+
+def withhold_record(record, foreign, skip=FOREIGN_SKIP, contributors=()):
+    """Rule 9.11 for one candidate record: top-level members in ``skip`` are kept as they are; every
+    other member is screened at every depth (member names included, apart from engine vocabulary),
+    and ``screening_holds`` by the input-derived path of each engine hold line."""
+    out, hits = {}, 0
+    for key, item in record.items():
+        if key in skip:
+            out[key] = item
+            continue
+        if key not in _ENGINE_MEMBERS and _foreign_hit(key, foreign, contributors):
+            hits += 1
+            key = FOREIGN_VALUE
+            number = 2
+            while key in out or key in record:
+                key = f"{FOREIGN_VALUE} [{number}]"
+                number += 1
+        if key == HOLDS_KEY:
+            out[key], count = _withhold_holds(item, foreign, contributors)
+        else:
+            out[key], count = _withhold_value(item, foreign, contributors, key not in _ENGINE_STRUCTURED)
+        hits += count
+    return out, hits
+
+
+def withhold_foreign(value, foreign, skip=frozenset(), contributors=()):
+    """A16/D12/D24 (rule 9.11): every string under ``value`` that names another client, or contains
+    one of the normalised ``contributors`` (values that name another client only when read together),
+    becomes the neutral FOREIGN_VALUE. Returns (new value, number of strings withheld). With ``skip``,
+    ``value`` is one candidate record and withhold_record() applies (``skip`` holds top-level members
+    only; nested members are always screened). The input is never mutated."""
+    if isinstance(value, dict) and skip:
+        return withhold_record(value, foreign, skip, contributors)
+    return _withhold_value(value, foreign, contributors, False)
+
+
+def _value_texts(value, screen_keys):
     if isinstance(value, str):
         yield value
     elif isinstance(value, dict):
         for key, item in value.items():
-            if key not in skip:
-                yield from _leaf_texts(item, skip)
+            if screen_keys and isinstance(key, str):
+                yield key
+            yield from _value_texts(item, screen_keys)
     elif isinstance(value, list):
         for item in value:
-            yield from _leaf_texts(item, skip)
+            yield from _value_texts(item, screen_keys)
+
+
+def _record_texts(record, skip):
+    """Every text of one candidate record that withhold_record() screens, in record order."""
+    for key, item in record.items():
+        if key in skip:
+            continue
+        if key not in _ENGINE_MEMBERS and isinstance(key, str):
+            yield key
+        if key == HOLDS_KEY and isinstance(item, list):
+            for hold in item:
+                match = _ENGINE_HOLD.match(hold) if isinstance(hold, str) else None
+                if match:
+                    yield match.group("path")
+                else:
+                    yield from _value_texts(hold, True)
+        else:
+            yield from _value_texts(item, key not in _ENGINE_STRUCTURED)
+
+
+def _split_name_contributors(texts, name):
+    """The texts that spell the other-client ``name`` (a token tuple) only when two or more of them
+    are read together in some order: the first ends with the name's opening words, any middle text
+    is exactly the next words, and the last starts with the closing words. Bounded search; when the
+    budget runs out, every text that could take part is returned (fail closed)."""
+    size = len(name)
+    starts, middles, ends = [], {}, []
+    for text in texts:
+        for cut in range(1, min(len(text), size - 1) + 1):
+            if text[-cut:] == name[:cut]:
+                starts.append((cut, text))
+        if len(text) < size - 1:
+            for at in range(1, size - len(text)):
+                if text == name[at:at + len(text)]:
+                    middles.setdefault(at, []).append((at + len(text), text))
+        for at in range(1, size):
+            if text[:size - at] == name[at:]:
+                ends.append((at, text))
+    found, budget = set(), [FOREIGN_CHAIN_BUDGET]
+    ends_at = {}
+    for at, text in ends:
+        ends_at.setdefault(at, []).append(text)
+
+    def walk(position, used):
+        budget[0] -= 1
+        if budget[0] < 0:
+            return
+        for text in ends_at.get(position, ()):
+            if text not in used:
+                found.update(used)
+                found.add(text)
+        for after, text in middles.get(position, ()):
+            if text not in used:
+                walk(after, used | {text})
+
+    for cut, text in starts:
+        walk(cut, frozenset({text}))
+    if budget[0] < 0:
+        return {text for _cut, text in starts} | {text for _at, text in ends} | {
+            text for group in middles.values() for _after, text in group}
+    return found
 
 
 def foreign_contributors(record, foreign, skip=FOREIGN_SKIP):
     """Rule 9.11: the normalised values of one candidate record that name another client, alone or
-    when two of its values are read together in either order (a name split across fields). A value
-    that only shares a word with the other client's name never counts on its own."""
+    when two or more of its values are read together in some order (a name split across fields or
+    list items). A value that only shares a word with the other client's name never counts on its
+    own, and neither do values that do not together spell the whole name."""
     if not foreign:
         return set()
-    names = [f" {name} " for name in foreign]
     texts = list(dict.fromkeys(
-        words for words in (normalize_entity_name(text) for text in _leaf_texts(record, skip)) if words))
+        words for words in (normalize_entity_name(text) for text in _record_texts(record, skip)) if words))
+    names = [f" {name} " for name in foreign]
     alone = {words for words in texts if any(name in f" {words} " for name in names)}
     found = set(alone)
-    rest = [words for words in texts if words not in alone]
-    for first in rest:
-        for second in rest:
-            if first != second and any(name in f" {first} {second} " for name in names):
-                found.update((first, second))
+    rest = [tuple(words.split()) for words in texts if words not in alone]
+    for name in foreign:
+        tokens = tuple(name.split())
+        if len(tokens) > 1:
+            found.update(" ".join(text) for text in _split_name_contributors(rest, tokens))
     return found
 
 
@@ -1159,21 +1297,44 @@ def foreign_candidates(records, foreign, skip=FOREIGN_SKIP):
     return found
 
 
+def _withhold_records(records, foreign, flagged):
+    if not isinstance(records, list):
+        return withhold_foreign(records, foreign)[0]
+    out = []
+    for record in records:
+        if isinstance(record, dict):
+            contributors = flagged.get(id_key(record.get("candidate_id")), ())
+            out.append(withhold_record(record, foreign, FOREIGN_SKIP, contributors)[0])
+        else:
+            out.append(withhold_foreign(record, foreign)[0])
+    return out
+
+
 def withhold_foreign_sections(payload, foreign, flagged=None):
     """Rule 9.11: the candidate records carried through unchanged (bench, scored and ranked sections)
     are screened the same way, so a value naming another client never reaches any output. ``flagged``
     is the foreign_candidates() map; every contributing value of a flagged candidate is withheld."""
     flagged = flagged if flagged is not None else foreign_candidates(candidate_records(payload), foreign)
-    for section in PASSTHROUGH_SECTIONS:
-        if section in payload:
-            payload[section], _hits = withhold_foreign(payload[section], foreign, FOREIGN_SKIP)
-    for record in candidate_records(payload):
-        if isinstance(record, dict):
-            contributors = flagged.get(id_key(record.get("candidate_id")))
-            if contributors:
-                scrubbed, _hits = withhold_foreign(record, foreign, FOREIGN_SKIP, contributors)
-                record.clear()
-                record.update(scrubbed)
+    if "bench_candidates" in payload:
+        payload["bench_candidates"] = _withhold_records(payload["bench_candidates"], foreign, flagged)
+    for section, member in (("scored_roles", "candidate_scores"), ("ranked_roles", "candidate_slate")):
+        if section not in payload:
+            continue
+        roles = payload[section]
+        if not isinstance(roles, list):
+            payload[section] = withhold_foreign(roles, foreign)[0]
+            continue
+        screened_roles = []
+        for role in roles:
+            if not isinstance(role, dict):
+                screened_roles.append(withhold_foreign(role, foreign)[0])
+                continue
+            screened_roles.append({
+                key: _withhold_records(item, foreign, flagged) if key == member
+                else withhold_foreign(item, foreign)[0]
+                for key, item in role.items()
+            })
+        payload[section] = screened_roles
     return payload
 
 
@@ -1246,12 +1407,15 @@ def govern(ranked_payload, constraints_payload):
             register_rows = candidate_register_rows(constraints, row["candidate_id"])
             candidate_held = {index: held_rows[index] for index, _item in register_rows if index in held_rows}
             ranked_holds = log.holds_under(f"ranked_input.ranked_roles[{r_index}].candidate_slate[{c_index}]")
-            holds = merge_unique(row.get("screening_holds") or [], ranked_holds)
             # Rule 9.11: a carried candidate value naming another client is withheld before any rule
-            # or message reads it, and the candidate is held for review.
+            # or message reads it, and the candidate is held for review. Hold lines are screened too.
             flagged_values = flagged.get(id_key(row["candidate_id"]), ())
             row, foreign_hits = withhold_foreign(row, foreign, FOREIGN_SKIP, flagged_values)
-            foreign_hits += bool(flagged_values)
+            ranked_holds, hold_hits = _withhold_holds(ranked_holds, foreign, flagged_values)
+            register_holds, register_hits = _withhold_holds(
+                merge_unique(*[row_holds[index] for index in candidate_held]), foreign, flagged_values)
+            foreign_hits += hold_hits + register_hits + bool(flagged_values)
+            holds = merge_unique(row.get("screening_holds") or [], ranked_holds)
 
             def evaluate(hold):
                 verdict_row = dict(row, screening_holds=holds)
@@ -1331,7 +1495,7 @@ def govern(ranked_payload, constraints_payload):
             if is_suspect(citation):
                 citation = "; ".join(item.split(";", 1)[0] for item in citations)
             out = {key: row[key] for key in row if key in CARRIED_KEYS}
-            all_holds = merge_unique(holds, *[row_holds[index] for index in candidate_held])
+            all_holds = merge_unique(holds, register_holds)
             if all_holds or "screening_holds" in row:
                 out["screening_holds"] = all_holds
             out["constraints_considered"] = considered
