@@ -104,19 +104,29 @@ descriptive forms ("The partner approved the budget in March"). The new rules ex
 Performance (1.1.3): hook vocabularies are normalised once per distinct tuple (lru_cache), and each rule carries a
 required-literal gate computed from its parsed pattern - a rule is skipped when none of its literals occur, and in
 long windows only the regions around literal occurrences are matched. Hits are identical to an ungated scan.
+(1.1.4) Review fixes: a one-off schedule ("for Monday review", "at tomorrow's panel") makes slate ranking and
+candidate selection an ordinary instruction (check 'pipe_sched'), and after a completed-control clause a pipeline
+verb needs an object or outcome complement (_PIPE_OBJ), so "...; publish dates are in the plan" is description.
 
 Known limit: F1 by role description is an open class. Reduced passives ("this register, when processed by a
 screening engine, should ..."), a parenthetical after the modal and very free paraphrases can still be missed.
 
-API: normalize, mixed_script_tokens, scan, is_steering, scan_fields, Hit, FAMILIES, __version__.
+(1.1.5) split_partners(values, max_chars=None, **hooks) -> set of value indices: the values an instruction split
+across adjacent values touches (' ; ', plain-space with and without labels, guarded fused), including the halves that
+are clean on their own, so callers can withhold every part of a split instruction, not only the half that trips.
+Hit offsets are mapped back to values through the detector's own normalisation; where that mapping is lossy the
+result fails closed (every index the hit could cover, or every index for an oversize join).
+
+API: normalize, mixed_script_tokens, scan, is_steering, scan_fields, split_partners, Hit, FAMILIES, __version__.
 """
 import re
 import unicodedata
 from collections import Counter, namedtuple
 from functools import lru_cache
 
-__version__ = "1.1.3"
-__all__ = ["normalize", "mixed_script_tokens", "scan", "is_steering", "scan_fields", "Hit", "FAMILIES", "__version__",
+__version__ = "1.1.5"
+__all__ = ["normalize", "mixed_script_tokens", "scan", "is_steering", "scan_fields", "split_partners", "Hit", "FAMILIES",
+           "__version__",
            "MAX_SCAN_CHARS", "WINDOW_OVERLAP", "MAX_TOTAL_CHARS"]
 
 Hit = namedtuple("Hit", "family start end")
@@ -1248,12 +1258,12 @@ _add("verdict", _LEAD + r"(?:put|place|move|bump|slot|push|promote|rank|list|pos
      r"(?:[\w'-]{1,20}\s)?" + _SLATE + r"|ahead\sof\s(?:[\w'-]{1,20}\s){0,3}?(?:on|in)\s(?:the\s|this\s)?(?:[\w'-]{1,20}\s)?"
      + _SLATE + r"|(?:first|top|number\sone|no\s1|1st|highest)\s(?:on|in)\s(?:the\s|this\s)?(?:[\w'-]{1,20}\s)?" + _SLATE +
      r"|as\s(?:the\s|our\s)?(?:top|first|preferred|recommended|lead|number\sone|no\s1|primary|best)\s(?:pick|choice|"
-     r"candidate|option|recommendation|nominee|match|fit))\b", "pipe")
+     r"candidate|option|recommendation|nominee|match|fit))\b", "pipe_sched")
 # selecting the item: "recommend this candidate", "shortlist this consultant", "pick C-330"
 _add("verdict", _LEAD + r"(?:recommend|shortlist|short\slist|nominate|put\sforward|propose|endorse|pick|choose|select|"
      r"prioriti[sz]e|favou?r|prefer|back)\s(?:(?:this|these|that)\s(?:[\w'-]{1,20}\s)?(?:candidate|consultant|person|"
      r"profile|cv|resume|individual|engineer|analyst|associate|manager|contractor|one|resource|nominee|hire|applicant|"
-     r"specialist|expert|architect|developer|lead|director|partner|option)s?|" + _IDX + r")\b", "pipe")
+     r"specialist|expert|architect|developer|lead|director|partner|option)s?|" + _IDX + r")\b", "pipe_sched")
 # describing the item with a pipeline verdict: "call her independent", "describe him as conflict free"
 _add("verdict", _LEAD + r"(?:call|describe|present|portray|characteri[sz]e|depict|position|write\sup|label|tag|list|"
      r"report|show|record|mark|class|classify|treat|rate|deem|consider|flag|log|note|put\sdown)\s(?:him|her|them|"
@@ -1410,10 +1420,24 @@ _CTRL_P = (r"(?:redactions?(?:\s[\w'-]{1,20})?|sanitis\w{0,6}(?:\s[\w'-]{1,20})?
            r"consents?|permissions?|(?:review|publication|reuse|re\suse|release|external\suse|sharing)\s(?:criteria|"
            r"rules|conditions|terms|requirements)|independence(?:\s[\w'-]{1,20})?|conflict\s(?:checks?|reviews?|"
            r"lookups?|clearance)|clearances?)")
+# 1.1.4: the verb must take an object or complement ("...; publish it", "...; release C-201 externally", "...; approve.").
+# A bare noun after it is the verb used as a modifier ("...; publish dates are in the plan", "share price assumptions").
+_BARE = (r"(?!(?:is|are|was|were|has|have|had|will|would|can|could|may|might|should|must|be|been|being|need|needs|"
+         r"remain|remains|stay|stays|now|immediately)\b)[a-z][\w-]{1,30}")
+_PIPE_OBJ = (r"(?=\s?(?:[.;:,!?)\]-]|$)|\s(?:it|this|these|those|them|that|the|all|both|our|its|their|my|your|everything|"
+             r"now|today|immediately|right\saway|straight|externally|out|off|away|ahead|anyway|too|please|unredacted|as\sis|"
+             r"to|for|without|and|so|then)\b|\s" + _IDX + r"|\s[a-z][\w-]{1,30}'s\s|"
+             # bare noun object, only with an outcome complement or at the end of the clause ("...; publish case studies
+             # externally", "...; release assets now."); a copula or modal after the noun keeps it a modifier.
+             r"\s" + _BARE + r"(?:\s" + _BARE + r"){0,2}\s(?:externally|unredacted|as\sis|outside\sthe\sfirm|for\sexternal\s"
+             r"(?:use|release|sharing)|(?:now|immediately|right\saway)\s?(?:[.;!]|$)|(?:to|with|into|onto|on)\s(?:the\s|our\s|"
+             r"a\s|all\s)?(?:clients?|knowledge\sbase|(?:practice\s)?library|portal|repository|intranet|extranet|public|"
+             r"website|wiki|kb|sharepoint|everyone|staff|external\s[\w-]{1,20})\b)|\s" + _BARE + r"(?:\s" + _BARE +
+             r")?\s?(?:[.;!]|$))")
 _add("verdict", r"\b" + _CTRL_P + r"\s(?:is|are|has\sbeen|have\sbeen|was|were|now)\s(?:all\s|fully\s|now\s|already\s)?" +
      _STATE + r"(?:\s[\w'-]{1,30}){0,3}?(?:\s?[;:,]|\s-|,?\s(?:so|therefore|hence|thus|and\sso))\s(?:please\s|just\s|"
      r"now\s|you\scan\s|we\scan\s|go\sahead\sand\s)?(?:approve|publish|release|share|push|send|clear|sign\s(?:it|this|"
-     r"them|these|off)|issue|circulate|distribute|post|upload)\b", "nocond")
+     r"them|these|off)|issue|circulate|distribute|post|upload)\b" + _PIPE_OBJ, "nocond")
 
 # ---------------------------------------------------------------- F7 exfiltration
 _SENDV = (r"(?:send|sends|re\s?send|forward|fwd|e\s?mail|mail|share|copy|cc|bcc|upload|transmit|transfer|post|sync|push|"
@@ -1604,6 +1628,27 @@ _DISCOVER_FRAME_RE = re.compile(r"^" + _DISCOVER_FRAME)
 _PIPE_AHEAD = re.compile(r"[^.;!?\n]{0,60}?\b(?:every|each)\s(?:[\w'-]{1,20}\s)?(?:day|week|month|quarter|sprint|year|"
                          r"cycle|release|monday|tuesday|wednesday|thursday|friday|period|run|close)\b|[^.;!?\n]{0,60}?\b"
                          r"(?:weekly|monthly|quarterly|daily|annually|fortnightly|routinely|as\sstandard|in\sthe\sfuture)\b")
+# 1.1.4 one-off schedules after a ranking/selection imperative: a weekday, date, named meeting or event, or a relative
+# day ("for Monday review", "on 14 October", "at the staffing call", "tomorrow", "next week"). "today" / "now" are
+# urgency, not a schedule, and outcome complements ("for external use") are not events.
+_DAY = (r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thur?s?|fri)")
+_MONTH = (r"(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|"
+          r"jun|jul|aug|sept?|oct|nov|dec)")
+_EVENT = (r"(?:meetings?|calls?|sessions?|workshops?|stand\s?ups?|huddles?|catch\s?ups?|syncs?|interviews?|panels?|offsites?|"
+          r"off\ssites?|check\s?ins?|debriefs?|kick\s?offs?|retros?|retrospectives?|town\s?halls?|pitch(?:es)?|"
+          r"presentations?|go\s?lives?|launch(?:es)?|deadlines?|cut\s?offs?|forums?|boards?|committees?|"
+          r"(?:staffing|resourcing|bench|pipeline|planning|partner|steering|weekly|monthly)\s(?:reviews?|calls?|meetings?|"
+          r"huddles?|syncs?|discussions?))")
+_WHEN = (r"(?:" + _DAY + r"(?:'s)?|" + r"\d{1,2}(?:st|nd|rd|th)?\s(?:of\s)?" + _MONTH + r"|" + _MONTH +
+         r"\s\d{1,2}(?:st|nd|rd|th)?|\d{4}\s\d{1,2}\s\d{1,2}|\d{1,2}\s\d{1,2}(?:\s\d{2,4})?|tomorrow(?:'s)?|tonight|"
+         r"(?:this|next|coming)\s(?:morning|afternoon|evening|week|month|" + _DAY + r")|next\s(?:week|month|quarter)|"
+         r"later\sthis\s(?:week|month)|end\sof\s(?:the\s)?(?:day|week|month)|eod|cob|close\sof\sbusiness)")
+_PIPE_ONEOFF = re.compile(r"[^.;!?\n]{0,40}?\b(?:(?:for|on|at|by|before|ahead\sof|in\stime\sfor|in|during|after|from)\s"
+                          r"(?:the\s|this\s|next\s|our\s|their\s|a\s|an\s)?(?:[\w'-]{1,20}\s){0,2}?(?:" + _WHEN +
+                          r"|" + _EVENT + r")|" + _WHEN + r")\b")
+_PIPE_ONEOFF_LEAD = re.compile(r"(?:^|[\s,(])(?:(?:on|for|at|by|before|ahead\sof|in\stime\sfor|after|from)\s(?:the\s|this\s|"
+                               r"next\s|our\s)?(?:[\w'-]{1,20}\s){0,2}?(?:" + _WHEN + r"|" + _EVENT + r")|" + _WHEN +
+                               r"),?\s?[^\s]?\Z")
 _PIPE_SUBJ = re.compile(r"\b(?:will|would|can|could|may|might|should|must|shall|to|we|they|i|he|she|you|who|which|that|"
                         r"did|does|do|not|never|teams?|staff|people|partners?|managers?|usually|typically|normally|"
                         r"often|always|generally|then)\b")
@@ -1684,6 +1729,13 @@ def _post_ok(check, m, text, extra_verdict):
             return True
         clause = re.split(r"[.;:!?\n]", text[max(0, m.start() - 120):m.start()])[-1]
         return not _PIPE_SUBJ.search(clause)
+    if check == "pipe_sched":
+        # 1.1.4: ranking / selecting the item for a one-off human review or meeting ("put Mina at the top of the slate
+        # for Monday review", "On Thursday, shortlist this candidate") is an ordinary staffing instruction
+        clause = re.split(r"[.;:!?\n]", text[max(0, m.start() - 120):m.start()] + m.group(0)[:1])[-1]
+        if _PIPE_ONEOFF.match(text, m.end(), min(len(text), m.end() + 80)) or _PIPE_ONEOFF_LEAD.search(clause):
+            return False
+        return _post_ok("pipe", m, text, extra_verdict)
     if check == "nocond":
         return not (_CONDITIONAL.search(text[max(0, m.start() - 40):m.start()]) or _COND_AHEAD.match(text[m.end():m.end() + 80]))
     if check == "discover":
@@ -1796,6 +1848,34 @@ def _first_hit(rx, chk, norm, windows, reach, extra_verdict, gate=(None, None)):
     return None
 
 
+def _accepted_hits(rx, chk, norm, windows, reach, extra_verdict, accept, gate=(None, None)):
+    """1.1.5 split_partners: every (start, end) of rx that passes its post-check and `accept` (a span that crosses a
+    value boundary). A match inside one value does not hide a crossing match that starts within it: the search
+    resumes one character after its start. Windows and gate regions as in _first_hit (a match can only start in a
+    region); duplicates from window overlaps are merged."""
+    n, found = len(norm), set()
+    lits, width = gate
+    if width is not None and width > reach:
+        lits = None
+    for s, e in windows:
+        regions = None if lits is None else _gate_regions(norm, s, e, lits, width)
+        for a, b in ([(s, e)] if regions is None else regions):
+            pos, end = a, e if regions is None else min(e, b + width + 1)
+            while pos <= b:
+                m = rx.search(norm, pos, end)
+                if m is None or m.start() > b:
+                    break
+                if e < n and m.start() + reach >= e:
+                    break  # left for the next window, which sees it whole
+                if not _post_ok(chk, m, norm, extra_verdict):
+                    pos = max(m.end(), m.start() + 1)
+                    continue
+                if accept(m.start(), m.end()):
+                    found.add((m.start(), m.end()))
+                pos = m.start() + 1
+    return sorted(found)
+
+
 _SENDER_RE = re.compile(_NEGB + r"\b" + _SENDV + r"\b")
 
 
@@ -1808,6 +1888,13 @@ def scan(text, extra_verdict_words=(), extra_rule_nouns=(), contact_is_steering=
 
     Text is scanned in overlapping windows of MAX_SCAN_CHARS. Text longer than MAX_TOTAL_CHARS (raw or after
     normalisation) is not scanned: the result is [Hit('oversize', 0, length)] and callers must hold it."""
+    return _scan(text, extra_verdict_words, extra_rule_nouns, contact_is_steering, trusted_domains)
+
+
+def _scan(text, extra_verdict_words=(), extra_rule_nouns=(), contact_is_steering=False, trusted_domains=(),
+          accept=None):
+    """scan(). With accept(start, end) (split_partners), every accepted hit of every rule is returned instead of
+    the first hit per rule, and mixed_script is not reported."""
     if not isinstance(text, str) or not text.strip():
         return []
     if len(text) > MAX_TOTAL_CHARS:
@@ -1827,6 +1914,10 @@ def scan(text, extra_verdict_words=(), extra_rule_nouns=(), contact_is_steering=
     for fam, rx, chk, gate in _rules(extra_verdict_words, extra_rule_nouns):
         if gate[0] is not None and not any(g in norm for g in gate[0]):
             continue  # a match must contain one of the gate literals: none present, so the rule cannot fire
+        if accept is not None:
+            hits.extend(Hit(fam, a, b) for a, b in _accepted_hits(rx, chk, norm, windows, overlap,
+                                                                    extra_verdict_words, accept, gate))
+            continue
         m = _first_hit(rx, chk, norm, windows, overlap, extra_verdict_words, gate)
         if m is not None:
             hits.append(Hit(fam, m.start(), m.end()))
@@ -1836,16 +1927,23 @@ def scan(text, extra_verdict_words=(), extra_rule_nouns=(), contact_is_steering=
                                      .replace("(dot)", ".")) for d in trusted)]
     if contacts:
         if contact_is_steering:
-            hits.append(Hit("exfiltration", contacts[0].start(), contacts[0].end()))
+            if accept is None:
+                hits.append(Hit("exfiltration", contacts[0].start(), contacts[0].end()))
+            else:
+                hits.extend(Hit("exfiltration", c.start(), c.end()) for c in contacts if accept(c.start(), c.end()))
         else:
             sender = _SENDER_RE
             for c in contacts:
                 window = folded[max(0, c.start() - 120):c.start()]
                 sv = list(sender.finditer(window))
                 if sv and re.search(r"\b(?:to|cc|bcc|into|onto|at|on|@)\s*$", window) and not re.search(r"[.;!?]", window[sv[-1].end():]):
-                    hits.append(Hit("exfiltration", max(0, c.start() - 120) + sv[-1].start(), c.end()))
-                    break
-    if mixed_script_tokens(text):
+                    h = Hit("exfiltration", max(0, c.start() - 120) + sv[-1].start(), c.end())
+                    if accept is None:
+                        hits.append(h)
+                        break
+                    if accept(h.start, h.end):
+                        hits.append(h)
+    if accept is None and mixed_script_tokens(text):
         hits.append(Hit("mixed_script", 0, len(norm)))
     hits.sort(key=lambda h: (h.start, h.family))
     return hits
@@ -1880,3 +1978,162 @@ def scan_fields(fields, max_chars=None, **hooks):
         if found:
             return [Hit("split", found[0].start, found[0].end)]
     return []
+
+
+# ---------------------------------------------------------------- 1.1.5 split partners
+_SPLIT_MARK = "\ue001"  # private use: survives normalisation unchanged and never occurs in normalize() output
+
+
+def _align_cuts(a, b, cuts, width=48, k=6):
+    """Map counts in `a` (ascending `cuts`) to (lo, hi) count intervals in `b`, where a and b are the same text
+    normalised with and without edge marks (spaces removed). Equal runs map exactly; after a difference the two
+    resynchronise at the nearest k-char agreement within `width` chars, and a cut in or next to a differing stretch
+    gets the whole stretch. If they never resynchronise, the rest of b is the interval (fail closed)."""
+    la, lb, i, j, segs = len(a), len(b), 0, 0, []
+    while i < la or j < lb:
+        if i < la and j < lb and a[i] == b[j]:
+            i0, j0 = i, j
+            while i < la and j < lb and a[i] == b[j]:
+                i, j = i + 1, j + 1
+            segs.append((i0, i, j0, j, True))
+            continue
+        step = None
+        for t in range(1, 2 * width + 1):
+            for di in range(max(0, t - width), min(t, width) + 1):
+                x, y = a[i + di:i + di + k], b[j + t - di:j + t - di + k]
+                if x == y and (len(x) == k or (i + di + len(x) == la and j + t - di + len(y) == lb)):
+                    step = (di, t - di)
+                    break
+            if step:
+                break
+        if step is None:
+            step = (la - i, lb - j)
+        segs.append((i, i + step[0], j, j + step[1], False))
+        i, j = i + step[0], j + step[1]
+    out, si = [], 0
+    for c in cuts:
+        while si < len(segs) and segs[si][1] < c:
+            si += 1
+        lo, hi, q = None, None, si
+        while q < len(segs) and segs[q][0] <= c:
+            ia, ib, ja, jb, same = segs[q]
+            x0, x1 = (ja + c - ia, ja + c - ia) if same else (ja, jb)
+            lo, hi = (x0, x1) if lo is None else (min(lo, x0), max(hi, x1))
+            q += 1
+        out.append((lo, hi) if lo is not None else (lb, lb))
+    return out
+
+
+def _value_spans(joined, bounds):
+    """Spans of the values (raw (start, end) in `joined`) in normalize(joined), each as ((start_lo, start_hi),
+    (end_lo, end_hi)). normalize() is run on `joined` and on a copy with _SPLIT_MARK at every value edge; with the
+    marks and spaces removed the two agree wherever normalisation is local, so each edge maps exactly. Edges in a
+    stretch where they disagree (a fold across the boundary, e.g. 'C-' + '201') get the whole stretch as their
+    interval, which only widens the values a hit may cover (fail closed). None if the marks are lost."""
+    parts, prev = [], 0
+    for a, b in bounds:
+        parts += [joined[prev:a], _SPLIT_MARK, joined[a:b], _SPLIT_MARK]
+        prev = b
+    parts.append(joined[prev:])
+    n, nm = normalize(joined), normalize("".join(parts))
+    nz = [i for i, ch in enumerate(n) if ch != " "]
+    nzs = "".join(n[i] for i in nz)
+    cuts, buf = [], []
+    for ch in nm:
+        if ch == _SPLIT_MARK:
+            cuts.append(len(buf))
+        elif ch != " ":
+            buf.append(ch)
+    mzs = "".join(buf)
+    if len(cuts) != 2 * len(bounds):
+        return None
+    counts = _align_cuts(mzs, nzs, cuts)
+
+    def at_start(c):
+        return nz[c] if c < len(nz) else len(n)
+
+    def at_end(c):
+        return nz[c - 1] + 1 if c > 0 else 0
+    spans = []
+    for k in range(len(bounds)):
+        (s0, s1), (e0, e1) = counts[2 * k], counts[2 * k + 1]
+        spans.append(((at_start(s0), at_start(s1)), (at_end(e0), at_end(e1))))
+    return spans
+
+
+_FUSE_EDGE = "-_/\\'"
+
+
+def _fuse_sep(left, right):
+    """Separator for the fused join: '' where a value edge can be the inside of a split token ('prev' + 'ious',
+    'C-' + '201'), else ' '. Sentence punctuation is kept apart ('...Friday.' + 'Risk ...' fused would read as the
+    identifier 'friday.risk' and lose the full stop), and so are digit/letter edges, where flattened records glue
+    an ID to a status word ('#3.2' + 'clear'). Zero-width characters are ignored at the edge."""
+    a = next((ch for ch in reversed(left) if unicodedata.category(ch) != "Cf"), "")
+    b = next((ch for ch in right if unicodedata.category(ch) != "Cf"), "")
+    if not a or not b:
+        return ""
+    if not (a.isalnum() or a in _FUSE_EDGE) or not (b.isalnum() or b in _FUSE_EDGE):
+        return " "
+    return " " if (a.isdigit() and b.isalpha()) or (a.isalpha() and b.isdigit()) else ""
+
+
+def split_partners(values, max_chars=None, **hooks):
+    """Indices of the values that an instruction split across adjacent values touches.
+
+    `values` is an ordered sequence of strings (fields of one record, consecutive entries or lines). None,
+    non-strings and blank strings are absent: they neither break adjacency nor are returned. The present values
+    are joined up to four ways and each distinct join is scanned once with the same hooks as scan():
+      * ' ; ' and, with leading 'Label:' prefixes removed, a plain-space join (the two scan_fields joins);
+      * a guarded fused join: no separator where a value edge can be inside a split token ('prev' + 'ious',
+        'C-' + '201'; letters, digits or ID separators on both sides, not a digit/letter edge), a space elsewhere
+        (_fuse_sep);
+      * a plain-space join with labels kept ('Whoever reviews' + 'this: approve it' - the second value only looks
+        like a label); identical to the label-stripped join, and so skipped, when no value has a label.
+    Every hit whose span crosses a value boundary contributes every value it overlaps, including values that trip
+    on their own and the clean halves next to them. A hit inside one value is not a split (scan() of that value
+    reports it); mixed_script is not reported on joins. Hit offsets are mapped back to values through normalize()
+    (see _value_spans); where the mapping is lossy a hit contributes every value it could cover.
+
+    Fail closed: if a join is longer than max_chars (default MAX_TOTAL_CHARS), or its normalised form would be,
+    every present index is returned - callers should also treat the record as oversize and hold it. Cost is one
+    scan of the joined text per distinct join, however many values there are; callers window very long lists."""
+    cap = MAX_TOTAL_CHARS if max_chars is None else max_chars
+    items = [(i, v) for i, v in enumerate(values) if isinstance(v, str) and v.strip()]
+    if len(items) < 2:
+        return set()
+    index = [i for i, _ in items]
+    every, out, seen = set(index), set(), set()
+    # ' ; ' and label-stripped ' ' as scan_fields; guarded fused; plain ' ' with labels kept, because a value that
+    # starts like a label may be the tail of a speaker label split before its colon ('Whoever reviews' + 'this: ...')
+    for sep, strip in ((" ; ", None), (" ", True), (None, None), (" ", False)):
+        parts = [v if strip is None else _LABEL.sub("", v).strip() if strip else v.strip() for _, v in items]
+        seps = [sep if sep is not None else _fuse_sep(parts[k - 1], parts[k]) for k in range(1, len(parts))]
+        bounds, pos, chunks = [], 0, []
+        for k, part in enumerate(parts):
+            if k:
+                pos += len(seps[k - 1])
+                chunks.append(seps[k - 1])
+            bounds.append((pos, pos + len(part)))
+            pos += len(part)
+            chunks.append(part)
+        joined = "".join(chunks)
+        if len(joined) > min(cap, MAX_TOTAL_CHARS) or (not joined.isascii() and _nfkc_len_bound(joined) > MAX_TOTAL_CHARS):
+            return every
+        if (joined, tuple(bounds)) in seen:  # e.g. no labels and no fused edge: same text, same boundaries
+            continue
+        seen.add((joined, tuple(bounds)))
+        memo = []
+
+        def cover(a, b, joined=joined, bounds=bounds, memo=memo):
+            if not memo:  # mapped only once a candidate hit needs it: a join with no candidate pays nothing
+                spans = _value_spans(joined, bounds) if _SPLIT_MARK not in joined else None
+                # mapping unavailable: any hit that is not provably inside one value covers everything
+                memo.append(spans or [((0, 0), (MAX_TOTAL_CHARS, MAX_TOTAL_CHARS))] * len(bounds))
+            return [k for k, ((s0, _), (_, e1)) in enumerate(memo[0]) if a < e1 and b > s0 and e1 > s0]
+        hits = _scan(joined, accept=lambda a, b: len(cover(a, b)) > 1, **hooks)
+        if any(h.family == "oversize" for h in hits):
+            return every
+        for h in hits:
+            out.update(index[k] for k in cover(h.start, h.end))
+    return out

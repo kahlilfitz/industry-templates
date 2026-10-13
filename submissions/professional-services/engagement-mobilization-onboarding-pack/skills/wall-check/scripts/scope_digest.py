@@ -66,11 +66,11 @@ def declarations(docs):
     return out,bad
 def one(v): return WITHHELD if hits(v) else v
 def items(line):
-    # Flagged SOW/letter text never travels (#4.3): withhold each flagged item; if the line only trips the wire as a
-    # whole, withhold every item from it.
+    # Flagged SOW/letter text never travels (#4.3): withhold each flagged item and its clean split partners (#4.5);
+    # if the line only trips the wire as a whole, withhold every item from it.
     xs=lst(line)
     if not hits(line): return xs
-    out=[WITHHELD if hits(x) else x for x in xs]
+    sp=split_indices(xs); out=[WITHHELD if hits(x) or n in sp else x for n,x in enumerate(xs)]
     return out if WITHHELD in out else [WITHHELD]
 def unique_records(recs,key,where,f=canon_id):
     """Records keyed by `key` (canonical, #1.3) appear once: a repeat is refused before any screening or linking, never
