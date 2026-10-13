@@ -3052,6 +3052,87 @@ class QARound11Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
                     self.assertNotIn(title, released)
                     self.assertNotIn(f"| {title} |", res.texts["skeleton.md"])
 
+# QA round 12 (#8.6): extension tokens and '/', '#', '.' are transparent to verdict phrases and digit
+# shorthand inside one citation part, and a case-evidenced phrase word that runs on in lower case is
+# exempt only when the whole capitalised part is an ordinary word on the shipped allowlist.
+ROUND12_SPLIT = ("raw/safe.md.2.reuse", "raw/safe2.md#reuse", "raw/safe.2.md#reuse", "raw/fine.2.pptx#ship",
+                 "raw/SAFE.2.MD#REUSE", "raw/safe.md#to-reuse", "raw/fine.md#to-ship", "raw/good-to.md#go",
+                 "raw/safe.md sheet ToReuse, row 2", "raw/safe2.xlsx sheet Reuse, row 2", "raw/fine.2.ship.md")
+ROUND12_SPLIT_CLEAR = ("raw/guide.v2.md", "DOC-7#section.2.1", "release-notes.2.4.md", "q4.2026.review.xlsx",
+                       "raw/go-live.md#2-reuse-notes", "raw/safety.md#2.1-reuse-policy",
+                       "raw/fine-print.md#ship-dates", "raw/go.2.market.md", "raw/roadmap.md#lease-accounting",
+                       "raw/set-up-guide.md#all-records")
+ROUND12_UNLISTED = ("SafeToarchive", "FineTodeliver", "OkayTosubmit", "GoodTogopublic", "TheyAreclear",
+                    "SafeToreuse", "FineToship", "OkayToproceed", "GoodTogolive", "NoNeedtoReview", "TheyAresafe")
+ROUND12_ORDINARY = ("SafeToolkit", "SafeTools", "FineTools", "OkayToolkit", "NoNeedle", "NoNeedles",
+                    "SafeTomorrow", "SafeTower", "SafeToronto", "SafeTone", "GoodTogether", "GoodToolbox",
+                    "TheyAreas", "SafeTooltips")
+
+
+class QARound12Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 12, confidentiality-sanitisation-rules.md #8.6: one citation part is read as a single run
+    of words for verdict phrases and digit shorthand, with extension tokens and path, anchor and sheet
+    separators transparent; a case-evidenced phrase word followed by lower case in the same capitalised
+    part is held unless that whole part is an ordinary word (_ORDINARY_RUN_ONS, with simple inflections)."""
+
+    place = QARound4Tests.place
+
+    def test_extension_split_phrases_are_withheld(self):
+        for citation in ROUND12_SPLIT:
+            with self.subTest(citation=citation):
+                self.assertFalse(core.citation_shape_ok(citation))
+        self.assertFalse(core.id_shape_ok("AST-safe.md.2.reuse"))
+        raw, placed = self.place((), ("raw/safe.md.2.reuse", "raw/safe2.md#reuse", "raw/fine.2.pptx#ship",
+                                      "raw/SAFE.2.MD#REUSE"))
+        for path, value in placed.items():
+            self.assertEqual(("render_shape",), core.shape_hits(hold_path(path), value), ascii_safe(value))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        raw, placed = self.place((), ("raw/safe.md#to-reuse", "raw/good-to.md#go", "raw/safe.2.md#reuse",
+                                      "raw/safe.md sheet ToReuse, row 2"))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        result = run_stage(asset_identify, with_value(("candidate_assets", 0, "asset_id"), "AST-safe.md.2.reuse"))
+        self.assert_refused(result, "candidate_assets[0].asset_id", forbid=("AST-safe.md.2.reuse", "safe.md.2.reuse"))
+
+    def test_extension_split_controls_still_render(self):
+        for citation in ROUND12_SPLIT_CLEAR:
+            with self.subTest(citation=citation):
+                self.assertTrue(core.citation_shape_ok(citation))
+        raw, placed = self.place((), ("raw/go-live.md#2-reuse-notes", "raw/safety.md#2.1-reuse-policy",
+                                      "raw/fine-print.md#ship-dates", "release-notes.2.4.md"))
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        for value in placed.values():
+            self.assertIn(value, res.texts["skeleton.md"])
+
+    def test_unlisted_continuations_are_withheld_and_ordinary_words_render(self):
+        for value in ROUND12_UNLISTED:
+            with self.subTest(value=value):
+                self.assertFalse(core.title_shape_ok(value))
+                self.assertFalse(core.id_shape_ok("AST-" + value))
+                self.assertFalse(core.citation_shape_ok(f"DOC-7#{value}"))
+        for value in ROUND12_ORDINARY:
+            with self.subTest(value=value):
+                self.assertTrue(core.title_shape_ok(value))
+                self.assertTrue(core.citation_shape_ok(f"DOC-7#{value}"))
+        for titles in (("SafeToarchive", "FineTodeliver"), ("OkayTosubmit", "GoodTogopublic"), ("TheyAreclear", "SafeToreuse")):
+            with self.subTest(titles=titles):
+                raw, placed = self.place(titles, ())
+                res = chain(raw)
+                self.assert_render_shape_holds(res, placed, location="field")
+                released = [asset["title"] for asset in governed(res)["knowledge_record"]["reusable_assets"]]
+                for title in titles:
+                    self.assertNotIn(title, released)
+                    self.assertNotIn(f"| {title} |", res.texts["skeleton.md"])
+        raw, placed = self.place(("SafeToronto", "GoodTogether"), ("DOC-7#NoNeedles", "raw/TheyAreas.md"))
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        for value in ("| SafeToronto |", "| GoodTogether |", "DOC-7#NoNeedles", "raw/TheyAreas.md"):
+            self.assertIn(value, res.texts["skeleton.md"])
+
 
 class DerivationTests(unittest.TestCase):
     def test_g4b_structured_inputs_re_derive_from_each_raw_pack(self):
@@ -3259,7 +3340,8 @@ GROUPS = {
     "screening": (ScreeningTests, QARound5ScreeningTests, QARound6ScreeningTests, QARound7ScreeningTests),
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
-    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests, QARound10Tests, QARound11Tests),
+    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests, QARound10Tests, QARound11Tests,
+                      QARound12Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),

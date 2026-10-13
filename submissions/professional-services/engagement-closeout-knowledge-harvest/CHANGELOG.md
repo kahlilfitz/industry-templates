@@ -124,9 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 151 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 154 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
-  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10, 148 before QA round 11). It ships with:
+  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10, 148 before QA round 11, 151 before QA round 12). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -964,3 +964,103 @@ copies are unchanged.
   The first and third fail on `9f44c27`.
 
 **Golden differences (QA round 11).** None.
+
+### QA round 12 (on `ee18c97`)
+
+Two Medium findings, fixed in the plugin. The knowledge-record output contract and the contract JSON
+copies are unchanged.
+
+- **Extension-split shorthand and phrases (Medium, escape).** `_shorthand_hit()` read only the parts
+  beside the digit, so an extension token or `#` split the phrase. `raw/safe.md.2.reuse`,
+  `raw/safe2.md#reuse`, `raw/safe.2.md#reuse`, `raw/fine.2.pptx#ship` and `raw/SAFE.2.MD#REUSE`
+  rendered literally in the skeleton. The same split also let plain verdict phrases through:
+  `raw/safe.md#to-reuse`, `raw/fine.md#to-ship`, `raw/good-to.md#go` and
+  `raw/safe.md sheet ToReuse, row 2` rendered on `ee18c97`.
+  - **Fix:** inside one citation part, verdict phrases and the digit shorthand are read across the
+    source, anchors and sheet names as one run of words. Known file-extension tokens are dropped
+    anywhere in the source, and `/`, `\`, `#` and the sheet keyword are transparent
+    (`part_phrase_spells()`, called from `citation_shape_ok()`). The shorthand drops extension tokens
+    the same way for IDs, so `AST-safe.md.2.reuse` fails the ID shape too.
+  - **Scope:** only verdict phrases, run-together verdict phrases and steering words, and the
+    shorthand are read across the part. Verbs keep the per-name and boundary rules, so
+    `raw/set-up-guide.md#all-records` and `raw/roadmap.md#lease-accounting` still render.
+  - **Still render:** `raw/guide.v2.md`, `DOC-7#section.2.1`, `release-notes.2.4.md`,
+    `q4.2026.review.xlsx`, `raw/safety.md#2.1-reuse-policy` (the 2 has a digit beside it),
+    `raw/fine-print.md#ship-dates` (`print ship` is no verdict phrase) and `raw/go.2.market.md`.
+  - **`raw/go-live.md#2-reuse-notes` renders.** It reads "go live to reuse notes", and "live to" is
+    no verdict phrase. "go live" alone is a project milestone, and it is not a verdict phrase anywhere
+    in #8.6, so holding it would withhold ordinary go-live runbooks.
+- **Ordinary-word allowlist for case-evidenced continuations (Medium, design).** The round-11
+  exemption enumerated the clause continuations to hold, so any unlisted one reopened forms held
+  before round 10: `SafeToarchive`, `FineTodeliver`, `OkayTosubmit`, `GoodTogopublic` and
+  `TheyAreclear` rendered.
+  - **Fix (inverted rule):** as on `7a20785`, a case-evidenced phrase word followed by lower-case
+    letters in the same capitalised part is held by default. It is exempt only when that whole part
+    is an ordinary word: in `_ORDINARY_RUN_ONS` (155 words, shipped inside `closeout_core.py`, so
+    all four byte-identical copies carry it), or one of them with a plain inflection (s, es, ies for
+    y, d, ed, ing, er, ers). `_VERDICT_COMPLEMENTS`, `_CONTINUATION_WORDS` and
+    `_clause_continuation()` are removed.
+  - **How the list was built:**
+    1. Take every word in the repository's ordinary-word text and the Python standard library (58,383
+       words of three or more letters) that begins with a phrase word that can follow a case
+       transition: are, external, for, go, is, it, need, one, to, use. That gives 1,196 candidates.
+    2. Keep those in the public-domain Webster's Second word list (`web2`).
+    3. Drop clause-like words: words in the screening vocabularies; words whose remainder after the
+       phrase word is vocabulary or starts with a vocabulary word of four or more letters or run
+       material; and are/is/need followed by `n` or `nt`. This drops forgive, forward, its, told,
+       took and similar.
+    4. Fold inflections into their stems, and remove obscure entries (gol, tod, tor and the like).
+    5. Add common modern compounds missing from `web2`: toolkit, toolchain, tooltip, toolbar,
+       toolset, tokenize, tokenizer, tokenization, username, userbase, userguide, onedrive, toronto.
+
+    The word list was used only at generation time and is not shipped.
+  - **Now withheld** in title, ID and anchor form, through the chain: the reviewer's five forms and
+    the round-11 six (`SafeToreuse`, `FineToship`, `OkayToproceed`, `GoodTogolive`,
+    `NoNeedtoReview`, `TheyAresafe`). `OkayTodo` stays withheld (`todo` is not in the list).
+  - **Still render:** `SafeToolkit`, `SafeTools`, `FineTools`, `OkayToolkit`, `NoNeedle`,
+    `NoNeedles`, `SafeTomorrow`, `SafeTower`, `SafeToronto`, `SafeTone`, `GoodTogether`,
+    `GoodToolbox`, `TheyAreas`, `SafeTooltips`.
+- **False holds after the fix:**
+
+  | Set | Held |
+  | --- | --- |
+  | 238-item corpus | 0 |
+  | Title–citation pairs | 0 of 9,810 |
+  | Boundary extra check | 0 of 2,376 |
+  | Neighbour citation→citation pairs | 0 of 8,100 |
+  | Neighbour title→title pairs | 0 of 11,881 |
+  | Round-6 controls | 0 (`Setúbal` as a citation only, ASCII rule; `Setit pricing` held as before) |
+  | Ordinary words: 54,608 words × 3 casings | 684 held, identical to `9f44c27`: none new, none freed |
+  | CamelCase name set | 36 of 221, unchanged from round 11 |
+  | Dotted and extension-split controls | 0 |
+
+  `raw/safe-harbor.md#to-do` is held, as it was on `7a20785` and `ee18c97`, because of the existing
+  "to do" anchor clause. Round 12 does not change that.
+- **Sweep.** The fused sweep adds run-on continuations of every verdict phrase (archive, deliver,
+  submit, share, deploy and 30 more) and 1,909 extension-split citation forms. It covers 1,133,240
+  forms.
+  - **Against `7a20785`:** identical; no form held there passes now, and none passing there is held.
+  - **Against `ee18c97`:** 1,044 forms are held again, and none is lost.
+  - **Against `9f44c27`:** 3,512 forms are held again, and none is lost.
+  - **Against `3b3a9af`, `6abb7f6` and `6c1ca73`:** nothing lost.
+  - **Against `9f122f8`:** the 72 round-9b residual forms (`gothemplan`) are unchanged.
+  - **Extension-split citations:** none of the 1,909 forms passes.
+  - **Allowlist releases.** No sweep form held on `7a20785` passes. In the CamelCase set, 13 names
+    held on `7a20785` now render, each because its capitalised part is an allowlisted ordinary word:
+    `SafeToolkit`, `SafeTools`, `FineTools`, `OkayToolkit`, `NoNeedle`, `OkayTools`, `OkayTokens`,
+    `SafeTokenVault`, `SafeTopology`, `FineTopology`, `NoNeedleTesting`, `NoNeeds`, `NoNeedlework`.
+- **Timings.** 100 assets take 35.0 s (8.3 / 8.5 / 9.1 / 9.1 s per stage). 400 assets take 141.4 s
+  (32.4 / 33.6 / 40.3 / 35.1 s), 4.0 times as long.
+- **Reference.** #8.6 item 4 is updated in all five byte-identical copies.
+- **Tests (154 in 16 groups).** `QARound12Tests` in `render-policy` has 3 tests:
+  - extension-split shorthand and phrases are refused as citations; eight run through the chain
+    with `render_shape` holds; `AST-safe.md.2.reuse` is refused without echo;
+  - the extension controls, including `raw/go-live.md#2-reuse-notes`, run through the chain with no
+    holds;
+  - the eleven unlisted continuations are refused in every form and run through the chain with
+    `render_shape` holds, out of `reusable_assets` and the skeleton; the allowlisted names render
+    with no holds.
+
+  The first and third fail on `ee18c97`.
+
+**Golden differences (QA round 12).** None.

@@ -841,7 +841,7 @@ _KNOWN_EXTENSIONS = frozenset((
     "ppt pptx pptm pps ppsx pot potx odp vsd vsdx mpp one onepkg msg eml ics vcf json xml yaml yml toml ini cfg "
     "conf log html htm xhtml mht mhtml css png jpg jpeg gif bmp svg tif tiff webp heic mov avi wmv wav "
     "zip rar gz tgz tar bz2 xz py ts tsx js jsx sql sh ps1 bat cmd cs java ipynb r rmd tex bib epub pbix pbit "
-    "pbip twb twbx sav sas dwg dxf bak tmp url lnk key pages numbers"
+    "pbip twb twbx sav sas dwg dxf bak tmp url lnk key pages numbers mp3 mp4 m4a 7z"
 ).split())
 _PATH_END = re.compile(r"[/\\#;,\s]|$")
 
@@ -893,21 +893,36 @@ def _path_dots(value):
     return "".join(out)
 
 
+_EXTENSION_TOKEN = re.compile(r"\.([A-Za-z0-9]{1,5})(?![A-Za-z0-9])")
+
+
+def _drop_extensions(value):
+    """The value with every known file-extension token removed, wherever it stands ('raw/safe.md#reuse'
+    reads 'raw/safe#reuse'; 'raw/safe.md.2.reuse' reads 'raw/safe.2.reuse'), so the phrase is read
+    across it."""
+    return _EXTENSION_TOKEN.sub(
+        lambda match: "" if match.group(1).casefold() in _KNOWN_EXTENSIONS and not match.group(1).isdigit()
+        else match.group(0), value)
+
+
 def _shorthand_hit(value):
     """True when a lone '2' or '4' stands for the 'to' or 'for' of a verdict phrase: the phrase words
     before it are whole parts ending at the digit, and the words after it are whole parts starting
-    there, within one path segment (a '.' bounds a segment only as _path_dots reads it); a phrase
-    ending in 'to' ('safe to') needs a word after the digit."""
+    there. Known extension tokens (_drop_extensions) and the path and anchor separators '/', '\\' and
+    '#' are transparent ('raw/safe2.md#reuse', 'raw/fine.2.pptx#ship'); only a dotted version or a
+    final extension that is not known but carries a digit bounds the reading (_path_dots: 'raw/Safe2.md',
+    'DOC-7#section.2.1'). A phrase ending in 'to' ('safe to') needs a word after the digit."""
     if not _SHORTHAND_RE.search(value):
         return False
-    marked = _SHORTHAND_RE.sub(lambda match: _SHORTHAND[match.group(0)][0], _path_dots(value))
+    plain = re.sub(r"[/\\#]", "-", _drop_extensions(value))
+    marked = _SHORTHAND_RE.sub(lambda match: _SHORTHAND[match.group(0)][0], _path_dots(plain))
     markers = {mark: word for mark, word in _SHORTHAND.values()}
     for form in comparison_skeletons(marked):
         pieces = re.split("([\x01\x02])", form)
         for index in range(1, len(pieces), 2):
-            # Both sides stay inside one path segment ('raw/Safe2.md' is no phrase; 'safe.2.reuse' is).
-            left = _letter_parts(re.split(r"[./\\#]", pieces[index - 1])[-1])
-            right = _letter_parts(re.split(r"[./\\#]", pieces[index + 1])[0])
+            # A dotted version or a remaining real extension bounds the reading ('section.2.1').
+            left = _letter_parts(pieces[index - 1].split(".")[-1])
+            right = _letter_parts(pieces[index + 1].split(".")[0])
             for before, word, after in _SHORTHAND_PHRASES:
                 if word != markers[pieces[index]] or not right or not right[0][:1].isalpha():
                     continue
@@ -919,28 +934,37 @@ def _shorthand_hit(value):
     return False
 
 
-# What may run on, in lower case, after a case-evidenced verdict phrase that ends inside a capitalised
-# word and still read as a clause ('SafeToreuse', 'TheyAresafe', 'NoNeedtoReview'): a clause word,
-# determiner, object, preposition, imperative or verdict verb, verdict-phrase word, steering word, or
-# one of the verdict complements below. A word shorter than four letters counts only when the
-# continuation ends with it or goes on into another such word ('to', 'golive'), so 'Safe|To|wer' or
-# 'No|Need|le' stays a name.
-_VERDICT_COMPLEMENTS = ("reuse", "ship", "proceed", "live", "golive", "deploy", "launch", "merge", "export")
-_CONTINUATION_WORDS = tuple(sorted(
-    _TITLE_VERBS | _TITLE_LEAD_VERBS | _TITLE_CLAUSE_WORDS | _DETERMINERS | _OBJECTS | set(_PREPOSITIONS)
-    | {word for phrase in _TITLE_PHRASES for word in phrase.split()} | set(_VERDICT_COMPLEMENTS)
-    | set(_FUSED_WORDS)))
+# Ordinary words that may run on from a word of a verdict phrase inside one capitalised part (#8.6):
+# 'Safe|Toolkit', 'No|Needles', 'They|Areas'. A case-evidenced phrase that ends inside a capitalised
+# part beginning inside it is held unless that whole part is one of these words or a simple inflection
+# of one (_ordinary_word); anything else that runs on is held ('SafeToreuse', 'SafeToarchive',
+# 'TheyAreclear'). The list holds the words of the ordinary-word and realistic-name sets that begin
+# with a phrase word after its first (to, go, for, external, use, need, one, are, it, is) and are in
+# Webster's Second International (public domain), with a few modern compounds (toolkit, tooltip,
+# username, onedrive); a word that is clause material or runs on into it (todo, forall, forgive,
+# golive, isset) is left out.
+_ORDINARY_RUN_ONS = frozenset("""
+    area arena externally externals forbid forbidden force forcefully forcibly forcing ford fore forecast
+    forego foreground foreign forest forever forge forger forgery forget forgetting forgot forgotten fork
+    form formal formalization formally format formerly formula formulae formulate forth fortnightly
+    fortuitous fortunately fortune forty forum forwarding forwardly forwards goal god goes going golden gone
+    gong goods goodwill gopher gory got gotham gothic gotten govern governance government island iso isolate
+    isolation isomorphic issuance issue issuer issuing italian italic item iterable iterate iteration
+    iterative iteratively itself needing needle needlessly needlework needs onedrive oneself onetime today
+    toe together toggle token tokenization tokenize tokenizer tolerable tolerance tolerant tolerantly
+    tolerate tom tomato tomorrow ton tone tong tongue too tool toolbar toolbox toolchain toolkit toolset
+    tooltip tooth top topic topmost topological topology topped topping tore torn toronto tort tortious
+    tortoise tortuous torture toss tot total totality totally touch touchline touchy tour tournament tout
+    toward tower used useful usefulness useless uselessly user userbase userguide username
+""".split())
+_INFLECTIONS = (("s", ""), ("es", ""), ("ies", "y"), ("d", ""), ("ed", ""), ("ing", ""), ("ing", "e"), ("er", ""),
+                ("ers", ""))
 
 
-def _clause_continuation(text):
-    """True when text (lower-case letters running on inside one capitalised word) begins clause material."""
-    for word in _CONTINUATION_WORDS:
-        if text.startswith(word):
-            rest = text[len(word):]
-            if len(word) >= 4 or not rest or rest in _CONTINUATION_WORDS or any(
-                    len(other) >= 4 and rest.startswith(other) for other in _CONTINUATION_WORDS):
-                return True
-    return False
+def _ordinary_word(word):
+    """True when word is in _ORDINARY_RUN_ONS or is a plural, -ed, -ing or -er form of one."""
+    return word in _ORDINARY_RUN_ONS or any(
+        word.endswith(suffix) and word[:-len(suffix)] + stem in _ORDINARY_RUN_ONS for suffix, stem in _INFLECTIONS)
 
 
 def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=()):
@@ -949,22 +973,26 @@ def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=())
     at a part end ('Plea-se', not 'Roadmap lease'). Inside one value a verdict phrase also counts when a
     case transition inside a letter run (case_starts) falls on one of its own word boundaries, wherever
     its ends fall ('xsafeToReuse', 'ItemnoONENEEDS'): the transition is the evidence of a phrase. A space
-    is no such evidence ('Safe Tomorrow plan'), and the phrase must end at a token end, not inside a
-    capitalised word that begins inside the phrase and runs on in lower case (continuing:
-    'Safe|To|olkit', 'No|Need|le'; 'Xgood|to|Go' still counts), unless what runs on is itself clause
-    material (_clause_continuation: 'SafeTo|reuse', 'GoodTogo|live', 'NoNeed|to'). A word inside the
-    phrase always runs on into the phrase's next word, so only the phrase's end is read this way.
+    is no such evidence ('Safe Tomorrow plan'). A phrase that ends inside a capitalised word that
+    begins inside the phrase and runs on in lower case (continuing) is held unless that whole word is
+    an ordinary word (_ordinary_word: 'Safe|Toolkit', 'No|Needle', 'Safe|Tomorrow'); anything else is
+    held ('SafeToreuse', 'SafeToarchive', 'TheyAreclear'; 'Xgood|to|Go' counts as before). A word
+    inside the phrase always runs on into the phrase's next word, so only the phrase's end is read
+    this way.
     With a boundary (a join of two values), only an
     occurrence that straddles it counts, and only by its ends."""
     ends = (set(starts) - {0}) | {len(collapsed)}
 
     def runs_on(start, end):
-        """True when the phrase ends inside a capitalised word that began inside it and what follows
-        in that word is not clause material."""
-        if end not in continuing or max(begin for begin in starts if begin < end) <= start:
+        """True when the phrase ends inside a capitalised word that began inside it and that whole
+        word is an ordinary word."""
+        if end not in continuing:
+            return False
+        first = max(begin for begin in starts if begin < end)
+        if first <= start:
             return False
         stop = min([begin for begin in starts if begin > end] + [len(collapsed)])
-        return not _clause_continuation(collapsed[end:stop])
+        return _ordinary_word(collapsed[first:stop])
     for needle in _FUSED_NEEDLES:
         start = collapsed.find(needle)
         while start >= 0:
@@ -1081,7 +1109,10 @@ def citation_shape_ok(value, spelled=True):
             return False
         if spelled and spells_clause(source.group(0), r"[-_./\\]+"):
             return False
-        parts.append((source.group(0), [anchor or sheet for anchor, sheet in _CITE_WORDS.findall(part)]))
+        names = [anchor or sheet for anchor, sheet in _CITE_WORDS.findall(part)]
+        if spelled and part_phrase_spells(source.group(0), names):
+            return False
+        parts.append((source.group(0), names))
     if not spelled:
         return True
     if not all(id_shape_ok(name) for _, names in parts for name in names):
@@ -1094,6 +1125,30 @@ def citation_shape_ok(value, spelled=True):
         if names and next_names and boundary_spells_clause(names[-1], " ".join(next_names[:4])):
             return False
     return True
+
+
+def part_phrase_spells(source, names):
+    """One citation part read as a single run of words for verdict phrases and digit shorthand (#8.6):
+    its source with known extension tokens dropped (_drop_extensions), then its anchors and sheet names,
+    with '/', '\\', '#' and the sheet keyword transparent ('raw/safe.md#to-reuse', 'raw/good-to.md#go',
+    'raw/safe.md sheet ToReuse', 'raw/safe2.md#reuse'). Only verdict phrases, run-together verdict
+    phrases and steering words that start and end at part boundaries, and digit shorthand are read
+    here; verbs are read per identifier and across boundaries by the recogniser of (8)."""
+    view = "-".join([re.sub(r"[/\\#]", "-", _drop_extensions(source))] + list(names))
+    if _shorthand_hit(view):
+        return True
+    for form in comparison_skeletons(view):
+        parts = _letter_parts(form)
+        joined = f" {' '.join(parts)} "
+        if any(f" {phrase} " in joined for phrase in _TITLE_PHRASES):
+            return True
+        starts, position = {}, 0
+        for index, part in enumerate(parts):
+            starts[position] = index
+            position += len(part)
+        if parts and _needle_hit("".join(parts), starts):
+            return True
+    return False
 
 
 def id_shape_ok(value):
