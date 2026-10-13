@@ -10,11 +10,12 @@ stream lives in the [operator runbook](../operator-runbook.md). The failure clas
 hardened against live in the [plugin hardening checklist](../plugin-hardening-checklist.md). This
 file is the history and the current position; it does not repeat those procedures.
 
-State as of 2026-10-12 evening. The five plugins moved to the MOS3 app package as new candidate
+State as of 2026-10-13 morning. The five plugins moved to the MOS3 app package as new candidate
 versions; see the [2026-10-12 owner decision](#owner-decision-mos3-packaging-per-version-test-data-and-verdict-rename-2026-10-12).
 Mobilization 1.0.3, T&E 1.0.5 and DRQG 1.0.5 are frozen and await their Cowork runs. Closeout 1.0.3
 and Staffing 1.1.5 are not frozen: both wait on an owner decision about the shared steering
-detector (see [Open risks](#open-risks)).
+detector (see [Open risks](#open-risks)), and Closeout also has two open Medium findings from QA
+round 10.
 
 ## Contents
 
@@ -109,7 +110,7 @@ human testers).
 
 | # | Plugin (slug) | Current version | State | C1 | C2 | C3 | C4 | C5 | Next action | Owner |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 01 | `engagement-closeout-knowledge-harvest` | 1.0.3 (MOS3, pre-freeze QA) | 1.0.3 **pre-freeze QA**, not frozen; supersedes 1.0.2 (Ready, archived; human gate not completed). QA rounds 1 to 4 fixed (`c4a039a`, `48015fb`, `8c831ae`, `3b3a9af`; 121 checks). One open High: reworded instruction-like prose the shared detector misses is copied from description, lesson and owner fields into intermediate JSON; it needs a shared-detector change | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Owner decision on the shared detector, then a final QA round, freeze and evaluate | owner, then operator |
+| 01 | `engagement-closeout-knowledge-harvest` | 1.0.3 (MOS3, pre-freeze QA) | 1.0.3 **pre-freeze QA**, not frozen; supersedes 1.0.2 (Ready, archived; human gate not completed). QA rounds 1 to 9 fixed (`c4a039a` to `7a20785`; 145 checks). QA round 10 (2026-10-13) has 2 open Medium, not fixed (paused): digit shorthand verdicts (`safe2reuse`, `fine2ship`) pass, and CamelCase names such as `SafeToolkit` are falsely withheld. One open High: reworded instruction-like prose the shared detector misses is copied from description, lesson and owner fields into intermediate JSON; it needs a shared-detector change | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Fix QA round 10, re-run QA until clean; owner decision on the shared detector; then freeze and evaluate | operator, owner |
 | 02 | `engagement-staffing-bench-match` | 1.1.5 (MOS3, pre-freeze QA) | 1.1.5 **pre-freeze QA**, not frozen; supersedes 1.1.4 (Ready, archived; human gate not completed). Hardening phases 1 and 2 (`b6946b6`, `9517b5f`) and QA rounds 1 to 14 fixed (`ea4b31b` to `07e271f`); QA round 15 found nothing (194/196 checks, source and ZIP). The 2 failures are the `detector-gaps` group, which fails by design (shared-detector misses), so the freeze is refused until the owner decides | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Owner decision on the shared detector, then freeze and evaluate | owner, then operator |
 | 03 | `engagement-mobilization-onboarding-pack` | 1.0.3 (MOS3, frozen 2026-10-12); 1.0.2 evaluated | 1.0.3 **frozen 2026-10-12** (`87DEFE6F…A4F3`, receipt `16963eb`, clean; toolkit validated), in Cowork evaluation; supersedes 1.0.2. History: 1.0.0 Blocked (trust-and-safety gate); 1.0.1 **No-ship** 2026-10-07 (complete-chain functional case failed); 1.0.2 frozen 2026-10-07 (`C49C8EA7…A378`, receipt `9d27925`, clean) after QA round 3 (cap); evaluated **Blocked** 2026-10-08 on missing grader-calibration evidence only (no human reference labels); every measured bar met and the 1.0.1 defect did not recur; owner accepted 2026-10-08, no re-version | No | No | No (1.0.2: Yes) | No | No | Create the Cowork task, attach both frozen ZIPs, run the watcher | operator |
 | 04 | `time-expense-narrative-compliance` | 1.0.5 (MOS3, frozen 2026-10-12); 1.0.4 evaluated | 1.0.5 **frozen 2026-10-12** (`DA1E657B…4C02`, receipt `ace135d`, clean; toolkit validated), in Cowork evaluation; supersedes 1.0.4. History: 1.0.3 Blocked (trust-and-safety gate); 1.0.4 frozen 2026-10-07 (`1E1380E3…10B4`, receipt `f9518fd`, clean) after QA round 15 (cap, `e6925e4`); evaluated **No-ship** 2026-10-07 on missing grader-calibration evidence only (no human reference labels); every measured bar met; owner accepted 2026-10-08, no re-version | No | No | No (1.0.4: Yes) | No | No | Create the Cowork task, attach both frozen ZIPs, run the watcher | operator |
@@ -261,11 +262,27 @@ From the 1.0.2 report:
    SHA-256 is `5F5F8123…1782`, and update the industry README. For the other owner decisions, follow
    the runbook's [Ready path](../operator-runbook.md#ready-path-human-gate-and-promotion).
 3. 1.0.3: **pre-freeze QA, blocked on the shared-detector decision** (see
-   [Open risks](#open-risks)). QA rounds 1 to 4 are fixed (`c4a039a`, `48015fb`, `8c831ae`,
-   `3b3a9af`; 121 checks, source and ZIP). Known residuals: a withheld clause split between an ID
-   and a title, or across records, is not checked; Cyrillic look-alikes are not folded in titles;
-   some run-together lowercase names may be over-withheld. After the decision, run a final QA
-   round, freeze, evaluate with both attachments, and create a 1.0.3 tracker tab keyed to the new SHA.
+   [Open risks](#open-risks)). QA rounds 1 to 9 are fixed, each as a new commit with no version
+   bump (145 checks, source and ZIP): `c4a039a`, `48015fb`, `8c831ae`, `3b3a9af`; round 5
+   `9f122f8` (short fused lead verbs, citation joins); round 6 `b366de4` (narrower short-verb rule
+   after an 8% false-withhold rate on a realistic corpus, adjacent `;` citation-part joins, linear
+   screening); round 7 `a4e36a8` (title and anchor boundary joins, escalations in the total
+   ceiling); round 8 `6abb7f6` (token-anchored boundary words, split verbs with complements);
+   round 9 `6c1ca73` and `7a20785` (case-evidenced fused phrases, neighbour screening in rendered
+   order, short lead verbs with trailing complements). False withholds on the plugin's realistic
+   corpus and pair sets are 0 at `7a20785`. Input ceilings: 1,000 records per array, 2,500 in total
+   including escalations and 200 items per list, each a clean refusal, documented in the README,
+   the `artifact-assemble` and `asset-identify` workflows and rules #8.1; about 35 s for the chain
+   on 100 assets and 140 s on 400. QA round 10 on `7a20785` (2026-10-13) found 2 Medium, **open,
+   paused by the owner**: digit shorthand verdict phrases (`raw/safe2reuse.md`, `DOC-7#fine2ship`,
+   `good2go`) reach the final record, and ordinary CamelCase names (`SafeToolkit`,
+   `ApprovedFormats`, `NoNeedle`) are falsely withheld because a case change at the start of the
+   last word establishes a phrase. Known residuals: a withheld clause split inside a document ID,
+   between an ID and a title, or across pieces that never render adjacently, is not checked;
+   Cyrillic look-alikes are not folded in titles; some run-together names (`SafeTomorrow`) are
+   over-withheld; `it`/`them` fused forms without a part end pass. Next: fix round 10, re-run QA
+   until a round is clean, then, after the detector decision, freeze, evaluate with both
+   attachments, and create a 1.0.3 tracker tab keyed to the new SHA.
 
 ## 02 Engagement Staffing & Bench Match
 
