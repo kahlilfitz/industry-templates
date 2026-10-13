@@ -240,6 +240,45 @@ the hardening phases change engine behaviour, but output contracts change only a
   - `ConstraintHardeningTests.test_qa5_engine_vocabulary_never_counts_as_foreign`
   - `ValidateHardeningTests.test_qa5_mentions_id_is_linear` (the timing ceiling is a generous 8 s)
 
+### QA round 6 (phase 2)
+
+- **QA round 6 fixes (two High defects, one Medium).**
+  - **Register contributors (High, rule 9.11).** Before, register-derived values were screened
+    one string at a time. A name split across a candidate's register values therefore escaped:
+    C-101 clear row source "Board" and citation "Director", with an established other client
+    named "Board Director Inc.". `slate_validate` also skipped `constraints_considered` in its
+    defensive scan. The candidate's record values and the input text of its own register rows
+    are now one collection for the multi-value search. A name split between register values, or
+    between the record and a register row, holds the candidate (#9.11, escalated by ID), and
+    every contributing value is withheld. `slate_validate` reads each slate row's register
+    entries with the row's values; fixed vocabulary, engine text and another client's
+    labelled entry are never counted.
+  - **Canonical role type (High, rule 9.11).** Before, a recognised alias such as
+    `"board director"` was exempt from screening as vocabulary but was carried as supplied. Now
+    `constraints_considered.role_type` carries the canonical type (`board_member`) for a
+    recognised alias, or the supplied text otherwise, which is then screened. Only the exact
+    canonical strings the engine emits count as vocabulary. This is additive-safe: Mobilization
+    does not read `role_type`, and the demo data uses only `employee`.
+  - **Indexed screening (Medium).** On a generated input of 500 candidates by 500 distinct other
+    clients, `govern()` took about 35 s on QA's machine and about 70 s here. The causes were a
+    contributor search per name per value and a full register scan per slate row. Values are now
+    normalised once per document, and other-client names are indexed by their rarest token. The
+    contributor search runs only when a record's token multiset contains every token of a name,
+    and register rows are indexed by candidate ID. The 9.11 screening of that input now takes
+    about 0.3 s (41 s before), and a warm `govern()` about 0.7 s. The first, cold pass is still
+    dominated by the shared instruction detector, whose cost is linear in the text; that module
+    is unchanged.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): 9.11 wording for the
+  combined record-and-register collection, exact canonical vocabulary and canonical
+  `role_type`.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are four new regression tests, each failing on `b45721c`:
+  - `ConstraintHardeningTests.test_qa6_name_split_across_register_values_holds_candidate`
+  - `ConstraintHardeningTests.test_qa6_role_type_alias_is_carried_canonical`
+  - `ConstraintHardeningTests.test_qa6_screening_is_indexed` (the ceilings are a generous 10 s for
+    screening and 15 s for a warm `govern()`)
+  - `ValidateHardeningTests.test_qa6_validate_screens_constraints_considered`
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

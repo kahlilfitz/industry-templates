@@ -8,6 +8,7 @@ exactly one ``error:`` line, no Traceback, no echoed value or file path and no o
 import copy
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -696,3 +697,24 @@ class ValidateHardeningTests(unittest.TestCase):
                 started = time.perf_counter()
                 self.assertIs(expected, slate_validate.mentions_id(text, "C-101"))
                 self.assertLess(time.perf_counter() - started, 8.0)
+
+    # --- QA round 6: the defensive 9.11 scan reads register entries with the candidate's values ---
+    def test_qa6_validate_screens_constraints_considered(self):
+        quillon = re.compile(r"quillon|varga", re.IGNORECASE)
+        for label, values in (("source and citation", {"source": "Quillon", "citation": "Varga"}),
+                              ("one entry member", {"citation": "Quillon Varga partner review"})):
+            document = self.a()
+            self.assertIn("C-101", self.recommended_ids(slate_validate.validate(self.a()), 0))
+            for role in document["governed_roles"]:
+                for slate in ("candidate_slate", "recommended_candidates"):
+                    for candidate in role[slate]:
+                        if candidate["candidate_id"] != "C-101":
+                            continue
+                        for item in candidate["constraints_considered"]:
+                            if item.get("type") == "clear":
+                                item.update(values)
+            with self.subTest(split=label):
+                result = slate_validate.validate(document, (), {"quillon varga"})
+                self.assertNotIn("C-101", self.recommended_ids(result, 0))
+                self.assertEqual([], quillon.findall(json.dumps(result)))
+                self.assertTrue(any("#9.11" in item for item in result["escalations"]))

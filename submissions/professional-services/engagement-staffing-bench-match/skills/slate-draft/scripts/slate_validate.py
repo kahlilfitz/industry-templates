@@ -884,19 +884,27 @@ def validate(governed_payload, intake_engagements=(), foreign_names=()):
     hit_scopes = _hit_scopes(governed_payload, log)
     held |= hit_scopes
     escalations = merge_unique(payload["escalations"], log)
-    foreign = set(foreign_names) | _governed_foreign(governed_payload, governed_payload["engagement"])
+    foreign = constraint_check.ForeignNames(
+        set(foreign_names) | _governed_foreign(governed_payload, governed_payload["engagement"]))
     foreign_held = set()
-    # Register rows are governed by #9.9 upstream; rule 9.11 screens the candidate's own values, in
-    # its slate rows and in every carried bench, scored and ranked record.
+    # Rule 9.11 screens the candidate's own values, in its slate rows and in every carried bench,
+    # scored and ranked record. A slate row's register entries are read with its values as one
+    # collection, by their register input text only (engine vocabulary and engine text never count).
     skip = constraint_check.FOREIGN_SKIP | {"constraints_considered"}
     flagged = constraint_check.foreign_candidates(constraint_check.candidate_records(payload), foreign)
     slate_rows = [candidate for role in payload["governed_roles"] for candidate in role["candidate_slate"]]
-    for key, values in constraint_check.foreign_candidates(slate_rows, foreign, skip).items():
+    for key, values in constraint_check.foreign_candidates(
+            slate_rows, foreign, skip,
+            extra=lambda record: constraint_check.considered_texts(
+                record.get("constraints_considered"), foreign)).items():
         flagged.setdefault(key, set()).update(values)
     for role_index, role in enumerate(payload["governed_roles"]):
         for index, candidate in enumerate(role["candidate_slate"]):
             values = flagged.get(id_key(candidate["candidate_id"]), ())
             scrubbed, hits = constraint_check.withhold_foreign(candidate, foreign, skip, values)
+            scrubbed["constraints_considered"], considered_hits = constraint_check.withhold_considered(
+                scrubbed["constraints_considered"], foreign, values, held=bool(hits or values))
+            hits += considered_hits
             if hits or values:
                 candidate.clear()
                 candidate.update(scrubbed)

@@ -16,6 +16,7 @@ validated before they are scoped out (#9.9) and are emitted only by position and
 import functools
 import re
 import sys
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -164,6 +165,17 @@ def candidate_register_rows(constraints, candidate_id):
         for index, item in enumerate(rows if isinstance(rows, list) else [])
         if isinstance(item, dict) and id_key(item.get("candidate_id")) == key
     ]
+
+def register_index(constraints):
+    """id_key(candidate_id) -> [(register index, row)], built in one pass over the register."""
+    rows = constraints.get("constraints") or []
+    index = {}
+    for position, item in enumerate(rows if isinstance(rows, list) else []):
+        if isinstance(item, dict):
+            key = id_key(item.get("candidate_id"))
+            if key is not None:
+                index.setdefault(key, []).append((position, item))
+    return index
 
 def candidate_constraints(constraints, candidate_id):
     return [item for _index, item in candidate_register_rows(constraints, candidate_id)]
@@ -339,7 +351,7 @@ def considered_item(item, applies, disposition, reason, default_source="connecto
         "client_name": _text(item, "client_name"),
         "status": _text(item, "status"),
         "material": materiality_value(item),
-        "role_type": _text(item, "role_type"),
+        "role_type": carried_role_type(_text(item, "role_type")),
         "process": _text(item, "process"),
         "end_date": _text(item, "end_date"),
         "resolved_date": _text(item, "resolved_date"),
@@ -436,6 +448,13 @@ def normalize_role_type(value):
     }
     return aliases.get(normalized, normalized)
 
+def carried_role_type(value):
+    """The role_type a register entry carries: the canonical type when the value is recognised (an
+    alias such as "board director" is never repeated), otherwise the supplied text."""
+    text = value if isinstance(value, str) else ""
+    canonical_type = normalize_role_type(text)
+    return canonical_type if canonical_type in ROLE_TYPES else text
+
 def safe_days_between(start, end):
     try:
         return days_between(start, end)
@@ -468,17 +487,18 @@ class _Verdict:
             self.considered.append(item)
 
 
-def verdict_for(role, row, constraints, held_rows=None, foreign_hold=False):
+def verdict_for(role, row, constraints, held_rows=None, foreign_hold=False, register_rows=None):
     """Evaluate one ranked candidate against the register. ``held_rows`` maps a register index to the
     set of member names a screening hit withheld (``None`` member: the row itself). ``foreign_hold``
-    marks a candidate record that named another client (rule 9.11)."""
+    marks a candidate record that named another client (rule 9.11). ``register_rows`` are the
+    candidate's (index, row) pairs when the caller already has them."""
     held_rows = held_rows or {}
     acc = _Verdict()
     start = _role_start(role, constraints)
     if not start:
         raise ValueError(f"no start_date for role {role.get('role_id', '<unknown>')}")
     engagement = constraints.get("engagement") or {}
-    rows = candidate_register_rows(constraints, row.get("candidate_id"))
+    rows = candidate_register_rows(constraints, row.get("candidate_id")) if register_rows is None else register_rows
     default_source = constraints.get("source") if isinstance(constraints.get("source"), str) else ""
     default_source = default_source or "connector:conflicts-register"
 
@@ -1061,6 +1081,54 @@ def _held_rows(log):
     return held
 
 
+class ForeignNames(frozenset):
+    """Normalised other-client names (rule 9.11) with a token index. Each name is filed under its
+    rarest token, so a text is compared only with the names filed under one of its own tokens, and
+    each distinct text is screened once per document (the result is cached)."""
+
+    def __new__(cls, names=()):
+        self = super().__new__(cls, (name for name in names if isinstance(name, str) and name.split()))
+        parts = [tuple(name.split()) for name in self]
+        frequency = Counter(token for words in parts for token in set(words))
+        self.filed = {}
+        for words in parts:
+            self.filed.setdefault(min(words, key=lambda token: (frequency[token], token)), []).append(words)
+        self.hits = {}
+        return self
+
+
+def _as_foreign(foreign):
+    return foreign if isinstance(foreign, ForeignNames) else ForeignNames(foreign or ())
+
+
+@functools.lru_cache(maxsize=1 << 16)
+def _entity_tokens(text):
+    return tuple(normalize_entity_name(text).split())
+
+
+def _tokens_of(text):
+    return _entity_tokens(text) if isinstance(text, str) else ()
+
+
+def _has_run(words, part):
+    """True when the token tuple ``part`` appears in ``words`` as whole consecutive tokens."""
+    width = len(part)
+    if not width or width > len(words):
+        return False
+    first = part[0]
+    return any(words[index:index + width] == part
+               for index in range(len(words) - width + 1) if words[index] == first)
+
+
+def _names_in(words, foreign):
+    """True when the token tuple ``words`` holds a whole other-client name (cached per name set)."""
+    hit = foreign.hits.get(words)
+    if hit is None:
+        hit = foreign.hits[words] = any(
+            _has_run(words, name) for token in set(words) for name in foreign.filed.get(token, ()))
+    return hit
+
+
 def _foreign_names(raw_constraints, engagement):
     """A16/D12: the other-client names in the raw register, harvested before anything is screened."""
     names = set()
@@ -1070,18 +1138,13 @@ def _foreign_names(raw_constraints, engagement):
             key = normalize_entity_name(name)
             if key:
                 names.add(key)
-    return names
+    return ForeignNames(names)
 
 
 def _names_foreign(text, foreign):
     if not foreign or not isinstance(text, str):
         return False
-    words = f" {normalize_entity_name(text)} "
-    return any(f" {name} " in words for name in foreign)
-
-
-def _contains_words(words, part):
-    return f" {part} " in f" {words} "
+    return _names_in(_entity_tokens(text), _as_foreign(foreign))
 
 
 # Top-level members of a candidate record whose names are engine vocabulary; every other member
@@ -1156,8 +1219,10 @@ def _engine_shaped(key, value):
 def _foreign_hit(text, foreign, contributors):
     if not isinstance(text, str):
         return False
-    return _names_foreign(text, foreign) or bool(
-        contributors and any(_contains_words(normalize_entity_name(text), part) for part in contributors))
+    if _names_foreign(text, foreign):
+        return True
+    words = _entity_tokens(text) if contributors else ()
+    return any(_has_run(words, tuple(part.split())) for part in contributors or ())
 
 
 def _withhold_value(value, foreign, contributors, screen_keys):
@@ -1189,6 +1254,7 @@ def _withhold_value(value, foreign, contributors, screen_keys):
 def _withhold_holds(value, foreign, contributors):
     """Rule 9.11 for a record's ``screening_holds``: an engine hold line is screened by its path (the
     only part an input can shape); anything else, a raw input value included, is screened whole."""
+    foreign = _as_foreign(foreign)
     if isinstance(value, list):
         out, hits = [], 0
         for item in value:
@@ -1211,6 +1277,7 @@ def withhold_record(record, foreign, skip=FOREIGN_SKIP, contributors=()):
     """Rule 9.11 for one candidate record: top-level members in ``skip`` are kept as they are; every
     other member is screened at every depth (member names included, apart from engine vocabulary),
     and ``screening_holds`` by the input-derived path of each engine hold line."""
+    foreign = _as_foreign(foreign)
     out, hits = {}, 0
     for key, item in record.items():
         if key in skip:
@@ -1237,6 +1304,7 @@ def withhold_foreign(value, foreign, skip=frozenset(), contributors=()):
     becomes the neutral FOREIGN_VALUE. Returns (new value, number of strings withheld). With ``skip``,
     ``value`` is one candidate record and withhold_record() applies (``skip`` holds top-level members
     only; nested members are always screened). The input is never mutated."""
+    foreign = _as_foreign(foreign)
     if isinstance(value, dict) and skip:
         return withhold_record(value, foreign, skip, contributors)
     return _withhold_value(value, foreign, contributors, False)
@@ -1320,23 +1388,32 @@ def _split_name_contributors(texts, name):
     return found
 
 
-def foreign_contributors(record, foreign, skip=FOREIGN_SKIP):
-    """Rule 9.11: the normalised values of one candidate record that name another client, alone or
-    when two or more of its values are read together in some order (a name split across fields or
-    list items). A value that only shares a word with the other client's name never counts on its
-    own, and neither do values that do not together spell the whole name."""
+def contributors_of(texts, foreign):
+    """Rule 9.11 over one candidate's collection of input-derived texts: the normalised texts that
+    name another client, alone or when two or more of them are read together in some order (a name
+    split across fields, list items or register values). A name is searched for only when the
+    collection's tokens include every token of it (as often as the name repeats it), so the cost
+    grows with the collection, not with the number of other clients. A text that only shares a word
+    with the other client's name never counts on its own."""
+    foreign = _as_foreign(foreign)
     if not foreign:
         return set()
-    texts = [words for words in (normalize_entity_name(text) for text in _record_texts(record, skip)) if words]
-    names = [f" {name} " for name in foreign]
-    alone = {words for words in texts if any(name in f" {words} " for name in names)}
+    words = [tokens for tokens in (_tokens_of(text) for text in texts) if tokens]
+    alone = {tokens for tokens in words if _names_in(tokens, foreign)}
     found = set(alone)
-    rest = [tuple(words.split()) for words in texts if words not in alone]  # every occurrence
-    for name in foreign:
-        tokens = tuple(name.split())
-        if len(tokens) > 1:
-            found.update(" ".join(text) for text in _split_name_contributors(rest, tokens))
-    return found
+    rest = [tokens for tokens in words if tokens not in alone]  # every occurrence
+    counts = Counter(token for tokens in rest for token in tokens)
+    for token in counts:
+        for name in foreign.filed.get(token, ()):
+            if len(name) > 1 and all(counts[part] >= need for part, need in Counter(name).items()):
+                found.update(_split_name_contributors(rest, name))
+    return {" ".join(tokens) for tokens in found}
+
+
+def foreign_contributors(record, foreign, skip=FOREIGN_SKIP, extra=()):
+    """Rule 9.11 for one candidate record (and ``extra`` input-derived texts read with it): see
+    contributors_of()."""
+    return contributors_of([*_record_texts(record, skip), *extra], foreign)
 
 
 _VOCABULARY = {
@@ -1346,12 +1423,12 @@ _VOCABULARY = {
 
 
 def _vocabulary_value(key, value):
-    """True for a register-row value that is exactly the rules' fixed vocabulary for ``key``."""
+    """True for a value that is exactly the canonical vocabulary the engine emits for ``key``."""
     if not isinstance(value, str):
         return False
     if key == "role_type":
-        return normalize_role_type(value) in ROLE_TYPES
-    return value.strip().casefold() in _VOCABULARY.get(key, ())
+        return value in ROLE_TYPES
+    return value in _VOCABULARY.get(key, ())
 
 
 def verdict_sources(constraints, register_rows):
@@ -1366,6 +1443,8 @@ def verdict_sources(constraints, register_rows):
         if applies_to_client(item, engagement) is False:
             continue
         for key, value in item.items():
+            if key == "role_type" and isinstance(value, str):
+                value = carried_role_type(value)  # the form the entry carries
             if key != "candidate_id" and not _vocabulary_value(key, value):
                 texts.extend(_value_texts(value, True))
     for key in ("source",) + (() if register_rows else ("citation",)):
@@ -1376,17 +1455,80 @@ def verdict_sources(constraints, register_rows):
 
 # Entry types the engine itself emits in constraints_considered (not register rows).
 _ENGINE_ENTRY_TYPES = {"source_screening", "availability", "availability_evidence", "conflicts_register_coverage"}
+# Entry types built from the bench record (already screened with it) or from fixed text only.
+_RECORD_ENTRY_TYPES = {"source_screening", "availability", "availability_evidence"}
+# Members of a register entry that carry input text; every other member is engine-composed.
+_INPUT_MEMBERS = ("client_name", "status", "role_type", "process", "end_date", "resolved_date", "source", "citation")
+# Fixed text and defaults the engine itself writes into those members.
+_ENGINE_TEXTS = {
+    FOREIGN_LABEL, FOREIGN_VALUE, FOREIGN_REASON, FOREIGN_RULE, "withheld", "conflicts record",
+    "conflicts register", "connector:conflicts-register",
+    f"conflicts register citation withheld: names another client ({RULES} #9.9)",
+}
+_ENGINE_ROW_TEXT = re.compile(
+    r"conflicts register row \d+(?: for another client; name and citation withheld)? "
+    r"\(independence-eligibility-rules\.md #\d+\.\d+\)")
 
 
-def _withhold_considered(item, foreign, contributors):
-    """Rule 9.11 for one constraints_considered entry: free text naming another client is withheld;
-    the disposition, fixed vocabulary, engine entry types and the fixed other-client label are kept."""
-    out = {}
-    for key, value in item.items():
-        keep = (not isinstance(value, str) or key == "disposition" or value == FOREIGN_LABEL
-                or _vocabulary_value(key, value) or (key == "type" and value in _ENGINE_ENTRY_TYPES))
-        out[key] = value if keep else withhold_foreign(value, foreign, contributors=contributors)[0]
-    return out
+def _engine_text(value):
+    return value in _ENGINE_TEXTS or _ENGINE_ROW_TEXT.fullmatch(value) is not None
+
+
+def _foreign_entry(item, foreign):
+    """True for another client's entry: the fixed label, or (in a hand-built governed document) a
+    not-applicable entry whose client_name is itself one of the established foreign identities."""
+    name = item.get("client_name")
+    if name == FOREIGN_LABEL:
+        return True
+    return (item.get("applies_to_engagement") is False and isinstance(name, str)
+            and normalize_entity_name(name) in foreign)
+
+
+def _input_member(item, key, value, foreign=frozenset()):
+    """True for a constraints_considered member that carries register input text (not fixed
+    vocabulary, engine text, an entry built from the bench record or another client's entry)."""
+    return (isinstance(value, str) and bool(value.strip()) and key in _INPUT_MEMBERS
+            and item.get("type") not in _RECORD_ENTRY_TYPES and not _foreign_entry(item, foreign)
+            and not _vocabulary_value(key, value) and not _engine_text(value))
+
+
+def considered_texts(items, foreign=frozenset()):
+    """The register input text a constraints_considered list carries (rule 9.11), in order."""
+    if not isinstance(items, list):
+        return []
+    return [value for item in items if isinstance(item, dict)
+            for key, value in item.items() if _input_member(item, key, value, foreign)]
+
+
+def withhold_considered(items, foreign, contributors=(), held=False):
+    """Rule 9.11 for a constraints_considered list: register input text naming another client (or
+    holding a contributing value) is withheld and counted. For a ``held`` candidate, engine-composed
+    text holding a contributing value is withheld too; dispositions, fixed vocabulary, engine entry
+    types and engine text are always kept. Returns (new list, number of input values withheld)."""
+    if not isinstance(items, list):
+        return items, 0
+    foreign = _as_foreign(foreign)
+    out, hits = [], 0
+    for item in items:
+        if not isinstance(item, dict):
+            out.append(item)
+            continue
+        if _foreign_entry(item, foreign):
+            out.append(dict(item))
+            continue
+        entry = {}
+        for key, value in item.items():
+            if _input_member(item, key, value, foreign):
+                if _foreign_hit(value, foreign, contributors):
+                    value = FOREIGN_VALUE
+                    hits += 1
+            elif (held and isinstance(value, str) and key not in ("type", "disposition")
+                    and not _vocabulary_value(key, value) and not _engine_text(value)
+                    and _foreign_hit(value, foreign, contributors)):
+                value = FOREIGN_VALUE
+            entry[key] = value
+        out.append(entry)
+    return out, hits
 
 
 def candidate_records(document):
@@ -1399,15 +1541,17 @@ def candidate_records(document):
                 yield from role.get(member) or []
 
 
-def foreign_candidates(records, foreign, skip=FOREIGN_SKIP):
+def foreign_candidates(records, foreign, skip=FOREIGN_SKIP, extra=None):
     """id_key(candidate_id) -> contributing normalised values, for each candidate with any record that
-    names another client (rule 9.11)."""
+    names another client (rule 9.11). ``extra(record)`` gives further input-derived texts read with
+    that record as one collection (the candidate's register text)."""
+    foreign = _as_foreign(foreign)
     found = {}
     for record in records:
         if not isinstance(record, dict):
             continue
         key = id_key(record.get("candidate_id"))
-        contributors = foreign_contributors(record, foreign, skip)
+        contributors = foreign_contributors(record, foreign, skip, extra(record) if extra else ())
         if key is not None and contributors:
             found.setdefault(key, set()).update(contributors)
     return found
@@ -1430,6 +1574,7 @@ def withhold_foreign_sections(payload, foreign, flagged=None):
     """Rule 9.11: the candidate records carried through unchanged (bench, scored and ranked sections)
     are screened the same way, so a value naming another client never reaches any output. ``flagged``
     is the foreign_candidates() map; every contributing value of a flagged candidate is withheld."""
+    foreign = _as_foreign(foreign)
     flagged = flagged if flagged is not None else foreign_candidates(candidate_records(payload), foreign)
     if "bench_candidates" in payload:
         payload["bench_candidates"] = _withhold_records(payload["bench_candidates"], foreign, flagged)
@@ -1509,7 +1654,17 @@ def govern(ranked_payload, constraints_payload):
             f"- check candidate ID mapping ({RULES} #9.5)",
             f"{RULES} #9.5",
         )
-    flagged = foreign_candidates(candidate_records(payload), foreign)
+    # Rule 9.11 reads one collection per candidate: the values of each of its records together with
+    # the register text its verdict can carry, so a name split between them is still found.
+    rows_by_key = register_index(constraints)
+    register_texts = {}
+    for ranked_role in payload["ranked_roles"]:
+        for candidate in ranked_role["candidate_slate"]:
+            key = id_key(candidate["candidate_id"])
+            if key not in register_texts:
+                register_texts[key] = verdict_sources(constraints, rows_by_key.get(key, []))
+    flagged = foreign_candidates(candidate_records(payload), foreign,
+                                 extra=lambda record: register_texts.get(id_key(record.get("candidate_id")), ()))
     missing_reported = set()
     governed_roles = []
     gaps = []
@@ -1520,7 +1675,7 @@ def govern(ranked_payload, constraints_payload):
         governed = []
         top_refused = False
         for c_index, row in enumerate(ranked_role["candidate_slate"]):
-            register_rows = candidate_register_rows(constraints, row["candidate_id"])
+            register_rows = rows_by_key.get(id_key(row["candidate_id"]), [])
             candidate_held = {index: held_rows[index] for index, _item in register_rows if index in held_rows}
             ranked_holds = log.holds_under(f"ranked_input.ranked_roles[{r_index}].candidate_slate[{c_index}]")
             # Rule 9.11: a carried candidate value naming another client is withheld before any rule
@@ -1533,23 +1688,25 @@ def govern(ranked_payload, constraints_payload):
             foreign_hits += hold_hits + register_hits + bool(flagged_values)
             holds = merge_unique(row.get("screening_holds") or [], ranked_holds)
 
-            # Only input-derived text the verdict can carry is screened; engine vocabulary never is.
-            sources = [text for text in verdict_sources(constraints, register_rows)
-                       if _names_foreign(text, foreign)]
+            foreign_held = bool(foreign_hits)
             verdict_row = dict(row, screening_holds=holds)
-            result = verdict_for(role, verdict_row, constraints, candidate_held,
-                                 foreign_hold=bool(foreign_hits or sources))
+            result = verdict_for(role, verdict_row, constraints, candidate_held, foreign_hold=foreign_held,
+                                 register_rows=register_rows)
             for item in result[3]:
                 if "client_name" in item and item.get("applies_to_engagement") is not False \
                         and _names_foreign(item.get("citation"), foreign):
                     item["citation"] = f"conflicts register citation withheld: names another client ({RULES} #9.9)"
             verdict, reasons, citations, considered = result
-            if sources:
-                contributors = {normalize_entity_name(text) for text in sources} - {""}
-                reasons = withhold_foreign(reasons, foreign, contributors=contributors)[0]
-                citations = withhold_foreign(citations, foreign, contributors=contributors)[0]
-                considered = [_withhold_considered(item, foreign, contributors) for item in considered]
-            foreign_held = bool(foreign_hits or sources)
+            # Only register input text reaches the verdict (bench values were withheld above); engine
+            # vocabulary and engine text never count.
+            register_words = {" ".join(_tokens_of(text)) for text in register_texts.get(id_key(row["candidate_id"]), ())}
+            register_contributors = set(flagged_values) & register_words
+            if register_contributors:
+                reasons = [text if _engine_text(text) else withhold_foreign(text, foreign, contributors=register_contributors)[0]
+                           for text in reasons]
+                citations = [text if _engine_text(text) else withhold_foreign(text, foreign, contributors=register_contributors)[0]
+                             for text in citations]
+            considered = withhold_considered(considered, foreign, register_contributors, held=bool(register_contributors))[0]
             if foreign_held:
                 escalations.add(
                     f"{role_id}: {row['candidate_id']} - {FOREIGN_REASON}; independence review required "

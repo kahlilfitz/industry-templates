@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -968,3 +969,72 @@ class ConstraintHardeningTests(unittest.TestCase):
                "status": "closed", "role_type": "employee", "end_date": "2010-01-01", "process": "Unrelated Synthetic Client",
                "source": "connector:conflicts-register", "confidence": 0.97, "citation": "conflicts extract row 73"}
         self.assert_foreign_hold(bench, self.with_rows(row))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 6: one collection per candidate - its record values and its register text (9.11).
+    # ----------------------------------------------------------------------------------------
+    def clear_row(self, source="connector:conflicts-register", citation="conflicts extract row 74"):
+        return {"candidate_id": "C-101", "type": "clear", "client_name": "Orchard Ridge Clinics",
+                "status": "cleared", "source": source, "confidence": 0.97, "citation": citation}
+
+    def test_qa6_name_split_across_register_values_holds_candidate(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        board = re.compile(r"\bboard\b|\bdirector\b", re.IGNORECASE)
+        self.assert_foreign_hold(
+            bench, self.with_rows(self.foreign_row("Board Director Inc."), self.clear_row("Board", "Director")), board)
+        quillon = re.compile(r"quillon|varga", re.IGNORECASE)
+        foreign = self.foreign_row("Quillon Varga Inc.")
+        with self.subTest(split="register source and citation"):
+            self.assert_foreign_hold(bench, self.with_rows(foreign, self.clear_row("Quillon", "Varga")), quillon)
+        with self.subTest(split="bench name and register citation"):
+            self.assert_foreign_hold(self.bench_with(name="Ava Quillon"),
+                                     self.with_rows(foreign, self.clear_row(citation="Varga")), quillon)
+        # No false hold: one word of the name in the register text alone.
+        governed, validated, _texts = self.chain(bench, self.with_rows(foreign, self.clear_row("Quillon")))
+        for document in (governed, validated):
+            self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+            self.assertFalse(any("C-101" in item and "#9.11" in item for item in document["escalations"]),
+                             ascii_safe(document["escalations"]))  # noqa: F821
+
+    def test_qa6_role_type_alias_is_carried_canonical(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        row = {"candidate_id": "C-101", "type": "prior_client_role", "client_name": "Orchard Ridge Clinics",
+               "status": "closed", "role_type": "board director", "end_date": "2010-01-01",
+               "source": "connector:conflicts-register", "confidence": 0.97, "citation": "conflicts extract row 75"}
+        governed, validated, texts = self.chain(bench, self.with_rows(self.foreign_row("Board Director Inc."), row))
+        for name, text in texts.items():
+            self.assertEqual([], re.findall(r"board[\s\-_.]*director", text, re.IGNORECASE), name)
+        for document in (governed, validated):
+            self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+            role_types = [item["role_type"] for item in slate_row(document, "PSS-001", "C-101")["constraints_considered"]
+                          if item.get("type") == "prior_client_role"]
+            self.assertEqual(["board_member"], role_types)
+
+    def test_qa6_screening_is_indexed(self):
+        roles, bench, constraints = scenario_inputs("scenario-a-happy")
+        template = bench["bench_candidates"][0]
+        bench["bench_candidates"], constraints["constraints"] = [], []
+        for i in range(500):
+            candidate = copy.deepcopy(template)
+            candidate.update(candidate_id=f"C-{2000 + i}", name=f"Indexed Person {i}",
+                             citation=f"bench export row C-{2000 + i}")
+            bench["bench_candidates"].append(candidate)
+            constraints["constraints"].append({
+                "candidate_id": candidate["candidate_id"], "type": "prior_client_role",
+                "client_name": f"Indexed Holding {i:03d} Partners", "status": "closed", "role_type": "employee",
+                "end_date": "2020-01-01", "source": "connector:conflicts-register", "confidence": 0.97,
+                "citation": f"conflicts extract row {i}"})
+        ranked = ranked_for(roles, bench)
+        foreign = constraint_check._foreign_names(constraints, constraints["engagement"])
+        self.assertEqual(500, len(foreign))
+        started = time.perf_counter()
+        flagged = constraint_check.foreign_candidates(list(constraint_check.candidate_records(ranked)), foreign)
+        constraint_check.withhold_foreign_sections(copy.deepcopy(ranked), foreign, flagged)
+        self.assertEqual({}, flagged)
+        self.assertLess(time.perf_counter() - started, 10.0)
+        # The whole governing pass, once the shared detector has seen these texts (its own cost is linear).
+        constraint_check.govern(copy.deepcopy(ranked), constraints)
+        started = time.perf_counter()
+        governed = constraint_check.govern(ranked, constraints)
+        self.assertLess(time.perf_counter() - started, 15.0)
+        self.assertEqual(500, len(governed["governed_roles"][0]["candidate_slate"]))
