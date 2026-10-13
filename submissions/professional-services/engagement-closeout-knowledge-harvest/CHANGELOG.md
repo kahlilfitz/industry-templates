@@ -124,9 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 138 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 142 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
-  round 6, 132 before QA round 7, 135 before QA round 8). It ships with:
+  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -651,4 +651,95 @@ JSON copies are unchanged.
   All three fail on `a4e36a8` and pass now.
 
 **Golden differences (QA round 8).** None. Every `expected/` file in both scenarios is byte-for-byte
+unchanged.
+
+### QA round 9 (on `6abb7f6`)
+
+Two Medium findings, fixed in the plugin. The knowledge-record output contract and the contract JSON
+copies are unchanged.
+
+- **Case-evidenced fused phrases (Medium).** Round 8 applied the token-start rule inside one value,
+  which let a verdict phrase whose first word begins mid-token pass. Title `xsafeToReuse` reached
+  governed.json and the skeleton; `3b3a9af` and `9f122f8` held it. Inside one value, a verdict
+  phrase now also counts when a case transition inside a run of letters falls on one of its own word
+  boundaries (`safe|To`), wherever its ends fall. The token-start and token-end rule still applies:
+  - where there is no case evidence, so `Safe Tomorrow plan`, `Casino One playbook` and `Failsafe to
+    production cutover` render;
+  - to single steering words, so `WorkshopLease` and `Roadmap lease review` render.
+
+  A related gap, present on every earlier commit, is also closed. An imperative or verdict verb that
+  ends its part (`Itempublish|THISRECORDNOW`), and a lead verb that fills one (`Release|THISRECORDNOW`),
+  are now clauses when the next part begins with determiners and then a known object. Whatever
+  follows the object does not matter. `Review Allocations`, `Release Theme` and
+  `PreapprovedAllocations` render.
+- **Restored false holds.** The run-together `SafeTomorrow` and `CasinoOne` are withheld again, as they
+  were before round 8. Neither is in the corpus.
+- **Within-value fixtures re-run.** A generated set of 15,265 fused forms was checked: every verdict
+  phrase, trigger verb and the 19 recorded detector-gap lines, with mid-token prefixes, CamelCase,
+  lower-case and upper-case forms, as title, ID and citation.
+  - Nothing that `3b3a9af` or `6abb7f6` held now passes.
+  - Against `9f122f8`, 36 values held then pass now. All are fused short verbs with a word after the
+    object (`ADDTHISRECORDPLAN`), which the round-6 short-verb rule (remainder ends at the object) frees
+    by design. They are listed under residual limits.
+- **Neighbours in rendering order (Medium).** The neighbour join used input order, but Govern moves
+  held assets out of the released table, so released neighbours change. Four assets, with asset 0
+  titled `Publi`, asset 2 titled `shThisRecord` and asset 1 held for client-specific configuration,
+  rendered `Publi` and `shThisRecord` as consecutive released rows. The rendered-document screen
+  (`rendered_hits`, §8.2) now also reads rendered titles and citations with their neighbours in
+  rendering order:
+  - **Released asset titles, in table order.** A title withheld here takes its asset out of the
+    table, so the scan keeps the live titles on a stack and reads each newly touching pair at once.
+  - **Lesson evidence citations, in line order across lessons.** These come from records that are not
+    input neighbours (`decision_log[1]` and `retrospective_inputs[1]` in one lesson).
+
+  A hit withholds both values with a `render_shape` hold (location `rendered`, citing #8.6). The chain
+  is re-run until nothing new is found, so any cascade the stack does not settle in one pass (evidence
+  that changes cluster when withheld) is read on the next pass. The run is bounded because each pass
+  withholds at least one new value. The knowledge-record check re-derives the governed record, so a
+  later stage cannot introduce an unscreened adjacency. Rendered `render_shape` holds cite #8.6;
+  other rendered holds still cite #8.2. Stages 1 and 2 render in input order, where these values were
+  not neighbours, so, as for every rendered hold, the values stay in those intermediates.
+- **False holds.** All counts are 0:
+
+  | Set | Held |
+  | --- | --- |
+  | 238-item corpus | 0 |
+  | 9,810 title–citation pairs | 0 |
+  | Extra check: 12 titles × 66 anchors × 3 title forms | 0 of 2,376 |
+  | Neighbour citation→citation pairs (also covers lesson line order) | 0 of 8,100 |
+  | Neighbour title→title pairs (also covers released-table order) | 0 of 11,881 |
+- **Timings.** Rendered-order reading is linear, and timings match `6abb7f6` on the same machine:
+
+  | Assets | Per stage (s) | Chain | `6abb7f6` |
+  | --- | --- | --- | --- |
+  | 100 | 8.4 / 8.4 / 9.3 / 9.3 | 35.5 s | 35.4 s |
+  | 400 | 31.5 / 32.3 / 37.2 / 35.7 | 136.7 s | 136.3 s |
+
+  400 assets take 3.9 times as long as 100.
+- **Reference.** All five byte-identical copies are updated:
+  - #8.2 notes the rendered-order neighbour reading and its #8.6 citation;
+  - #8.6 item 4 documents the case-evidenced phrase rule;
+  - #8.6 item 5 documents the determiner-and-object part after a verb;
+  - #8.6 item 8 documents rendering-order neighbours.
+- **Tests (142 in 16 groups).** `QARound9Tests` in `render-policy` has 4 tests:
+  - Fused, case-evidenced phrases and verbs are refused as title, ID, citation path and anchor. These
+    include `xsafeToReuse`, `zzPublishThisRecord`, `abcSkipValidation` and
+    `ItempublishTHISRECORDNOW`, plus four fused forms of each of the 19 detector-gap lines. Three run
+    through the chain with `render_shape` holds, and nine benign titles render.
+  - The reported repro, the two-held cascade and the stack cascade are withheld in the governed record
+    and the skeleton. The stack cascade is `Publi`, `Sk`, `ipThisRecord` and `shThisRecord` with held
+    assets between them. A benign table renders.
+  - Lesson citations `DOC-1#Publi` and `DOC-2#shThisRecord` in one lesson are withheld.
+  - A governed record edited to restore `Publi` and `shThisRecord` and drop their holds is refused by
+    the knowledge-record check, without echo.
+
+  All four fail on `6abb7f6` and pass now.
+- **Residual limits.**
+  - A fused short verb followed by determiners, an object and more letters in the same part
+    (`ADDTHISRECORDPLAN`) passes, under the round-6 rule that the remainder end at the object.
+  - The run-together `SafeTomorrow` and `CasinoOne` are withheld.
+  - The limits listed for round 8 are unchanged, except that neighbours in rendering order are now
+    joined.
+
+**Golden differences (QA round 9).** None. Every `expected/` file in both scenarios is byte-for-byte
 unchanged.

@@ -679,6 +679,11 @@ _SHORT_PRONOUNS = ("it", "them", "everything")
 _FUSED_WORDS = ("already", "exactly", "kindly", "please", "nothing", "nobody")
 _FUSED_NEEDLES = tuple(sorted(set(_FUSED_WORDS) | {phrase.replace(" ", "") for phrase in _TITLE_PHRASES
                                                    if len(phrase.replace(" ", "")) >= FUSED_MIN_CHARS}))
+# The internal word boundaries of each run-together verdict phrase ('safeto': 4), the case evidence
+# a split phrase is read by ('xsafeToReuse').
+_PHRASE_BOUNDARIES = {phrase.replace(" ", ""): tuple(len("".join(phrase.split()[:index]))
+                                                     for index in range(1, len(phrase.split())))
+                      for phrase in _TITLE_PHRASES if len(phrase.replace(" ", "")) >= FUSED_MIN_CHARS}
 _TRIGGER_VERBS = tuple(sorted(_TITLE_VERBS | _TITLE_LEAD_VERBS))
 # The comparison skeleton folds only these look-alike digits and symbols, inside runs that hold a letter.
 _LOOKALIKE_DIGITS = {"0": "o", "3": "e", "4": "a", "5": "s", "7": "t"}
@@ -789,14 +794,17 @@ def _verb_hit(verb, rest, following, at_start, later=()):
         if rest.startswith(material) or any(
                 rest.startswith(end) and rest[len(end):].startswith(material) for end in _DERIVED):
             return True
-        return (not rest or rest in _DERIVED) and following in whole
+        # Ending its part, it is a clause before a whole determiner, object or preposition, or before a
+        # part that begins with determiners then a known object ('ItempublishTHISRECORDTOTHEBASE').
+        return (not rest or rest in _DERIVED) and (following in whole or _object_start(later))
     if at_start and not rest:
-        return following in _DETERMINERS  # 'ReleaseThisRecord', not 'Release readiness'
+        # 'ReleaseThisRecord', 'ReleaseTHISRECORDNOW', not 'Release readiness' or 'Review Allocations'.
+        return following in _DETERMINERS or _object_start(later)
     if len(verb) < LEAD_RUN_MIN_CHARS:
         # Fused at a part boundary only before clause material in full ('usethisrecord', not
         # 'Gothenburg'); inside a longer part a short verb is a coincidence ('warehouse', 'output').
         return at_start and _object_run(rest, later)
-    return rest.startswith(_RUN_MATERIAL) or (not rest and following in _DETERMINERS)
+    return rest.startswith(_RUN_MATERIAL) or (not rest and (following in _DETERMINERS or _object_start(later)))
 
 
 def spells_clause(value, separators, tokens=True):
@@ -814,10 +822,14 @@ def spells_clause(value, separators, tokens=True):
     return any(_spells_clause(form, separators, tokens) for form in comparison_skeletons(value))
 
 
-def _needle_hit(collapsed, starts, boundary=None):
+def _needle_hit(collapsed, starts, boundary=None, case_starts=()):
     """A steering word or verdict phrase in the collapsed form. Inside one part (a run-together word,
-    'pleaseapprove') it counts anywhere; across parts it must start at a part start and end at a part
-    end ('Plea-se', not 'Roadmap lease'). With a boundary, only an occurrence that straddles it counts."""
+    'pleaseapprove') it counts anywhere. Across parts it counts when it starts at a part start and ends
+    at a part end ('Plea-se', not 'Roadmap lease'). Inside one value a verdict phrase also counts when a
+    case transition inside a letter run (case_starts) falls on one of its own word boundaries, wherever
+    its ends fall ('xsafeToReuse', 'ItemnoONENEEDS'): the transition is the evidence of a phrase. A space
+    is no such evidence ('Safe Tomorrow plan'). With a boundary (a join of two values), only an
+    occurrence that straddles it counts, and only by its ends."""
     ends = (set(starts) - {0}) | {len(collapsed)}
     for needle in _FUSED_NEEDLES:
         start = collapsed.find(needle)
@@ -826,7 +838,9 @@ def _needle_hit(collapsed, starts, boundary=None):
             first = max(begin for begin in starts if begin <= start)
             inside = not any(first < begin < end for begin in starts)
             straddles = boundary is None or start < boundary < end
-            if straddles and ((inside and boundary is None) or (start in starts and end in ends)):
+            splits = _PHRASE_BOUNDARIES.get(needle, ())
+            evidenced = boundary is None and any(start + offset in case_starts for offset in splits)
+            if straddles and ((inside and boundary is None) or evidenced or (start in starts and end in ends)):
                 return True
             start = collapsed.find(needle, start + 1)
     return False
@@ -840,7 +854,13 @@ def _spells_clause(text, separators, tokens):
             acronym = len(bare) >= 2 and bare.isupper()
             if low.endswith("n't") or (not acronym and low in _TITLE_CLAUSE_WORDS):
                 return True
-    parts = [part.casefold() for run in re.findall(r"[^\W_]+", text) for part in _case_parts(run)]
+    parts, case_starts, position = [], set(), 0
+    for run in re.findall(r"[^\W_]+", text):
+        for index, part in enumerate(_case_parts(run)):
+            if index:
+                case_starts.add(position)
+            parts.append(part.casefold())
+            position += len(part)
     joined = f" {' '.join(parts)} "
     if any(f" {phrase} " in joined for phrase in _TITLE_PHRASES):
         return True
@@ -849,7 +869,7 @@ def _spells_clause(text, separators, tokens):
     for index, part in enumerate(parts):
         starts[position] = index
         position += len(part)
-    if _needle_hit(collapsed, starts):
+    if _needle_hit(collapsed, starts, case_starts=case_starts):
         return True
 
     def after(end):
@@ -1422,7 +1442,7 @@ def make_hold(number, path, found, location):
         reason, citation = HOLD_REASONS["render_shape"], "confidentiality-sanitisation-rules.md #8.6"
     else:
         reason, citation = HOLD_REASONS["instruction"], "confidentiality-sanitisation-rules.md #8.1"
-    if location == "rendered":
+    if location == "rendered" and found != ("render_shape",):
         citation = "confidentiality-sanitisation-rules.md #8.2"
     return {
         "hold_id": f"SH-{number:03d}",
@@ -2067,8 +2087,8 @@ def skeleton_text(doc):
 
 def rendered_hits(doc):
     """Screen the rendered skeleton line by line, as each line's contributing values joined, and in
-    adjacent pairs (D22). Returns the supplied
-    contributor paths to withhold: {path: (families, "rendered")}."""
+    adjacent pairs (D22), and read rendered titles and citations with their neighbours in rendering
+    order (#8.6). Returns the supplied contributor paths to withhold: {path: (families, "rendered")}."""
     lines = skeleton(doc)
     held = {p for p, b, k in _layout(doc)[0] if b[k] == WITHHELD}
     out = {}
@@ -2104,6 +2124,51 @@ def rendered_hits(doc):
             found = fields_hits((body(first), body(second)))
             if found:
                 take(found, first, second)
+    out.update(rendered_neighbour_hits(doc, values, held | set(out)))
+    return out
+
+
+def rendered_neighbour_hits(doc, values, gone):
+    """Neighbours in rendering order (#8.6). Input order is screened in screen(); once assets are held
+    and evidence is clustered, the released-asset table and the lesson citations render values side by
+    side that were not neighbours in the input. Titles of released assets are read in table order: a
+    title withheld here moves its asset to the held table, so the scan keeps the live titles on a stack
+    and reads the newly touching pair at once ('Publi', a withheld 'Sk' + 'ipThisRecord', then
+    'shThisRecord'). Lesson evidence citations are read in line order, across lessons. gone: paths
+    already withheld or about to be. Returns {path: (("render_shape",), "rendered")}; derive() re-runs
+    the chain with them until nothing new is found."""
+    out = {}
+    kr = doc["knowledge_record"]
+    asset_index = {a["asset_id"]: i for i, a in enumerate(doc["candidate_assets"])}
+
+    def mark(*paths):
+        for path in paths:
+            if path not in gone:
+                out[path] = (("render_shape",), "rendered")
+
+    live = []
+    for asset in kr["reusable_assets"]:
+        path = f"candidate_assets[{asset_index[asset['asset_id']]}].title"
+        if asset["title"] == WITHHELD or path in gone:
+            continue
+        if live and neighbour_spells_clause(live[-1][1], True, asset["title"], True):
+            mark(live.pop()[0], path)
+        else:
+            live.append((path, asset["title"]))
+    cite_paths = {item["decision_id"]: f"decision_log[{i}].citation" for i, item in enumerate(doc["decision_log"])}
+    cite_paths.update({item["input_id"]: f"retrospective_inputs[{i}].citation"
+                       for i, item in enumerate(doc["retrospective_inputs"])})
+    previous = None
+    for lesson in kr["lessons"]:
+        for value in lesson["evidence_citations"]:
+            paths = [cite_paths[e] for e in lesson["evidence_ids"] if values.get(cite_paths[e]) == value]
+            if value == WITHHELD or not paths or any(path in gone or path in out for path in paths):
+                previous = None
+            elif previous and neighbour_spells_clause(previous[1], False, value, False):
+                mark(*previous[0], *paths)
+                previous = None
+            else:
+                previous = (paths, value)
     return out
 
 

@@ -2738,6 +2738,122 @@ class QARound8Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
         self.assertIn("DOC-2#lease-accounting", everything(res))
 
 
+# QA round 9 (#8.6): a verdict phrase or verb split at a case transition inside one value, whose first
+# word begins mid-token, and titles or citations that only meet once held assets leave the table.
+ROUND9_FUSED = ("xsafeToReuse", "zzPublishThisRecord", "abcSkipValidation", "xxFineToShip", "qOkayToRelease",
+                "zApprovedForExternalUse", "xclearedForRelease", "xgoodToGo", "ItemsafeTOREUSE", "ItemnoONENEEDS",
+                "ItempublishTHISRECORDNOW", "ReleaseTHISRECORDNOW")
+ROUND9_CLEAR = ("Casino One playbook", "Safe Tomorrow plan", "Failsafe to production cutover", "Roadmap lease review",
+                "WorkshopLease", "Workshop Lease review", "PreapprovedAllocations", "Release Theme",
+                "Record Items list")
+
+
+def round9_assets(titles, held):
+    """Scenario A with one released-shaped asset per title; the indexes in held carry a client-specific
+    configuration marker, so Govern holds them and their neighbours meet in the released table."""
+    raw = scenario_raw()
+    proto = raw["candidate_assets"][0]
+    assets = []
+    for index, title in enumerate(titles):
+        asset = json.loads(json.dumps(proto))
+        asset["asset_id"] = f"AST-{index + 1:03d}"
+        asset["title"] = title
+        if index in held:
+            asset["confidentiality_markers"] = ["client_specific_configuration"]
+        assets.append(asset)
+    raw["candidate_assets"] = assets
+    return raw
+
+
+class QARound9Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 9, confidentiality-sanitisation-rules.md #8.6: a case transition on a verdict phrase's
+    own word boundary is evidence of the phrase wherever its ends fall, and titles and citations are
+    read with their neighbours in the order they render, not only in input order."""
+
+    def test_case_evidenced_fused_phrases_are_withheld(self):
+        for value in ROUND9_FUSED:
+            with self.subTest(value=value):
+                self.assertFalse(core.title_shape_ok(value))
+                self.assertFalse(core.id_shape_ok("AST-" + value))
+                self.assertFalse(core.citation_shape_ok(f"raw/{value}.md"))
+                self.assertFalse(core.citation_shape_ok(f"DOC-7#{value}"))
+        for value in ROUND9_CLEAR:
+            self.assertTrue(core.title_shape_ok(value), value)
+        # Every recorded detector-gap line, fused after a mid-token prefix with its first word in lower case.
+        gaps = json.loads((DATA_ROOT / "tests" / "closeout-steering-sets.json").read_text(encoding="utf-8"))["detector_gaps"]
+        for line in gaps:
+            words = "".join(ch if ch.isalnum() else " " for ch in line).split()
+            camel = words[0].lower() + "".join(w[:1].upper() + w[1:] for w in words[1:])
+            for value in ("x" + camel, "Item" + words[0].lower() + "".join(words[1:]).upper(),
+                          "zz" + "".join(w[:1].upper() + w[1:] for w in words), ("abc" + "".join(words)).upper()):
+                with self.subTest(gap=ascii_safe(value)):
+                    self.assertFalse(core.title_shape_ok(value[:80]))
+        raw = scenario_raw()
+        placed = {("candidate_assets", 0, "title"): "xsafeToReuse", ("candidate_assets", 1, "title"): "zzPublishThisRecord",
+                  ("decision_log", 0, "citation"): "raw/xxFineToShip.md"}
+        for path, value in placed.items():
+            set_path(raw, path, value)
+        self.assert_render_shape_holds(chain(raw), placed, location="field")
+
+    def assert_rendered_neighbours(self, res, placed):
+        """Each placed value is withheld with a render_shape hold found in rendering order, and is absent
+        from the governed record, the skeleton and the output streams (stages 1-2 render in input
+        order, where these values were not neighbours)."""
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        paths = hold_paths(res)
+        doc = governed(res)
+        reader = json.dumps(doc) + res.texts["skeleton.md"] + res.stdout + res.stderr
+        for path, value in placed.items():
+            with self.subTest(path=path, value=value):
+                hold = paths[hold_path(path)]
+                self.assertEqual(("render_shape", "rendered", "confidentiality-sanitisation-rules.md #8.6"),
+                                 (hold["family"], hold["location"], hold["citation"]))
+                target = doc
+                for key in path:
+                    target = target[key]
+                self.assertEqual(core.WITHHELD, target)
+                self.assertNotIn(json.dumps(value), reader)
+                self.assertNotIn(f"| {value} |", reader)
+
+    def test_released_neighbours_are_read_in_table_order(self):
+        cases = (
+            (["Publi", "Integration runbook", "shThisRecord", "Cutover checklist"], {1}, (0, 2)),
+            (["Publi", "Integration runbook", "Training plan", "shThisRecord"], {1, 2}, (0, 3)),
+            # Withholding Sk + ipThisRecord takes both out of the table, so Publi then meets shThisRecord.
+            (["Publi", "Integration runbook", "Sk", "Training plan", "ipThisRecord", "Data map", "shThisRecord"],
+             {1, 3, 5}, (0, 2, 4, 6)),
+        )
+        for titles, held, split in cases:
+            with self.subTest(titles=titles):
+                for first, second in zip(titles, titles[1:]):
+                    self.assertFalse(core.neighbour_spells_clause(first, True, second, True), (first, second))
+                res = chain(round9_assets(titles, held))
+                self.assert_rendered_neighbours(res, {("candidate_assets", i, "title"): titles[i] for i in split})
+                self.assertFalse({f"candidate_assets[{i}].title" for i in held} & set(hold_paths(res)))
+        res = chain(round9_assets(["Publi", "Integration runbook", "Training plan", "Data map"], {1}))
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        self.assertIn("| Publi |", res.texts["skeleton.md"])
+
+    def test_lesson_citations_are_read_in_line_order(self):
+        raw = scenario_raw()
+        placed = {("decision_log", 1, "citation"): "DOC-1#Publi", ("retrospective_inputs", 1, "citation"): "DOC-2#shThisRecord"}
+        for path, value in placed.items():
+            set_path(raw, path, value)
+        self.assert_rendered_neighbours(chain(raw), placed)
+
+    def test_record_check_rereads_rendered_neighbours(self):
+        titles = ["Publi", "Integration runbook", "shThisRecord", "Cutover checklist"]
+        res = chain(round9_assets(titles, {1}))
+        doc = json.loads(json.dumps(governed(res)))
+        doc["candidate_assets"][0]["title"], doc["candidate_assets"][2]["title"] = "Publi", "shThisRecord"
+        doc["screening_holds"] = []
+        code, so, se, written = run_stage(record_check, doc)
+        self.assertEqual(2, code)
+        self.assertFalse(written)
+        self.assertNotIn("shThisRecord", so + se)
+
+
 class DerivationTests(unittest.TestCase):
     def test_g4b_structured_inputs_re_derive_from_each_raw_pack(self):
         for scenario in SCENARIOS:
@@ -2944,7 +3060,7 @@ GROUPS = {
     "screening": (ScreeningTests, QARound5ScreeningTests, QARound6ScreeningTests, QARound7ScreeningTests),
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
-    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests),
+    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),
