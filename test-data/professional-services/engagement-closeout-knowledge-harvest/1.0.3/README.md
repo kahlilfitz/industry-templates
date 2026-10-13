@@ -62,7 +62,7 @@ finishes (a failing subtest fails its test), prints failure details after the re
 | `screening` | 18 | Embedded-instruction screen: families, locations, joins, oversize, rendered holds; single-pass scanning, the screening ceilings (1000 per array or escalations list, 2500 across the arrays and escalations, 200 per list), a timed 100-asset chain and linear scaling from 100 to 400 assets |
 | `steering-corpus` | 5 | Vendored shared detector and corpus scored at the real call site |
 | `steering-sets` | 9 | Closeout attack, paraphrase and benign sets, and every detector-gap line in every rendered field, ID and draft slot |
-| `render-policy` | 42 | Titles, citations and IDs render only in an allow-shape (#8.6), including upper-case, CamelCase, fused, zero-width, combining-mark and look-alike-digit forms, short fused lead verbs and clauses split between a title and its citation (source, file name or any anchor or sheet name), a citation's source and anchor, or adjacent citation parts or neighbour records in input and rendering order, read by the token-anchored boundary recogniser; case-evidenced fused phrases; short fused lead verbs with trailing complements; digit shorthand in verdict phrases (`safe2reuse`) while `B2B`-style identifiers render; case-evidenced phrases ending at token ends (`SafeToolkit` renders); benign fused locators, the realistic render corpus and its 9,810 title and citation pairs still render; withheld flags and skeleton markers |
+| `render-policy` | 45 | Titles, citations and IDs render only in an allow-shape (#8.6), including upper-case, CamelCase, fused, zero-width, combining-mark and look-alike-digit forms, short fused lead verbs and clauses split between a title and its citation (source, file name or any anchor or sheet name), a citation's source and anchor, or adjacent citation parts or neighbour records in input and rendering order, read by the token-anchored boundary recogniser; case-evidenced fused phrases; short fused lead verbs with trailing complements; digit shorthand in verdict phrases (`safe2reuse`) while `B2B`-style identifiers render; case-evidenced phrases ending at token ends (`SafeToolkit` renders); dotted shorthand (`DOC-7#safe.2.reuse`) while dotted versions and extensions render; clause material running on after a case-evidenced phrase (`SafeToreuse`); benign fused locators, the realistic render corpus and its 9,810 title and citation pairs still render; withheld flags and skeleton markers |
 | `drafting` | 7 | Knowledge-record skeleton and `record_check.py` refusal codes, including short-phrase copies |
 | `derivation` | 1 | Demo inputs re-derive from each scenario's raw pack (G4b) |
 | `goldens` | 1 | Both scenarios reproduce every `expected/` file byte for byte, LF only |
@@ -70,7 +70,7 @@ finishes (a failing subtest fails its test), prints failure details after the re
 | `release` | 8 | Guardrails, citations, routing, versions, stand-alone skills and the runner |
 | `harness` | 2 | A crashing test is reported as FAIL |
 
-The full suite (148 tests) takes about three minutes.
+The full suite (151 tests) takes about three minutes.
 
 ## What the scenarios cover
 

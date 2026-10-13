@@ -124,9 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 148 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 151 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
-  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10). It ships with:
+  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10, 148 before QA round 11). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -885,3 +885,82 @@ copies are unchanged.
   The first and third fail on `7a20785`.
 
 **Golden differences (QA round 10).** None.
+
+### QA round 11 (on `9f44c27`)
+
+Two Medium findings, fixed in the plugin. The knowledge-record output contract and the contract JSON
+copies are unchanged.
+
+- **Dotted digit shorthand (Medium, escape).** `.` always bounded a path segment for the round-10
+  shorthand, so `DOC-7#safe.2.reuse`, `fine.2.ship` and `good.2.go` rendered literally in the skeleton,
+  while `safe-2-reuse` and `safe_2_reuse` were held.
+  - **Fix:** for the shorthand, a `.` is a path boundary only where it really is one:
+    - before a file extension that ends a path segment, either a known document, data, code or media
+      extension (`.md`, `.xlsx`, `.pptx` and the like) or one containing a digit (`.mp4`);
+    - between two digits (a dotted version: `v1.2.3`, `2.4`).
+
+    Anywhere else (inside anchors, dotted identifiers, mid-segment) it joins like `-` or `_`.
+  - **Not the full ≤5-character extension rule.** An unknown alphabetic tail of five letters or fewer
+    is not treated as an extension, because it is exactly the escape: `raw/safe.2.reuse`,
+    `raw/fine.2.ship`. Only the shorthand reads dots this way. The other checks already split at
+    every `.`, the same as at `-`.
+  - **Now withheld** as ID, anchor, file name, extensionless path and `.docx` source: `safe.2.reuse`,
+    `fine.2.ship`, `good.2.go`, `Safe.2.Reuse`, `SAFE.2.REUSE`, `cleared.4.release`. An ID such as
+    `AST-safe.2.reuse` is refused without echo.
+  - **Still render:** `raw/guide.v2.md`, `DOC-7#section.2.1`, `release-notes.2.4.md`,
+    `q4.2026.review.xlsx`, `raw/notes.v1.2.3.docx`, `raw/Safe2.md`, `DOC-7#B2B.P2P`,
+    `raw/phase.2.plan.md`, `DOC-7#step.2.4`, `raw/m365.2026.roadmap.pptx`, `raw/go.2.market.md`,
+    `PRJ-v1.2.3` and `AST-q4.2026.review`.
+- **Clause continuations after case-evidenced phrase words (Medium, regression).** The round-10
+  token-end exemption released run-together verdict text that `7a20785` held. `SafeToreuse`,
+  `FineToship`, `OkayToproceed`, `GoodTogolive`, `NoNeedtoReview` and `TheyAresafe` reached
+  `reusable_assets` and the skeleton.
+  - **Fix:** the exemption now applies only when what runs on, in lower case inside the same part,
+    cannot be read as clause material. Clause material is a clause word, determiner, object,
+    preposition, imperative or verdict verb, verdict-phrase word, steering word, or one of the verdict
+    complements reuse, ship, proceed, live, golive, deploy, launch, merge or export.
+  - **Short words:** a word shorter than four letters counts only when the run ends with it or goes
+    on into another such word (`NoNeed|to`, `GoodTogo|live`). So `Safe|To|wer` (`we`) and
+    `No|Need|le` stay names.
+  - **Only the phrase's end is read this way.** A word inside the phrase always runs on into the
+    phrase's next word, so the round-10 check of internal word ends added nothing but escapes
+    (`GoodTogoNow`).
+  - **Still render:** `SafeToolkit`, `SafeTools`, `FineTools`, `OkayToolkit`, `NoNeedle`,
+    `SafeTomorrow`, `SafeTower`, `SafeTokenVault`, `SafeTopology`, `OkayTokens`, `NoNeedlework`.
+  - **`OkayTodo` is withheld again,** as on `7a20785`: `Okay|To|do` reads "okay to do", a verdict
+    phrase followed by a verb. It moves from the round-10 render list to the round-11 withheld list.
+- **False holds after the fix:**
+
+  | Set | Held |
+  | --- | --- |
+  | 238-item corpus | 0 |
+  | Title–citation pairs | 0 of 9,810 |
+  | Boundary extra check | 0 of 2,376 |
+  | Neighbour citation→citation pairs | 0 of 8,100 |
+  | Neighbour title→title pairs | 0 of 11,881 |
+  | Round-6 controls | 0 (`Setúbal` as a citation only, ASCII rule; `Setit pricing` held as before) |
+  | Ordinary words: 54,585 words × 3 casings | 645 held, identical to `9f44c27`: none new, none freed |
+  | CamelCase name set | 36 of 221: the documented 35, plus `OkayTodo` (held on `7a20785`) |
+  | Dotted controls | 0 of 13 citations and 5 IDs |
+
+  The ordinary-word set is larger than in round 10 because it is rebuilt from the repository text.
+- **Sweep.** The fused sweep now also tries every partial capitalisation of the first five words, the
+  forms the round-10 sweep missed. It covers 1,127,884 forms.
+  - **Against `7a20785`:** identical; no form held there passes now, and none passing there is held.
+  - **Against `9f44c27`:** 272 forms are held again, and none is lost.
+  - **Against `3b3a9af`, `6abb7f6` and `6c1ca73`:** nothing lost.
+  - **Against `9f122f8`:** the 72 round-9b residual forms (`gothemplan`) are unchanged.
+- **Timings.** 100 assets take 35.1 s (8.2 / 8.4 / 9.1 / 9.4 s per stage). 400 assets take 132.8 s
+  (32.2 / 32.3 / 34.3 / 34.1 s), 3.8 times as long.
+- **Reference.** #8.6 item 4 is updated in all five byte-identical copies.
+- **Tests (151 in 16 groups).** `QARound11Tests` in `render-policy` has 3 tests:
+  - dotted shorthand is refused as ID, anchor, file name and path; four run through the chain with
+    `render_shape` holds; `AST-safe.2.reuse` is refused without echo;
+  - dotted versions, extensions and identifiers render, through the chain with no holds;
+  - the six reported titles and the other continuations are refused in every form, and run through the
+    chain with `render_shape` holds, out of `reusable_assets` and the skeleton; the `SafeToolkit`-style
+    controls render.
+
+  The first and third fail on `9f44c27`.
+
+**Golden differences (QA round 11).** None.

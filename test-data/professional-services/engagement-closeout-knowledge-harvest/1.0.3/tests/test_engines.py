@@ -2913,7 +2913,7 @@ ROUND10_SHORTHAND = ("safe2reuse", "safe_2_reuse", "fine2ship", "good2go", "Safe
 ROUND10_SHORTHAND_CLEAR = ("B2B", "P2P", "R2R", "O2C", "H2R", "Q2C", "peer2peer", "S2P", "M365-2026", "v2", "phase2",
                            "go2market", "Outlook2Teams", "Book2Go", "Q4-2026", "Wave4Rollout", "ok4release",
                            "good2gold")
-ROUND10_TOKEN_END_CLEAR = ("SafeToolkit", "SafeTools", "FineTools", "OkayToolkit", "NoNeedle", "OkayTodo",
+ROUND10_TOKEN_END_CLEAR = ("SafeToolkit", "SafeTools", "FineTools", "OkayToolkit", "NoNeedle",
                            "GoodTogether", "GoodToolbox", "ItemsafeToolkit", "FineTuning", "ReadyReckoner",
                            "SetupGuide", "UseCaseCatalog", "GoLivePlan", "ReleaseTrain")
 ROUND10_TOKEN_END_HELD = ("xsafeToReuse", "zzPublishThisRecord", "abcSkipValidation", "SafeToReuse",
@@ -2979,6 +2979,78 @@ class QARound10Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
         self.assertEqual(["SafeToolkit", "NoNeedle"], released)
         for value in ("| SafeToolkit |", "| NoNeedle |", "raw/FineTools.md", "DOC-7#OkayToolkit"):
             self.assertIn(value, res.texts["skeleton.md"])
+
+
+# QA round 11 (#8.6): a '.' joins digit shorthand like '-' unless it really bounds a path segment, and
+# a case-evidenced phrase that runs on in lower case still counts when what runs on is clause material.
+ROUND11_DOTTED = ("safe.2.reuse", "fine.2.ship", "good.2.go", "Safe.2.Reuse", "SAFE.2.REUSE", "cleared.4.release")
+ROUND11_DOTTED_CLEAR = ("raw/guide.v2.md", "DOC-7#section.2.1", "release-notes.2.4.md", "q4.2026.review.xlsx",
+                        "raw/notes.v1.2.3.docx", "raw/Safe2.md", "DOC-7#B2B.P2P", "raw/phase.2.plan.md",
+                        "DOC-7#step.2.4", "raw/m365.2026.roadmap.pptx", "raw/go.2.market.md")
+ROUND11_CONTINUED = ("SafeToreuse", "FineToship", "OkayToproceed", "GoodTogolive", "NoNeedtoReview", "TheyAresafe",
+                     "OkayTodo", "GoodTogoNow", "SafeToreleaseNow")
+ROUND11_CONTINUED_CLEAR = ("SafeToolkit", "SafeTools", "FineTools", "OkayToolkit", "NoNeedle", "SafeTomorrow",
+                           "SafeTower", "SafeTokenVault", "SafeTopology", "OkayTokens", "NoNeedlework", "NoNeeds")
+
+
+class QARound11Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 11, confidentiality-sanitisation-rules.md #8.6: a '.' bounds a path segment for the digit
+    shorthand only before a file extension or between digits, and a case-evidenced verdict phrase that
+    ends inside a capitalised word is exempt only when what runs on cannot be read as clause material."""
+
+    place = QARound4Tests.place
+
+    def test_dotted_shorthand_is_withheld(self):
+        for value in ROUND11_DOTTED:
+            with self.subTest(value=value):
+                self.assertFalse(core.id_shape_ok("AST-" + value))
+                for citation in (f"DOC-7#{value}", f"raw/{value}.md", f"raw/{value}", f"{value}.docx"):
+                    self.assertFalse(core.citation_shape_ok(citation), citation)
+        raw, placed = self.place((), ("DOC-7#safe.2.reuse", "DOC-7#fine.2.ship", "raw/good.2.go.md",
+                                      "raw/Safe.2.Reuse"))
+        for path, value in placed.items():
+            self.assertEqual(("render_shape",), core.shape_hits(hold_path(path), value), ascii_safe(value))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        for fragment in ("safe.2.reuse", "fine.2.ship", "good.2.go"):
+            self.assertNotIn(fragment, everything(res).casefold())
+        result = run_stage(asset_identify, with_value(("candidate_assets", 0, "asset_id"), "AST-safe.2.reuse"))
+        self.assert_refused(result, "reads as a phrase, not an identifier", forbid=("AST-safe.2.reuse", "safe.2.reuse"))
+
+    def test_dotted_paths_and_versions_still_render(self):
+        for citation in ROUND11_DOTTED_CLEAR:
+            with self.subTest(citation=citation):
+                self.assertTrue(core.citation_shape_ok(citation))
+        for value in ("PRJ-v1.2.3", "AST-B2B.P2P", "AST-phase.2.plan", "AST-q4.2026.review", "AST-go.2.market"):
+            self.assertTrue(core.id_shape_ok(value), value)
+        raw, placed = self.place((), ("raw/guide.v2.md", "DOC-7#section.2.1", "release-notes.2.4.md",
+                                      "q4.2026.review.xlsx"))
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        for value in placed.values():
+            self.assertIn(value, res.texts["skeleton.md"])
+
+    def test_clause_continuations_after_case_evidenced_phrases_are_withheld(self):
+        for value in ROUND11_CONTINUED:
+            with self.subTest(value=value):
+                self.assertFalse(core.title_shape_ok(value))
+                self.assertFalse(core.id_shape_ok("AST-" + value))
+                self.assertFalse(core.citation_shape_ok(f"raw/{value}.md"))
+                self.assertFalse(core.citation_shape_ok(f"DOC-7#{value}"))
+        for value in ROUND11_CONTINUED_CLEAR:
+            with self.subTest(value=value):
+                self.assertTrue(core.title_shape_ok(value))
+                self.assertTrue(core.citation_shape_ok(f"DOC-7#{value}"))
+        for titles in (("SafeToreuse", "FineToship"), ("OkayToproceed", "GoodTogolive"), ("NoNeedtoReview", "TheyAresafe")):
+            with self.subTest(titles=titles):
+                raw, placed = self.place(titles, ())
+                res = chain(raw)
+                self.assert_render_shape_holds(res, placed, location="field")
+                released = [asset["title"] for asset in governed(res)["knowledge_record"]["reusable_assets"]]
+                for title in titles:
+                    self.assertNotIn(title, released)
+                    self.assertNotIn(f"| {title} |", res.texts["skeleton.md"])
 
 
 class DerivationTests(unittest.TestCase):
@@ -3187,7 +3259,7 @@ GROUPS = {
     "screening": (ScreeningTests, QARound5ScreeningTests, QARound6ScreeningTests, QARound7ScreeningTests),
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
-    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests, QARound10Tests),
+    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests, QARound10Tests, QARound11Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),
