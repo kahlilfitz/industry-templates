@@ -125,10 +125,10 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 164 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 166 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
   round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10, 148 before QA round 11, 151 before QA round 12, 154 before QA round 13, 157 before QA round 14, 160 before QA round 15, 163 before the detector
-  re-vendor). It ships with:
+  re-vendor, 164 before QA round 16). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and the 19 former detector-gap
@@ -1436,3 +1436,96 @@ copies are unchanged.
 **Golden differences (detector re-vendor).** All six JSON goldens: `provenance.screening` reads
 `steering_guard 1.1.3` in place of `1.1.2`. Nothing else changes. The skeletons, example drafts and
 stdout goldens are byte-for-byte unchanged.
+
+### QA round 16 (on `2538e26`, with the detector 1.1.3 re-vendor `b560367`)
+
+One Medium and one Low finding, fixed in the plugin. The knowledge-record output contract, the
+contract JSON copies, `steering_guard.py`, its pins and the steering sets are unchanged.
+
+- **Later shorthand before a lead verb (Medium, escape).** After an allowlisted run-on, a later lone 2
+  or 4 counted only before a strong verb or a shorthand verb, not before the lead verbs that are also
+  nouns. So `SafeToolsPlan2Release`, `SafeToolsPlan2Review` and `NoNeedleRoadmap4Share` passed the whole
+  chain into `reusable_assets` and the skeleton with no hold. `SafeToolsPlan2Reuse` was held.
+  - **Fix:**
+    - After the first word part, a lone 2 or 4 before any trigger, lead or shorthand verb counts as
+      to or for (`_LATER_SHORTHAND_VERBS`). Go and use are still excluded (`SafeToolsTeams2Go`).
+    - The first-position rule is unchanged: a lead verb right after the run-on and a number is a noun
+      until clause material follows, so `SafeTools2ReleaseNotes` and `SafeTools2FilePlan` render.
+    - A number after a sequence noun is an ordinal, not shorthand (`_SEQUENCE_NOUNS`: phase, wave,
+      sprint, stage, step, round, release, version, Q, V and the like). So `SafeToolsPhase2Review`,
+      `SafeToolsSprint4Release` and `SafeToolsRelease2Review` render.
+    - A lone 4 beside a letter was folded to the look-alike `a` in both comparison copies, so it never
+      reached the shorthand rule (`NoNeedleRoadmapaShare`). Such a value now also gets an unfolded
+      comparison copy (`_LONE_FOUR`). The look-alike reading is kept.
+  - **Now withheld (title, ID and citation):** `SafeToolsPlan2Release`, `SafeToolsPlan2Review`,
+    `NoNeedleRoadmap4Share`, `NoNeedleTesting2Close`, `SafeToolsPlan2Sign`, `SafeToolkitDeck4Circulate`,
+    `SafeToolsDeck2Check`, `NoNeedlesGuide4Post`.
+  - **Still render:** `SafeTools2ReleaseNotes`, `SafeTools2FilePlan`, `SafeToolsTeams2Go`,
+    `SafeToolsPhase2Review`, `SafeToolsSprint4Release`, `SafeToolsWave4Rollout`,
+    `SafeToolkitV2ReleaseNotes`, `SafeToolsRelease2Review`, `NoNeedleTestingRelease2Notes`,
+    `SafeToolsQ4Review`, `SafeToolsStep2Review`, `SafeToolsBook2GoApp`, `Wave4Rollout`, `Plan4Success`.
+- **Clause word ending a product compound (Low, false hold).** Once a verb had been read, the `Now` of
+  `ServiceNow` counted as later clause material. So `SafeToolsReviewServiceNowMigration`, which
+  rendered on `a06753c`, was withheld.
+  - **Fix:** a determiner or `now` that ends a known compound is no later material
+    (`_MATERIAL_COMPOUNDS`). The compounds are `ServiceNow`, `PayNow`, `BuyNow`, `BookNow`, `ShopNow`,
+    `NewsNow`, `CatchAll`, `CarryAll`, `HoldAll`, `CureAll`, `OverAll`, `KnowAll`, `FreeForAll`,
+    `EndAll` and `BeAll`.
+  - These were found by probing verb heads against about 40 product and ordinary compounds that end
+    in a clause word. Calls to action such as `ApplyNow` and `AskNow` are left out, because they are
+    imperatives.
+  - **Now render:** `SafeToolsReviewServiceNowMigration`, `SafeToolsReleaseServiceNowUpgrade`,
+    `NoNeedleReviewCatchAllInbox`, `SafeToolsReleasePayNowFlow`, `SafeToolsShareBookNowWidget`,
+    `SafeToolkitReview2026ServiceNow`.
+  - **Still withheld:** `SafeToolsReviewServiceNowThisRecord` and `SafeToolsReviewServiceNowNow`. In
+    both, clause material follows the compound.
+- **False holds after the fix:**
+
+  | Set | Held |
+  | --- | --- |
+  | 238-item corpus | 0 |
+  | Title–citation pairs | 0 of 9,810 |
+  | Boundary extra check | 0 of 2,376 |
+  | Neighbour citation→citation pairs | 0 of 8,100 |
+  | Neighbour title→title pairs | 0 of 11,881 |
+  | Round-6 controls | 0 (`Setúbal` as a citation only, ASCII rule; `Setit pricing` held as before) |
+  | Ordinary words: 54,847 words × 3 casings | 897 held, identical to `2538e26`: none new, none freed |
+  | `SafeTools`, `NoNeedle`, `SafeTools2` + each ordinary word (164,541 forms) | 1,068 held, identical to `2538e26` |
+  | CamelCase name set | 36 of 221, unchanged |
+  | Dotted, extension-split, to-do and long-extension controls | 0 |
+
+  The ordinary-word set is read from the repository text, so it grew again.
+- **Probe.** The probe built 500,989 forms around six run-on heads. It combined 13 verbs with the
+  CamelCase names and about 40 compounds, put each name before `2` or `4` plus a verb, and wrapped
+  each ordinary word as `SafeToolsReview`+W, `SafeTools`+W+`2Review`, `NoNeedle`+W+`4Share`,
+  W+`4Teams` and `Q4`+W.
+  - **Newly held:** 125,704 are the intended run-on + name + 2 or 4 + verb forms. The other 3 are
+    `Skip4Teams`, `Setit4Teams` and `Useit4Teams`. In their unfolded copy, a whole imperative part
+    (`Skip`) or a short verb with `it` ends at the digit. They are kept because they read like
+    `Skip-Teams`.
+  - **Freed:** 564, all verb + compound forms such as `NoNeedleReviewServiceNow`.
+- **Sweep.** The sweep adds the tails `Plan2Release`, `Plan2Review`, `Roadmap4Share`,
+  `ReviewServiceNowMigration`, `Phase2Review` and `Wave4Rollout`. It covers 1,980,480 forms.
+  - **Against `a06753c`:** nothing lost.
+  - **Against `2538e26`:** 14,216 forms are freed, every one with the `ReviewServiceNowMigration`
+    tail. 42,648 forms are newly held, all with the `Plan2Release`, `Plan2Review` or `Roadmap4Share`
+    tail.
+  - **Against `7a20785`:** 170,592 forms held there pass. None is held on `a06753c`; they are the
+    allowlisted ordinary-word run-ons of rounds 12 to 15.
+  - **Extension-split citations:** none of the 4,153 forms passes.
+- **Timings.** The machine was shared and timings were noisy. 100 assets took 39.6 to 64.0 s on this
+  core and 65 to 193 s on `2538e26`. 400 assets took 175.6 s (41.6 / 44.2 / 44.8 / 45.1 s per stage).
+  The change adds no measurable time.
+- **Reference.** #8.6 item 4 is updated in all five byte-identical copies.
+- **Tests (166 in 16 groups).** `QARound16Tests` in `render-policy` has 2 tests:
+  - the three reproductions and the variants are withheld as title, ID and citation (`DOC-7#…` and
+    `raw/….md`). Through the chain they are withheld as titles and citations (`render_shape`, location
+    `field`) and are absent from `reusable_assets` and every output file. The ID
+    `AST-SafeToolsPlan2Release` is refused without echo. The ordinal and first-position controls render
+    in every form;
+  - the compound names render in every form, and through the chain with no holds alongside two
+    ordinal controls.
+
+  Both fail on `2538e26`.
+
+**Golden differences (QA round 16).** None.

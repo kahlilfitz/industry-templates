@@ -3482,6 +3482,71 @@ class QARound15Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
             self.assertIn(value, res.texts["skeleton.md"])
 
 
+# QA round 16 (#8.6): a later lone 2 or 4 before any trigger, lead or shorthand verb but go and use is
+# a clause (an ordinal after a sequence noun is not); a determiner or 'now' that ends a known compound
+# ('ServiceNow', 'CatchAll') is no later clause material.
+ROUND16_REPROS = ("SafeToolsPlan2Release", "SafeToolsPlan2Review", "NoNeedleRoadmap4Share")
+ROUND16_LATER_HELD = ("NoNeedleTesting2Close", "SafeToolsPlan2Sign", "SafeToolkitDeck4Circulate",
+                      "SafeToolsDeck2Check", "NoNeedlesGuide4Post", "SafeToolsReviewServiceNowThisRecord",
+                      "SafeToolsReviewServiceNowNow")
+ROUND16_LATER_CLEAR = ("SafeTools2ReleaseNotes", "SafeTools2FilePlan", "SafeToolsTeams2Go", "SafeToolsPhase2Review",
+                       "SafeToolsSprint4Release", "SafeToolsWave4Rollout", "SafeToolkitV2ReleaseNotes",
+                       "SafeToolsRelease2Review", "NoNeedleTestingRelease2Notes", "SafeToolsQ4Review",
+                       "SafeToolsStep2Review", "SafeToolsBook2GoApp", "Wave4Rollout", "Plan4Success")
+ROUND16_COMPOUND_CLEAR = ("SafeToolsReviewServiceNowMigration", "SafeToolsReleaseServiceNowUpgrade",
+                          "NoNeedleReviewCatchAllInbox", "SafeToolsReleasePayNowFlow", "SafeToolsShareBookNowWidget",
+                          "SafeToolkitReview2026ServiceNow", "SafeToolsServiceNowMigration")
+
+
+class QARound16Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 16, confidentiality-sanitisation-rules.md #8.6: the later shorthand rule reads every
+    trigger, lead and shorthand verb but go and use, a lone 4 is read as 'for' as well as a look-alike
+    'a', and a clause word that ends a product compound is no later clause material."""
+
+    place = QARound4Tests.place
+
+    def shapes(self, value):
+        return (core.title_shape_ok(value), core.id_shape_ok("AST-" + value),
+                core.citation_shape_ok(f"DOC-7#{value}"), core.citation_shape_ok(f"raw/{value}.md"))
+
+    def test_later_shorthand_before_any_verb_is_withheld(self):
+        for value in ROUND16_REPROS + ROUND16_LATER_HELD:
+            with self.subTest(value=value):
+                self.assertEqual((False, False, False, False), self.shapes(value))
+        for value in ROUND16_LATER_CLEAR:
+            with self.subTest(value=value):
+                self.assertEqual((True, True, True, True), self.shapes(value))
+        raw, placed = self.place(ROUND16_REPROS[:2], (f"DOC-7#{ROUND16_REPROS[2]}", f"raw/{ROUND16_LATER_HELD[0]}.md",
+                                                      f"DOC-7#{ROUND16_LATER_HELD[2]}", f"raw/{ROUND16_REPROS[1]}.md"))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        released = [asset["title"] for asset in governed(res)["knowledge_record"]["reusable_assets"]]
+        for value in ROUND16_REPROS + ROUND16_LATER_HELD[:1] + ROUND16_LATER_HELD[2:3]:
+            self.assertNotIn(value, released)
+            self.assertNotIn(value, everything(res))
+        raw, placed = self.place((ROUND16_REPROS[2],), ())
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        self.assertNotIn(ROUND16_REPROS[2], everything(res))
+        result = run_stage(asset_identify, with_value(("candidate_assets", 0, "asset_id"), "AST-SafeToolsPlan2Release"))
+        self.assert_refused(result, "candidate_assets[0].asset_id",
+                            forbid=("AST-SafeToolsPlan2Release", "SafeToolsPlan2Release"))
+
+    def test_clause_word_ending_a_product_compound_is_no_material(self):
+        for value in ROUND16_COMPOUND_CLEAR:
+            with self.subTest(value=value):
+                self.assertEqual((True, True, True, True), self.shapes(value))
+        raw, placed = self.place(ROUND16_COMPOUND_CLEAR[:2], (f"DOC-7#{ROUND16_COMPOUND_CLEAR[2]}",
+                                                              f"raw/{ROUND16_COMPOUND_CLEAR[3]}.md",
+                                                              f"DOC-7#{ROUND16_LATER_CLEAR[3]}",
+                                                              f"raw/{ROUND16_LATER_CLEAR[5]}.md"))
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        for value in placed.values():
+            self.assertIn(value, res.texts["skeleton.md"])
+
+
 class DerivationTests(unittest.TestCase):
     def test_g4b_structured_inputs_re_derive_from_each_raw_pack(self):
         for scenario in SCENARIOS:
@@ -3690,7 +3755,7 @@ GROUPS = {
     "steering-sets": (SteeringSetTests,),
     "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests, QARound10Tests, QARound11Tests,
                       QARound12Tests, QARound13Tests, QARound14Tests,
-                      QARound15Tests),
+                      QARound15Tests, QARound16Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),

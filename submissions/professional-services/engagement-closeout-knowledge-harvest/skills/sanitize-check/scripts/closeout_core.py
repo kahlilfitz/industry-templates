@@ -708,14 +708,20 @@ def has_cf(value):
     return any(unicodedata.category(char) == "Cf" for char in value)
 
 
+# A lone 4 (no digit beside it) next to a letter: a look-alike 'a' or shorthand for 'for'.
+_LONE_FOUR = re.compile(r"(?<!\d)(?:(?<=[^\W\d_])4(?!\d)|4(?=[^\W\d_]))")
+
+
 def comparison_skeletons(value):
     """The comparison copies of a value (#8.6), never rendered: NFKD with combining marks (Mn) dropped,
     '@' read as 'a' and '$' as 's', and inside a letter-and-digit run that holds a letter the look-alike
     digits 0, 3, 4, 5 and 7 read as o, e, a, s and t, and 1 as i in one copy and l in the other. A folded
-    character takes the case of the nearest letter, so case boundaries survive."""
+    character takes the case of the nearest letter, so case boundaries survive. A lone 4 beside a
+    letter may also be shorthand for 'for' ('NoNeedleRoadmap4Share'), so such a value also gets an
+    unfolded copy."""
     base = "".join(ch for ch in unicodedata.normalize("NFKD", value) if unicodedata.category(ch) != "Mn")
     base = base.replace("@", "a").replace("$", "s")
-    forms = []
+    forms = [base] if _LONE_FOUR.search(base) else []
     for one in ("i", "l"):
         def fold(match, one=one):
             run = match.group(0)
@@ -1046,6 +1052,21 @@ _LATER_MATERIAL = frozenset(_DETERMINERS - {"it", "its", "us", "me", "my", "his"
 # ('Teams2Go', 'Ready2Use').
 _LATER_SHORTHAND_NAMES = frozenset(("go", "use"))
 _RUN_VERBS = tuple(sorted({verb for verb in _TRIGGER_VERBS if len(verb) >= LEAD_RUN_MIN_CHARS} | _SHORTHAND_VERBS))
+# Verbs a later lone 2 or 4 turns into a clause: every trigger, lead and shorthand verb but go and use.
+_LATER_SHORTHAND_VERBS = frozenset(set(_TRIGGER_VERBS) | _SHORTHAND_VERBS) - _LATER_SHORTHAND_NAMES
+# Words a number follows as an ordinal, not as 'to' or 'for' ('Phase2Review', 'Sprint4Release').
+_SEQUENCE_NOUNS = frozenset((
+    "phase phases wave waves sprint sprints stage stages step steps round rounds part parts tier tiers level "
+    "levels version versions release releases chapter chapters module modules week weeks day days month months "
+    "year years quarter batch batches cohort cohorts iteration iterations milestone milestones gen generation "
+    "track tracks pillar pillars section sections lot lots increment pi q v r h fy wk"
+).split())
+# Product and ordinary compounds whose last part is a clause word ('ServiceNow', 'CatchAll'): that part
+# is no later clause material.
+_MATERIAL_COMPOUNDS = (
+    ("service", "now"), ("pay", "now"), ("buy", "now"), ("book", "now"), ("shop", "now"), ("news", "now"),
+    ("catch", "all"), ("carry", "all"), ("hold", "all"), ("cure", "all"), ("over", "all"), ("know", "all"),
+    ("free", "for", "all"), ("end", "all"), ("be", "all"))
 
 
 def _after_is_clause(parts, reach=None):
@@ -1059,8 +1080,11 @@ def _after_is_clause(parts, reach=None):
     the first word not before go or use, 'SafeToolsTeams2Go'), and once a verb has been read
     (_TRIGGER_VERBS, a shorthand verb) a later determiner, pronoun object or 'now' (_LATER_MATERIAL), or
     a lower-case run of clause words, completes the clause ('SafeTools2ReleaseRoadmapNow',
-    'SafeToolsReviewRoadmapNow'). 'SafeTools2Release', 'SafeTools2026Roadmap' and
-    'SafeToolsServiceNowMigration' render."""
+    'SafeToolsReviewRoadmapNow'). After the first word a lone 2 or 4 before any trigger, lead or
+    shorthand verb but go and use is a clause ('SafeToolsPlan2Release', 'NoNeedleRoadmap4Share'), unless
+    it follows a sequence noun as an ordinal ('SafeToolsPhase2Review'). A determiner or 'now' that ends a
+    known compound is no material ('SafeToolsReviewServiceNowMigration'). 'SafeTools2Release',
+    'SafeTools2026Roadmap' and 'SafeToolsServiceNowMigration' render."""
     reach = len(parts) if reach is None else reach
     tokens = []
     for index, part in enumerate(parts):
@@ -1071,16 +1095,22 @@ def _after_is_clause(parts, reach=None):
             tokens[-1] = ("number", tokens[-1][1] + part, tokens[-1][2])
         else:
             tokens.append(("number" if part.isdigit() else "word", part, index))
-    shorthand, pending, first, verb = False, True, True, False
+    shorthand, pending, first, verb, words = False, True, True, False, []
     for kind, part, origin in tokens:
         if kind == "number":
-            shorthand = part in ("2", "4")
+            # A number after a sequence noun is an ordinal ('Phase2Review'), not 'to' or 'for'.
+            shorthand = part in ("2", "4") and not (words and words[-1] in _SEQUENCE_NOUNS)
+            words = []
             continue
         if not pending and origin >= reach:
             break
-        if shorthand and (part in _TITLE_VERBS or part in _SHORTHAND_VERBS) and (
-                first or part not in _LATER_SHORTHAND_NAMES):
+        if shorthand and (part in _TITLE_VERBS or part in _SHORTHAND_VERBS) and first:
             return True
+        # Later in the token any verb counts ('SafeToolsPlan2Release'); first, a lead verb is a noun
+        # until clause material follows ('SafeTools2ReleaseNotes').
+        if shorthand and not first and part in _LATER_SHORTHAND_VERBS:
+            return True
+        words.append(part)
         # A verb that is also a noun after a version number ('SafeTools2Release', 'SafeTools2FilePlan')
         # needs clause material after it.
         noun_verb = shorthand and part in _TITLE_LEAD_VERBS
@@ -1088,7 +1118,8 @@ def _after_is_clause(parts, reach=None):
             return True
         if origin < reach and _run_reads_clause(part) and (verb or part.startswith(_RUN_VERBS)):
             return True
-        if origin < reach and verb and part in _LATER_MATERIAL:
+        if origin < reach and verb and part in _LATER_MATERIAL and not any(
+                tuple(words[-len(compound):]) == compound for compound in _MATERIAL_COMPOUNDS):
             return True
         pending = noun_verb
         verb = verb or part in _TRIGGER_VERBS or part in _SHORTHAND_VERBS
