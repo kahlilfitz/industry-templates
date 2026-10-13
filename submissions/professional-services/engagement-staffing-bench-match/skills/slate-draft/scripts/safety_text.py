@@ -4,9 +4,10 @@ Detection is the shared steering_guard detector, vendored byte-for-byte next to 
 edited here; staffing vocabulary reaches it only through its documented hooks (STAFFING_HOOKS).
 This module keeps the plugin's non-detection logic: which fields are free text, how a flagged value
 is replaced by a neutral marker that never echoes it, record-level (split-field) and adjacent-entry
-(list run) screening, including the clean half of an instruction whose other half trips on its own,
-already-redacted marker text supplied as input, the escalation that names the field path, and one
-escalation per piece of text (ScreeningLog).
+(list run) screening, including the clean half of an instruction whose other half trips on its own
+(the detector's split_partners, windowed here), the oversize hold for values too long to screen
+together, already-redacted marker text supplied as input, the escalation that names the field path,
+and one escalation per piece of text (ScreeningLog).
 """
 import functools
 import hashlib
@@ -157,132 +158,57 @@ def record_hits(fields, trusted_domains=()):
     return list(_record_families(tuple(str(value) for value in fields), tuple(trusted_domains)))
 
 
-# The label strip steering_guard.scan_fields applies to its plain-space join (its own pattern, so the
-# joins here stay the joins scan_fields screens; the vendored file is hash-pinned by the tests).
-_JOIN_LABEL = sg._LABEL
-# The joins scan_fields screens (" ; " and the label-stripped plain-space join) plus the fused join.
-_JOIN_SEPARATORS = (" ; ", " ", "")
-# Whole-text families: their span says nothing about which value contributed.
-_SPAN_IGNORED = {"mixed_script", "oversize"}
-# Characters a boundary fold may drop, merge or turn into a space at the edge of a joined value.
-_EDGE_CHARS = " .,;:!?'\"()[]{}-_/\\"
+# sg.split_partners scans each of its joins whole, so long runs of values are screened in overlapping
+# windows of SPLIT_WINDOW consecutive present values, SPLIT_STRIDE apart: every split across up to
+# SPLIT_WINDOW - SPLIT_STRIDE + 1 adjacent values lies inside one window, and the cost stays linear.
+SPLIT_WINDOW = 8
+SPLIT_STRIDE = 4
 
 
-@functools.lru_cache(maxsize=4096)
-def _join_hits(joined):
-    """(family, start, end) of every detector hit on one text, whole-text families left out."""
-    return tuple(
-        (hit.family, hit.start, hit.end)
-        for hit in sg.scan(joined, **_hooks())
-        if hit.family not in _SPAN_IGNORED
-    )
+def _present(value):
+    """A value split screening joins: non-blank text without an already-redacted marker. Anything else is
+    absent; it neither joins nor breaks adjacency (as None in sg.split_partners)."""
+    return isinstance(value, str) and bool(value.strip()) and not has_marker(value)
 
 
-def _value_spans(joined, parts, sep):
-    """Each part's (start, end) in normalize(joined), the coordinates detector hit offsets use.
+@functools.lru_cache(maxsize=8192)
+def _split_partners(values, trusted_domains):
+    return frozenset(sg.split_partners(values, **_hooks(trusted_domains)))
 
-    normalize() is local, so a part's own normalised text normally appears at the cursor. A fold at a
-    boundary ("1499.Ignore" -> "1499 ignore") can change the part's edge characters, so the part's
-    core (its normalised text without leading or trailing non-word characters) is looked up instead,
-    near the cursor only, and the span keeps the edges around it. If even the core is not there, the
-    span is placed at the cursor. Linear in the join: no part re-normalises a prefix.
+
+def join_is_oversize(values, trusted_domains=()):
+    """True when two or more present values are too long to screen together: one is oversize on its own, or
+    their " ; " join would be longer than the detector's MAX_TOTAL_CHARS. The join was not scanned, so the
+    record or list holding them is withheld and held as oversize (sg.split_partners fails closed the same way)."""
+    present = [value for value in values if _present(value)]
+    if len(present) < 2:
+        return False
+    return (sum(len(value) + 3 for value in present) > sg.MAX_TOTAL_CHARS
+            or any("oversize" in hits(value, trusted_domains) for value in present))
+
+
+def split_partner_indices(values, trusted_domains=()):
+    """Indices of the present values an instruction split across adjacent values touches (D18).
+
+    The shared detector's split_partners does the work: it scans the ordered joins of the values and returns
+    every value a hit crossing a value boundary overlaps, mapped through the detector's own normalisation,
+    including values that trip on their own. An unrelated neighbour is not returned. Runs longer than
+    SPLIT_WINDOW present values are screened in overlapping windows; an oversize join returns every present
+    index (join_is_oversize).
     """
-    norm = sg.normalize(joined)
-    spans, cursor = [], 0
-    for part in parts:
-        piece = sg.normalize(part)
-        core = piece.strip(_EDGE_CHARS)
-        lead = len(piece) - len(piece.lstrip(_EDGE_CHARS))
-        limit = cursor + len(piece) + len(sep) + 2
-        found = norm.find(core, cursor, limit) if core else -1
-        start = max(cursor, found - lead) if found >= 0 else min(cursor + (1 if sep else 0), len(norm))
-        end = min(len(norm), start + len(piece))
-        spans.append((start, end))
-        cursor = end
-    # A fold across a fused boundary can make a part's standalone length overreach: never let a span
-    # run into the next part's span.
-    for index in range(len(spans) - 1):
-        start, end = spans[index]
-        spans[index] = (start, max(start, min(end, spans[index + 1][0])))
-    return norm, spans
-
-
-def _own_hit(hit, parts, spans, partners):
-    """True when ``hit`` is a tripping part's own standalone hit that only reaches back into the text
-    before it: a rule's leading context (a clause-boundary mark, a lead-in word) is not a contribution.
-    Same family, the hit ends inside the partner where the partner's standalone hit of that family ends
-    (one character of normalisation drift allowed) and starts before the partner."""
-    family, hit_start, hit_end = hit
-    for position in partners:
-        start, end = spans[position]
-        if not hit_start < start < hit_end <= end + 1:
-            continue
-        if any(own_family == family and abs(start + own_end - hit_end) <= 1
-               for own_family, _own_start, own_end in _join_hits(parts[position])):
-            return True
-    return False
-
-
-def _touched_in_join(values, clean):
-    """Positions in ``clean`` (a clean value) that a detector hit on an ordered join of ``values`` with
-    the other, tripping, values overlaps by at least one word character.
-
-    The joins are scan_fields' two plus the fused join. A hit that is a tripping value's own hit with
-    leading context reaching back into the value before it does not count (_own_hit). A join longer
-    than MAX_TOTAL_CHARS is not scanned (it would only be an oversize hit); each value in it was
-    screened on its own.
-    """
-    touched = set()
-    clean = set(clean)
-    partners = [position for position in range(len(values)) if position not in clean]
-    for sep in _JOIN_SEPARATORS:
-        parts = [_JOIN_LABEL.sub("", value).strip() for value in values] if sep == " " else list(values)
-        joined = sep.join(parts)
-        if len(joined) > sg.MAX_TOTAL_CHARS:
-            continue
-        hits = _join_hits(joined)
-        if not hits:
-            continue
-        norm, spans = _value_spans(joined, parts, sep)
-        for hit in hits:
-            _family, hit_start, hit_end = hit
-            for position in clean - touched:
-                start, end = spans[position]
-                overlap = norm[max(start, hit_start):min(end, hit_end)]
-                if any(char.isalnum() for char in overlap) and not _own_hit(hit, parts, spans, partners):
-                    touched.add(position)
-    return touched
-
-def partner_touched_indices(items):
-    """Indices of clean string entries withheld because a join with an entry that trips alone hits them.
-
-    An instruction split across entries can leave one half clean while the other half trips on its own;
-    the tripping half is redacted by itself, and the clean half is withheld only when a detector hit on
-    an ordered join with a tripping entry overlaps its span. Bounded: every adjacent pair of a tripping
-    and a clean entry, plus the whole ordered run of clean and tripping entries. Blank, marker-bearing,
-    oversize and non-string entries are neither partners nor candidates. A clean entry no join hit
-    touches is never withheld, so benign entries beside a tripping one still render.
-    """
-    kinds = {}
-    for index, item in enumerate(items):
-        if not isinstance(item, str) or not item.strip() or has_marker(item):
-            continue
-        if not is_suspect(item):
-            kinds[index] = "clean"
-        elif not is_oversize(item):
-            kinds[index] = "trips"
-    if "trips" not in kinds.values() or "clean" not in kinds.values():
+    present = [index for index, value in enumerate(values) if _present(value)]
+    if len(present) < 2:
         return set()
+    if join_is_oversize(values, trusted_domains):
+        return set(present)
+    domains = tuple(trusted_domains)
+    starts = list(range(0, max(len(present) - SPLIT_WINDOW, 0) + 1, SPLIT_STRIDE))
+    if starts[-1] + SPLIT_WINDOW < len(present):
+        starts.append(len(present) - SPLIT_WINDOW)
     touched = set()
-    for first in kinds:
-        second = first + 1
-        if second in kinds and kinds[first] != kinds[second]:
-            pair = (first, second)
-            clean = [position for position, index in enumerate(pair) if kinds[index] == "clean"]
-            touched.update(pair[position] for position in _touched_in_join([items[i] for i in pair], clean))
-    order = sorted(kinds)
-    clean = [position for position, index in enumerate(order) if kinds[index] == "clean"]
-    touched.update(order[position] for position in _touched_in_join([items[i] for i in order], clean))
+    for start in starts:
+        window = present[start:start + SPLIT_WINDOW]
+        touched.update(window[k] for k in _split_partners(tuple(values[i] for i in window), domains))
     return touched
 
 
@@ -333,9 +259,17 @@ def _record_is_suspect(value):
 
 
 def _record_partner_texts(value):
-    """Clean values of a record that a join with one of its tripping values hits (stripped text)."""
-    texts = [text for text in _record_texts(value) if text.strip()]
-    return frozenset(texts[index].strip() for index in partner_touched_indices(texts))
+    """Stripped free-text values of a record that an instruction split across its values touches."""
+    texts = list(_record_texts(value))
+    return frozenset(texts[index].strip() for index in split_partner_indices(texts))
+
+
+def _hold_oversize_join(values, path, escalations):
+    """Hold a record or list whose values are too long to screen together; a value that is oversize on its
+    own already holds itself."""
+    present = [value for value in values if _present(value)]
+    if join_is_oversize(values) and not any(is_oversize(value) for value in present):
+        _escalate(escalations, path, "oversize", _digest(" ; ".join(present)), f"{path}: {OVERSIZE_REASON}")
 
 
 def _is_scan_record(value, field_name=None):
@@ -356,8 +290,8 @@ def list_run_indices(items):
     Every pair of neighbouring clean string entries is screened, then the whole list in order; a run
     that trips withholds every entry in it. Entries that trip (or carry a marker) on their own are
     handled individually and never join a clean run, but an entry that trips alone is still a join
-    partner: a clean entry is also withheld when a hit on its join with one overlaps it
-    (partner_touched_indices).
+    partner: a clean entry is also withheld when a hit crossing its boundary with a neighbour overlaps it
+    (split_partner_indices). Only clean entries are returned; one that trips alone redacts itself.
     """
     clean = [
         index for index, item in enumerate(items)
@@ -369,7 +303,7 @@ def list_run_indices(items):
             flagged.update((first, second))
     if not flagged and len(clean) > 2 and _run_trips([items[index] for index in clean]):
         flagged.update(clean)
-    return flagged | partner_touched_indices(items)
+    return flagged | {index for index in split_partner_indices(items) if not is_suspect(items[index])}
 
 
 def _safe_key(key, path, escalations):
@@ -397,12 +331,16 @@ def sanitize_free_text(
     ``engine_markers_ok`` is only for a document this plugin's engines have just re-derived: a whole
     marker in the exact engine form is kept. Anywhere else, input text carrying the ``[FLAGGED:``
     marker is withheld and held under independence-eligibility-rules.md #9.6 (D20).
-    ``withhold`` holds the stripped free-text values of an enclosing record that a join with one of
-    its tripping values hit (_record_partner_texts); they are redacted wherever they occur in it.
+    ``withhold`` holds the stripped free-text values of an enclosing record that an instruction split
+    across its values touches (_record_partner_texts); they are redacted wherever they occur in it.
+    A record or list whose values are too long to screen together is withheld and held as oversize.
     """
     if isinstance(value, dict):
         scan_record = not force_redact and _is_scan_record(value, field_name)
-        redact_record = force_redact or (scan_record and _record_is_suspect(value))
+        oversize_record = scan_record and join_is_oversize(list(_record_texts(value)))
+        if oversize_record:
+            _hold_oversize_join(list(_record_texts(value)), path, escalations)
+        redact_record = force_redact or oversize_record or (scan_record and _record_is_suspect(value))
         if scan_record and not redact_record:
             withhold = withhold | _record_partner_texts(value)
         sanitized = {}
@@ -420,6 +358,9 @@ def sanitize_free_text(
             )
         return sanitized
     if isinstance(value, list):
+        oversize_run = not force_redact and join_is_oversize(value)
+        if oversize_run:
+            _hold_oversize_join(value, path, escalations)
         runs = set() if force_redact else list_run_indices(value)
         return [
             sanitize_free_text(
