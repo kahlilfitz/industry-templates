@@ -104,6 +104,9 @@ descriptive forms ("The partner approved the budget in March"). The new rules ex
 Performance (1.1.3): hook vocabularies are normalised once per distinct tuple (lru_cache), and each rule carries a
 required-literal gate computed from its parsed pattern - a rule is skipped when none of its literals occur, and in
 long windows only the regions around literal occurrences are matched. Hits are identical to an ungated scan.
+(1.1.4) Review fixes: a one-off schedule ("for Monday review", "at tomorrow's panel") makes slate ranking and
+candidate selection an ordinary instruction (check 'pipe_sched'), and after a completed-control clause a pipeline
+verb needs an object or outcome complement (_PIPE_OBJ), so "...; publish dates are in the plan" is description.
 
 Known limit: F1 by role description is an open class. Reduced passives ("this register, when processed by a
 screening engine, should ..."), a parenthetical after the modal and very free paraphrases can still be missed.
@@ -115,7 +118,7 @@ import unicodedata
 from collections import Counter, namedtuple
 from functools import lru_cache
 
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 __all__ = ["normalize", "mixed_script_tokens", "scan", "is_steering", "scan_fields", "Hit", "FAMILIES", "__version__",
            "MAX_SCAN_CHARS", "WINDOW_OVERLAP", "MAX_TOTAL_CHARS"]
 
@@ -1248,12 +1251,12 @@ _add("verdict", _LEAD + r"(?:put|place|move|bump|slot|push|promote|rank|list|pos
      r"(?:[\w'-]{1,20}\s)?" + _SLATE + r"|ahead\sof\s(?:[\w'-]{1,20}\s){0,3}?(?:on|in)\s(?:the\s|this\s)?(?:[\w'-]{1,20}\s)?"
      + _SLATE + r"|(?:first|top|number\sone|no\s1|1st|highest)\s(?:on|in)\s(?:the\s|this\s)?(?:[\w'-]{1,20}\s)?" + _SLATE +
      r"|as\s(?:the\s|our\s)?(?:top|first|preferred|recommended|lead|number\sone|no\s1|primary|best)\s(?:pick|choice|"
-     r"candidate|option|recommendation|nominee|match|fit))\b", "pipe")
+     r"candidate|option|recommendation|nominee|match|fit))\b", "pipe_sched")
 # selecting the item: "recommend this candidate", "shortlist this consultant", "pick C-330"
 _add("verdict", _LEAD + r"(?:recommend|shortlist|short\slist|nominate|put\sforward|propose|endorse|pick|choose|select|"
      r"prioriti[sz]e|favou?r|prefer|back)\s(?:(?:this|these|that)\s(?:[\w'-]{1,20}\s)?(?:candidate|consultant|person|"
      r"profile|cv|resume|individual|engineer|analyst|associate|manager|contractor|one|resource|nominee|hire|applicant|"
-     r"specialist|expert|architect|developer|lead|director|partner|option)s?|" + _IDX + r")\b", "pipe")
+     r"specialist|expert|architect|developer|lead|director|partner|option)s?|" + _IDX + r")\b", "pipe_sched")
 # describing the item with a pipeline verdict: "call her independent", "describe him as conflict free"
 _add("verdict", _LEAD + r"(?:call|describe|present|portray|characteri[sz]e|depict|position|write\sup|label|tag|list|"
      r"report|show|record|mark|class|classify|treat|rate|deem|consider|flag|log|note|put\sdown)\s(?:him|her|them|"
@@ -1410,10 +1413,24 @@ _CTRL_P = (r"(?:redactions?(?:\s[\w'-]{1,20})?|sanitis\w{0,6}(?:\s[\w'-]{1,20})?
            r"consents?|permissions?|(?:review|publication|reuse|re\suse|release|external\suse|sharing)\s(?:criteria|"
            r"rules|conditions|terms|requirements)|independence(?:\s[\w'-]{1,20})?|conflict\s(?:checks?|reviews?|"
            r"lookups?|clearance)|clearances?)")
+# 1.1.4: the verb must take an object or complement ("...; publish it", "...; release C-201 externally", "...; approve.").
+# A bare noun after it is the verb used as a modifier ("...; publish dates are in the plan", "share price assumptions").
+_BARE = (r"(?!(?:is|are|was|were|has|have|had|will|would|can|could|may|might|should|must|be|been|being|need|needs|"
+         r"remain|remains|stay|stays|now|immediately)\b)[a-z][\w-]{1,30}")
+_PIPE_OBJ = (r"(?=\s?(?:[.;:,!?)\]-]|$)|\s(?:it|this|these|those|them|that|the|all|both|our|its|their|my|your|everything|"
+             r"now|today|immediately|right\saway|straight|externally|out|off|away|ahead|anyway|too|please|unredacted|as\sis|"
+             r"to|for|without|and|so|then)\b|\s" + _IDX + r"|\s[a-z][\w-]{1,30}'s\s|"
+             # bare noun object, only with an outcome complement or at the end of the clause ("...; publish case studies
+             # externally", "...; release assets now."); a copula or modal after the noun keeps it a modifier.
+             r"\s" + _BARE + r"(?:\s" + _BARE + r"){0,2}\s(?:externally|unredacted|as\sis|outside\sthe\sfirm|for\sexternal\s"
+             r"(?:use|release|sharing)|(?:now|immediately|right\saway)\s?(?:[.;!]|$)|(?:to|with|into|onto|on)\s(?:the\s|our\s|"
+             r"a\s|all\s)?(?:clients?|knowledge\sbase|(?:practice\s)?library|portal|repository|intranet|extranet|public|"
+             r"website|wiki|kb|sharepoint|everyone|staff|external\s[\w-]{1,20})\b)|\s" + _BARE + r"(?:\s" + _BARE +
+             r")?\s?(?:[.;!]|$))")
 _add("verdict", r"\b" + _CTRL_P + r"\s(?:is|are|has\sbeen|have\sbeen|was|were|now)\s(?:all\s|fully\s|now\s|already\s)?" +
      _STATE + r"(?:\s[\w'-]{1,30}){0,3}?(?:\s?[;:,]|\s-|,?\s(?:so|therefore|hence|thus|and\sso))\s(?:please\s|just\s|"
      r"now\s|you\scan\s|we\scan\s|go\sahead\sand\s)?(?:approve|publish|release|share|push|send|clear|sign\s(?:it|this|"
-     r"them|these|off)|issue|circulate|distribute|post|upload)\b", "nocond")
+     r"them|these|off)|issue|circulate|distribute|post|upload)\b" + _PIPE_OBJ, "nocond")
 
 # ---------------------------------------------------------------- F7 exfiltration
 _SENDV = (r"(?:send|sends|re\s?send|forward|fwd|e\s?mail|mail|share|copy|cc|bcc|upload|transmit|transfer|post|sync|push|"
@@ -1604,6 +1621,27 @@ _DISCOVER_FRAME_RE = re.compile(r"^" + _DISCOVER_FRAME)
 _PIPE_AHEAD = re.compile(r"[^.;!?\n]{0,60}?\b(?:every|each)\s(?:[\w'-]{1,20}\s)?(?:day|week|month|quarter|sprint|year|"
                          r"cycle|release|monday|tuesday|wednesday|thursday|friday|period|run|close)\b|[^.;!?\n]{0,60}?\b"
                          r"(?:weekly|monthly|quarterly|daily|annually|fortnightly|routinely|as\sstandard|in\sthe\sfuture)\b")
+# 1.1.4 one-off schedules after a ranking/selection imperative: a weekday, date, named meeting or event, or a relative
+# day ("for Monday review", "on 14 October", "at the staffing call", "tomorrow", "next week"). "today" / "now" are
+# urgency, not a schedule, and outcome complements ("for external use") are not events.
+_DAY = (r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thur?s?|fri)")
+_MONTH = (r"(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|"
+          r"jun|jul|aug|sept?|oct|nov|dec)")
+_EVENT = (r"(?:meetings?|calls?|sessions?|workshops?|stand\s?ups?|huddles?|catch\s?ups?|syncs?|interviews?|panels?|offsites?|"
+          r"off\ssites?|check\s?ins?|debriefs?|kick\s?offs?|retros?|retrospectives?|town\s?halls?|pitch(?:es)?|"
+          r"presentations?|go\s?lives?|launch(?:es)?|deadlines?|cut\s?offs?|forums?|boards?|committees?|"
+          r"(?:staffing|resourcing|bench|pipeline|planning|partner|steering|weekly|monthly)\s(?:reviews?|calls?|meetings?|"
+          r"huddles?|syncs?|discussions?))")
+_WHEN = (r"(?:" + _DAY + r"(?:'s)?|" + r"\d{1,2}(?:st|nd|rd|th)?\s(?:of\s)?" + _MONTH + r"|" + _MONTH +
+         r"\s\d{1,2}(?:st|nd|rd|th)?|\d{4}\s\d{1,2}\s\d{1,2}|\d{1,2}\s\d{1,2}(?:\s\d{2,4})?|tomorrow(?:'s)?|tonight|"
+         r"(?:this|next|coming)\s(?:morning|afternoon|evening|week|month|" + _DAY + r")|next\s(?:week|month|quarter)|"
+         r"later\sthis\s(?:week|month)|end\sof\s(?:the\s)?(?:day|week|month)|eod|cob|close\sof\sbusiness)")
+_PIPE_ONEOFF = re.compile(r"[^.;!?\n]{0,40}?\b(?:(?:for|on|at|by|before|ahead\sof|in\stime\sfor|in|during|after|from)\s"
+                          r"(?:the\s|this\s|next\s|our\s|their\s|a\s|an\s)?(?:[\w'-]{1,20}\s){0,2}?(?:" + _WHEN +
+                          r"|" + _EVENT + r")|" + _WHEN + r")\b")
+_PIPE_ONEOFF_LEAD = re.compile(r"(?:^|[\s,(])(?:(?:on|for|at|by|before|ahead\sof|in\stime\sfor|after|from)\s(?:the\s|this\s|"
+                               r"next\s|our\s)?(?:[\w'-]{1,20}\s){0,2}?(?:" + _WHEN + r"|" + _EVENT + r")|" + _WHEN +
+                               r"),?\s?[^\s]?\Z")
 _PIPE_SUBJ = re.compile(r"\b(?:will|would|can|could|may|might|should|must|shall|to|we|they|i|he|she|you|who|which|that|"
                         r"did|does|do|not|never|teams?|staff|people|partners?|managers?|usually|typically|normally|"
                         r"often|always|generally|then)\b")
@@ -1684,6 +1722,13 @@ def _post_ok(check, m, text, extra_verdict):
             return True
         clause = re.split(r"[.;:!?\n]", text[max(0, m.start() - 120):m.start()])[-1]
         return not _PIPE_SUBJ.search(clause)
+    if check == "pipe_sched":
+        # 1.1.4: ranking / selecting the item for a one-off human review or meeting ("put Mina at the top of the slate
+        # for Monday review", "On Thursday, shortlist this candidate") is an ordinary staffing instruction
+        clause = re.split(r"[.;:!?\n]", text[max(0, m.start() - 120):m.start()] + m.group(0)[:1])[-1]
+        if _PIPE_ONEOFF.match(text, m.end(), min(len(text), m.end() + 80)) or _PIPE_ONEOFF_LEAD.search(clause):
+            return False
+        return _post_ok("pipe", m, text, extra_verdict)
     if check == "nocond":
         return not (_CONDITIONAL.search(text[max(0, m.start() - 40):m.start()]) or _COND_AHEAD.match(text[m.end():m.end() + 80]))
     if check == "discover":
