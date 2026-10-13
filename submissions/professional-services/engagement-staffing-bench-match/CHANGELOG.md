@@ -407,6 +407,46 @@ the hardening phases change engine behaviour, but output contracts change only a
   - `ConstraintHardeningTests.test_qa10_slate_validate_reconciles_client_name_like_constraint_check`
     (with controls: another client or engagement ID is still refused)
 
+### QA round 11 (phase 2)
+
+- **QA round 11 fixes (one High defect, two Medium).**
+  - **Exact engagement IDs (High, rules 9.8/9.10).** fit-score, constraint-check and slate-draft
+    validation reconciled engagement IDs with `id_key()`, the rule 9.5 candidate-ID folding, so
+    roles `ENG-PS-2026-1042` with bench or constraints `eng_ps_2026_1042` passed. role-intake
+    uses the engagement ID exactly as it appears in the source, and the rules already said it is
+    compared exactly. New additive `input_guard.engagement_id_key()` (all three copies) keeps
+    the ID as supplied, trimming only surrounding whitespace. `fit_score.validate_inputs()` (all
+    three copies), `constraint_check.merge_engagement()`/`validate_constraints()` and
+    `slate_validate._same_identity()` use it, and a mismatch is refused with the existing
+    engagement-mismatch input error.
+  - **Leading "the" only (Medium, rules 9.2 and 9.9).** "the" was in `ENTITY_SUFFIXES`, so a
+    trailing "the" was dropped and "Orchard Ridge Clinics The" matched the client exactly, which
+    exposed the name. "the" is no longer a trailing designator; only a leading "the" is dropped.
+    `ENTITY_DESIGNATORS` (suffixes plus "the") still decides whether a name is made only of
+    designators. "Orchard Ridge Clinics The" is now a token-subset ambiguity, a rule 9.9 review
+    hold with the name withheld.
+  - **Ambiguous identity in the default source (Medium, rule 9.9).** A held ambiguous row with no
+    source of its own fell back to the register default source. `held_item()` copied that source
+    unscreened, so "Orchard Clinics register" echoed the withheld identity. New
+    `ambiguous_names()` collects the identities of rule 9.9 ambiguous rows from the raw register.
+    `verdict_for()` replaces a default source, default citation or row citation that names one
+    with fixed text (`UNVERIFIED_VALUE`, an engine text). New `withhold_unverified()` does the same
+    for every carried `constraints_considered` source or citation, held rows included. Each
+    withholding is escalated without echo. slate-draft validation receives the same identities
+    when it re-derives (`validate(..., withheld_names)`) and runs the same scan defensively: a hit
+    is withheld and the candidate is held (#9.9). Identities are not added to the rule 9.11
+    foreign set, so ordinary text about the client does not hold.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): the rules 9.2/9.9
+  note covers the leading-only "the", exact engagement IDs in all three engines, and the
+  withholding of register text naming an ambiguous entity.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are four new regression tests, each failing on `e5d5da7`:
+  - `ConstraintHardeningTests.test_qa11_engagement_ids_compare_exactly` (with a whitespace control)
+  - `ConstraintHardeningTests.test_qa11_trailing_the_is_not_dropped` (with a leading-"the" control)
+  - `ConstraintHardeningTests.test_qa11_default_source_naming_ambiguous_identity_is_withheld`
+    (with a control that has no ambiguous row)
+  - `ValidateHardeningTests.test_qa11_register_text_naming_withheld_identity_is_held`
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

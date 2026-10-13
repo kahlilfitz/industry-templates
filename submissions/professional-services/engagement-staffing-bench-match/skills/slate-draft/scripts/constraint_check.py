@@ -34,6 +34,7 @@ from input_guard import (
     check_confidence,
     check_date,
     check_id,
+    engagement_id_key,
     duplicate_keys,
     has_marker,
     id_key,
@@ -105,6 +106,9 @@ CARRIED_KEYS = (
 FOREIGN_LABEL = "another client (name withheld)"
 FOREIGN_RULE = "independence-eligibility-rules.md #9.11"
 FOREIGN_VALUE = f"withheld: names another client ({FOREIGN_RULE})"
+# Register text naming an entity a rule 9.9 review hold withholds (one that only partly matches the
+# client or a declared affiliate) is replaced with this fixed text wherever it would be carried.
+UNVERIFIED_VALUE = f"withheld: names an entity that cannot be matched reliably ({RULES} #9.9)"
 FOREIGN_REASON = "candidate record names another client; values withheld"
 # Top-level record members never screened for another client's identity (the record key). Nested
 # members are always screened, and ``screening_holds`` is screened by its input-derived path only.
@@ -118,7 +122,10 @@ _ENGINE_HOLD = re.compile(
 FOREIGN_CHAIN_BUDGET = 20000
 PASSTHROUGH_SECTIONS = ("bench_candidates", "scored_roles", "ranked_roles")
 REVIEW_FALLBACK = "conflicts, screening or availability evidence requires independence review"
-ENTITY_SUFFIXES = {"llc", "inc", "ltd", "plc", "corp", "corporation", "co", "company", "the"}
+# Corporate designators: only a trailing run of them is dropped from an entity name.
+ENTITY_SUFFIXES = {"llc", "inc", "ltd", "plc", "corp", "corporation", "co", "company"}
+# A name made only of these words (designators and the article) names no entity (rule 9.2).
+ENTITY_DESIGNATORS = ENTITY_SUFFIXES | {"the"}
 _ENGINE_MARKER_DIGEST = re.compile(r"\[FLAGGED: [^\]]*sha256=([0-9a-f]{12})\]")
 _ROW_HIT = re.compile(r"^constraints_input\.constraints\[(\d+)\](?:\.([^.\[]+))?")
 
@@ -227,7 +234,7 @@ def _valid_date(value):
 def _entity_key(text):
     folded = steering_guard.normalize(canonical(text))
     words = re.sub(r"[\W_]+", " ", folded).split()
-    if all(word in ENTITY_SUFFIXES for word in words):
+    if all(word in ENTITY_DESIGNATORS for word in words):
         return " ".join(words)  # a name made only of designators stays as it is
     end = len(words)
     while words[end - 1] in ENTITY_SUFFIXES:
@@ -238,8 +245,9 @@ def _entity_key(text):
 def normalize_entity_name(name):
     """Entity names compare in one canonical form: NFKC, format characters removed, confusables and
     diacritics folded, case-folded, separators and punctuation as spaces, then only the trailing run
-    of corporate designators (and a leading "the") dropped, never a designator inside the name, so
-    "Company Partners" stays "company partners" while "Partners Inc." is "partners"."""
+    of corporate designators and a leading "the" dropped, never a designator inside the name or a
+    trailing "the", so "Company Partners" stays "company partners" while "Partners Inc." is
+    "partners", and "Orchard Ridge Clinics The" keeps its "the"."""
     if name is None or isinstance(name, bool) or not isinstance(name, (str, int, float)):
         return ""
     return _entity_key(str(name))
@@ -248,7 +256,7 @@ def entity_matchable(name):
     """A name that can identify an entity: it normalises to something other than corporate
     designators alone ("The Company Inc" names no entity; rule 9.2)."""
     words = normalize_entity_name(name).split()
-    return bool(words) and not all(word in ENTITY_SUFFIXES for word in words)
+    return bool(words) and not all(word in ENTITY_DESIGNATORS for word in words)
 
 def entity_names_match(left, right):
     """True only for one entity: equal after normalisation and trailing-designator removal. None
@@ -299,6 +307,38 @@ def ambiguous_row(item, engagement):
         return False
     return applies_to_client(item, engagement) is None
 
+def ambiguous_names(constraints, engagement):
+    """Rule 9.9: the identities of the register rows held because their entity only partly matches
+    the client or a declared affiliate, harvested from the raw register. Register text naming one is
+    withheld wherever it would be carried, like the row's own name."""
+    names = set()
+    for item in constraints.get("constraints") or []:
+        if isinstance(item, dict) and ambiguous_row(item, engagement):
+            key = normalize_entity_name(item.get("client_name"))
+            if key:
+                names.add(key)
+    return ForeignNames(names)
+
+def unverified_text(text, ambiguous):
+    """True for register text (not engine text) that names an identity withheld under rule 9.9."""
+    return isinstance(text, str) and not _engine_value(text) and _names_foreign(text, ambiguous)
+
+def withhold_unverified(items, ambiguous):
+    """Rule 9.9 for a constraints_considered list: a source or citation naming an identity withheld
+    under rule 9.9 is replaced with fixed text. Returns (new list, number of values withheld)."""
+    if not isinstance(items, list) or not ambiguous:
+        return items, 0
+    out, hits = [], 0
+    for item in items:
+        if isinstance(item, dict):
+            item = dict(item)
+            for key in ("source", "citation"):
+                if unverified_text(item.get(key), ambiguous):
+                    item[key] = UNVERIFIED_VALUE
+                    hits += 1
+        out.append(item)
+    return out, hits
+
 def same_entity(left, right):
     """One entity after canonical folding; names that fold to nothing compare in canonical form."""
     left_key, right_key = normalize_entity_name(left), normalize_entity_name(right)
@@ -338,7 +378,7 @@ def merge_engagement(payload, constraints, escalations):
         same = (
             same_entity(mine, theirs)
             if key == "client_name"
-            else id_key(mine) is not None and id_key(mine) == id_key(theirs)
+            else engagement_id_key(mine) is not None and engagement_id_key(mine) == engagement_id_key(theirs)
         )
         if not same:
             sys.exit(
@@ -516,11 +556,12 @@ class _Verdict:
             self.considered.append(item)
 
 
-def verdict_for(role, row, constraints, held_rows=None, foreign_hold=False, register_rows=None):
+def verdict_for(role, row, constraints, held_rows=None, foreign_hold=False, register_rows=None, ambiguous=None):
     """Evaluate one ranked candidate against the register. ``held_rows`` maps a register index to the
     set of member names a screening hit withheld (``None`` member: the row itself). ``foreign_hold``
     marks a candidate record that named another client (rule 9.11). ``register_rows`` are the
-    candidate's (index, row) pairs when the caller already has them."""
+    candidate's (index, row) pairs when the caller already has them. ``ambiguous`` are the identities
+    withheld under rule 9.9 (ambiguous_names(); computed from ``constraints`` when not given)."""
     held_rows = held_rows or {}
     acc = _Verdict()
     start = _role_start(role, constraints)
@@ -530,6 +571,13 @@ def verdict_for(role, row, constraints, held_rows=None, foreign_hold=False, regi
     rows = candidate_register_rows(constraints, row.get("candidate_id")) if register_rows is None else register_rows
     default_source = constraints.get("source") if isinstance(constraints.get("source"), str) else ""
     default_source = default_source or "connector:conflicts-register"
+    if ambiguous is None:
+        ambiguous = ambiguous_names(constraints, engagement)
+    # Rule 9.9: register text naming a withheld identity is never carried, held rows included.
+    if unverified_text(default_source, ambiguous):
+        default_source = UNVERIFIED_VALUE
+    default_citation = constraints.get("citation") or "conflicts register"
+    default_citation = UNVERIFIED_VALUE if unverified_text(default_citation, ambiguous) else safe_cite(default_citation)
 
     confidence_values = [
         confidence_value(row.get("confidence", 1.0)),
@@ -563,11 +611,12 @@ def verdict_for(role, row, constraints, held_rows=None, foreign_hold=False, regi
             "reason": reason,
             "source": default_source,
             "confidence": confidence_value(constraints.get("confidence", 0.0)),
-            "citation": safe_cite(constraints.get("citation") or "conflicts register"),
+            "citation": default_citation,
         })
 
     for index, item in rows:
-        cite = safe_cite(_text(item, "citation") or "conflicts record")
+        cite = _text(item, "citation") or "conflicts record"
+        cite = UNVERIFIED_VALUE if unverified_text(cite, ambiguous) else safe_cite(cite)
         if index in held_rows:
             fields = held_rows[index]
             reason = "conflicts-register record carries text withheld by source screening"
@@ -995,7 +1044,7 @@ def validate_constraints(constraints, ranked):
         engagement_id = engagement.get("engagement_id")
         if engagement_id not in (None, ""):
             _ident(engagement_id, f"{label}: engagement.engagement_id")
-            need(id_key(engagement_id) == id_key(ranked_engagement.get("engagement_id")),
+            need(engagement_id_key(engagement_id) == engagement_id_key(ranked_engagement.get("engagement_id")),
                  f"{label}: engagement.engagement_id does not match the ranked (role-intake) engagement; "
                  "the ranked engagement is authoritative (rule 9.10)")
         if "affiliates" in engagement:
@@ -1536,13 +1585,13 @@ _RECORD_ENTRY_TYPES = {"source_screening", "availability", "availability_evidenc
 _INPUT_MEMBERS = ("client_name", "status", "role_type", "process", "end_date", "resolved_date", "source", "citation")
 # Fixed text and defaults the engine itself writes into those members.
 _ENGINE_TEXTS = {
-    FOREIGN_LABEL, FOREIGN_VALUE, FOREIGN_REASON, FOREIGN_RULE, "withheld", "conflicts record",
+    FOREIGN_LABEL, FOREIGN_VALUE, FOREIGN_REASON, FOREIGN_RULE, UNVERIFIED_VALUE, "withheld", "conflicts record",
     "conflicts register", "connector:conflicts-register",
     f"conflicts register citation withheld: names another client ({RULES} #9.9)",
 }
 _ENGINE_ROW_TEXT = re.compile(
     r"conflicts register row \d+(?: for another client; name and citation withheld)? "
-    r"\(independence-eligibility-rules\.md #\d+\.\d+\)")
+    r"\(independence-eligibility-rules\.md #\d+\.\d+(?:,#\d+\.\d+)*\)")
 
 
 def _engine_text(value):
@@ -1743,6 +1792,7 @@ def govern(ranked_payload, constraints_payload):
         target_engagement["affiliates"] = merge_unique(
             _affiliates(ranked_payload["engagement"]), _affiliates(constraints_payload["engagement"]))
     foreign = _foreign_names(constraints_payload, target_engagement)
+    ambiguous = ambiguous_names(constraints_payload, target_engagement)
 
     log = ScreeningLog()
     _seed_engine_markers(log, ranked_payload, "")
@@ -1763,6 +1813,10 @@ def govern(ranked_payload, constraints_payload):
     except SystemExit as error:
         raise InputError(str(error.code)) from None
     escalations.extend(merge_notes)
+    if any(unverified_text(constraints_payload.get(key), ambiguous) for key in ("source", "citation")):
+        escalations.add(
+            f"conflicts register source or citation names an entity that cannot be matched reliably; "
+            f"withheld ({RULES} #9.9)", f"{RULES} #9.9")
 
     held_rows = _held_rows(log)
     row_holds = {index: log.holds_under(f"constraints_input.constraints[{index}]") for index in held_rows}
@@ -1820,7 +1874,7 @@ def govern(ranked_payload, constraints_payload):
             foreign_held = bool(foreign_hits)
             verdict_row = dict(row, screening_holds=holds)
             result = verdict_for(role, verdict_row, constraints, candidate_held, foreign_hold=foreign_held,
-                                 register_rows=register_rows)
+                                 register_rows=register_rows, ambiguous=ambiguous)
             for item in result[3]:
                 if "client_name" in item and item.get("applies_to_engagement") is not False \
                         and _names_foreign(item.get("citation"), foreign):
@@ -1837,6 +1891,11 @@ def govern(ranked_payload, constraints_payload):
                 citations = [text if _engine_text(text) else withhold_foreign(text, foreign, contributors=register_contributors)[0]
                              for text in citations]
             considered = withhold_considered(considered, foreign, register_contributors, held=bool(register_contributors))[0]
+            considered, unverified_hits = withhold_unverified(considered, ambiguous)
+            if unverified_hits:
+                escalations.add(
+                    f"{row['candidate_id']}: conflicts register text names an entity that cannot be matched "
+                    f"reliably; withheld ({RULES} #9.9)", f"{RULES} #9.9")
             if foreign_held:
                 escalations.add(
                     f"{role_id}: {row['candidate_id']} - {FOREIGN_REASON}; independence review required "

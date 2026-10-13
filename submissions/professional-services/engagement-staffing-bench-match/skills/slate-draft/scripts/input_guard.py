@@ -145,6 +145,14 @@ def id_key(value):
     return folded or None
 
 
+def engagement_id_key(value):
+    """An engagement ID compares exactly as supplied, surrounding whitespace aside; it is never
+    folded (the rule 9.5 canonical folding is for candidate IDs only). Blank IDs return None."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()
+
+
 _ID_SEP = r"[\s\-_.\u2010-\u2015\u2212]"
 _ID_JOIN = r"[\-_.\u2010-\u2015\u2212]"
 

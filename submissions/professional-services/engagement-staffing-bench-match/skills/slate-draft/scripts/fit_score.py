@@ -26,6 +26,7 @@ from input_guard import (
     check_confidence,
     check_date,
     check_id,
+    engagement_id_key,
     check_name,
     check_pct,
     check_timestamp,
@@ -241,7 +242,7 @@ def validate_inputs(roles_payload, bench_payload):
     bench_engagement, bench_provenance = _labelled("bench.json", _validate_bench_document, bench_payload)
     need(
         canonical(roles_engagement["client_name"]) == canonical(bench_engagement["client_name"])
-        and id_key(roles_engagement["engagement_id"]) == id_key(bench_engagement["engagement_id"]),
+        and engagement_id_key(roles_engagement["engagement_id"]) == engagement_id_key(bench_engagement["engagement_id"]),
         "bench.json: engagement does not match roles.json engagement (client_name, engagement_id)",
     )
     need("generated_at" in roles_provenance or "generated_at" in bench_provenance,

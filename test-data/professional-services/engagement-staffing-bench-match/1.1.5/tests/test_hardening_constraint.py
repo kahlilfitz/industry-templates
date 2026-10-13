@@ -1242,3 +1242,80 @@ class ConstraintHardeningTests(unittest.TestCase):
                 self.assertEqual(2, result.returncode, ascii_safe(result.stdout + result.stderr))  # noqa: F821
                 self.assertNotIn("Traceback", result.stderr)
                 self.assertFalse(out.exists())
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 11: engagement IDs compare exactly; only a leading "the" is dropped; register text
+    # naming an identity withheld under rule 9.9 (the default source included) is withheld.
+    # ----------------------------------------------------------------------------------------
+    def test_qa11_engagement_ids_compare_exactly(self):
+        roles, bench, constraints = scenario_inputs("scenario-a-happy")
+        self.assertEqual("ENG-PS-2026-1042", constraint_check.engagement_id_key("  ENG-PS-2026-1042 "))
+        self.assertNotEqual(constraint_check.engagement_id_key("ENG-PS-2026-1042"),
+                            constraint_check.engagement_id_key("eng_ps_2026_1042"))
+        folded = copy.deepcopy(bench)
+        folded["engagement"]["engagement_id"] = "eng_ps_2026_1042"
+        with self.assertRaises(fit_score.InputError):
+            fit_score.score(roles, folded)
+        changed = copy.deepcopy(constraints)
+        changed["engagement"]["engagement_id"] = "eng_ps_2026_1042"
+        result, out = self.check(roles, bench, changed)
+        self.assert_refused(result, out, contains="engagement_id does not match")
+        # slate_validate refuses the folded ID in constraints.json against a valid governed document.
+        self.chain(bench, constraints)
+        path = self.write("constraints-folded.json", changed)
+        validated = self.temp / "validated-folded.json"
+        result = subprocess.run(
+            [sys.executable, str(VALIDATE), "--roles", str(self.temp / "roles.json"),
+             "--bench", str(self.temp / "bench.json"), "--constraints", str(path),
+             "--governed", str(self.temp / "governed.json"), "--out", str(validated)],
+            cwd=str(self.temp), capture_output=True, text=True, encoding="utf-8", errors="backslashreplace")
+        self.assertEqual(2, result.returncode, ascii_safe(result.stdout + result.stderr))  # noqa: F821
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(validated.exists())
+        # Control: the exact ID, surrounding whitespace aside, still passes.
+        padded = copy.deepcopy(constraints)
+        padded["engagement"]["engagement_id"] = " ENG-PS-2026-1042 "
+        governed, _validated, _texts = self.chain(bench, padded)
+        self.assertEqual(["C-101", "C-103"], recommended_ids(governed, "PSS-001"))
+
+    def test_qa11_trailing_the_is_not_dropped(self):
+        self.assertEqual("orchard ridge clinics the", constraint_check.normalize_entity_name("Orchard Ridge Clinics The"))
+        self.assertIsNone(constraint_check.entity_names_match("Orchard Ridge Clinics The", "Orchard Ridge Clinics"))
+        self.assertTrue(constraint_check.entity_names_match("The Orchard Ridge Clinics", "Orchard Ridge Clinics"))
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        self.assert_ambiguous_hold(
+            bench, dict(wall_row(client_name="Orchard Ridge Clinics The"), citation="conflicts extract row 93"),
+            r"(?i)clinics[\s\-_.]*the")
+        # Control: a leading "the" is still dropped, so the wall applies to the engagement.
+        governed, validated, _texts = self.chain(bench, self.with_rows(wall_row(client_name="The Orchard Ridge Clinics")))
+        for document in (governed, validated):
+            self.assertEqual("ineligible", slate_row(document, "PSS-001", "C-101")["eligibility"]["verdict"])
+            self.assertEqual(["C-103"], recommended_ids(document, "PSS-001"))
+
+    def test_qa11_default_source_naming_ambiguous_identity_is_withheld(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        leak = re.compile(r"orchard[\s\-_.]*clinics", re.IGNORECASE)
+        row = {key: value for key, value in wall_row(client_name="Orchard Clinics").items() if key != "source"}
+        for key, value in (("source", "Orchard Clinics register"), ("citation", "Orchard Clinics extract")):
+            with self.subTest(key=key):
+                constraints = self.with_rows(row)
+                constraints[key] = value
+                governed, validated, texts = self.chain(bench, constraints)
+                for name, text in texts.items():
+                    self.assertEqual([], leak.findall(text), name)
+                for document in (governed, validated):
+                    self.assert_held(slate_row(document, "PSS-001", "C-101"), "#9.9")
+                    self.assertEqual(["C-103"], recommended_ids(document, "PSS-001"))
+                    self.assertTrue(any("#9.9" in item and "register source or citation" in item
+                                        for item in document["escalations"]),
+                                    ascii_safe(document["escalations"]))  # noqa: F821
+        # A row-level source or citation naming the withheld identity is withheld too.
+        constraints = self.with_rows(row, self.clear_row("Orchard Clinics feed", "Orchard Clinics extract row 5"))
+        governed, validated, texts = self.chain(bench, constraints)
+        for name, text in texts.items():
+            self.assertEqual([], leak.findall(text), name)
+        # Control: with no ambiguous row the same text is ordinary register text and is carried.
+        constraints = self.with_rows(self.clear_row("Orchard Clinics feed"))
+        governed, validated, texts = self.chain(bench, constraints)
+        self.assertIn("Orchard Clinics feed", texts["governed.json"])
+        self.assertEqual(["C-101", "C-103"], recommended_ids(governed, "PSS-001"))

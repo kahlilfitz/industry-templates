@@ -35,6 +35,7 @@ from input_guard import (
     check_confidence,
     check_date,
     check_id,
+    engagement_id_key,
     check_name,
     duplicate_keys,
     field,
@@ -102,6 +103,8 @@ COMPOSED_HOLD_PROBLEM = "recommendation evidence withheld for review"
 ESCALATION_HOLD_PROBLEM = "an open escalation names this candidate"
 FOREIGN_RULE = constraint_check.FOREIGN_RULE
 FOREIGN_REASON = constraint_check.FOREIGN_REASON
+UNVERIFIED_REASON = "conflicts register text names an entity that cannot be matched reliably; withheld"
+UNVERIFIED_RULE = "independence-eligibility-rules.md #9.9"
 DRAFT_BANNER = (
     "DRAFT - HUMAN REVIEW REQUIRED",
     "DRAFT - pending partner approval and independence/resource-management review",
@@ -610,7 +613,7 @@ def _same_identity(expected, carried, key):
         digest = hashlib.sha256(expected.strip().encode("utf-8")).hexdigest()[:12]
         return f"sha256={digest}" in carried
     if key == "engagement_id":
-        return id_key(expected) == id_key(carried)
+        return engagement_id_key(expected) == engagement_id_key(carried)
     # Client names reconcile exactly as constraint-check reconciles them (rule 9.10).
     return constraint_check.same_entity(expected, carried)
 
@@ -861,13 +864,16 @@ def _withhold_foreign_escalations(escalations, foreign):
     return out
 
 
-def validate(governed_payload, intake_engagements=(), foreign_names=()):
+def validate(governed_payload, intake_engagements=(), foreign_names=(), withheld_names=()):
     """Secondary safety check of a governed document; returns the validated document. No file I/O.
 
     The input is never mutated. ``intake_engagements`` is an optional sequence of
     (label, engagement object) pairs from the raw inputs; any identity mismatch is refused (C5).
     ``foreign_names`` are canonical other-client names harvested from constraints.json; any carried
     candidate value naming one is withheld and the candidate is held for review (rule 9.11).
+    ``withheld_names`` are the identities of register rows held under rule 9.9 (an entity that only
+    partly matches the client); a carried register source or citation naming one is withheld and the
+    candidate is held for review.
     """
     try:
         engagement, roles = _check_structure(governed_payload)
@@ -916,6 +922,18 @@ def validate(governed_payload, intake_engagements=(), foreign_names=()):
                     f"governed_roles[{role_index}].candidate_slate[{index}]: {FOREIGN_REASON}; "
                     f"independence review required ({FOREIGN_RULE})"
                 )
+    unverified = constraint_check.ForeignNames(set(withheld_names))
+    unverified_held = set()
+    for role_index, role in enumerate(payload["governed_roles"]):
+        for index, candidate in enumerate(role["candidate_slate"]):
+            candidate["constraints_considered"], hits = constraint_check.withhold_unverified(
+                candidate["constraints_considered"], unverified)
+            if hits:
+                unverified_held.add((role_index, index))
+                escalations.append(
+                    f"governed_roles[{role_index}].candidate_slate[{index}]: {UNVERIFIED_REASON}; "
+                    f"independence review required ({UNVERIFIED_RULE})"
+                )
     constraint_check.withhold_foreign_sections(payload, foreign, flagged)
     escalations = _withhold_foreign_escalations(escalations, foreign)
     open_escalations = list(governed_payload["escalations"])
@@ -945,6 +963,8 @@ def validate(governed_payload, intake_engagements=(), foreign_names=()):
                 problems.append((ESCALATION_HOLD_PROBLEM, RULE_VERDICT))
             if (role_index, index) in foreign_held:
                 problems.append((FOREIGN_REASON, FOREIGN_RULE))
+            if (role_index, index) in unverified_held:
+                problems.append((UNVERIFIED_REASON, UNVERIFIED_RULE))
             problems = _unique_pairs(problems)
             if problems:
                 _withhold(candidate, role, role_index, index, problems, escalations, log)
@@ -1259,7 +1279,8 @@ def _main(argv):
         if isinstance(payload, dict)
     ]
     foreign = constraint_check._foreign_names(constraints_payload, expected["engagement"])
-    payload = validate(expected, intake, foreign)
+    withheld = constraint_check.ambiguous_names(constraints_payload, expected["engagement"])
+    payload = validate(expected, intake, foreign, withheld)
     draft = render_draft(payload)
     write_outputs(args.out, payload, args.draft_out, draft)
     print(f"slate_validate: {len(payload['governed_roles'])} role(s) -> validated output and slate draft written")

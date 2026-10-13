@@ -789,3 +789,20 @@ class ValidateHardeningTests(unittest.TestCase):
                             item["client_name"] = "Clinics Inc"
         result = slate_validate.validate(document, ())
         self.assertEqual(["C-101"], self.recommended_ids(result, 0))
+
+    def test_qa11_register_text_naming_withheld_identity_is_held(self):
+        document = self.a()
+        for role in document["governed_roles"]:
+            for slate in ("candidate_slate", "recommended_candidates"):
+                for candidate in role[slate]:
+                    if candidate["candidate_id"] == "C-101":
+                        for item in candidate["constraints_considered"]:
+                            if item.get("type") == "clear":
+                                item["source"] = "Orchard Clinics feed"
+        result = slate_validate.validate(copy.deepcopy(document), (), (), {"orchard clinics"})
+        self.assertEqual(["C-103"], self.recommended_ids(result, 0))
+        self.assertEqual([], re.findall(r"orchard[\s\-_.]*clinics", json.dumps(result), re.IGNORECASE))
+        self.assertTrue(any("#9.9" in item for item in result["escalations"]))
+        # Control: without a withheld identity the same text is ordinary register text.
+        result = slate_validate.validate(copy.deepcopy(document), ())
+        self.assertEqual(["C-101", "C-103"], self.recommended_ids(result, 0))
