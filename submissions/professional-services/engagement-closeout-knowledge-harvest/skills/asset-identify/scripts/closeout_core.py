@@ -36,6 +36,11 @@ WITHHELD = "[withheld: embedded instruction held for review - see screening_hold
 DRAFT_LABEL = "DRAFT - HUMAN REVIEW REQUIRED"
 MAX_INPUT_BYTES = 5_000_000
 MAX_DEPTH = 64
+# Screening joins every pair of fields in a record and of adjacent records (D18, D22), so its cost
+# grows with these counts; they bound it (confidentiality-sanitisation-rules.md #8.1).
+MAX_RECORDS = 100
+MAX_TOTAL_RECORDS = 250
+MAX_LIST_ITEMS = 20
 
 # Plugin vocabulary passes to the shared detector only through its documented hooks
 # (confidentiality-sanitisation-rules.md #8.1). Closeout text never legitimately carries an e-mail
@@ -423,6 +428,8 @@ def _check_value(kind, value, path, ctx):
             raise InputError(f"{path} must be a calendar date YYYY-MM-DD (value not repeated)")
     elif kind in ("names", "texts", "tokens"):
         need_list(value, path)
+        if kind != "tokens" and len(value) > MAX_LIST_ITEMS:
+            raise InputError(f"{path} has more than {MAX_LIST_ITEMS} items; keep the most relevant (#8.1 screening bound)")
         for index, item in enumerate(value):
             item_path = f"{path}[{index}]"
             if kind == "tokens":
@@ -510,6 +517,12 @@ def validate_input(doc, generated_at=None, prior=None):
     for name in RAW_ARRAYS:
         if name not in doc or type(doc[name]) is not list:
             raise InputError(f"missing or invalid required array: {name} (absent, null or another type is not an empty list)")
+        if len(doc[name]) > MAX_RECORDS:
+            raise InputError(f"{name} has more than {MAX_RECORDS} records; split the harvest or keep the most "
+                             f"relevant (#8.1 screening bound)")
+    if sum(len(doc[name]) for name in RAW_ARRAYS) > MAX_TOTAL_RECORDS:
+        raise InputError(f"the input arrays hold more than {MAX_TOTAL_RECORDS} records together; split the harvest "
+                         f"or keep the most relevant (#8.1 screening bound)")
     if "engagement" not in doc or type(doc["engagement"]) is not dict:
         raise InputError("missing or invalid required object: engagement")
 
@@ -536,6 +549,8 @@ def validate_input(doc, generated_at=None, prior=None):
     escalations = []
     if "escalations" in doc:
         need_list(doc["escalations"], "escalations")
+        if len(doc["escalations"]) > MAX_RECORDS:
+            raise InputError(f"escalations has more than {MAX_RECORDS} items (#8.1 screening bound)")
         for index, item in enumerate(doc["escalations"]):
             _check_text(item, f"escalations[{index}]", ctx)
             if item == WITHHELD or item not in escalations:  # identical upstream escalations merge once (A8)
@@ -735,8 +750,10 @@ def _verb_hit(verb, rest, following, at_start):
         return (not rest or rest in _DERIVED) and following in whole
     if at_start and not rest:
         return following in _DETERMINERS  # 'ReleaseThisRecord', not 'Release readiness'
+    if at_start and rest.startswith(_RUN_MATERIAL):
+        return True  # at a part boundary any lead verb, short ones too: 'usethisrecord', 'gothisrecord'
     if len(verb) < LEAD_RUN_MIN_CHARS:
-        return False
+        return False  # inside a longer part a short verb is a coincidence: 'warehouse', 'asset'
     return rest.startswith(_RUN_MATERIAL) or (not rest and following in _DETERMINERS)
 
 
@@ -830,7 +847,9 @@ def citation_shape_ok(value, spelled=True):
     """A source path or document ID (no spaces; it carries a '.', '/', '\\' or a digit) with an optional
     #anchor and row, line, clause, section, page or named-sheet locators, ';'-separated. No path,
     anchor or sheet name may spell a clause under the canonical token check, as an identifier may
-    not (#8.6)."""
+    not, and neither may each part's source read together with its anchors and sheet names, in
+    order, nor any source segment followed by an anchor or sheet name (#8.6: 'DOC-Publi#shThisRecord',
+    'raw/publi.md#shThisRecord')."""
     text = value.strip()
     if has_cf(value) or not text or len(text) > CITATION_MAX_CHARS or not CITATION_RE.fullmatch(text):
         return False
@@ -840,6 +859,13 @@ def citation_shape_ok(value, spelled=True):
             return False
         if spelled and spells_clause(source.group(0), r"[-_./\\]+"):
             return False
+        names = [anchor or sheet for anchor, sheet in _CITE_WORDS.findall(part)]
+        if spelled and names:
+            if spells_clause(" ".join([source.group(0)] + names), r"[\s\-_./\\]+"):
+                return False
+            segments = [word for word in re.split(r"[-_./\\]+", source.group(0)) if word]
+            if any(spells_clause(f"{segment} {name}", r"\s+", tokens=False) for segment in segments for name in names):
+                return False
     return not spelled or all(id_shape_ok(anchor or sheet) for anchor, sheet in _CITE_WORDS.findall(text))
 
 
@@ -892,13 +918,21 @@ def _families(hits):
     return found
 
 
+@functools.lru_cache(maxsize=None)
+def scan_families(text):
+    """The single detector call site: the hit families of sg.scan on one text. Each distinct text is
+    scanned once per process, so a value screened as a field is not scanned again when it joins a
+    record, a pair or a run, and a re-run of the chain (#8.2) re-reads the cache."""
+    return tuple(_families(sg.scan(text, **GUARD_HOOKS)))
+
+
 @functools.lru_cache(maxsize=65536)
 def text_hits(text):
-    """The single detector call site for one line of supplied text: a tuple of hit families."""
+    """One line of supplied text: a tuple of hit families."""
     if len(text) > sg.MAX_TOTAL_CHARS:
         return ("oversize",)
     found = ["supplied_marker"] if marker_shaped(text) else []
-    for family in _families(sg.scan(text, **GUARD_HOOKS)):
+    for family in scan_families(text):
         if family not in found:
             found.append(family)
     return tuple(found)
@@ -906,10 +940,26 @@ def text_hits(text):
 
 @functools.lru_cache(maxsize=65536)
 def fields_hits(values):
-    """Bounded join of related values (D13, D18, D22): a tuple of hit families."""
+    """Bounded join of related values (D13, D18, D22): a tuple of hit families, exactly as
+    sg.scan_fields reports it. Each value's own scan comes from the cache, so only the two joins
+    (' ; ' and, with 'Label:' prefixes removed, a plain space) are new scans."""
     if sum(len(value) for value in values) > sg.MAX_TOTAL_CHARS:
         return ("oversize",)
-    return tuple(_families(sg.scan_fields({str(i): v for i, v in enumerate(values)}, **GUARD_HOOKS)))
+    values = [value for value in values if isinstance(value, str) and value.strip()]
+    found = []
+    for value in values:
+        found.extend(family for family in scan_families(value) if family not in found)
+    if found or len(values) < 2:
+        return tuple(found)
+    for joined in (" ; ".join(values), " ".join(sg._LABEL.sub("", value).strip() for value in values)):
+        if len(joined) > sg.MAX_TOTAL_CHARS:
+            return ("oversize",)
+        families = [family for family in scan_families(joined) if family != "mixed_script"]
+        if "oversize" in families:
+            return ("oversize",)
+        if families:
+            return ("split",)
+    return ()
 
 
 def id_hits(value):

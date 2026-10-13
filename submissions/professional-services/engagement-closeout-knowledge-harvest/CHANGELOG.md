@@ -124,8 +124,8 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 121 tests in 16 groups (97 in 15 before
-  QA round 2, 109 before QA round 3, 116 before QA round 4). It ships with:
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 128 tests in 16 groups (97 in 15 before
+  QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -391,4 +391,68 @@ plugin; `shared/` and the vendored `steering_guard.py` copies were not edited.
   rendered skeleton. The original is asserted withheld in `QARound4Tests`.
 
 **Golden differences (QA round 4).** None. Every `expected/` file in both scenarios is byte-for-byte
+unchanged.
+
+### QA round 5 (short fused lead verbs, citation source-anchor joins, single-pass record screening)
+
+QA on `3b3a9af` found three Medium defects. All fixes are inside the plugin; `shared/`, the vendored
+`steering_guard.py` copies and the knowledge-record output contract were not changed.
+
+- **Short fused lead verbs.** The four-letter minimum for a lead verb ran before the run-on test,
+  so `usethisrecord`, `setthisrecord`, `addthisrecord`, `putthisrecord`, `letthisrecord` and
+  `gothisrecord` passed as titles, `raw/usethisrecord.md` as a citation and `AST-usethisrecord` as an
+  ID. At a part boundary, clause material running on in the same part now makes the verb a clause
+  before the length test. The length test still applies to a verb found inside a larger part. Titles
+  and citations are withheld with a `render_shape` hold; IDs are refused without echo. `user
+  research record`, `settlement record` and `address book` still render.
+- **Citation source and anchor read together.** The source and the anchor or sheet name were
+  screened apart, so `D0C-Publi#shThisRecord` and `D0C-Publi sheet shThisRecord` passed. After the
+  structural check, each `;`-separated part's source segments and its anchors and sheet names are
+  read together in order. Each source segment followed by each anchor or sheet name is also read, so
+  an extension between the halves (`raw/publi.md#shthisrecord`) cannot hide a clause.
+- **Single-pass record screening.** The record, pair and cross-record joins called
+  `sg.scan_fields`, which re-scanned every value. The fixpoint loop and every stage replayed it: 100
+  assets took about 15 s per stage and 60 s for the chain. `scan_families` is now the single detector
+  call site, cached per distinct text for the run. `fields_hits` reuses each value's cached scan and
+  scans only the two joins, reporting exactly what `sg.scan_fields` reports (tested). The vendored
+  detector costs about 1.3 ms per scan, and about 60% of that is its per-call hook re-normalisation
+  (`_overlap`), which cannot be changed in-plugin. So the input is also bounded (#8.1):
+  - at most 100 records per input array;
+  - at most 250 records across all arrays;
+  - at most 20 items in a text or name list (`named_people`, `third_party_products`).
+
+  A larger input is a clean input error (exit 2, value not repeated). Timings on the reference
+  machine, one process per CLI stage (stage 1, 2, 3, record check):
+
+  | Input | Before | After |
+  |---|---|---|
+  | 100 assets | 14.7 / 14.6 / 15.9 / 15.5 s (60.7 s) | 8.8 / 8.6 / 10.2 / 9.5 s (37.2 s) |
+  | Worst case at the bounds (100 assets, 150 other records) | not measured | 14.6 / 14.8 / 16.1 / 15.1 s (60.6 s) |
+
+  Reaching a few seconds per stage needs the detector to cache its normalised hook words; that is
+  recommended for `shared/steering-guard`.
+- **Reference.** #8.1 and #8.6 in all five byte-identical copies of
+  `confidentiality-sanitisation-rules.md` document the bounds, the single-pass scan, the short-verb
+  order and the source-anchor join. The known limits now also list two kinds of false withhold:
+  - run-together titles that start with a short lead verb before clause material (`Gothenburg`,
+    `setallocations`);
+  - an anchor that is itself clause material after a lead-verb segment
+    (`raw/release-notes.md#this-record`).
+- **Tests (128 in 16 groups).**
+  - `QARound5Tests` in `render-policy` (4 tests):
+    - the short fused titles and citations run through the real chain;
+    - the short fused IDs are refused in every ID field;
+    - ordinary short-word titles and IDs, plus four citations with anchors or sheets, render with no
+      hold;
+    - the source-anchor repros, each of whose halves passes alone, are withheld.
+  - `QARound5ScreeningTests` in `screening` (3 tests):
+    - `fields_hits` equals `sg.scan_fields` on attack, paraphrase and benign joins;
+    - a generated 100-asset chain scans each distinct text once, holds nothing, and finishes under a
+      generous 120 s ceiling (about 10 s in one process);
+    - the record and list bounds are clean refusals, and an input exactly at 250 records is accepted.
+
+  The five defect tests fail on `3b3a9af` and pass now. The benign-control and detector-equivalence
+  tests pass on both.
+
+**Golden differences (QA round 5).** None. Every `expected/` file in both scenarios is byte-for-byte
 unchanged.
