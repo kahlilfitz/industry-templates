@@ -668,3 +668,19 @@ class ValidateHardeningTests(unittest.TestCase):
             document["escalations"].append(named)
             with self.subTest(named=named):
                 self.assertEqual(["C-103"], self.recommended_ids(slate_validate.validate(document), 0))
+
+    # --- QA round 4: the whole leading component is read, however long (#9.5) ---
+    def test_qa4_long_leading_component_never_hides_its_digit(self):
+        for longer in ("2" + "A" * 70 + "/C-101 independence review pending",
+                       "A" * 70 + "2/C-101 independence review pending",
+                       "x" * 40 + "." + "y" * 40 + "9:C-101 independence review pending"):
+            document = self.a()
+            document["escalations"].append(longer)
+            with self.subTest(longer=longer[:8]):
+                self.assertEqual(["C-101", "C-103"], self.recommended_ids(slate_validate.validate(document), 0))
+        for named in ("A" * 70 + "/C-101 independence review pending",
+                      "independence review pending: " + "x" * 80 + " C-101"):
+            document = self.a()
+            document["escalations"].append(named)
+            with self.subTest(named=named[:8]):
+                self.assertEqual(["C-103"], self.recommended_ids(slate_validate.validate(document), 0))

@@ -167,20 +167,25 @@ def _extends_id(tail):
     return len(word) == 1 or any(char.isdigit() for char in word)
 
 
-_ID_TOKEN_END = re.compile(r"[^\W_]+(?:" + _ID_JOIN + r"+[^\W_]+)*$")
+_ID_PART_CHAR = re.compile(r"[^\W_]|" + _ID_JOIN)
 
 
 def _prefixes_id(head):
     """True when ``head`` (the text right before a matched ID) makes it part of a longer ID: a
     component that holds a digit or is a single character directly followed by punctuation such as
-    '/', ':' or '#' (X/C-101, 2:C-101, A#C-101). Another whole ID (C-100/C-101), prose (re:C-101),
-    a space, an apostrophe, an opening bracket or quote at the start of the text does not."""
+    '/', ':' or '#' (X/C-101, 2:C-101, A#C-101). The whole preceding component is read, however
+    long. Another whole ID (C-100/C-101), prose (re:C-101), a space, an apostrophe, an opening
+    bracket or quote at the start of the text does not."""
     if len(head) < 2 or head[-1].isspace() or head[-1] in "'\u2019" or re.match(r"\w", head[-1]):
         return False
-    token = _ID_TOKEN_END.search(head[-65:-1])
-    if token is None or _ID_LIKE.match(token.group(0)):
+    if not re.match(r"[^\W_]", head[-2]):
         return False
-    word = token.group(0)
+    start = len(head) - 2
+    while start > 0 and _ID_PART_CHAR.match(head[start - 1]):
+        start -= 1
+    word = re.sub(r"^(?:" + _ID_JOIN + r")+", "", head[start:-1])
+    if _ID_LIKE.match(word):
+        return False
     return len(word) == 1 or any(char.isdigit() for char in word)
 
 

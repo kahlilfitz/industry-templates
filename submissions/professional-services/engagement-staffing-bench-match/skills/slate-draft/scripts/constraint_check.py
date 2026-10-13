@@ -1084,10 +1084,47 @@ def _contains_words(words, part):
     return f" {part} " in f" {words} "
 
 
-# Top-level members of a candidate record whose names are engine vocabulary, and members whose
-# nested member names are engine vocabulary; every other member name is screened like a value.
+# Top-level members of a candidate record whose names are engine vocabulary; every other member
+# name is screened like a value.
 _ENGINE_MEMBERS = set(CARRIED_KEYS) | {"constraints_considered", "eligibility", "final_eligible_rank"}
-_ENGINE_STRUCTURED = {"component_scores", "component_citations", "constraints_considered", "eligibility"}
+# The shape the engines give the structured members. Member names inside one of these are exempt
+# from screening only when the whole member has exactly this shape (known names, scalar values);
+# anything else, such as a raw bench record carrying a member with an engine name, is screened as
+# untrusted passthrough, member names included. Values are always screened.
+_COMPONENTS = {"skills", "seniority", "availability", "location_language", "rate_band", "continuity"}
+_CONSIDERED_KEYS = {
+    "type", "client_name", "status", "material", "role_type", "process", "end_date", "resolved_date",
+    "applies_to_engagement", "disposition", "reason", "source", "confidence", "citation",
+}
+_ELIGIBILITY_KEYS = {
+    "verdict", "recommendation_status", "blocking_rule", "reasons", "source", "confidence", "citation",
+}
+
+
+def _scalar(value):
+    return value is None or isinstance(value, (str, bool, int, float))
+
+
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _engine_shaped(key, value):
+    """True when the record member ``key`` has the exact shape its engine gives it."""
+    if key == "component_scores":
+        return isinstance(value, dict) and set(value) <= _COMPONENTS and all(map(_number, value.values()))
+    if key == "component_citations":
+        return isinstance(value, dict) and set(value) <= _COMPONENTS and all(
+            isinstance(item, str) for item in value.values())
+    if key == "eligibility":
+        return isinstance(value, dict) and set(value) <= _ELIGIBILITY_KEYS and all(
+            _scalar(item) or (isinstance(item, list) and all(isinstance(part, str) for part in item))
+            for item in value.values())
+    if key == "constraints_considered":
+        return isinstance(value, list) and all(
+            isinstance(item, dict) and set(item) <= _CONSIDERED_KEYS and all(map(_scalar, item.values()))
+            for item in value)
+    return False
 
 
 def _foreign_hit(text, foreign, contributors):
@@ -1163,7 +1200,7 @@ def withhold_record(record, foreign, skip=FOREIGN_SKIP, contributors=()):
         if key == HOLDS_KEY:
             out[key], count = _withhold_holds(item, foreign, contributors)
         else:
-            out[key], count = _withhold_value(item, foreign, contributors, key not in _ENGINE_STRUCTURED)
+            out[key], count = _withhold_value(item, foreign, contributors, not _engine_shaped(key, item))
         hits += count
     return out, hits
 
@@ -1207,17 +1244,23 @@ def _record_texts(record, skip):
                 else:
                     yield from _value_texts(hold, True)
         else:
-            yield from _value_texts(item, key not in _ENGINE_STRUCTURED)
+            yield from _value_texts(item, not _engine_shaped(key, item))
 
 
 def _split_name_contributors(texts, name):
     """The texts that spell the other-client ``name`` (a token tuple) only when two or more of them
     are read together in some order: the first ends with the name's opening words, any middle text
-    is exactly the next words, and the last starts with the closing words. Bounded search; when the
-    budget runs out, every text that could take part is returned (fail closed)."""
+    is exactly the next words, and the last starts with the closing words. ``texts`` keeps every
+    occurrence, so a name that repeats a word ("Echo Echo Consulting") can use two equal values;
+    each occurrence is used at most once. Equal texts are interchangeable, so only the first unused
+    occurrence of each is tried. Bounded search; when the budget runs out, every text that could
+    take part is returned (fail closed)."""
     size = len(name)
-    starts, middles, ends = [], {}, []
+    counts = {}
     for text in texts:
+        counts[text] = counts.get(text, 0) + 1
+    starts, middles, ends_at = [], {}, {}
+    for text in counts:
         for cut in range(1, min(len(text), size - 1) + 1):
             if text[-cut:] == name[:cut]:
                 starts.append((cut, text))
@@ -1227,28 +1270,26 @@ def _split_name_contributors(texts, name):
                     middles.setdefault(at, []).append((at + len(text), text))
         for at in range(1, size):
             if text[:size - at] == name[at:]:
-                ends.append((at, text))
+                ends_at.setdefault(at, []).append(text)
     found, budget = set(), [FOREIGN_CHAIN_BUDGET]
-    ends_at = {}
-    for at, text in ends:
-        ends_at.setdefault(at, []).append(text)
 
     def walk(position, used):
         budget[0] -= 1
         if budget[0] < 0:
             return
         for text in ends_at.get(position, ()):
-            if text not in used:
+            if used.get(text, 0) < counts[text]:
                 found.update(used)
                 found.add(text)
         for after, text in middles.get(position, ()):
-            if text not in used:
-                walk(after, used | {text})
+            if used.get(text, 0) < counts[text]:
+                walk(after, {**used, text: used.get(text, 0) + 1})
 
     for cut, text in starts:
-        walk(cut, frozenset({text}))
+        walk(cut, {text: 1})
     if budget[0] < 0:
-        return {text for _cut, text in starts} | {text for _at, text in ends} | {
+        return {text for _cut, text in starts} | {
+            text for group in ends_at.values() for text in group} | {
             text for group in middles.values() for _after, text in group}
     return found
 
@@ -1260,12 +1301,11 @@ def foreign_contributors(record, foreign, skip=FOREIGN_SKIP):
     own, and neither do values that do not together spell the whole name."""
     if not foreign:
         return set()
-    texts = list(dict.fromkeys(
-        words for words in (normalize_entity_name(text) for text in _record_texts(record, skip)) if words))
+    texts = [words for words in (normalize_entity_name(text) for text in _record_texts(record, skip)) if words]
     names = [f" {name} " for name in foreign]
     alone = {words for words in texts if any(name in f" {words} " for name in names)}
     found = set(alone)
-    rest = [tuple(words.split()) for words in texts if words not in alone]
+    rest = [tuple(words.split()) for words in texts if words not in alone]  # every occurrence
     for name in foreign:
         tokens = tuple(name.split())
         if len(tokens) > 1:

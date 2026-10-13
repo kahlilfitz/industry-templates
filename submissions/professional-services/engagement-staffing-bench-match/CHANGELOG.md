@@ -183,6 +183,31 @@ the hardening phases change engine behaviour, but output contracts change only a
   - `ConstraintHardeningTests.test_qa3_name_across_three_or_more_values_holds_candidate`
   - `ValidateHardeningTests.test_qa3_escalation_id_never_matches_after_a_leading_component`
 
+### QA round 4 (phase 2)
+
+- **QA round 4 fixes (two High defects, one Low).**
+  - **Engine-member shape (High, rule 9.11).** Before, member names inside `component_scores`,
+    `component_citations`, `constraints_considered` and `eligibility` were never screened. A raw
+    bench record could carry, for example, `component_scores: {"<other client>": ...}`; the name
+    reached governed and validated JSON, and C-101 stayed recommended. Member names there are now
+    exempt only when the whole member has exactly the engine's shape: known component, eligibility
+    or register-row names, with scalar values. Anything else is screened as untrusted
+    passthrough, member names included. The candidate is held and escalated by ID.
+  - **Repeated name words (High, rule 9.11).** The split-name search counted equal values once,
+    so "Echo Echo Consulting" spread over skills `Echo`, `Echo`, `Consulting` was missed. It now
+    keeps every occurrence and uses each once (equal values are interchangeable, so the search
+    stays bounded). A single `Echo` still cannot fill both words.
+  - **Full leading component (Low, rule 9.5).** `input_guard.mentions_id` (all three copies) now
+    reads the whole component before the ID instead of the last 64 characters, so
+    `2AAAA…A/C-101` no longer matches C-101.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): wording in 9.5 and
+  9.11.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are three new regression tests, each failing on `bbaa16a`:
+  - `ConstraintHardeningTests.test_qa4_engine_named_member_with_foreign_member_name_holds_candidate`
+  - `ConstraintHardeningTests.test_qa4_name_repeating_a_word_across_values_holds_candidate`
+  - `ValidateHardeningTests.test_qa4_long_leading_component_never_hides_its_digit`
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

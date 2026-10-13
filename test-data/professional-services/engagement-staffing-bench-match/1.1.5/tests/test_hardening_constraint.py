@@ -865,3 +865,62 @@ class ConstraintHardeningTests(unittest.TestCase):
                 governed, validated, _texts = self.chain(bench, constraints)
                 for document in (governed, validated):
                     self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 4: a member named like an engine member is trusted only in the engine's shape.
+    # ----------------------------------------------------------------------------------------
+    def test_qa4_engine_named_member_with_foreign_member_name_holds_candidate(self):
+        _roles, _bench, constraints = scenario_inputs("scenario-a-happy")
+        for member, value in (
+            ("component_scores", {"Unrelated Synthetic Client": "ordinary value"}),
+            ("component_scores", {"Unrelated Synthetic Client": 0.5}),
+            ("component_citations", {"Unrelated Synthetic Client": "fit-scoring-rubric.md #1.1"}),
+            ("eligibility", {"verdict": "eligible", "Unrelated Synthetic Client": "cleared"}),
+            ("constraints_considered", [{"type": "prior_client_role", "Unrelated Synthetic Client": "x"}]),
+            ("eligibility", {"reasons": [{"Unrelated Synthetic Client": "nested"}]}),
+        ):
+            with self.subTest(member=member, value=ascii(value)):
+                self.assert_foreign_hold(self.bench_with(**{member: value}), constraints)
+        # An engine-shaped member with ordinary values is no hold.
+        bench = self.bench_with(component_scores={"skills": 0.5}, eligibility={"verdict": "eligible", "reasons": []})
+        governed, validated, _texts = self.chain(bench, constraints)
+        for document in (governed, validated):
+            self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 4: a name that repeats a word can be assembled from equal values (9.11).
+    # ----------------------------------------------------------------------------------------
+    def test_qa4_name_repeating_a_word_across_values_holds_candidate(self):
+        _roles, _bench, constraints = scenario_inputs("scenario-a-happy")
+        constraints["constraints"].append({
+            "candidate_id": "C-103", "type": "prior_client_role", "client_name": "Echo Echo Consulting",
+            "status": "closed", "role_type": "employee", "end_date": "2020-01-01",
+            "source": "connector:conflicts-register", "confidence": 0.97, "citation": "conflicts extract row 61",
+        })
+        echo = re.compile(r"echo[\s\-_.]*echo[\s\-_.]*consulting", re.IGNORECASE)
+
+        def bench_skills(*skills, **fields):
+            bench = self.bench_with(**fields)
+            for candidate in bench["bench_candidates"]:
+                if candidate["candidate_id"] == "C-101":
+                    candidate["skills"] = candidate["skills"] + list(skills)
+            return bench
+
+        for label, bench in (
+            ("three skills", bench_skills("Echo", "Echo", "Consulting")),
+            ("name, location, skill", bench_skills("Consulting", name="Echo", location="Echo")),
+            ("echo twice then consulting", bench_skills("Consulting", "Echo", name="Ava Echo")),
+        ):
+            with self.subTest(case=label):
+                governed, validated, _texts = self.assert_foreign_hold(bench, constraints, echo)
+                for document in (governed, validated):
+                    record = next(item for item in document["bench_candidates"] if item["candidate_id"] == "C-101")
+                    self.assertNotIn("Echo", record["skills"])
+                    self.assertNotIn("Consulting", record["skills"])
+        # One "Echo" cannot be used twice.
+        for label, bench in (("single echo", bench_skills("Echo", "Consulting")),
+                             ("echo echo without consulting", bench_skills("Echo", "Echo"))):
+            with self.subTest(case=label):
+                governed, validated, _texts = self.chain(bench, constraints)
+                for document in (governed, validated):
+                    self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
