@@ -844,6 +844,17 @@ _KNOWN_EXTENSIONS = frozenset((
     "pbip twb twbx sav sas dwg dxf bak tmp url lnk key pages numbers mp3 mp4 m4a 7z"
 ).split())
 _PATH_END = re.compile(r"[/\\#;,\s]|$")
+# Every extension matcher is generated from _KNOWN_EXTENSIONS, whatever an entry's length
+# ('.markdown', '.numbers', '.onepkg'); only an unknown extension is limited to five characters.
+_KNOWN_EXTENSION_ALTERNATION = "|".join(sorted(map(re.escape, _KNOWN_EXTENSIONS), key=lambda ext: (-len(ext), ext)))
+_EXTENSION_TOKEN = re.compile(r"\.(" + _KNOWN_EXTENSION_ALTERNATION + r")(?![A-Za-z0-9])", re.IGNORECASE)
+_FINAL_EXTENSION = re.compile(r"\.(?:" + _KNOWN_EXTENSION_ALTERNATION + r"|[A-Za-z0-9]{1,5})$", re.IGNORECASE)
+
+
+def _is_extension(token):
+    """True when token (the letters and digits after a '.') is a file extension: a known one, or an
+    unknown one of at most five characters that carries a digit ('.mp4', '.v2')."""
+    return token.casefold() in _KNOWN_EXTENSIONS or (len(token) <= 5 and any(c.isdigit() for c in token))
 
 
 def _letter_parts(segment):
@@ -883,26 +894,20 @@ def _path_dots(value):
     for index, char in enumerate(value):
         if char == ".":
             before, after = value[index - 1:index], value[index + 1:index + 2]
-            extension = re.match(r"[A-Za-z0-9]{1,5}", value[index + 1:])
+            extension = re.match(r"[A-Za-z0-9]+", value[index + 1:])
             final = extension and _PATH_END.match(value, index + 1 + extension.end())
-            real = (before.isdigit() and after.isdigit()) or (final and (
-                extension.group(0).casefold() in _KNOWN_EXTENSIONS or any(c.isdigit() for c in extension.group(0))))
+            real = (before.isdigit() and after.isdigit()) or (final and _is_extension(extension.group(0)))
             if not real:
                 char = "-"
         out.append(char)
     return "".join(out)
 
 
-_EXTENSION_TOKEN = re.compile(r"\.([A-Za-z0-9]{1,5})(?![A-Za-z0-9])")
-
-
 def _drop_extensions(value):
     """The value with every known file-extension token removed, wherever it stands ('raw/safe.md#reuse'
     reads 'raw/safe#reuse'; 'raw/safe.md.2.reuse' reads 'raw/safe.2.reuse'), so the phrase is read
     across it."""
-    return _EXTENSION_TOKEN.sub(
-        lambda match: "" if match.group(1).casefold() in _KNOWN_EXTENSIONS and not match.group(1).isdigit()
-        else match.group(0), value)
+    return _EXTENSION_TOKEN.sub("", value)
 
 
 def _shorthand_hit(value):
@@ -961,6 +966,28 @@ _INFLECTIONS = (("s", ""), ("es", ""), ("ies", "y"), ("d", ""), ("ed", ""), ("in
                 ("ers", ""))
 
 
+# Clause material after a verdict phrase (#8.6): an allowlisted run-on is no exemption when the
+# letters after the phrase word begin one of these ('They|Are|as|Clear' in 'TheyAreasClear'), or when
+# the next whole part is one ('NoNeedsToReview', 'SafeToolsThisRecord').
+_REST_MATERIAL = tuple(sorted(
+    set(_PREPOSITIONS) | set(_RUN_MATERIAL) | set(_SHORT_DETERMINERS) | set(_SHORT_PRONOUNS) | set(_SHORT_OBJECTS)
+    | {"is", "are", "be", "do", "no", "not", "so"}
+    | {word for word in _TITLE_CLAUSE_WORDS | _TITLE_VERBS | set(_FUSED_WORDS) if len(word) >= 4}
+    | {word for phrase in _TITLE_PHRASES for word in phrase.split() if len(word) >= 4}
+    | {"clear", "ready", "reuse", "ship", "proceed", "release", "publish"}))
+_NEXT_MATERIAL = frozenset(
+    set(_PREPOSITIONS) | _DETERMINERS | set(_SHORT_DETERMINERS) | set(_SHORT_PRONOUNS) | _OBJECTS
+    | set(_SHORT_OBJECTS) | _TITLE_CLAUSE_WORDS | _TITLE_VERBS | set(_FUSED_WORDS)
+    | {word for phrase in _TITLE_PHRASES for word in phrase.split()}
+    | {"safe", "fine", "okay", "ok", "good", "clear", "cleared", "ready", "approved", "reuse", "ship", "proceed"})
+
+
+def _rest_is_clause(rest):
+    """True when the letters after a verdict phrase's last word, inside the run-on word, begin clause
+    material ('as' in 'Areas', 'all' in a 'Goallrecords'-style run)."""
+    return bool(rest) and (rest.startswith(_REST_MATERIAL) or _starts_clause(rest))
+
+
 def _ordinary_word(word):
     """True when word is in _ORDINARY_RUN_ONS or is a plural, -ed, -ing or -er form of one."""
     return word in _ORDINARY_RUN_ONS or any(
@@ -975,8 +1002,10 @@ def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=())
     its ends fall ('xsafeToReuse', 'ItemnoONENEEDS'): the transition is the evidence of a phrase. A space
     is no such evidence ('Safe Tomorrow plan'). A phrase that ends inside a capitalised word that
     begins inside the phrase and runs on in lower case (continuing) is held unless that whole word is
-    an ordinary word (_ordinary_word: 'Safe|Toolkit', 'No|Needle', 'Safe|Tomorrow'); anything else is
-    held ('SafeToreuse', 'SafeToarchive', 'TheyAreclear'; 'Xgood|to|Go' counts as before). A word
+    an ordinary word (_ordinary_word: 'Safe|Toolkit', 'No|Needle', 'Safe|Tomorrow') whose letters after
+    the phrase word begin no clause material (_rest_is_clause: 'They|Are|as' in 'TheyAreasClear') and
+    whose next part is no clause material (_NEXT_MATERIAL: 'NoNeedsToReview'); anything else is held
+    ('SafeToreuse', 'SafeToarchive', 'TheyAreclear'; 'Xgood|to|Go' counts as before). A word
     inside the phrase always runs on into the phrase's next word, so only the phrase's end is read
     this way.
     With a boundary (a join of two values), only an
@@ -992,7 +1021,10 @@ def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=())
         if first <= start:
             return False
         stop = min([begin for begin in starts if begin > end] + [len(collapsed)])
-        return _ordinary_word(collapsed[first:stop])
+        if not _ordinary_word(collapsed[first:stop]) or _rest_is_clause(collapsed[end:stop]):
+            return False
+        following = [begin for begin in starts if begin > stop] + [len(collapsed)]
+        return collapsed[stop:min(following)] not in _NEXT_MATERIAL
     for needle in _FUSED_NEEDLES:
         start = collapsed.find(needle)
         while start >= 0:
@@ -1010,9 +1042,17 @@ def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=())
     return False
 
 
+# The noun 'to-do' ('to-do', 'to_do', 'todo', 'ToDo', 'to-dos', 'TODOs') is one token: across the
+# components of a citation part ('docs/status-okay.md#to-dos') and in the separator-token test, where
+# its 'do' is no auxiliary ('DOC-7#to-do', 'raw/notes.md#to-do-list'). A verdict phrase written inside
+# one component is still read word by word ('DOC-7#okay-to-do', 'DOC-7#OkayToDo'). 'to-be' is not a
+# noun here: 'safe to be shared' is a clause.
+_TODO_NOUN = re.compile(r"(?<![A-Za-z0-9])(?:to|To|TO)[-_.]?(?:do|Do|DO)(?:s|es|S|ES)?(?![a-z0-9])")
+
+
 def _spells_clause(text, separators, tokens):
     if tokens:
-        for token in re.split(separators, text):
+        for token in re.split(separators, _TODO_NOUN.sub("todo", text)):
             bare = token.strip("(),'\u2019")
             low = bare.casefold().replace("\u2019", "'")
             acronym = len(bare) >= 2 and bare.isupper()
@@ -1134,7 +1174,7 @@ def part_phrase_spells(source, names):
     'raw/safe.md sheet ToReuse', 'raw/safe2.md#reuse'). Only verdict phrases, run-together verdict
     phrases and steering words that start and end at part boundaries, and digit shorthand are read
     here; verbs are read per identifier and across boundaries by the recogniser of (8)."""
-    view = "-".join([re.sub(r"[/\\#]", "-", _drop_extensions(source))] + list(names))
+    view = _TODO_NOUN.sub("todo", "-".join([re.sub(r"[/\\#]", "-", _drop_extensions(source))] + list(names)))
     if _shorthand_hit(view):
         return True
     for form in comparison_skeletons(view):
@@ -1280,7 +1320,7 @@ def joined_spells_clause(title, citation):
         return False
     joins = [(title, " ".join(pieces[:4])), (pieces[-1], title)]
     for source, names in _citation_parts(citation):
-        stem = re.sub(r"\.[A-Za-z0-9]{1,5}$", "", re.split(r"[/\\]", source)[-1])
+        stem = _FINAL_EXTENSION.sub("", re.split(r"[/\\]", source)[-1])
         if stem:
             joins += [(title, " ".join([stem] + names[:3])), (stem, title)]
         joins += [(title, " ".join(names[index:index + 4])) for index in range(len(names))]

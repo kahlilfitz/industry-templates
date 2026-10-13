@@ -124,9 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 154 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 157 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
-  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10, 148 before QA round 11, 151 before QA round 12). It ships with:
+  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10, 148 before QA round 11, 151 before QA round 12, 154 before QA round 13). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -1064,3 +1064,102 @@ copies are unchanged.
   The first and third fail on `ee18c97`.
 
 **Golden differences (QA round 12).** None.
+
+### QA round 13 (on `dc83421`)
+
+Two High findings and one Medium, fixed in the plugin. The knowledge-record output contract and the
+contract JSON copies are unchanged.
+
+- **Long known extensions (High, escape).** `_EXTENSION_TOKEN` matched only 1–5 characters, but
+  `_KNOWN_EXTENSIONS` lists `markdown`, `numbers` and `onepkg`. So `raw/safe.markdown#to-reuse` and
+  `raw/safe.numbers#to-reuse` reached `evidence_citations` and the skeleton.
+  - **Fix:** every extension matcher is generated from `_KNOWN_EXTENSIONS`, whatever an entry's
+    length: `_EXTENSION_TOKEN` (dropped for phrase reading), the `.` boundary test in `_path_dots`,
+    and the file-name stem in the title–citation join (`_FINAL_EXTENSION`).
+  - **Unknown extensions:** these still count only up to five characters, and only with a digit
+    (`_is_extension`).
+  - **Now withheld:** `raw/safe.markdown#to-reuse`, `raw/safe.numbers#to-reuse`,
+    `raw/fine.onepkg#to-ship`, `raw/safe.markdown.2.reuse`, `raw/safe2.numbers#reuse`,
+    `raw/fine.2.onepkg#ship`, `raw/SAFE.MARKDOWN#TO-REUSE`, `raw/good-to.Numbers#go`, and the ID
+    `AST-safe.markdown.2.reuse`.
+- **Allowlisted inflections followed by clause material (High, escape).** `_ordinary_word()` admitted
+  `areas`, an inflection of the allowlisted `area`, so the title `TheyAreasClear` (They|Are|as|Clear)
+  rendered. It was held on `ee18c97`.
+  - **Fix:** an allowlisted word or inflection exempts a run-on only when two conditions hold:
+    - the letters after the phrase word do not begin clause material (`_rest_is_clause`): a
+      preposition (as, to, for), a determiner, pronoun or object, run material, a clause word,
+      steering word or strong verb of four or more letters, a verdict-phrase word or a verdict word;
+    - the next whole part is not clause material either (`_NEXT_MATERIAL`: prepositions,
+      determiners, pronouns, objects, clause words, strong verbs and verdict words).
+
+    Lead verbs that are also nouns (release, review) do not count as the next part, so
+    `SafeToolkitRelease` renders.
+  - **Now withheld:** `TheyAreasClear`, `TheyAreasReady`, `TheyAreasSafe`, `TheyAreas`,
+    `NoNeedsToReview` and `SafeToolsThisRecord`, as title, ID and citation.
+  - **`TheyAreas` changes list.** It moves from the round-12 render list to the withheld list, and the
+    round-12 chain control now uses `raw/SafeTools.md`.
+  - **Audit.** The 155 entries and their generated inflections give 1,284 forms and 2,472
+    phrase-reachable pairs (form beginning with a phrase's last word).
+    - No base entry has a clause-material remainder, so none is removed.
+    - 11 generated forms are constrained (25 phrase pairs). Only two are ordinary English: `areas`
+      (as) and `towered` (were). The other nine are mechanical inflections (`forthed`, `toneed`,
+      `goneed`, `toweres` and the like).
+    - A unit test walks the allowlist × inflections and asserts that every form with a
+      clause-material remainder is withheld.
+- **Noun to-do anchors (Medium, false hold).** Reading across citation components turned noun anchors
+  into verdict phrases: `docs/status-okay.md#to-dos` and `docs/review-fine.md#to-dos` rendered on
+  `ee18c97` and were withheld on `dc83421`.
+  - **Fix:** the noun `to-do` (`to-do`, `to_do`, `todo`, `ToDo`, plurals) is one token
+    (`_TODO_NOUN`) when a citation part is read across its components. It is also one token in the
+    separator-token test of an identifier, where its `do` was read as an auxiliary.
+  - **The `raw/safe-harbor.md#to-do` note from round 12.** That citation was held by the
+    separator-token test (`do`), not by the cross-component reading. It now renders, as do
+    `DOC-7#to-do` and `raw/notes.md#to-do-list`.
+  - **Still withheld:** a verdict phrase written inside one name, which is still read word by word
+    (`DOC-7#okay-to-do`, `DOC-7#OkayToDo`), and `raw/safe.md#to-reuse` with the round-12 forms.
+  - **`to-be` is not a noun here.** `raw/safe.md#to-be-shared` reads "safe to be shared", a clause,
+    so it stays withheld. An "as-is/to-be" anchor is already held by the `as is` phrase.
+- **False holds after the fix:**
+
+  | Set | Held |
+  | --- | --- |
+  | 238-item corpus | 0 |
+  | Title–citation pairs | 0 of 9,810 |
+  | Boundary extra check | 0 of 2,376 |
+  | Neighbour citation→citation pairs | 0 of 8,100 |
+  | Neighbour title→title pairs | 0 of 11,881 |
+  | Round-6 controls | 0 (`Setúbal` as a citation only, ASCII rule; `Setit pricing` held as before) |
+  | Ordinary words: 54,628 words × 3 casings | 738 held, identical to `9f44c27`: none new, none freed |
+  | CamelCase name set | 36 of 221, unchanged |
+  | Dotted, extension-split, to-do and long-extension controls | 0 |
+
+  The ordinary-word set is rebuilt from the repository text, so it grows each round.
+- **Sweep.** The sweep adds every allowlisted form behind each verdict phrase, alone and followed by
+  `Clear`, `Ready`, `Safe`, `ToReuse`, `ThisRecord`, `Now`, `Plan` or `Review`. It also adds
+  long-extension split citations. It covers 1,350,464 forms.
+  - **Against `dc83421`, `ee18c97` and `9f44c27`:** nothing lost; 86,472 forms are held again
+    against `dc83421`.
+  - **Against `7a20785`:** 42,648 new sweep forms held there pass. They passed on `9f44c27`,
+    `ee18c97` and `dc83421` too, and every one is an allowlisted ordinary-word run-on, alone or
+    followed by `Plan` or `Review` (`DOC-7#AsItIsland`, `FineToday`, `GoodToGoals`). No form with a
+    clause tail is among them.
+  - **Against `6abb7f6`:** nothing lost.
+  - **Against `9f122f8`:** the round-9b residual is 88 forms of the `gothemplan` kind. That is the
+    72 from earlier rounds plus 16 new sweep values of the same kind, all passing on `dc83421`.
+  - **Extension-split citations:** none of the 4,153 forms passes.
+- **Timings.** 100 assets take 36.3 s (8.2 / 8.7 / 10.1 / 9.2 s per stage). 400 assets take 135.6 s
+  (31.5 / 32.7 / 35.7 / 35.7 s), 3.7 times as long.
+- **Reference.** #8.6 item 4 is updated in all five byte-identical copies.
+- **Tests (157 in 16 groups).** `QARound13Tests` in `render-policy` has 3 tests:
+  - every `_KNOWN_EXTENSIONS` entry, in three casings, is an extension token (`_drop_extensions`,
+    `_path_dots`, `_is_extension`), and its `#to-reuse` and `.2.reuse` citations are withheld; the
+    long-extension forms run through the chain with `render_shape` holds; the ID is refused;
+  - the allowlist × inflection walk, the `TheyAreas*` titles as title, ID and citation, and a chain
+    run with two titles and two citations held, out of `reusable_assets` and the skeleton; the ID
+    `AST-TheyAreasReady` is refused without echo;
+  - the to-do anchors and long-extension paths render through the chain with no holds, and the
+    one-name verdict phrases stay withheld.
+
+  All three fail on `dc83421`.
+
+**Golden differences (QA round 13).** None.

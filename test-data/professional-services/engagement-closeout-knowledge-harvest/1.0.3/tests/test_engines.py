@@ -3066,7 +3066,7 @@ ROUND12_UNLISTED = ("SafeToarchive", "FineTodeliver", "OkayTosubmit", "GoodTogop
                     "SafeToreuse", "FineToship", "OkayToproceed", "GoodTogolive", "NoNeedtoReview", "TheyAresafe")
 ROUND12_ORDINARY = ("SafeToolkit", "SafeTools", "FineTools", "OkayToolkit", "NoNeedle", "NoNeedles",
                     "SafeTomorrow", "SafeTower", "SafeToronto", "SafeTone", "GoodTogether", "GoodToolbox",
-                    "TheyAreas", "SafeTooltips")
+                    "SafeTooltips")
 
 
 class QARound12Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
@@ -3126,11 +3126,115 @@ class QARound12Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
                 for title in titles:
                     self.assertNotIn(title, released)
                     self.assertNotIn(f"| {title} |", res.texts["skeleton.md"])
-        raw, placed = self.place(("SafeToronto", "GoodTogether"), ("DOC-7#NoNeedles", "raw/TheyAreas.md"))
+        raw, placed = self.place(("SafeToronto", "GoodTogether"), ("DOC-7#NoNeedles", "raw/SafeTools.md"))
         res = chain(raw)
         self.assertEqual(0, res.exit, ascii_safe(res.stderr))
         self.assertEqual([], holds(res))
-        for value in ("| SafeToronto |", "| GoodTogether |", "DOC-7#NoNeedles", "raw/TheyAreas.md"):
+        for value in ("| SafeToronto |", "| GoodTogether |", "DOC-7#NoNeedles", "raw/SafeTools.md"):
+            self.assertIn(value, res.texts["skeleton.md"])
+
+# QA round 13 (#8.6): every extension matcher comes from _KNOWN_EXTENSIONS; an allowlisted run-on is no
+# exemption when what follows the phrase word is clause material; the noun 'to-do' is one token.
+ROUND13_LONG_EXTENSIONS = ("raw/safe.markdown#to-reuse", "raw/safe.numbers#to-reuse", "raw/fine.onepkg#to-ship",
+                           "raw/safe.markdown.2.reuse", "raw/safe2.numbers#reuse", "raw/fine.2.onepkg#ship",
+                           "raw/SAFE.MARKDOWN#TO-REUSE", "raw/good-to.Numbers#go")
+ROUND13_AREAS = ("TheyAreasClear", "TheyAreasReady", "TheyAreasSafe")
+ROUND13_TODO_CLEAR = ("docs/status-okay.md#to-dos", "docs/review-fine.md#to-dos", "raw/safe-harbor.md#to-do",
+                      "DOC-7#to-do", "raw/notes.md#to-do-list", "DOC-7#ToDos", "raw/plan.markdown",
+                      "raw/q4.numbers")
+ROUND13_TODO_HELD = ("DOC-7#okay-to-do", "DOC-7#OkayToDo", "raw/safe.md#to-be-shared", "raw/safe.md#to-reuse",
+                     "raw/safe2.md#reuse", "raw/fine.2.pptx#ship")
+# Clause material a run-on may not begin with after the phrase word, read independently of the core.
+ROUND13_REST_MATERIAL = ("as", "to", "for", "this", "the", "these", "those", "that", "now", "all", "our", "any",
+                         "every", "each", "it", "them", "were", "need", "record", "asset")
+
+
+def round13_inflections(word):
+    forms = {word, word + "s", word + "es", word + "d", word + "ed", word + "ing", word + "er", word + "ers"}
+    if word.endswith("y"):
+        forms.add(word[:-1] + "ies")
+    if word.endswith("e"):
+        forms.add(word[:-1] + "ing")
+    return {form for form in forms if core._ordinary_word(form)}
+
+
+class QARound13Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 13, confidentiality-sanitisation-rules.md #8.6: extensions of any length on the known
+    list are transparent; an allowlisted ordinary word exempts a run-on only when the letters after the
+    phrase word and the next part begin no clause material; 'to-do' and 'todo' are one noun token."""
+
+    place = QARound4Tests.place
+
+    def test_every_known_extension_is_an_extension_token(self):
+        for ext in sorted(core._KNOWN_EXTENSIONS):
+            with self.subTest(ext=ext):
+                for form in (ext, ext.upper(), ext.capitalize()):
+                    self.assertEqual("raw/safe#to-reuse", core._drop_extensions(f"raw/safe.{form}#to-reuse"))
+                    self.assertEqual(f"raw/a.{form}", core._path_dots(f"raw/a.{form}"))
+                    self.assertTrue(core._is_extension(form))
+                self.assertFalse(core.citation_shape_ok(f"raw/safe.{ext}#to-reuse"))
+                self.assertFalse(core.citation_shape_ok(f"raw/safe.{ext}.2.reuse"))
+        for citation in ROUND13_LONG_EXTENSIONS:
+            with self.subTest(citation=citation):
+                self.assertFalse(core.citation_shape_ok(citation))
+        self.assertFalse(core.id_shape_ok("AST-safe.markdown.2.reuse"))
+        raw, placed = self.place((), ROUND13_LONG_EXTENSIONS[:4])
+        for path, value in placed.items():
+            self.assertEqual(("render_shape",), core.shape_hits(hold_path(path), value), ascii_safe(value))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        raw, placed = self.place((), ROUND13_LONG_EXTENSIONS[4:])
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+
+    def test_allowlisted_run_ons_followed_by_clause_material_are_withheld(self):
+        reachable = 0
+        for word in sorted(core._ORDINARY_RUN_ONS):
+            for form in sorted(round13_inflections(word)):
+                for phrase in core._TITLE_PHRASES:
+                    words = phrase.split()
+                    rest = form[len(words[-1]):]
+                    if len("".join(words)) < core.FUSED_MIN_CHARS or not form.startswith(words[-1]) or not rest:
+                        continue
+                    if rest.startswith(ROUND13_REST_MATERIAL) or core._rest_is_clause(rest):
+                        reachable += 1
+                        title = "".join(w.capitalize() for w in words[:-1]) + form.capitalize()
+                        with self.subTest(title=title):
+                            self.assertFalse(core.title_shape_ok(title))
+                            self.assertFalse(core.title_shape_ok("x" + title))
+        self.assertGreater(reachable, 0)
+        for value in ROUND13_AREAS + ("TheyAreas", "NoNeedsToReview", "SafeToolsThisRecord"):
+            with self.subTest(value=value):
+                self.assertFalse(core.title_shape_ok(value))
+                self.assertFalse(core.id_shape_ok("AST-" + value))
+                self.assertFalse(core.citation_shape_ok(f"DOC-7#{value}"))
+                self.assertFalse(core.citation_shape_ok(f"raw/{value}.md"))
+        for value in ("SafeToolkit", "NoNeedles", "SafeTomorrow", "TheyArea", "SafeToolkitRelease", "NoNeedleTesting"):
+            with self.subTest(value=value):
+                self.assertTrue(core.title_shape_ok(value))
+                self.assertTrue(core.citation_shape_ok(f"DOC-7#{value}"))
+        raw, placed = self.place(ROUND13_AREAS[:2], ("DOC-7#TheyAreasSafe", "raw/TheyAreasClear.md"))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        released = [asset["title"] for asset in governed(res)["knowledge_record"]["reusable_assets"]]
+        for title in ROUND13_AREAS[:2]:
+            self.assertNotIn(title, released)
+            self.assertNotIn(f"| {title} |", res.texts["skeleton.md"])
+        result = run_stage(asset_identify, with_value(("candidate_assets", 0, "asset_id"), "AST-TheyAreasReady"))
+        self.assert_refused(result, "candidate_assets[0].asset_id", forbid=("AST-TheyAreasReady", "TheyAreasReady"))
+
+    def test_noun_to_do_anchors_render(self):
+        for citation in ROUND13_TODO_CLEAR:
+            with self.subTest(citation=citation):
+                self.assertTrue(core.citation_shape_ok(citation))
+        for citation in ROUND13_TODO_HELD:
+            with self.subTest(citation=citation):
+                self.assertFalse(core.citation_shape_ok(citation))
+        raw, placed = self.place((), ROUND13_TODO_CLEAR[:4])
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        for value in placed.values():
             self.assertIn(value, res.texts["skeleton.md"])
 
 
@@ -3341,7 +3445,7 @@ GROUPS = {
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
     "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests, QARound10Tests, QARound11Tests,
-                      QARound12Tests),
+                      QARound12Tests, QARound13Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),
