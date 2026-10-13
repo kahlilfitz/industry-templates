@@ -302,6 +302,34 @@ the hardening phases change engine behaviour, but output contracts change only a
   - `ConstraintHardeningTests.test_qa7_global_source_in_foreign_rows_is_screened`
   - `ValidateHardeningTests.test_qa7_foreign_entry_exempts_only_its_client_name`
 
+### QA round 8 (phase 2)
+
+- **QA round 8 fixes (one High defect, one Medium).**
+  - **Raw rows for another client (High, rule 9.11).** `verdict_sources()` skipped a raw row
+    whenever it did not apply to the engagement. `foreign_item()` then replaced the row's
+    source and citation with fixed text, so neither engine ever saw them. Repro: a C-101
+    `prior_client_role` row for "Unrelated Synthetic Client" with source
+    "Unrelated Synthetic Client register" left C-101 recommended with no #9.11. The decision
+    is now made on the raw rows before any entry replaces them. Every member name and value
+    of each of the candidate's rows is screened, whether or not the row applies. The only
+    exception is the `client_name` of a row for another client, which is that client's own
+    identity and is never carried. A hit holds and escalates the candidate.
+  - **Default source only when used (Medium, rule 9.11).** The register's own `source` was
+    screened for every candidate with rows, so a default naming another client falsely held
+    C-101 even though every C-101 row names its own source. It now counts only when one of the
+    candidate's entries falls back to it: a row with no source of its own, a held row or a row
+    for another client.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): 9.11 wording for
+  raw-row screening and default-source use.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are two new regression tests, each failing on `2a8208a`:
+  - `ConstraintHardeningTests.test_qa8_raw_foreign_row_members_are_screened`
+  - `ConstraintHardeningTests.test_qa8_unused_default_source_never_holds` (with the control that
+    a default used by C-101's entry still holds it)
+- **Test payload change.** The payload of `test_qa7_global_source_in_foreign_rows_is_screened`
+  now drops the source of C-101's own row, so C-101's entry genuinely carries the register's
+  default. Its assertions are unchanged.
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

@@ -1431,25 +1431,46 @@ def _vocabulary_value(key, value):
     return value in _VOCABULARY.get(key, ())
 
 
-def verdict_sources(constraints, register_rows):
-    """The input-derived texts a candidate's verdict can carry (rule 9.11): every string of each of
-    its register rows that is evaluated for this engagement (a row for another client is carried by
-    fixed label and vocabulary only), except values that are exactly fixed vocabulary, plus the
-    register's own source and, for a candidate with no row, its citation. Engine-composed reasons,
-    citations and fixed vocabulary are never candidate content."""
+def _default_source_used(item, engagement, held):
+    """True when verdict_for() writes the register's own source into this row's entry: a held or
+    another client's row always carries it, an evaluated row only when it has no source of its own;
+    a row withheld by source screening carries no source at all."""
+    if held is not None and (None in held or held & DECISION_FIELDS):
+        return False
+    name = _text(item, "client_name")
+    if shape_problems(item) or not name.strip() or is_reserved_label(name):
+        return True
+    if applies_to_client(item, engagement) is False:
+        return True
+    return not _text(item, "source")
+
+
+def verdict_sources(constraints, register_rows, held_rows=None):
+    """The input-derived texts of a candidate's register rows (rule 9.11), read from the raw rows
+    before any entry replaces them: every member name and every string of every row, whether or not
+    it applies to this engagement, except the candidate_id, the client_name of a row for another
+    client (that client's own identity, never carried) and values that are exactly fixed vocabulary.
+    The register's own source counts only when some row's entry falls back to it, and the register's
+    citation only for a candidate with no row. Engine-composed text is never candidate content."""
     engagement = constraints.get("engagement") or {}
-    texts = []
-    for _index, item in register_rows:
-        if applies_to_client(item, engagement) is False:
-            continue
+    held_rows = held_rows or {}
+    texts, default_used = [], not register_rows
+    for index, item in register_rows:
+        foreign_row = applies_to_client(item, engagement) is False
+        default_used = default_used or _default_source_used(item, engagement, held_rows.get(index))
         for key, value in item.items():
+            if key == "candidate_id" or (foreign_row and key == "client_name"):
+                continue
+            if isinstance(key, str) and key not in _CONSIDERED_SHAPE:
+                texts.append(key)
             if key == "role_type" and isinstance(value, str):
                 value = carried_role_type(value)  # the form the entry carries
-            if key != "candidate_id" and not _vocabulary_value(key, value):
+            if not _vocabulary_value(key, value):
                 texts.extend(_value_texts(value, True))
-    for key in ("source",) + (() if register_rows else ("citation",)):
-        if isinstance(constraints.get(key), str):
-            texts.append(constraints[key])
+    if default_used and isinstance(constraints.get("source"), str):
+        texts.append(constraints["source"])
+    if not register_rows and isinstance(constraints.get("citation"), str):
+        texts.append(constraints["citation"])
     return texts
 
 
@@ -1698,7 +1719,7 @@ def govern(ranked_payload, constraints_payload):
         for candidate in ranked_role["candidate_slate"]:
             key = id_key(candidate["candidate_id"])
             if key not in register_texts:
-                register_texts[key] = verdict_sources(constraints, rows_by_key.get(key, []))
+                register_texts[key] = verdict_sources(constraints, rows_by_key.get(key, []), held_rows)
     flagged = foreign_candidates(candidate_records(payload), foreign,
                                  extra=lambda record: register_texts.get(id_key(record.get("candidate_id")), ()))
     missing_reported = set()

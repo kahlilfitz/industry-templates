@@ -1051,6 +1051,10 @@ class ConstraintHardeningTests(unittest.TestCase):
                  re.compile(r"quillon", re.IGNORECASE))):
             constraints = self.with_rows(self.foreign_row("Quillon Varga Inc."))
             constraints["source"] = source
+            # C-101's row has no source of its own, so its entry carries the register's (QA round 8).
+            for item in constraints["constraints"]:
+                if item["candidate_id"] == "C-101":
+                    item.pop("source")
             with self.subTest(split=label):
                 governed, validated, texts = self.chain(bench, constraints)
                 for text_name, text in texts.items():
@@ -1061,3 +1065,46 @@ class ConstraintHardeningTests(unittest.TestCase):
                     self.assert_held(row, "#9.11")
                     self.assertEqual([], re.findall(r"quillon|varga", json.dumps(row), re.IGNORECASE))
                     self.assertNotIn("C-101", recommended_ids(document, "PSS-001"))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 8: raw register rows are screened before any entry replaces them; the register's
+    # default source counts only for a candidate whose entry falls back to it (9.11).
+    # ----------------------------------------------------------------------------------------
+    def test_qa8_raw_foreign_row_members_are_screened(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        for label, members in (
+                ("source", {"source": "Unrelated Synthetic Client register"}),
+                ("citation", {"citation": "Unrelated Synthetic Client row 99"}),
+                ("unknown member", {"notes": "Unrelated Synthetic Client"}),
+                ("unknown member name", {"Unrelated Synthetic Client": "ordinary"})):
+            row = {"candidate_id": "C-101", "type": "prior_client_role", "client_name": "Unrelated Synthetic Client",
+                   "status": "closed", "role_type": "employee", "end_date": "2020-01-01",
+                   "source": "connector:conflicts-register", "confidence": 0.97, "citation": "row 99"}
+            row.update(members)
+            with self.subTest(member=label):
+                self.assert_foreign_hold(bench, self.with_rows(row))
+
+    def test_qa8_unused_default_source_never_holds(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        constraints = self.with_rows()
+        constraints["source"] = "Unrelated Synthetic Client register"
+        for used in (False, True):
+            if used:
+                # Control: once C-101's entry falls back to the register's source, it is held.
+                for item in constraints["constraints"]:
+                    if item["candidate_id"] == "C-101":
+                        item.pop("source")
+            with self.subTest(default_used_by_c101=used):
+                governed, validated, texts = self.chain(bench, constraints)
+                for name, text in texts.items():
+                    self.assertEqual([], FOREIGN_CLIENT.findall(text), name)
+                for document in (governed, validated):
+                    # C-103's row for another client always carries the register's source.
+                    self.assert_held(slate_row(document, "PSS-001", "C-103"), "#9.11")
+                    if used:
+                        self.assert_held(slate_row(document, "PSS-001", "C-101"), "#9.11")
+                        self.assertEqual([], recommended_ids(document, "PSS-001"))
+                    else:
+                        self.assertEqual(["C-101"], recommended_ids(document, "PSS-001"))
+                        self.assertFalse(any("C-101" in item and "#9.11" in item for item in document["escalations"]),
+                                         ascii_safe(document["escalations"]))  # noqa: F821
