@@ -36,11 +36,11 @@ WITHHELD = "[withheld: embedded instruction held for review - see screening_hold
 DRAFT_LABEL = "DRAFT - HUMAN REVIEW REQUIRED"
 MAX_INPUT_BYTES = 5_000_000
 MAX_DEPTH = 64
-# Screening joins every pair of fields in a record and of adjacent records (D18, D22), so its cost
-# grows with these counts; they bound it (confidentiality-sanitisation-rules.md #8.1).
-MAX_RECORDS = 100
-MAX_TOTAL_RECORDS = 250
-MAX_LIST_ITEMS = 20
+# Screening is linear in the number of records and list items (#8.1); these ceilings only keep one
+# run inside the runner's time budget (confidentiality-sanitisation-rules.md #8.1, README).
+MAX_RECORDS = 1000
+MAX_TOTAL_RECORDS = 2500
+MAX_LIST_ITEMS = 200
 
 # Plugin vocabulary passes to the shared detector only through its documented hooks
 # (confidentiality-sanitisation-rules.md #8.1). Closeout text never legitimately carries an e-mail
@@ -429,7 +429,8 @@ def _check_value(kind, value, path, ctx):
     elif kind in ("names", "texts", "tokens"):
         need_list(value, path)
         if kind != "tokens" and len(value) > MAX_LIST_ITEMS:
-            raise InputError(f"{path} has more than {MAX_LIST_ITEMS} items; keep the most relevant (#8.1 screening bound)")
+            raise InputError(f"{path} has more than {MAX_LIST_ITEMS} items, above the screening ceiling (#8.1); "
+                             f"nothing was screened (values not repeated)")
         for index, item in enumerate(value):
             item_path = f"{path}[{index}]"
             if kind == "tokens":
@@ -518,11 +519,11 @@ def validate_input(doc, generated_at=None, prior=None):
         if name not in doc or type(doc[name]) is not list:
             raise InputError(f"missing or invalid required array: {name} (absent, null or another type is not an empty list)")
         if len(doc[name]) > MAX_RECORDS:
-            raise InputError(f"{name} has more than {MAX_RECORDS} records; split the harvest or keep the most "
-                             f"relevant (#8.1 screening bound)")
+            raise InputError(f"{name} has more than {MAX_RECORDS} records, above the screening ceiling (#8.1); "
+                             f"nothing was screened (values not repeated)")
     if sum(len(doc[name]) for name in RAW_ARRAYS) > MAX_TOTAL_RECORDS:
-        raise InputError(f"the input arrays hold more than {MAX_TOTAL_RECORDS} records together; split the harvest "
-                         f"or keep the most relevant (#8.1 screening bound)")
+        raise InputError(f"the input arrays hold more than {MAX_TOTAL_RECORDS} records together, above the screening "
+                         f"ceiling (#8.1); nothing was screened (values not repeated)")
     if "engagement" not in doc or type(doc["engagement"]) is not dict:
         raise InputError("missing or invalid required object: engagement")
 
@@ -546,15 +547,16 @@ def validate_input(doc, generated_at=None, prior=None):
     if timestamp is None:
         raise InputError("run_metadata.generated_at is required (or pass --generated-at)")
 
-    escalations = []
+    escalations, merged = [], set()
     if "escalations" in doc:
         need_list(doc["escalations"], "escalations")
         if len(doc["escalations"]) > MAX_RECORDS:
-            raise InputError(f"escalations has more than {MAX_RECORDS} items (#8.1 screening bound)")
+            raise InputError(f"escalations has more than {MAX_RECORDS} items, above the screening ceiling (#8.1)")
         for index, item in enumerate(doc["escalations"]):
             _check_text(item, f"escalations[{index}]", ctx)
-            if item == WITHHELD or item not in escalations:  # identical upstream escalations merge once (A8)
+            if item == WITHHELD or item not in merged:  # identical upstream escalations merge once (A8)
                 escalations.append(item)
+                merged.add(item)
 
     def check_record(record, path, spec):
         need_object(record, path)
@@ -661,6 +663,15 @@ _RUN_MATERIAL = ("the", "this", "these", "that", "those", "them", "their", "all"
 _DERIVED = frozenset("s es d ed ing ings r rs er ers ation ations able al als ment ments ance".split())
 FUSED_MIN_CHARS = 5
 LEAD_RUN_MIN_CHARS = 4
+# A lead verb shorter than LEAD_RUN_MIN_CHARS ('use', 'set', 'go') fused into a longer part is a clause
+# only when the rest of the part, with any parts after it, reads in full as one or more determiners and
+# an object ending at a part boundary ('usethisrecord', 'Gothis-Record'), or as a pronoun object
+# ('useit'): 'Gothenburg', 'Setallocations' and 'Usecase' stay names.
+_SHORT_DETERMINERS = ("the", "this", "these", "that", "those", "all", "every", "each", "any", "our", "their",
+                      "my", "your", "its")
+_SHORT_OBJECTS = ("record", "records", "asset", "assets", "entry", "entries", "item", "items", "section",
+                  "sections", "file", "files", "document", "documents", "page", "pages", "lesson", "lessons")
+_SHORT_PRONOUNS = ("it", "them", "everything")
 # Steering words and verdict phrases are clause-shaped wherever they appear, run together or not.
 _FUSED_WORDS = ("already", "exactly", "kindly", "please", "nothing", "nobody")
 _FUSED_NEEDLES = tuple(sorted(set(_FUSED_WORDS) | {phrase.replace(" ", "") for phrase in _TITLE_PHRASES
@@ -734,9 +745,37 @@ def _starts_clause(text):
         text == verb or (len(verb) >= LEAD_RUN_MIN_CHARS and text.startswith(verb)) for verb in _TRIGGER_VERBS)
 
 
-def _verb_hit(verb, rest, following, at_start):
+def _object_run(rest, later):
+    """True when rest (the letters after a short verb in its part), read on through the parts after
+    it, is clause material in full: determiners then an object, or a pronoun object, optionally
+    followed by 'now', ending at a part boundary."""
+    later = list(later[:4])
+    tail = rest + "".join(later)
+    ends, position = {len(rest)}, len(rest)
+    for part in later:
+        position += len(part)
+        ends.add(position)
+
+    def finishes(index):
+        return index in ends or (tail.startswith("now", index) and index + 3 in ends)
+
+    if any(tail.startswith(word) and finishes(len(word)) for word in _SHORT_PRONOUNS):
+        return True
+    reached, frontier = set(), [0]
+    while frontier:
+        index = frontier.pop()
+        for word in _SHORT_DETERMINERS:
+            if tail.startswith(word, index) and index + len(word) not in reached:
+                reached.add(index + len(word))
+                frontier.append(index + len(word))
+    return any(tail.startswith(word, index) and finishes(index + len(word))
+               for index in reached for word in _SHORT_OBJECTS)
+
+
+def _verb_hit(verb, rest, following, at_start, later=()):
     """One occurrence of a trigger verb in the collapsed form. rest: the letters after it in the same
-    part; following: the next part; at_start: it begins at a part boundary."""
+    part; following: the next part; later: the parts after it, starting with following; at_start: it
+    begins at a part boundary."""
     if verb in _TITLE_VERBS:
         if at_start and not rest:
             return True  # a whole part or whole parts: 'Publish', 'Pub|Lish', 'APPROVE'
@@ -750,10 +789,10 @@ def _verb_hit(verb, rest, following, at_start):
         return (not rest or rest in _DERIVED) and following in whole
     if at_start and not rest:
         return following in _DETERMINERS  # 'ReleaseThisRecord', not 'Release readiness'
-    if at_start and rest.startswith(_RUN_MATERIAL):
-        return True  # at a part boundary any lead verb, short ones too: 'usethisrecord', 'gothisrecord'
     if len(verb) < LEAD_RUN_MIN_CHARS:
-        return False  # inside a longer part a short verb is a coincidence: 'warehouse', 'asset'
+        # Fused at a part boundary only before clause material in full ('usethisrecord', not
+        # 'Gothenburg'); inside a longer part a short verb is a coincidence ('warehouse', 'output').
+        return at_start and _object_run(rest, later)
     return rest.startswith(_RUN_MATERIAL) or (not rest and following in _DETERMINERS)
 
 
@@ -793,27 +832,27 @@ def _spells_clause(text, separators, tokens):
         return True
 
     def after(end):
-        """(letters after end in the same part, the next whole part)."""
+        """(letters after end in the same part, the next whole part, the parts from there on)."""
         if end in starts:
-            return "", parts[starts[end]]
+            return "", parts[starts[end]], parts[starts[end]:]
         if end >= len(collapsed):
-            return "", ""
+            return "", "", []
         first = max(start for start in starts if start < end)
         index = starts[first]
-        return parts[index][end - first:], parts[index + 1] if index + 1 < len(parts) else ""
+        return parts[index][end - first:], parts[index + 1] if index + 1 < len(parts) else "", parts[index + 1:]
 
     for negation in _NEGATIONS:
         start = collapsed.find(negation)
         while start >= 0:
-            rest, following = after(start + len(negation))
+            rest, following, _ = after(start + len(negation))
             if _starts_clause(rest) if rest else (following in _DETERMINERS | _OBJECTS or _starts_clause(following)):
                 return True
             start = collapsed.find(negation, start + 1)
     for verb in _TRIGGER_VERBS:
         start = collapsed.find(verb)
         while start >= 0:
-            rest, following = after(start + len(verb))
-            if _verb_hit(verb, rest, following, start in starts):
+            rest, following, later = after(start + len(verb))
+            if _verb_hit(verb, rest, following, start in starts, later):
                 return True
             start = collapsed.find(verb, start + 1)
     return False
@@ -847,26 +886,35 @@ def citation_shape_ok(value, spelled=True):
     """A source path or document ID (no spaces; it carries a '.', '/', '\\' or a digit) with an optional
     #anchor and row, line, clause, section, page or named-sheet locators, ';'-separated. No path,
     anchor or sheet name may spell a clause under the canonical token check, as an identifier may
-    not, and neither may each part's source read together with its anchors and sheet names, in
-    order, nor any source segment followed by an anchor or sheet name (#8.6: 'DOC-Publi#shThisRecord',
-    'raw/publi.md#shThisRecord')."""
+    not. Joins read only boundaries that are contiguous in rendering order (#8.6): the whole citation's
+    sources, anchors and sheet names in order ('DOC-Publi#shThisRecord', anchor to the next source),
+    and for adjacent ';' parts the source with the next source and the last anchor or sheet name with
+    the next part's first ('DOC-1#Publi; DOC-2#shThisRecord')."""
     text = value.strip()
     if has_cf(value) or not text or len(text) > CITATION_MAX_CHARS or not CITATION_RE.fullmatch(text):
         return False
+    parts = []
     for part in text.split(";"):
         source = _CITE_SOURCE.match(part.strip())
         if not source or not any(c in "./\\" or c.isdigit() for c in source.group(0)):
             return False
         if spelled and spells_clause(source.group(0), r"[-_./\\]+"):
             return False
-        names = [anchor or sheet for anchor, sheet in _CITE_WORDS.findall(part)]
-        if spelled and names:
-            if spells_clause(" ".join([source.group(0)] + names), r"[\s\-_./\\]+"):
-                return False
-            segments = [word for word in re.split(r"[-_./\\]+", source.group(0)) if word]
-            if any(spells_clause(f"{segment} {name}", r"\s+", tokens=False) for segment in segments for name in names):
-                return False
-    return not spelled or all(id_shape_ok(anchor or sheet) for anchor, sheet in _CITE_WORDS.findall(text))
+        parts.append((source.group(0), [anchor or sheet for anchor, sheet in _CITE_WORDS.findall(part)]))
+    if not spelled:
+        return True
+    if not all(id_shape_ok(name) for _, names in parts for name in names):
+        return False
+    separators = r"[\s\-_./\\]+"
+    if spells_clause(" ".join(word for source, names in parts for word in [source] + names), separators):
+        return False
+    for (source, names), (next_source, next_names) in zip(parts, parts[1:]):
+        joins = [f"{source} {next_source}"]
+        if names and next_names:
+            joins.append(f"{names[-1]} {next_names[0]}")
+        if any(spells_clause(join, separators, tokens=False) for join in joins):
+            return False
+    return True
 
 
 def id_shape_ok(value):
@@ -876,24 +924,38 @@ def id_shape_ok(value):
 
 
 def citation_words(citation):
-    """The rendered identifier words of a citation, in order: each source path segment, then each
-    anchor and sheet or tab name."""
+    """The rendered identifier words of a citation in rendering order: for each ';' part, its source
+    path segments, then its anchors and sheet or tab names."""
     found = []
     for part in citation.split(";"):
         source = _CITE_SOURCE.match(part.strip())
         if source:
             found.extend(word for word in re.split(r"[-_./\\]+", source.group(0)) if word)
-    found.extend(anchor or sheet for anchor, sheet in _CITE_WORDS.findall(citation))
+        found.extend(anchor or sheet for anchor, sheet in _CITE_WORDS.findall(part))
+    return found
+
+
+def citation_stems(citation):
+    """The file name of each ';' part's source without its extension (a document ID is its own stem)."""
+    found = []
+    for part in citation.split(";"):
+        source = _CITE_SOURCE.match(part.strip())
+        if source:
+            stem = re.sub(r"\.[A-Za-z0-9]{1,5}$", "", re.split(r"[/\\]", source.group(0))[-1])
+            if stem:
+                found.append(stem)
     return found
 
 
 def joined_spells_clause(title, citation):
     """A record's title and citation render together, so a clause split between them is refused: the
     canonical check (without the separator-token test each value already passed) reads the title
-    followed by the citation's words, the reverse, and the title next to each word in either order."""
+    followed by the citation's words and the reverse, and, because a directory prefix such as raw/ is
+    conventional, the title next to each source file name in either order. Only these contiguous
+    boundaries are read: the title is not paired with an anchor or sheet name further along."""
     pieces = citation_words(citation)
     joins = [[title] + pieces, pieces + [title]]
-    joins += [pair for piece in pieces for pair in ([title, piece], [piece, title])]
+    joins += [pair for stem in citation_stems(citation) for pair in ([title, stem], [stem, title])]
     return any(spells_clause(" ".join(join), r"\s+", tokens=False) for join in joins)
 
 
@@ -926,7 +988,7 @@ def scan_families(text):
     return tuple(_families(sg.scan(text, **GUARD_HOOKS)))
 
 
-@functools.lru_cache(maxsize=65536)
+@functools.lru_cache(maxsize=None)
 def text_hits(text):
     """One line of supplied text: a tuple of hit families."""
     if len(text) > sg.MAX_TOTAL_CHARS:
@@ -938,7 +1000,7 @@ def text_hits(text):
     return tuple(found)
 
 
-@functools.lru_cache(maxsize=65536)
+@functools.lru_cache(maxsize=None)
 def fields_hits(values):
     """Bounded join of related values (D13, D18, D22): a tuple of hit families, exactly as
     sg.scan_fields reports it. Each value's own scan comes from the cache, so only the two joins
@@ -1063,6 +1125,14 @@ def _layout(doc):
     return slots, records, runs
 
 
+RUN_BLOCK = 16
+
+
+def _is_item(member):
+    """A slot that is one item of a list (named_people, third_party_products, escalations)."""
+    return type(member[2]) is int
+
+
 def screen(doc, prior=None, forced=None):
     """Screen every supplied free-text value of a validated input. Returns (screened copy, holds).
     prior: carried holds keyed by path (a carried placeholder keeps its hold); forced: paths the
@@ -1122,9 +1192,14 @@ def screen(doc, prior=None, forced=None):
                     continue
                 # Fields of one record can render next to each other in any layout (a title beside
                 # its description), so every pair of live fields is also screened as a join (D22).
+                # Two list items are paired only as neighbours in one list (wider item windows are the
+                # run windows below), which keeps the screen linear in the list's length.
                 for i in range(len(current)):
                     for j in range(i + 1, len(current)):
                         pair = (current[i], current[j])
+                        if _is_item(pair[0]) and _is_item(pair[1]) and not (
+                                pair[0][1] is pair[1][1] and abs(pair[0][2] - pair[1][2]) == 1):
+                            continue
                         if all(m[0] not in held for m in pair):
                             found = fields_hits(tuple(box[key] for _, box, key in pair))
                             if found:
@@ -1137,16 +1212,24 @@ def screen(doc, prior=None, forced=None):
                     if found:
                         withhold(current, found, "run")
                         continue
-                    # Any field of one entry can render next to any field of the next (D18).
+                    # Any field of one entry can render next to any field of the next (D18); list items
+                    # meet across the boundary only as the last item of one and the first of the next.
                     for first in run[1]:
                         for second in run[2]:
+                            if _is_item(first) and _is_item(second) and not (
+                                    first[2] == len(first[1]) - 1 and second[2] == 0):
+                                continue
                             if first[0] not in held and second[0] not in held:
                                 found = fields_hits((first[1][first[2]], second[1][second[2]]))
                                 if found:
                                     withhold((first, second), found, "run")
                 continue
             current = live(run)
-            windows = [current] + [current[i:i + size] for size in (2, 3) for i in range(len(current) - size + 1)]
+            # Neighbours (2 and 3 items) and overlapping blocks of RUN_BLOCK items; a run that short
+            # is one block, so the whole run is joined as before without growing past a block.
+            step = RUN_BLOCK - 3
+            blocks = [current[i:i + RUN_BLOCK] for i in range(0, max(len(current) - 3, 1), step)]
+            windows = blocks + [current[i:i + size] for size in (2, 3) for i in range(len(current) - size + 1)]
             for window in windows:
                 if len(window) > 1 and all(m[0] not in held for m in window):
                     found = fields_hits(tuple(box[key] for _, box, key in window))

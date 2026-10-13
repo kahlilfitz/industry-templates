@@ -26,7 +26,7 @@ The contract entry payload (`ps.engagement-closeout-knowledge-harvest.v1`) conta
 2. Quote the engine's deliverable gaps, reuse scores and any `screening_holds` (hold ID, path, reason) verbatim.
 3. Pass all confidentiality markers and aggregation tokens forward unchanged to `lesson-cluster` and `sanitize-check`.
 4. Make clear that a high reuse score is not a clearance decision.
-5. If the engine exits non-zero (exit 2 prints `asset_identify: input error: ...; nothing written`), stop and report the error; never estimate a score.
+5. If the engine exits non-zero (exit 2 prints `asset_identify: input error: ...; nothing written`), stop and report the error; never estimate a score. An input above the screening ceiling (1000 records per array, 2500 in total, 200 items per list) is refused this way; ask for one workstream or phase per run rather than dropping records.
 ## Tools
 Run `scripts/asset_identify.py` with the shell tool and read its JSON output with the file-read tool. No connector writes or outbound actions.
 ## Output format

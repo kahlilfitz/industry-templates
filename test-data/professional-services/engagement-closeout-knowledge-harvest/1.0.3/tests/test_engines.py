@@ -2333,7 +2333,7 @@ ROUND5_SHORT_BENIGN_TITLES = ("user research record", "settlement record", "addr
                               "Letterhead standards", "Gothic arch survey")
 ROUND5_SHORT_BENIGN_IDS = ("AST-user-research", "AST-settlement", "AST-address-book")
 ROUND5_SOURCE_ANCHOR_CITATIONS = ("D0C-Publi#shThisRecord", "D0C-Publi sheet shThisRecord",
-                                  "raw/publi.md#shthisrecord", "DOC-7-Rel#easeThisRecord")
+                                  "raw/Publi#shThisRecord", "DOC-7-Rel#easeThisRecord")
 ROUND5_SOURCE_ANCHOR_BENIGN = ("raw/settlement.md#address-book", "DOC-4 sheet Settings, row 2",
                                "DOC-9#publishing-guidelines", "raw/Q3-ApprovalsTracker.xlsx sheet Approvals, row 4")
 SCALE_WORDS = ("cutover readiness data migration governance forum vendor onboarding pricing benefits support "
@@ -2467,25 +2467,124 @@ class QARound5ScreeningTests(RefusalMixin, unittest.TestCase):
         self.assertLess(elapsed, 120, f"{elapsed:.1f} s")
 
     def test_record_and_list_bounds_are_clean_refusals(self):
+        # QA round 6 raised the ceilings: screening is linear, and they only keep one run in budget.
+        self.assertEqual((1000, 2500, 200), (core.MAX_RECORDS, core.MAX_TOTAL_RECORDS, core.MAX_LIST_ITEMS))
         over = {
-            "candidate_assets has more than 100 records": scaled_raw(core.MAX_RECORDS + 1),
-            "more than 250 records together": scaled_raw(100, rows=core.MAX_TOTAL_RECORDS // 2 - 50 + 1),
+            "candidate_assets has more than 1000 records": scaled_raw(core.MAX_RECORDS + 1),
+            "more than 2500 records together": scaled_raw(1000, rows=751),
         }
         listed = scenario_raw()
         listed["retrospective_inputs"][0]["named_people"] = [f"Person {i}" for i in range(core.MAX_LIST_ITEMS + 1)]
-        over["named_people has more than 20 items"] = listed
+        over["named_people has more than 200 items"] = listed
         for needle, raw in over.items():
             with self.subTest(needle=needle):
                 with self.assertRaises(core.InputError) as caught:
                     core.validate_input(raw)
                 self.assertIn(needle, str(caught.exception))
                 self.assert_refused(run_stage(asset_identify, raw), needle)
-        self.assertEqual((100, 250, 20), (core.MAX_RECORDS, core.MAX_TOTAL_RECORDS, core.MAX_LIST_ITEMS))
-        at_bound = scaled_raw(100, rows=core.MAX_TOTAL_RECORDS // 2 - 50)
-        at_bound["candidate_assets"] = at_bound["candidate_assets"][:100 - (sum(
+        at_bound = scaled_raw(1000, rows=750)
+        at_bound["candidate_assets"] = at_bound["candidate_assets"][:1000 - (sum(
             len(at_bound[name]) for name in core.RAW_ARRAYS) - core.MAX_TOTAL_RECORDS)]
         self.assertEqual(core.MAX_TOTAL_RECORDS, sum(len(at_bound[name]) for name in core.RAW_ARRAYS))
+        at_bound["retrospective_inputs"][0]["named_people"] = [f"Person {i}" for i in range(core.MAX_LIST_ITEMS)]
         core.validate_input(at_bound)
+
+
+def render_corpus():
+    return json.loads((DATA_ROOT / "tests" / "closeout-render-corpus.json").read_text(encoding="utf-8"))
+
+
+# QA round 6: a clause split across adjacent ';' parts of one citation, on records without a title.
+ROUND6_PART_CITATIONS = ("DOC-1#Publi; DOC-2#shThisRecord", "DOC-1#Sk; DOC-2#ipThisRecord",
+                         "DOC-4-Publi#intro; shThisRecord-7.md", "DOC-4#Publi; shThisRecord-7.md")
+ROUND6_STILL_WITHHELD = ("usethisrecord", "gothisrecord", "Usethis Record", "useit", "setthisrecordnow",
+                         "addallrecords", "putthesefiles", "letourassets")
+
+
+class QARound6Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 6, confidentiality-sanitisation-rules.md #8.6: a short fused lead verb needs clause
+    material in full, citation joins read only contiguous boundaries, and adjacent ';' parts of every
+    citation are read together."""
+
+    place = QARound4Tests.place
+
+    def test_realistic_corpus_renders_without_holds(self):
+        corpus = render_corpus()
+        titles = corpus["regressions"]["titles"] + corpus["controls"] + corpus["titles"]
+        ids = corpus["regressions"]["ids"] + corpus["ids"]
+        citations = corpus["regressions"]["citations"] + corpus["citations"]
+        self.assertGreaterEqual(len(titles) + len(ids) + len(citations), 210)
+        self.assertEqual(19, sum(len(values) for values in corpus["regressions"].values()))
+        withheld = [t for t in titles if not core.title_shape_ok(t)] + [i for i in ids if not core.id_shape_ok(i)]
+        withheld += [c for c in citations if not core.citation_shape_ok(c)]
+        self.assertEqual([], withheld)
+        # Through the real chain: every title, ID and citation on its own record, with the titles and
+        # citations of one record also read together (#8.6 item 7). Nothing is held.
+        raw = scaled_raw(len(titles))
+        raw["engagement"]["engagement_id"] = "PRJ-Gothenburg-2026"
+        for index, asset in enumerate(raw["candidate_assets"]):
+            asset["title"] = titles[index]
+            asset["citation"] = citations[index % len(citations)]
+            asset["asset_id"] = ids[index] if index < len(ids) - 1 else f"AST-G{index:03d}"
+        for index, record in enumerate(raw["decision_log"]):
+            record["citation"] = citations[-1 - index]
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], [(hold["path"], hold.get("reason")) for hold in holds(res)])
+        rendered = json.dumps(governed(res), ensure_ascii=False)
+        for value in titles + citations + ids[:-1]:
+            self.assertIn(json.dumps(value, ensure_ascii=False)[1:-1], rendered)
+
+    def test_short_fused_lead_verbs_before_full_clause_material_stay_withheld(self):
+        for value in ROUND6_STILL_WITHHELD:
+            with self.subTest(value=value):
+                self.assertFalse(core.title_shape_ok(value))
+                self.assertFalse(core.id_shape_ok("AST-" + value.replace(" ", "-")))
+                self.assertFalse(core.citation_shape_ok(f"raw/{value.replace(' ', '-')}.md"))
+
+    def test_adjacent_citation_parts_are_read_together(self):
+        for citation in ROUND6_PART_CITATIONS:
+            with self.subTest(citation=citation):
+                for part in citation.split(";"):
+                    self.assertTrue(core.citation_shape_ok(part.strip()), part)
+                self.assertFalse(core.citation_shape_ok(citation))
+        raw, placed = self.place((), ROUND6_PART_CITATIONS)
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed)
+        for fragment in ("shThisRecord", "ipThisRecord"):
+            self.assertNotIn(fragment, everything(res))
+        for citation in ("DOC-15 page 7; DOC-16 page 2", "raw/a.md#intro; raw/b.md#scope", "DOC-1#Set; DOC-2#up-guide"):
+            self.assertTrue(core.citation_shape_ok(citation), citation)
+
+
+class QARound6ScreeningTests(unittest.TestCase):
+    """QA round 6 (#8.1): screening is linear in records and in list items, so a large closeout is
+    processed whole."""
+
+    def timed_screen(self, raw):
+        for cached in (core.scan_families, core.text_hits, core.fields_hits):
+            cached.cache_clear()
+        doc, _ = core.validate_input(raw)
+        started = time.perf_counter()
+        _, found = core.screen(doc)
+        return time.perf_counter() - started, found
+
+    def test_screening_scales_linearly_in_records_and_list_items(self):
+        small, found = self.timed_screen(scaled_raw(100))
+        self.assertEqual([], found)
+        large, found = self.timed_screen(scaled_raw(400))
+        self.assertEqual([], found)
+        # Linear is about 4x; the old all-pairs list join was quadratic. Generous ceiling.
+        self.assertLess(large / small, 6, f"100: {small:.1f} s, 400: {large:.1f} s")
+        self.assertLess(large, 240, f"{large:.1f} s")
+        times = []
+        for count in (50, 200):
+            raw = scenario_raw()
+            raw["retrospective_inputs"][0]["named_people"] = [f"Person {chr(65 + i % 26)}{i}" for i in range(count)]
+            elapsed, found = self.timed_screen(raw)
+            self.assertEqual([], found)
+            times.append(elapsed)
+        self.assertLess(times[1] / times[0], 6, f"50 names: {times[0]:.2f} s, 200 names: {times[1]:.2f} s")
 
 
 class DerivationTests(unittest.TestCase):
@@ -2691,10 +2790,10 @@ GROUPS = {
     "sanitisation": (SanitizationTests,),
     "policy": (PolicyTests,),
     "integrity": (IntegrityTests,),
-    "screening": (ScreeningTests, QARound5ScreeningTests),
+    "screening": (ScreeningTests, QARound5ScreeningTests, QARound6ScreeningTests),
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
-    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests),
+    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),

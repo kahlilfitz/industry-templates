@@ -124,8 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 128 tests in 16 groups (97 in 15 before
-  QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5). It ships with:
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 132 tests in 16 groups (97 in 15 before
+  QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
+  round 6). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -455,4 +456,72 @@ QA on `3b3a9af` found three Medium defects. All fixes are inside the plugin; `sh
   tests pass on both.
 
 **Golden differences (QA round 5).** None. Every `expected/` file in both scenarios is byte-for-byte
+unchanged.
+
+### QA round 6 (on `9f122f8`)
+
+Three Medium findings, fixed in the plugin. The knowledge-record output contract is unchanged, and
+so are the contract JSON copies.
+
+- **Narrower short-verb rule.** A two- or three-letter lead verb at the start of a part counted as a
+  clause as soon as the next letters began clause material, so `Gothenburg …`, `Setallocations
+  workbook`, `PRJ-Gothenburg-2026` (which refused the whole harvest), `raw/set-up-guide.md#all-records`
+  and `raw/add-inventory.md#our-assets` were withheld. Now everything after the short verb, up to a
+  part boundary, must be clause material in full. That means one or more determiners and then an
+  object (record, asset, entry, item, section, file, document, page or lesson), or the pronoun it,
+  them or everything, optionally followed by `now`. `usethisrecord`, `gothisrecord`, `useit` and
+  `Usethis Record` stay withheld.
+- **Contiguous joins only.** The source-segment × anchor cross-product is gone. A citation's words
+  are read in their rendered order, and adjacent `;` parts are joined at their contiguous boundaries
+  (source with next source, last anchor or sheet name with the next part's first). This applies to
+  every citation field, titled or not, so `DOC-1#Publi; DOC-2#shThisRecord` and
+  `DOC-1#Sk; DOC-2#ipThisRecord` on the decision log are now withheld. The title join (#8.6 item 7)
+  pairs the title only with the whole citation, in order and reversed, and with each source's file
+  name. It no longer pairs the title with an anchor further along, which had withheld 117 of 9,810
+  corpus title–citation pairs (for example `Go-live readiness review` with `…#all-sites`). The
+  round-4 splits (`Publi` with `raw/shThisRecordNow.md`, and the reverse) still hold.
+  `raw/publi.md#shthisrecord` now renders because its halves do not render next to each other.
+- **Linear screening, high ceilings.** List items are now paired only as neighbours. Across records,
+  they meet only at the boundary. Runs are read in windows of two and three items and in overlapping
+  blocks of 16, so screening is linear in records and list items. Escalation merging is linear too.
+  The ceilings are raised from 100 per array, 250 in total and 20 per list to 1000 per array, 2500
+  in total and 200 per list. They are documented in the README, in the `artifact-assemble` and
+  `asset-identify` workflows, and in #8.1. A larger input is still a clean refusal; run one
+  workstream or phase per harvest instead. Timings on the reference machine, one process per CLI
+  stage (stage 1, 2, 3, record check):
+
+  | Input | Per stage | Chain |
+  |---|---|---|
+  | 100 assets | 8.6 / 8.6 / 9.8 / 9.6 s | 36.6 s |
+  | 400 assets | 30.9 / 31.8 / 36.2 / 39.4 s | 138.3 s (3.8×) |
+  | 1000 assets | 87.4 / 85.4 / 87.3 / 86.4 s | 346.4 s |
+  | 2500 records at the ceiling | 153.8 s (stage 1) | not measured |
+
+- **False-withhold rate.** On a 238-item realistic corpus (19 reconstructed regressions from the
+  reported classes, the 13 reviewer control words, 91 further titles, 35 IDs and 80 citations),
+  `9f122f8` withheld 22 (9.2%) and this version withholds none. Across all 9,810 title–citation pairs,
+  the record join withholds none.
+- **Reference.** #8.1 and #8.6 in all five byte-identical copies document the ceilings and runtime,
+  the linear joins, the full-clause-material rule and the contiguous joins. The known limits are
+  now:
+  - a clause split across pieces that do not render next to each other is not joined (for example
+    a title and a segment inside a document ID);
+  - an anchor made of clause words (`#this-record`) is withheld;
+  - a whole-part short verb before a determiner part (`Set all records`) is still a clause.
+- **Tests (132 in 16 groups).**
+  - `QARound6Tests` in `render-policy` (3 tests):
+    - the corpus (`tests/closeout-render-corpus.json`) passes the shape checks and runs through the
+      real chain with no hold, with `PRJ-Gothenburg-2026` as the engagement ID;
+    - short fused lead verbs before full clause material stay withheld as titles, IDs and citations;
+    - the adjacent-part citation repros, each of whose parts passes alone, are withheld with a
+      `render_shape` hold and absent from every output file.
+  - `QARound6ScreeningTests` in `screening` (1 test): screening 400 assets takes less than 6× the
+    time for 100, and a 200-name list less than 6× a 50-name list, with no holds.
+  - The round-5 bounds test now checks the new ceilings and an input of exactly 2500 records.
+  - `raw/publi.md#shthisrecord` in the round-5 set is replaced by the contiguous
+    `raw/Publi#shThisRecord`.
+
+  All four round-6 tests and the updated bounds test fail on `9f122f8` and pass now.
+
+**Golden differences (QA round 6).** None. Every `expected/` file in both scenarios is byte-for-byte
 unchanged.

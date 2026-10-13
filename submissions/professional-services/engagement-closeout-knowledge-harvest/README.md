@@ -34,6 +34,10 @@ The handoff is intentionally conservative. Credential assembly may read the reco
 
 An engagement workspace or SharePoint folder, the deliverable register, decision and risk logs, status history, retrospective notes, confidentiality terms, the firm's knowledge taxonomy and prior knowledge records.
 
+### Size and runtime
+
+Screening is linear in the number of records, so a large closeout is processed whole. Each input array (deliverable register, candidate assets, decision log, retrospective inputs) holds at most 1000 records, all of them together at most 2500, and each text or name list (`named_people`, `third_party_products`) at most 200 items. A larger input is refused before anything is screened (`input error: ... above the screening ceiling (#8.1)`); nothing is dropped silently. Harvest one workstream or phase per run instead, each with its own knowledge record. Each engine stage takes about 9 seconds per 100 candidate assets (about 35 seconds for 400, about 90 for 1000), and up to about 2.5 minutes at the 2500-record ceiling.
+
 ## Package
 
 From 1.0.3 the plugin ships as a MOS3 Microsoft 365 app package (manifest 1.28). The ZIP holds only `manifest.json`, `color.png`, `outline.png` and `skills/`. Each skill is self-contained: it carries its own copy of the contract (`contracts/`), the three rule references (`references/`) and, for the engine skills, its Python engine (`scripts/`). The engines use the Python 3 standard library only and read and write only the paths given by `--input` and `--out`.
