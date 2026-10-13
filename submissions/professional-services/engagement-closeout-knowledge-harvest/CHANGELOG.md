@@ -124,9 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 135 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 138 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
-  round 6, 132 before QA round 7). It ships with:
+  round 6, 132 before QA round 7, 135 before QA round 8). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -575,4 +575,80 @@ contract JSON copies are unchanged.
   Both defect tests fail on `b366de4` and pass now. The benign-boundary test passes on both.
 
 **Golden differences (QA round 7).** None. Every `expected/` file in both scenarios is byte-for-byte
+unchanged.
+
+### QA round 8 (on `a4e36a8`)
+
+Two Medium findings in the boundary recogniser, fixed in the plugin. The fix anchors boundary words
+to token edges instead of adding vocabulary. The knowledge-record output contract and the contract
+JSON copies are unchanged.
+
+- **Split verbs with complements (Medium, escape).** The boundary recogniser required an exact
+  determiner-and-object run after every trigger verb. So a complement or an unlisted object let a
+  split pass the whole chain with no hold: title `Set` with citation `DOC-1#thisrecordpublic`, `Sk`
+  with `DOC-1#ipValidation`, and `Publi` with `DOC-1#shInstructions`. Now:
+  - A trigger verb that straddles the boundary, anchored as below, is a clause whenever another
+    token follows it, and an imperative or verdict verb is one even when none does. A verb broken
+    across two fields is itself the signal.
+  - If the verb's right piece runs on inside one token, clause material must still follow in full
+    (`Publi` with `DOC-1#shthisrecord`).
+  - A whole verb that ends the left value keeps the strict start (determiners then a known object,
+    or it, them or everything), but anything may follow it (`thisrecordpublic`).
+  - The round-7 head-noun condition is kept: a lead verb that is also a noun counts only when it
+    starts the left value.
+- **Boundary words without lexical context (Medium, false hold).** `Roadmap` with
+  `DOC-1#lease-accounting` was withheld, because the trailing `p` and `lease` spell "please". A word
+  that straddles a boundary, each side giving at least one letter, now counts only when two
+  conditions hold:
+  - its left piece starts at a token start in the left value (a word boundary, punctuation, or a
+    case or digit transition), and
+  - its right piece ends at a token end in the right value.
+
+  So `Roadma|p` with `lease` is no word, and neither is `Sk|ip` with `ipad-guide`. `Sk|ip` with
+  `Validation` and `Publi|sh` with `Instructions` or `ThisRecord` are words. The same anchoring now
+  applies inside one value. A steering word or verdict phrase counts anywhere within one run-together
+  part (`pleaseapprove`), but across parts only from a part start to a part end (`PleaseApprove`,
+  `Plea-se review`). So `Roadmap lease review` and `raw/roadmap-lease.md`, which `a4e36a8` also
+  withheld, now render.
+- **One recogniser everywhere.** Every boundary join uses the token-anchored recogniser: the title
+  with its citation (whole citation, source file names, every anchor and sheet name, in both
+  orders), a citation's words in rendering order, and adjacent `;` parts. The collapsed-form joins
+  inside a citation are gone.
+- **Neighbour records.** Only titles and citations render, so list items such as `named_people`,
+  `third_party_products` and tokens need no join. The "neighbour list items" join is applied to
+  neighbour records of one input list, which render one after the other. Each rendered title or
+  citation of a record is read with each of the next record's, as adjacent `;` parts are. So
+  `DOC-1#Publi` and `DOC-2#shThisRecord` on two decision-log entries are both withheld with a
+  `render_shape` hold (location `run`), while `DOC-1#roadmap` then `DOC-2#lease-accounting` renders.
+  This narrows the earlier "across two records" limit to records that are not neighbours.
+- **False holds.** All counts are 0:
+
+  | Set | Held |
+  | --- | --- |
+  | 238-item corpus | 0 |
+  | 9,810 title–citation pairs | 0 |
+  | Extra check: 12 titles ending in letters that start steering words × 66 anchors × 3 title forms | 0 of 2,376 |
+  | Neighbour citation→citation pairs | 0 of 8,100 |
+  | Neighbour title→title pairs | 0 of 11,881 |
+
+  The 12 titles are Roadmap, Workshop, Desktop, Laptop, Backup, Setup, Sitemap, Bootcamp, Recap,
+  Startup, Lineup and Markup. The anchors begin `lease`, `lan`, `ost`, `ublish`, `ublic`, `rove`,
+  `kip`, `ip`, `ush`, `load` and similar. The title forms are as-is, lower-case and `+ plan`.
+- **Timings.** 100 generated assets take 8.2 / 8.6 / 9.3 / 9.2 s per stage (35.2 s for the chain),
+  against 37.2 s on `a4e36a8`.
+- **Reference.** #8.6 in all five byte-identical copies documents the anchored in-value words and
+  the boundary recogniser (new item 8: token anchoring, split verbs, whole verbs with any remainder,
+  neighbour records). The known limits now include a split verb whose halves are whole tokens with
+  another token after it, which is withheld (a title ending in the token `Rel` with `#ease-notes`).
+- **Tests (138 in 16 groups).** `QARound8Tests` in `render-policy` (3 tests):
+  - the three escapes run through the real chain with both fields withheld (location `record`),
+    and the same splits across `;` parts are refused;
+  - `Roadmap` with `DOC-1#lease-accounting` runs through the chain with no hold, and the 2,376-pair
+    extra check, the in-value controls and the anchoring controls hold or clear as described;
+  - neighbour decision-log citations `DOC-1#Publi` and `DOC-2#shThisRecord` are withheld (location
+    `run`), and a benign neighbour pair renders.
+
+  All three fail on `a4e36a8` and pass now.
+
+**Golden differences (QA round 8).** None. Every `expected/` file in both scenarios is byte-for-byte
 unchanged.

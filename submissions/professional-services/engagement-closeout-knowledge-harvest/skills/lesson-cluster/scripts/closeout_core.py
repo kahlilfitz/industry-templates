@@ -814,6 +814,24 @@ def spells_clause(value, separators, tokens=True):
     return any(_spells_clause(form, separators, tokens) for form in comparison_skeletons(value))
 
 
+def _needle_hit(collapsed, starts, boundary=None):
+    """A steering word or verdict phrase in the collapsed form. Inside one part (a run-together word,
+    'pleaseapprove') it counts anywhere; across parts it must start at a part start and end at a part
+    end ('Plea-se', not 'Roadmap lease'). With a boundary, only an occurrence that straddles it counts."""
+    ends = (set(starts) - {0}) | {len(collapsed)}
+    for needle in _FUSED_NEEDLES:
+        start = collapsed.find(needle)
+        while start >= 0:
+            end = start + len(needle)
+            first = max(begin for begin in starts if begin <= start)
+            inside = not any(first < begin < end for begin in starts)
+            straddles = boundary is None or start < boundary < end
+            if straddles and ((inside and boundary is None) or (start in starts and end in ends)):
+                return True
+            start = collapsed.find(needle, start + 1)
+    return False
+
+
 def _spells_clause(text, separators, tokens):
     if tokens:
         for token in re.split(separators, text):
@@ -831,7 +849,7 @@ def _spells_clause(text, separators, tokens):
     for index, part in enumerate(parts):
         starts[position] = index
         position += len(part)
-    if any(needle in collapsed for needle in _FUSED_NEEDLES):
+    if _needle_hit(collapsed, starts):
         return True
 
     def after(end):
@@ -889,10 +907,11 @@ def citation_shape_ok(value, spelled=True):
     """A source path or document ID (no spaces; it carries a '.', '/', '\\' or a digit) with an optional
     #anchor and row, line, clause, section, page or named-sheet locators, ';'-separated. No path,
     anchor or sheet name may spell a clause under the canonical token check, as an identifier may
-    not. Joins read only boundaries that are contiguous in rendering order (#8.6): the whole citation's
-    sources, anchors and sheet names in order ('DOC-Publi#shThisRecord', anchor to the next source),
-    and for adjacent ';' parts the source with the next source and the last anchor or sheet name with
-    the next part's first ('DOC-1#Publi; DOC-2#shThisRecord')."""
+    not. Joins read only boundaries that are contiguous in rendering order, with the token-anchored
+    boundary recogniser (#8.6): each source, anchor and sheet name with the next in order
+    ('DOC-Publi#shThisRecord', anchor to the next source), and for adjacent ';' parts the source with
+    the next source and the last anchor or sheet name with the next part's first
+    ('DOC-1#Publi; DOC-2#shThisRecord')."""
     text = value.strip()
     if has_cf(value) or not text or len(text) > CITATION_MAX_CHARS or not CITATION_RE.fullmatch(text):
         return False
@@ -908,14 +927,12 @@ def citation_shape_ok(value, spelled=True):
         return True
     if not all(id_shape_ok(name) for _, names in parts for name in names):
         return False
-    separators = r"[\s\-_./\\]+"
-    if spells_clause(" ".join(word for source, names in parts for word in [source] + names), separators):
+    if sequence_spells_clause([word for source, names in parts for word in [source] + names]):
         return False
     for (source, names), (next_source, next_names) in zip(parts, parts[1:]):
-        joins = [f"{source} {next_source}"]
-        if names and next_names:
-            joins.append(f"{names[-1]} {next_names[0]}")
-        if any(spells_clause(join, separators, tokens=False) for join in joins):
+        if boundary_spells_clause(source, " ".join([next_source] + next_names[:3])):
+            return False
+        if names and next_names and boundary_spells_clause(names[-1], " ".join(next_names[:4])):
             return False
     return True
 
@@ -926,39 +943,45 @@ def id_shape_ok(value):
     return not spells_clause(value, r"[-_.]+")
 
 
-def citation_words(citation):
-    """The rendered identifier words of a citation in rendering order: for each ';' part, its source
-    path segments, then its anchors and sheet or tab names."""
-    found = []
-    for part in citation.split(";"):
-        source = _CITE_SOURCE.match(part.strip())
-        if source:
-            found.extend(word for word in re.split(r"[-_./\\]+", source.group(0)) if word)
-        found.extend(anchor or sheet for anchor, sheet in _CITE_WORDS.findall(part))
-    return found
-
-
-def citation_stems(citation):
-    """The file name of each ';' part's source without its extension (a document ID is its own stem)."""
-    found = []
-    for part in citation.split(";"):
-        source = _CITE_SOURCE.match(part.strip())
-        if source:
-            stem = re.sub(r"\.[A-Za-z0-9]{1,5}$", "", re.split(r"[/\\]", source.group(0))[-1])
-            if stem:
-                found.append(stem)
-    return found
+def _object_start(parts):
+    """True when parts (what follows a whole verb at a boundary) begin with clause material: one or
+    more determiners then a known object, or a pronoun object ending at a part end ('it', not 'items').
+    Anything may follow the object ('thisrecordpublic')."""
+    tail = "".join(parts)
+    ends, position = set(), 0
+    for part in parts:
+        position += len(part)
+        ends.add(position)
+    if any(tail.startswith(word) and (len(word) in ends or (tail.startswith("now", len(word))
+                                                         and len(word) + 3 in ends))
+           for word in _SHORT_PRONOUNS):
+        return True
+    reached, frontier = set(), [0]
+    while frontier:
+        index = frontier.pop()
+        for word in _SHORT_DETERMINERS:
+            if tail.startswith(word, index) and index + len(word) not in reached:
+                reached.add(index + len(word))
+                frontier.append(index + len(word))
+    return any(tail.startswith(word, index) for index in reached for word in _SHORT_OBJECTS)
 
 
 def _boundary_clause(left, right):
-    """The strict recogniser for one touching boundary (left's tail meets right's head), on comparison
-    skeletons: a steering word or verdict phrase that straddles the boundary, or a trigger verb that
-    starts a part of left and reaches its end, followed by clause material in full, as for a short fused
-    verb (_object_run: determiners then an object, or a pronoun object, optionally 'now'). The verb is
-    split across the boundary, or is left's last word; a lead verb that is also a noun ('review',
-    'record', 'set') and lies wholly in left counts only when it also starts left, since the last word
-    of a longer noun phrase is its head noun. 'Publi' + 'shThisRecord' and 'Review' + 'this-section'
-    are clauses; 'Go-live readiness review' + 'all-records' and 'Data set' + 'all-sites' are not."""
+    """The token-anchored recogniser for one touching boundary (left's tail meets right's head), on
+    comparison skeletons. Each value already passed the canonical check alone, so only what crosses
+    the boundary is read:
+    - a verdict phrase whose whole tokens fall on both sides ('Safe' + 'to-deploy');
+    - a steering word, verdict phrase or trigger verb split across the boundary, counted only when its
+      left piece starts at a token start and its right piece ends at a token end ('Publi' +
+      'shInstructions', 'Sk' + 'ipValidation'; not 'Roadmap' + 'lease-accounting', where 'p' starts no
+      token, nor 'Sk' + 'ipad-guide'), or, in a run-together right token, when the rest of that token
+      is clause material in full ('Publi' + 'shthisrecord'). A split verb is itself the signal: it
+      holds when any token follows it, or when it is an imperative or verdict verb;
+    - a whole verb that ends left, followed by determiners and a known object, or a pronoun object,
+      with anything after ('Set' + 'thisrecordpublic'); a lead verb that is also a noun ('review',
+      'record', 'set') counts only when it also starts left, since the last word of a longer noun
+      phrase is its head noun ('Go-live readiness review' + 'all-records' renders);
+    - a negation that ends left before a verb or clause material."""
     def split(text):
         return [part.casefold() for run in re.findall(r"[^\W_]+", text) for part in _case_parts(run)]
 
@@ -971,57 +994,111 @@ def _boundary_clause(left, right):
     for index, part in enumerate(parts):
         starts[position] = index
         position += len(part)
-    for needle in _FUSED_NEEDLES:
-        start = collapsed.find(needle)
-        while start >= 0:
-            if start < boundary < start + len(needle):
+    ends = (set(starts) - {0}) | {len(collapsed)}
+    for phrase in _TITLE_PHRASES:
+        words = phrase.split()
+        for index in range(len(parts) - len(words) + 1):
+            if parts[index:index + len(words)] == words and index < len(head) < index + len(words):
                 return True
-            start = collapsed.find(needle, start + 1)
+    if _needle_hit(collapsed, starts, boundary):
+        return True
+
+    def rest_of(end):
+        """(letters after end in its part, the parts after that part)."""
+        if end in starts:
+            return "", parts[starts[end]:]
+        first = max(begin for begin in starts if begin < end)
+        return parts[starts[first]][end - first:], parts[starts[first] + 1:]
+
     for verb in _TRIGGER_VERBS:
         start = collapsed.find(verb)
         while start >= 0:
             end = start + len(verb)
-            if start in starts and start < boundary <= end and (
-                    end > boundary or start == 0 or verb in _TITLE_VERBS):
-                if end in starts:
-                    rest, later = "", parts[starts[end]:]
+            if start in starts and start < boundary < end:
+                if end in ends:
+                    if end < len(collapsed) or verb in _TITLE_VERBS:
+                        return True
                 else:
-                    first = max(begin for begin in starts if begin < end)
-                    rest, later = parts[starts[first]][end - first:], parts[starts[first] + 1:]
-                if _object_run(rest, later):
+                    rest, later = rest_of(end)
+                    if _object_run(rest, later):
+                        return True
+            elif start in starts and end == boundary and (start == 0 or verb in _TITLE_VERBS):
+                if _object_start(tail):
                     return True
             start = collapsed.find(verb, start + 1)
+    for negation in _NEGATIONS:
+        start = collapsed.find(negation)
+        while start >= 0:
+            if start in starts and start + len(negation) == boundary and (
+                    tail[0] in _DETERMINERS | _OBJECTS or _starts_clause(tail[0])):
+                return True
+            start = collapsed.find(negation, start + 1)
     return False
 
 
 def boundary_spells_clause(left, right):
-    """True when left followed directly by right spells a clause across their touching ends (#8.6)."""
+    """True when left followed directly by right spells a clause across their touching ends (#8.6).
+    right may carry the rendered words that follow it, space-separated."""
+    if has_cf(left) or has_cf(right):
+        return True
     return any(_boundary_clause(one, two)
                for one in comparison_skeletons(left) for two in comparison_skeletons(right))
 
 
-def citation_names(citation):
-    """Every anchor and sheet or tab name of every ';' part of a citation, in rendering order."""
-    return [anchor or sheet for anchor, sheet in _CITE_WORDS.findall(citation)]
+def sequence_spells_clause(words):
+    """The boundaries of a rendered sequence of identifier words (#8.6): each word meets the next,
+    with up to three further words as the clause material that may follow."""
+    return any(boundary_spells_clause(words[index], " ".join(words[index + 1:index + 5]))
+               for index in range(len(words) - 1))
 
 
 def joined_spells_clause(title, citation):
-    """A record's title and citation render together, so a clause split between them is refused: the
-    canonical check (without the separator-token test each value already passed) reads the title
-    followed by the citation's words and the reverse, and, because a directory prefix such as raw/ is
-    conventional, the title next to each source file name in either order. Each anchor and sheet name
-    of every ';' part also meets the title at its touching ends (title + name and name + title), read
-    only by the strict boundary recogniser (boundary_spells_clause), so 'Publi' with
-    'DOC-1#shThisRecord' is refused and 'Go-live readiness review' with '...#all-sites' is not."""
-    pieces = citation_words(citation)
-    joins = [[title] + pieces, pieces + [title]]
-    joins += [pair for stem in citation_stems(citation) for pair in ([title, stem], [stem, title])]
-    if any(spells_clause(" ".join(join), r"\s+", tokens=False) for join in joins):
-        return True
-    # Each anchor and sheet name meets the title at a boundary of its own (title tail + anchor head and
-    # anchor tail + title head), read by the strict boundary recogniser only.
-    return any(boundary_spells_clause(title, name) or boundary_spells_clause(name, title)
-               for name in citation_names(citation))
+    """A record's title and citation render together, so a clause split between them is refused (#8.6).
+    The token-anchored boundary recogniser reads the title before the citation's first word and after
+    its last, and, because a directory prefix such as raw/ is conventional, next to each source file
+    name and each anchor and sheet name of every ';' part, in either order. So 'Publi' with
+    'DOC-1#shThisRecord' or 'raw/shThisRecordNow.md' is refused, and 'Go-live readiness review' with
+    '...#all-sites' or 'Roadmap' with 'DOC-1#lease-accounting' is not."""
+    pieces = [word for source, names in _citation_parts(citation) for word in [source] + names]
+    if not pieces:
+        return False
+    joins = [(title, " ".join(pieces[:4])), (pieces[-1], title)]
+    for source, names in _citation_parts(citation):
+        stem = re.sub(r"\.[A-Za-z0-9]{1,5}$", "", re.split(r"[/\\]", source)[-1])
+        if stem:
+            joins += [(title, " ".join([stem] + names[:3])), (stem, title)]
+        joins += [(title, " ".join(names[index:index + 4])) for index in range(len(names))]
+        joins += [(name, title) for name in names]
+    return any(boundary_spells_clause(left, right) for left, right in joins)
+
+
+def _citation_parts(citation):
+    """(source, [anchors and sheet names]) for each ';' part, in rendering order."""
+    found = []
+    for part in citation.split(";"):
+        source = _CITE_SOURCE.match(part.strip())
+        if source:
+            found.append((source.group(0), [anchor or sheet for anchor, sheet in _CITE_WORDS.findall(part)]))
+    return found
+
+
+def neighbour_spells_clause(first, first_is_title, second, second_is_title):
+    """Neighbour records of one list render one after the other, so a clause split between a value of
+    one and a value of the next is refused (#8.6), read as adjacent ';' parts are: two titles meet at
+    their ends; a title and a citation join as a record's title and citation do; two citations join
+    the first's last part with the second's first part ('DOC-1#Publi' then 'DOC-2#shThisRecord')."""
+    if first_is_title and second_is_title:
+        return boundary_spells_clause(first, second)
+    if first_is_title or second_is_title:
+        return joined_spells_clause(*((first, second) if first_is_title else (second, first)))
+    ahead, behind = _citation_parts(first), _citation_parts(second)
+    if not ahead or not behind:
+        return False
+    (source, names), (next_source, next_names) = ahead[-1], behind[0]
+    words = [word for part, more in behind for word in [part] + more]
+    return (boundary_spells_clause(([source] + names)[-1], " ".join(words[:4]))
+            or boundary_spells_clause(source, " ".join([next_source] + next_names[:3]))
+            or bool(names and next_names and boundary_spells_clause(names[-1], " ".join(next_names[:4]))))
 
 
 def shape_hits(path, value):
@@ -1236,6 +1313,23 @@ def screen(doc, prior=None, forced=None):
                     and joined_spells_clause(title, citation)):
                 for path in (title_path, citation_path):
                     held.setdefault(path, (("render_shape",), "record"))
+    # Neighbour records of one list: each rendered title or citation of a record meets each of the next
+    # record's, read by the token-anchored recogniser as adjacent ';' parts are ('DOC-1#Publi' then
+    # 'DOC-2#shThisRecord'); both values are withheld with a render_shape hold.
+    for run in runs:
+        if not (run and run[0] == "pair"):
+            continue
+        rendered = [[(path, box[key]) for path, box, key in side
+                     if (_TITLE_PATH.fullmatch(path) or _CITATION_PATH.fullmatch(path)) and path not in held]
+                    for side in run[1:]]
+        for first_path, first in rendered[0]:
+            for second_path, second in rendered[1]:
+                if first_path in held or second_path in held:
+                    continue
+                if neighbour_spells_clause(first, bool(_TITLE_PATH.fullmatch(first_path)),
+                                           second, bool(_TITLE_PATH.fullmatch(second_path))):
+                    for path in (first_path, second_path):
+                        held[path] = (("render_shape",), "run")
     terms = identity_terms(doc["engagement"]["client_name"])  # harvested before any redaction (A16)
 
     def live(members):

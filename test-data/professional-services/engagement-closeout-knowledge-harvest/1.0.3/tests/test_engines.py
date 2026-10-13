@@ -2665,6 +2665,79 @@ class QARound7ScreeningTests(RefusalMixin, unittest.TestCase):
         self.assertIn("escalations has more than 1000 items", str(caught.exception))
 
 
+# QA round 8 (#8.6): a verb split across a title and an anchor, followed by a complement or an
+# unlisted object, and a steering word that crosses a boundary without a token anchor.
+ROUND8_ESCAPES = (("Set", "DOC-1#thisrecordpublic"), ("Sk", "DOC-1#ipValidation"), ("Publi", "DOC-1#shInstructions"))
+ROUND8_FALSE_HOLD = ("Roadmap", "DOC-1#lease-accounting")
+ROUND8_TITLE_TAILS = ("Roadmap", "Workshop", "Desktop", "Laptop", "Backup", "Setup", "Sitemap", "Bootcamp", "Recap",
+                      "Startup", "Lineup", "Markup")
+ROUND8_ANCHOR_HEADS = ("lease", "lan", "ost", "ublish", "ublic", "rove", "kip", "ip", "ush", "ost-mortem", "load",
+                       "lease-accounting", "lanning", "ublishing-guide", "ost-launch", "ipeline", "roval-log")
+
+
+class QARound8Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 8, confidentiality-sanitisation-rules.md #8.6: a word crossing a boundary counts only
+    when it starts at a token start on the left and ends at a token end on the right, and a split verb
+    holds whenever anything follows it."""
+
+    def test_split_verbs_with_complements_are_withheld_through_the_chain(self):
+        for title, citation in ROUND8_ESCAPES:
+            with self.subTest(title=title, citation=citation):
+                self.assertTrue(core.title_shape_ok(title))
+                self.assertTrue(core.citation_shape_ok(citation))
+                self.assertTrue(core.joined_spells_clause(title, citation))
+                raw = scenario_raw()
+                placed = {("candidate_assets", 0, "title"): title, ("candidate_assets", 0, "citation"): citation}
+                for path, value in placed.items():
+                    set_path(raw, path, value)
+                res = chain(raw)
+                self.assert_render_shape_holds(res, placed, location="record")
+        for citation in ("DOC-1#Sk; DOC-2#ipValidation", "DOC-4#Publi; shInstructions-7.md"):
+            self.assertFalse(core.citation_shape_ok(citation), citation)
+
+    def test_boundary_words_need_a_token_anchor(self):
+        title, citation = ROUND8_FALSE_HOLD
+        self.assertFalse(core.joined_spells_clause(title, citation))
+        raw = scenario_raw()
+        set_path(raw, ("candidate_assets", 0, "title"), title)
+        set_path(raw, ("candidate_assets", 0, "citation"), citation)
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], [hold["path"] for hold in holds(res)])
+        self.assertIn("DOC-1#lease-accounting", everything(res))
+        held = [(tail, head) for tail in ROUND8_TITLE_TAILS for head in ROUND8_ANCHOR_HEADS
+                for left in (tail, tail.lower(), tail + " plan")
+                for anchor in (f"DOC-1#{head}", f"DOC-1#{head}-notes", f"DOC-1#{head[0].upper()}{head[1:]}Summary")
+                if core.joined_spells_clause(left, anchor)]
+        self.assertEqual([], held)
+        for value in ("Roadmap lease review", "Desktop ost summary"):
+            self.assertTrue(core.title_shape_ok(value), value)
+        for value in ("raw/roadmap-lease.md", "DOC-7-roadmap#lease-accounting", "DOC-1#lease; DOC-2#roadmap"):
+            self.assertTrue(core.citation_shape_ok(value), value)
+        self.assertFalse(core.joined_spells_clause("Sk", "DOC-1#ipad-guide"))
+        # A steering word inside one run-together part, or split on token ends, still counts.
+        for value in ("PleaseApprove", "pleaseapprove", "Plea-se review"):
+            self.assertFalse(core.title_shape_ok(value), value)
+        self.assertTrue(core.joined_spells_clause("Plea", "DOC-1#seReview"))
+
+    def test_neighbour_records_are_read_across_their_boundary(self):
+        raw = scenario_raw()
+        placed = {("decision_log", 0, "citation"): "DOC-1#Publi", ("decision_log", 1, "citation"): "DOC-2#shThisRecord"}
+        for path, value in placed.items():
+            self.assertTrue(core.citation_shape_ok(value))
+            set_path(raw, path, value)
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="run")
+        raw = scenario_raw()
+        benign = {("decision_log", 0, "citation"): "DOC-1#roadmap", ("decision_log", 1, "citation"): "DOC-2#lease-accounting"}
+        for path, value in benign.items():
+            set_path(raw, path, value)
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], [hold["path"] for hold in holds(res)])
+        self.assertIn("DOC-2#lease-accounting", everything(res))
+
+
 class DerivationTests(unittest.TestCase):
     def test_g4b_structured_inputs_re_derive_from_each_raw_pack(self):
         for scenario in SCENARIOS:
@@ -2871,7 +2944,7 @@ GROUPS = {
     "screening": (ScreeningTests, QARound5ScreeningTests, QARound6ScreeningTests, QARound7ScreeningTests),
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
-    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests),
+    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),
