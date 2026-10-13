@@ -530,6 +530,44 @@ the hardening phases change engine behaviour, but output contracts change only a
     (5 client spellings x 5 other-entity spellings: governed output always validates, and
     governed verdicts equal validated verdicts)
 
+### QA round 14 (phase 2)
+
+- **QA round 14 fix (one High defect): matchability across all readings (rules 9.9, 9.10 and
+  9.11).** `entity_matchable()` in `safety_text.py` (vendored, byte-identical, in fit-score,
+  constraint-check and slate-draft) checked only the reading with format characters removed. A
+  name whose removed reading collapses to a corporate designator ("In\u200bc" -> "inc", and
+  "C\u200bo", "L\u200bLC", "P\u200bLC", "Cor\u200bp") was therefore unmatchable even though its
+  word-boundary reading ("in c") is a meaningful name. `screened_identities()` never harvested it,
+  so a C-103 row for "In\u200bc" left C-101's note "In C alumni" carried and C-101 recommended in
+  governed and validated output; `entity_names_match("In\u200bc", "In C")` returned None and
+  `same_client()` returned False.
+  - New `_meaningful()`: a reading is meaningful when it is not empty and not made only of
+    designators. `entity_keys()` returns only meaningful readings, `entity_matchable()` is true
+    when any reading is meaningful, and `entity_names_match()` compares every meaningful reading of
+    both names, keeping the round 13 precedence and single classification.
+  - `same_client()`: a matchable name equals another name only when both are matchable and
+    `entity_names_match()` is true; the canonical-form comparison applies only when neither name
+    can be matched. fit-score, constraint-check and slate-draft validation share it, so
+    "In\u200bc" reconciles with "In C" in every engine, and a designator-only name is still refused.
+  - Text screening still reads every reading of a value; only harvested and compared identities
+    are restricted to meaningful readings.
+  - Consequence: a row whose client name is "In\u200bc" is now an ordinary other client's row
+    (screened under rule 9.11), no longer a rule 9.2/9.9 review for an unmatchable name.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): the rules 9.2/9.9 note
+  states that a name can be matched when any reading is more than designators.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are three new regression tests, each failing on `e0be73a`:
+  - `ConstraintHardeningTests.test_qa14_designator_collision_names_are_harvested_and_withheld`
+    (five designator-collision names: harvested, the note withheld, C-101 held #9.11 in governed and
+    validated output; control "Inc alumni" stays recommended)
+  - `ConstraintHardeningTests.test_qa14_designator_collision_names_reconcile_across_inputs`
+    (fit-score, constraint-check and slate-draft validation reconcile each name with its
+    word-boundary reading; a designator-only name is refused)
+  - `ConstraintHardeningTests.test_qa14_matchability_property_over_format_character_positions`
+    (generated names x format-character positions: `entity_matchable()` agrees with an independent
+    any-reading oracle, and governed output validates with governed verdicts equal to validated
+    verdicts)
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

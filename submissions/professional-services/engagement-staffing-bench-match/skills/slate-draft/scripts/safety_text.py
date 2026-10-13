@@ -403,19 +403,26 @@ def entity_key(name):
     return " ".join(entity_readings(text)[0][0]) if text is not None else ""
 
 
+def _meaningful(words):
+    return bool(words) and not all(word in ENTITY_DESIGNATORS for word in words)
+
+
 def entity_keys(name):
-    """Every canonical form of an entity name (one per reading); empty forms are dropped."""
+    """Every canonical form of an entity name that can identify an entity, one per reading: a
+    reading that is empty or made only of corporate designators is dropped, so "In\u200bc" is
+    "in c" (its other reading, "inc", names no entity). These are the forms every engine harvests,
+    compares and screens."""
     text = _entity_text(name)
     if text is None:
         return ()
-    return tuple(" ".join(words) for words, _spans in entity_readings(text) if words)
+    return tuple(" ".join(words) for words, _spans in entity_readings(text) if _meaningful(words))
 
 
 def entity_matchable(name):
-    """A name that can identify an entity: it normalises to something other than corporate
-    designators alone ("The Company Inc" names no entity; rule 9.2)."""
-    words = entity_key(name).split()
-    return bool(words) and not all(word in ENTITY_DESIGNATORS for word in words)
+    """A name that can identify an entity: some reading of it normalises to something other than
+    corporate designators alone ("The Company Inc" names no entity; rule 9.2, while "In\u200bc",
+    read with the format character as a word boundary, is "in c")."""
+    return bool(entity_keys(name))
 
 
 def _keys_match(left_name, right_name):
@@ -432,8 +439,8 @@ def _keys_match(left_name, right_name):
 
 def entity_names_match(left, right):
     """True only for one entity: equal after normalisation and trailing-designator removal, in
-    either reading of either name (a name is the entity when any reading is: fail closed, the row's
-    constraint applies). None when either name cannot be compared, or when every word of one is
+    either meaningful reading of either name (a name is the entity when any reading is: fail closed,
+    the row's constraint applies; a reading made only of designators is never compared). None when either name cannot be compared, or when every word of one is
     also a word of the other in some reading, in any order and with gaps ("Orchard Clinics" for
     "Orchard Ridge Clinics"): neither the same entity nor plainly another (rule 9.9). False only when
     every reading pair is another entity, including names that only share some words."""
@@ -447,10 +454,12 @@ def entity_names_match(left, right):
 
 
 def same_client(left, right):
-    """Two inputs name the same engagement client (rule 9.10): entity_names_match() is True. Names
-    that identify no entity (designators only, or nothing) compare by canonical form instead."""
-    if entity_matchable(left) and entity_matchable(right):
-        return entity_names_match(left, right) is True
+    """Two inputs name the same engagement client (rule 9.10): entity_names_match() is True. Only
+    two names that both identify no entity in any reading (designators only, or nothing) compare by
+    canonical form instead; a name that identifies an entity never equals one that does not."""
+    left_matchable, right_matchable = entity_matchable(left), entity_matchable(right)
+    if left_matchable or right_matchable:
+        return left_matchable and right_matchable and entity_names_match(left, right) is True
     left_key, right_key = entity_key(left), entity_key(right)
     if left_key or right_key:
         return left_key == right_key

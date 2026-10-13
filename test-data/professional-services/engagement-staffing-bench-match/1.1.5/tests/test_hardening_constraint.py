@@ -1482,3 +1482,105 @@ class ConstraintHardeningTests(unittest.TestCase):
                         self.assertIn("C-101", recommended_ids(document, "PSS-001"))
                         if kind == "foreign":
                             self.assertNotIn(other, json.dumps(document, ensure_ascii=False))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 14: a name is matchable when any reading is; designator-only readings are never
+    # harvested or compared (rules 9.2, 9.9, 9.10, 9.11).
+    # ----------------------------------------------------------------------------------------
+    DESIGNATOR_COLLISIONS = (("In\u200bc", "In C"), ("C\u200bo", "C O"), ("L\u200bLC", "L LC"),
+                             ("P\u200bLC", "P LC"), ("Cor\u200bp", "Cor P"))
+
+    def test_qa14_designator_collision_names_are_harvested_and_withheld(self):
+        for name, spaced in self.DESIGNATOR_COLLISIONS:
+            with self.subTest(name=ascii(name)):
+                self.assertTrue(constraint_check.entity_matchable(name))
+                self.assert_foreign_hold(self.bench_with(notes=spaced + " alumni"),
+                                         self.with_rows(self.foreign_row(name)),
+                                         re.compile(re.escape(spaced) + " alumni", re.IGNORECASE))
+        # Control: the designator reading alone ("Inc") names no entity and never holds.
+        governed, validated, texts = self.chain(self.bench_with(notes="Inc alumni"),
+                                                self.with_rows(self.foreign_row("In\u200bc")))
+        self.assert_same_verdicts(governed, validated)
+        self.assertIn("Inc alumni", texts["governed.json"])
+        for document in (governed, validated):
+            self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+
+    def test_qa14_designator_collision_names_reconcile_across_inputs(self):
+        slate_validate = _load("slate_validate", VALIDATE)
+
+        def renamed(client):
+            return [json.loads(json.dumps(document).replace("Orchard Ridge Clinics", client))
+                    for document in scenario_inputs("scenario-a-happy")]
+
+        def refused(call):
+            try:
+                call()
+            except Exception as error:  # each module load has its own InputError class
+                self.assertEqual("InputError", type(error).__name__, ascii(error))
+                return True
+            return False
+
+        for name, spaced in self.DESIGNATOR_COLLISIONS:
+            with self.subTest(name=ascii(name)):
+                roles, bench, constraints = renamed(spaced)
+                bench["engagement"]["client_name"] = name
+                constraints["engagement"]["client_name"] = name
+                self.assertTrue(constraint_check.same_client(name, spaced))
+                governed = constraint_check.govern(slate_rank.rank(fit_score.score(roles, bench)), constraints)
+                self.assertEqual(spaced, governed["engagement"]["client_name"])
+                intake = [(label, document["engagement"])
+                          for label, document in (("roles.json", roles), ("bench.json", bench),
+                                                  ("constraints.json", constraints))]
+                validated = slate_validate.validate(
+                    governed, intake, constraint_check._foreign_names(constraints, governed["engagement"]),
+                    constraint_check.ambiguous_names(constraints, governed["engagement"]))
+                self.assert_same_verdicts(governed, validated)
+                # Control: the designator reading alone ("Inc", "Co", ...) is not the client.
+                designator = name.replace("\u200b", "")
+                self.assertFalse(constraint_check.same_client(designator, spaced))
+                bench["engagement"]["client_name"] = designator
+                self.assertTrue(refused(lambda: fit_score.score(roles, bench)))
+                bench["engagement"]["client_name"] = name
+                constraints["engagement"]["client_name"] = designator
+                ranked = slate_rank.rank(fit_score.score(roles, bench))
+                self.assertTrue(refused(lambda: constraint_check.govern(ranked, constraints)))
+
+    def test_qa14_matchability_property_over_format_character_positions(self):
+        designators = {"llc", "inc", "ltd", "plc", "corp", "corporation", "co", "company", "the"}
+
+        def some_reading_matchable(name, char):
+            for reading in (name.replace(char, ""), name.replace(char, " ")):
+                words = re.sub(r"[\W_]+", " ", reading.lower()).split()
+                if words and not all(word in designators for word in words):
+                    return True
+            return False
+
+        names = ("Inc", "Co", "LLC", "Corp", "Ltd", "Inc Co", "The Co", "Acme")
+        cases = [(name[:at] + char + name[at:], char)
+                 for name in names for at in range(1, len(name)) for char in ("\u200b", "\u00ad")]
+        for variant, char in cases:
+            with self.subTest(variant=ascii(variant)):
+                self.assertEqual(some_reading_matchable(variant, char), constraint_check.entity_matchable(variant))
+        roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        slate_validate = _load("slate_validate", VALIDATE)
+        for variant, char in cases:
+            if char != "\u200b":
+                continue
+            with self.subTest(variant=ascii(variant)):
+                changed = copy.deepcopy(bench)
+                for candidate in changed["bench_candidates"]:
+                    if candidate["candidate_id"] == "C-101":
+                        candidate["notes"] = variant + " alumni"
+                constraints = self.with_rows(self.foreign_row(variant))
+                governed = constraint_check.govern(ranked_for(roles, changed), constraints)
+                validated = slate_validate.validate(
+                    governed, [], constraint_check._foreign_names(constraints, governed["engagement"]),
+                    constraint_check.ambiguous_names(constraints, governed["engagement"]))
+                self.assert_same_verdicts(governed, validated)
+                for document in (governed, validated):
+                    row = slate_row(document, "PSS-001", "C-101")
+                    if some_reading_matchable(variant, char):
+                        self.assert_held(row, "#9.11")
+                        self.assertNotIn(variant, json.dumps(document, ensure_ascii=False))
+                    else:
+                        self.assertIn("C-101", recommended_ids(document, "PSS-001"))
