@@ -175,7 +175,7 @@ def matches_engagement(item, engagement):
     comparisons = [
         entity_names_match(record_name, target)
         for target in [engagement.get("client_name"), *affiliates]
-        if isinstance(target, str) and normalize_entity_name(target)
+        if isinstance(target, str) and constraint_check.entity_matchable(target)
     ]
     if any(value is True for value in comparisons):
         return True
@@ -611,7 +611,8 @@ def _same_identity(expected, carried, key):
         return f"sha256={digest}" in carried
     if key == "engagement_id":
         return id_key(expected) == id_key(carried)
-    return canonical(expected) == canonical(carried)
+    # Client names reconcile exactly as constraint-check reconciles them (rule 9.10).
+    return constraint_check.same_entity(expected, carried)
 
 
 def _check_identity(document, engagement, intake_engagements):

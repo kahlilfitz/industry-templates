@@ -1174,3 +1174,71 @@ class ConstraintHardeningTests(unittest.TestCase):
         # Control: a source naming the client with other text is still candidate content.
         self.assert_foreign_hold(bench, self.with_rows(foreign, self.clear_row("Conflicts Register LLC feed")),
                                  re.compile(r"register[\s\-_.]*llc", re.IGNORECASE))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 10: a token-subset entity name is ambiguous; only trailing corporate designators
+    # are dropped; slate_validate reconciles client names exactly as constraint_check does.
+    # ----------------------------------------------------------------------------------------
+    def assert_ambiguous_hold(self, bench, row, leak):
+        governed, validated, texts = self.chain(bench, self.with_rows(row))
+        for name, text in texts.items():
+            self.assertEqual([], re.findall(leak, text), name)
+            self.assertNotIn(row["citation"], text, name)
+        for document in (governed, validated):
+            self.assert_held(slate_row(document, "PSS-001", "C-101"), "#9.9")
+            self.assertEqual(["C-103"], recommended_ids(document, "PSS-001"))
+            self.assertTrue(any(item.startswith("C-101: conflicts register row ") and "#9.9" in item
+                                and "cannot be matched reliably" in item for item in document["escalations"]),
+                            ascii_safe(document["escalations"]))  # noqa: F821
+
+    def test_qa10_token_subset_entity_is_a_review_hold(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        for client, leak in (("Orchard Clinics", r"Orchard Clinics"),
+                             ("Clinics Orchard Ridge", r"Clinics Orchard"),
+                             ("Ridge Orchard Health Holdings", r"Ridge Orchard")):
+            with self.subTest(client=client):
+                self.assert_ambiguous_hold(bench, dict(wall_row(client_name=client), citation="conflicts extract row 91"),
+                                           leak)
+        # Control: names that only share a common word are different entities; no hold.
+        governed, validated, _texts = self.chain(bench, self.with_rows(wall_row(client_name="Northwind Clinics")))
+        for document in (governed, validated):
+            self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+            self.assertFalse(any(item.startswith("C-101: conflicts register row ") for item in document["escalations"]),
+                             ascii_safe(document["escalations"]))  # noqa: F821
+        self.assertIs(False, constraint_check.entity_names_match("Northwind Clinics", "Orchard Ridge Clinics"))
+
+    def test_qa10_only_trailing_designators_are_dropped(self):
+        self.assertEqual("company partners", constraint_check.normalize_entity_name("Company Partners"))
+        self.assertEqual("partners", constraint_check.normalize_entity_name("Partners Inc."))
+        self.assertIsNone(constraint_check.entity_names_match("Company Partners", "Partners Inc."))
+        self.assertTrue(constraint_check.entity_names_match("The Orchard Ridge Clinics, LLC", "Orchard Ridge Clinics"))
+        self.assertEqual("inc co", constraint_check.normalize_entity_name("Inc. Co."))
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        row = {"candidate_id": "C-101", "type": "prior_client_role", "client_name": "Company Orchard Ridge Clinics",
+               "status": "closed", "role_type": "employee", "end_date": "2010-01-01",
+               "source": "connector:conflicts-register", "confidence": 0.97, "citation": "conflicts extract row 92"}
+        self.assert_ambiguous_hold(bench, row, r"Company Orchard")
+
+    def test_qa10_slate_validate_reconciles_client_name_like_constraint_check(self):
+        _roles, bench, constraints = scenario_inputs("scenario-a-happy")
+        constraints["engagement"]["client_name"] = "Orchard Ridge Clinics, LLC"
+        governed, validated, _texts = self.chain(bench, constraints)
+        for document in (governed, validated):
+            self.assertEqual("Orchard Ridge Clinics", document["engagement"]["client_name"])
+            self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+        # Control: slate_validate still refuses another client or another engagement ID in constraints.json.
+        for key, value in (("client_name", "Northwind Clinics"), ("engagement_id", "ENG-OTHER-9")):
+            changed = copy.deepcopy(constraints)
+            changed["engagement"][key] = value
+            path = self.temp / "constraints-other.json"
+            path.write_text(json.dumps(changed), encoding="utf-8")
+            out = self.temp / "validated-other.json"
+            with self.subTest(key=key):
+                result = subprocess.run(
+                    [sys.executable, str(VALIDATE), "--roles", str(self.temp / "roles.json"),
+                     "--bench", str(self.temp / "bench.json"), "--constraints", str(path),
+                     "--governed", str(self.temp / "governed.json"), "--out", str(out)],
+                    cwd=str(self.temp), capture_output=True, text=True, encoding="utf-8", errors="backslashreplace")
+                self.assertEqual(2, result.returncode, ascii_safe(result.stdout + result.stderr))  # noqa: F821
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertFalse(out.exists())

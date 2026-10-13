@@ -373,6 +373,40 @@ the hardening phases change engine behaviour, but output contracts change only a
   - `ConstraintHardeningTests.test_qa9_engine_source_text_is_not_candidate_content`
   - `ValidateHardeningTests.test_qa9_engine_text_and_partial_entity_in_governed_entries`
 
+### QA round 10 (phase 2)
+
+- **QA round 10 fixes (two High defects, one Medium).**
+  - **Token-subset ambiguity (High, rules 9.2 and 9.9).** `entity_names_match()` recognised
+    ambiguity only for a contiguous run of words. "Orchard Clinics" was therefore scoped out as
+    another client against "Orchard Ridge Clinics", and an active ethical wall was ignored
+    (C-101 recommended). Two names that differ are now ambiguous when every word of one is also
+    a word of the other, in any order and with gaps (token multiset subset). Such a row is a
+    rule 9.9 review hold, as in round 9. Names that only share some words ("Northwind Clinics"
+    and "Orchard Ridge Clinics") remain different entities and do not hold.
+  - **Trailing designators only (High, rules 9.2 and 9.9).** `_entity_key()` dropped corporate
+    designators anywhere, so "Company Partners" and "Partners Inc." both became "partners" and
+    matched exactly. Only the trailing run of designators (and a leading "the") is dropped now.
+    "Company Partners" against "Partners Inc." becomes a subset, so it is a review hold, not
+    clearance. A name made only of designators keeps its words. New `entity_matchable()` still
+    treats such a name ("The Company Inc") as naming no entity (rule 9.2), so
+    `test_unmatchable_client_name_requires_review` is unchanged. Every emptiness check now uses
+    it: the engagement checks, ambiguous rows and slate-draft's comparison targets.
+  - **Consistent client identity (Medium, rule 9.8/9.10).** `slate_validate._same_identity()`
+    compared raw canonical strings, so a constraints client_name "Orchard Ridge Clinics, LLC"
+    passed constraint-check but was refused by slate-draft validation. Client names now
+    reconcile with `constraint_check.same_entity()`, the comparison constraint-check uses.
+    `engagement_id` is still compared exactly.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): the rules 9.2/9.9
+  note covers trailing designators, token-subset ambiguity, the shared-word no-hold case and
+  client-name reconciliation in slate-draft validation.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are three new regression tests, each failing on `f2febe7`:
+  - `ConstraintHardeningTests.test_qa10_token_subset_entity_is_a_review_hold` (with the
+    "Northwind Clinics" no-hold control)
+  - `ConstraintHardeningTests.test_qa10_only_trailing_designators_are_dropped`
+  - `ConstraintHardeningTests.test_qa10_slate_validate_reconciles_client_name_like_constraint_check`
+    (with controls: another client or engagement ID is still refused)
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

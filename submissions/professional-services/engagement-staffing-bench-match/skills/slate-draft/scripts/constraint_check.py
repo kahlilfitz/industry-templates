@@ -227,20 +227,37 @@ def _valid_date(value):
 def _entity_key(text):
     folded = steering_guard.normalize(canonical(text))
     words = re.sub(r"[\W_]+", " ", folded).split()
-    return " ".join(word for word in words if word not in ENTITY_SUFFIXES)
+    if all(word in ENTITY_SUFFIXES for word in words):
+        return " ".join(words)  # a name made only of designators stays as it is
+    end = len(words)
+    while words[end - 1] in ENTITY_SUFFIXES:
+        end -= 1
+    start = 1 if words[0] == "the" and end > 1 else 0
+    return " ".join(words[start:end])
 
 def normalize_entity_name(name):
     """Entity names compare in one canonical form: NFKC, format characters removed, confusables and
-    diacritics folded, case-folded, separators and punctuation as spaces, corporate suffixes dropped."""
+    diacritics folded, case-folded, separators and punctuation as spaces, then only the trailing run
+    of corporate designators (and a leading "the") dropped, never a designator inside the name, so
+    "Company Partners" stays "company partners" while "Partners Inc." is "partners"."""
     if name is None or isinstance(name, bool) or not isinstance(name, (str, int, float)):
         return ""
     return _entity_key(str(name))
 
+def entity_matchable(name):
+    """A name that can identify an entity: it normalises to something other than corporate
+    designators alone ("The Company Inc" names no entity; rule 9.2)."""
+    words = normalize_entity_name(name).split()
+    return bool(words) and not all(word in ENTITY_SUFFIXES for word in words)
+
 def entity_names_match(left, right):
-    """True only for one entity: equal after normalisation and corporate-suffix removal. None when
-    either name cannot be compared, or when one is a whole-word part of the other ("Clinics Inc" and
-    "Orchard Ridge Clinics"): such a name is neither the same entity nor plainly another (rule 9.9).
-    False otherwise."""
+    """True only for one entity: equal after normalisation and trailing-designator removal. None
+    when either name cannot be compared, or when every word of one is also a word of the other, in
+    any order and with gaps ("Clinics Inc" or "Orchard Clinics" for "Orchard Ridge Clinics"): such a
+    name is neither the same entity nor plainly another (rule 9.9). False otherwise, including two
+    names that only share some words ("Northwind Clinics" and "Orchard Ridge Clinics")."""
+    if not entity_matchable(left) or not entity_matchable(right):
+        return None
     left_name = normalize_entity_name(left)
     right_name = normalize_entity_name(right)
     if not left_name or not right_name:
@@ -249,13 +266,8 @@ def entity_names_match(left, right):
     right_tokens = right_name.split()
     if left_tokens == right_tokens:
         return True
-    shorter, longer = (
-        (left_tokens, right_tokens)
-        if len(left_tokens) <= len(right_tokens)
-        else (right_tokens, left_tokens)
-    )
-    width = len(shorter)
-    if any(longer[index:index + width] == shorter for index in range(len(longer) - width + 1)):
+    left_count, right_count = Counter(left_tokens), Counter(right_tokens)
+    if not left_count - right_count or not right_count - left_count:
         return None
     return False
 
@@ -283,7 +295,7 @@ def ambiguous_row(item, engagement):
     if (not isinstance(raw_name, str) or not raw_name.strip() or is_reserved_label(raw_name)
             or is_suspect(raw_name) or has_marker(raw_name) or shape_problems(item)):
         return False
-    if not normalize_entity_name(engagement.get("client_name")) or not normalize_entity_name(raw_name):
+    if not entity_matchable(engagement.get("client_name")) or not entity_matchable(raw_name):
         return False
     return applies_to_client(item, engagement) is None
 
@@ -349,7 +361,7 @@ def merge_engagement(payload, constraints, escalations):
         )
     if not str(merged.get("client_name") or "").strip():
         sys.exit("engagement.client_name is required for fail-closed conflict governance")
-    if not normalize_entity_name(merged["client_name"]):
+    if not entity_matchable(merged["client_name"]):
         escalations.append(
             "engagement.client_name cannot be normalized to a matchable entity; "
             "all candidates require independence review"
@@ -529,7 +541,7 @@ def verdict_for(role, row, constraints, held_rows=None, foreign_hold=False, regi
     if lowest_confidence < CONFIDENCE_FLOOR:
         acc.add("needs_review", f"evidence confidence {lowest_confidence} below {CONFIDENCE_FLOOR}", f"{RULES} #8.1")
 
-    if not normalize_entity_name(engagement.get("client_name")):
+    if not entity_matchable(engagement.get("client_name")):
         acc.add("needs_review", "engagement client name cannot be matched reliably", f"{RULES} #9.2")
     if engagement_unsafe(engagement):
         acc.add("needs_review", "engagement client or affiliate name was withheld by source screening",
