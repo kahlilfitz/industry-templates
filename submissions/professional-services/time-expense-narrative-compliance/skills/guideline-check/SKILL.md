@@ -4,7 +4,7 @@ description: 'Checks drafted, coded time narratives against the client billing g
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/guideline_check.py on coded.json from code-map and activity.json from activity-pull; reads the config/signal-sources.json, contracts/ and references/ (client-billing-guidelines.md) in this skill folder and writes governed.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.5"
+  version: "1.0.6"
   icon: ic_fluent_text_grammar_checkmark_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

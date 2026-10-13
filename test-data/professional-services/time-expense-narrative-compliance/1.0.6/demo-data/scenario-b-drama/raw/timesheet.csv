@@ -1,0 +1,5 @@
+entry_id,date,person,hours,narrative,activity_ids,phase_code,task_code
+TE-B-001,2026-09-15,Morgan Lee,7.5,"Attention to various matters, including kickoff meeting, review and revise integration memo, follow up on security exceptions, and work on client implementation questions.","B-CAL-001;B-DOC-001;B-DOC-002;B-MAIL-001",DL,DL300
+TE-B-002,2026-09-14,Priya Shah,1.5,"Attended billing controls kickoff meeting with client team to discuss implementation assumptions and next steps.",B-CAL-002,DL,DL300
+TE-B-003,2026-09-14,Jordan Kim,1.5,"Attended billing controls kickoff meeting with client team to discuss implementation assumptions and next steps.",B-CAL-003,AN,AN220
+TE-B-004,2026-09-18,Morgan Lee,0.3,"Coordinated internal staffing coverage for next week.",B-CAL-004,NB,NB900

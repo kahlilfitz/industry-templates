@@ -5,7 +5,7 @@ The rules live in the shared billing_rules.py (identical copies next to code_map
 exception_report.py), whose constants mirror references/client-billing-guidelines.md section by
 section. The model reports these flags; it never decides, suppresses or downgrades compliance verdicts.
 
-v1.0.5 rules (billing_rules.govern):
+v1.0.6 rules (billing_rules.govern):
 - Signals from disabled or unknown sources are dropped first (signal_policy.py, #10.1); an
   entry that linked one gets a hold_for_review flag and the signal never counts as evidence.
 - Rows outside the recorded timekeeper scope are withheld before any check (#12.1). A recorded team view
@@ -43,7 +43,7 @@ import billing_rules  # noqa: E402  (shared rules, identical copies next to code
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = billing_rules.GUIDELINE_ENGINE
-ENGINE_VERSION = "guideline_check/1.0.5"
+ENGINE_VERSION = "guideline_check/1.0.6"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 # Narrative fields are data. The tripwire is shared by every engine (signal_policy.py, #11.1).
 embedded_instruction = signal_policy.embedded_instruction

@@ -6,7 +6,7 @@ engagement manager and billing coordinator. It only writes a local draft file: i
 e-mail, chat or network code and never sends, submits, approves or alters WIP balances.
 Engine flags are quoted verbatim; nothing is dropped or softened.
 
-v1.0.5: governed data that holds rows outside the recorded timekeeper scope is refused
+v1.0.6: governed data that holds rows outside the recorded timekeeper scope is refused
 (client-billing-guidelines.md #12.1). Every data-derived cell (person, subject, narrative,
 flag detail, exclusion reason, engagement names) passes the shared embedded-instruction
 tripwire; flagged text is replaced by a withheld marker and never printed (#11.2). The engagement
@@ -45,7 +45,7 @@ import billing_rules  # noqa: E402  (shared rules, identical copies next to code
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:exception_report"
-ENGINE_VERSION = "exception_report/1.0.5"
+ENGINE_VERSION = "exception_report/1.0.6"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 HEADER_KEYS = ("client_name", "matter_name", "engagement_id")
 

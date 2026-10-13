@@ -1,0 +1,4 @@
+workplan_id,engagement_id,item_type,match_key,activity_class,deliverable,purpose
+WP-A-01,ENG-SYN-042,calendar_event,MTG-ORION-101,client_meeting,Billing Workflow Requirements Specification,confirm implementation requirements
+WP-A-02,ENG-SYN-042,document,service-catalog-draft.docx,,Billing Workflow Requirements Specification,identify billing workflow requirements
+WP-A-03,ENG-SYN-042,document,implementation-decision-log.docx,,Implementation Decision Record,summarize approved billing workflow assumptions

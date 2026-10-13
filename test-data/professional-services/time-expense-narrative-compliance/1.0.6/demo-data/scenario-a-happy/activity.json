@@ -1,0 +1,303 @@
+{
+  "contract_version": "ps.time-expense-narrative-compliance.v1",
+  "engagement": {
+    "engagement_id": "ENG-SYN-042",
+    "client_name": "Orion Advisory Cooperative",
+    "matter_name": "Billing Controls Implementation",
+    "billing_guidelines_id": "OCG-SYNTH-2026-09",
+    "engagement_manager": "Dana Whitfield",
+    "source": "connector:engagement-workspace",
+    "confidence": 0.99,
+    "citations": [
+      "raw/engagement-letter-extract.md #engagement"
+    ]
+  },
+  "period": {
+    "start": "2026-09-14",
+    "end": "2026-09-18"
+  },
+  "signal_config": {
+    "config_version": "ps.time-expense-narrative-compliance.signal-sources.v1",
+    "default_posture": "narrowest_range_that_still_works",
+    "purpose": "Limit activity grounding to engagement-scoped signals unless the firm explicitly enables broader sources.",
+    "sources": {
+      "calendar": {
+        "enabled": true,
+        "scope": "engagement_calendar_only",
+        "content": "title_organizer_attendees_start_end_location_only",
+        "lookback_days_default": 7,
+        "requires_engagement_id": true
+      },
+      "document_activity": {
+        "enabled": true,
+        "scope": "engagement_workspace_only",
+        "content": "file_name_activity_type_timestamp_duration_no_document_body",
+        "requires_engagement_workspace": true
+      },
+      "mailbox_content": {
+        "enabled": false,
+        "scope": "off_by_default",
+        "content": "disabled",
+        "enablement_requires": [
+          "firm_policy_approval",
+          "matter_scope_filter",
+          "user_notice"
+        ]
+      },
+      "mailbox_metadata": {
+        "enabled": false,
+        "scope": "off_by_default",
+        "content": "sender_recipient_subject_timestamp_only_when_enabled",
+        "enablement_requires": [
+          "firm_policy_approval",
+          "matter_scope_filter",
+          "user_notice"
+        ]
+      }
+    },
+    "redaction": {
+      "default": "summarize_signals_before_drafting",
+      "store_raw_mail": false,
+      "store_document_body": false
+    },
+    "citation": "client-billing-guidelines.md #10.1",
+    "enforcement": "Every engine (activity_pull, narrative_draft, code_map, guideline_check, exception_report) applies this file via signal_policy.py; most restrictive of this file and the packet's signal_config wins; disabled or unknown sources are dropped and recorded in provenance.excluded_signals."
+  },
+  "guidelines": {
+    "guidelines_id": "OCG-SYNTH-2026-09",
+    "summary": "Synthetic outside-counsel-style billing guideline excerpt for demos.",
+    "source": "connector:sharepoint-guidelines",
+    "confidence": 0.98,
+    "citations": [
+      "client-billing-guidelines.md #1.1",
+      "client-billing-guidelines.md #2.1",
+      "client-billing-guidelines.md #3.1",
+      "client-billing-guidelines.md #8.1"
+    ]
+  },
+  "code_structure": {
+    "code_set_id": "SYNTH-PS-CODES-2026",
+    "source": "connector:billing-code-repository",
+    "confidence": 0.98,
+    "citations": [
+      "task-phase-codes.md #1.1",
+      "task-phase-codes.md #2.1",
+      "task-phase-codes.md #3.1",
+      "task-phase-codes.md #4.1"
+    ]
+  },
+  "activity_signals": [
+    {
+      "activity_id": "A-CAL-001",
+      "person": "Alex Rivera",
+      "date": "2026-09-14",
+      "activity_class": "client_meeting",
+      "duration_hours": 1.2,
+      "subject": "billing workflow discovery session",
+      "purpose": "confirm implementation requirements",
+      "deliverable": "Billing Workflow Requirements Specification",
+      "meeting_id": "MTG-ORION-101",
+      "billable_signal": true,
+      "organizer": "Orion product lead",
+      "attendees": [
+        "Orion product lead",
+        "Alex Rivera"
+      ],
+      "source": "connector:m365-calendar",
+      "confidence": 0.96,
+      "citations": [
+        "raw/calendar-export.csv row 2",
+        "raw/engagement-workplan.csv row 2",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "A-DOC-001",
+      "person": "Alex Rivera",
+      "date": "2026-09-15",
+      "activity_class": "document_analysis",
+      "duration_hours": 1.4,
+      "subject": "service catalog draft",
+      "purpose": "identify billing workflow requirements",
+      "deliverable": "Billing Workflow Requirements Specification",
+      "meeting_id": null,
+      "billable_signal": true,
+      "file_name": "service-catalog-draft.docx",
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.94,
+      "citations": [
+        "raw/document-activity-log.csv row 2",
+        "raw/engagement-workplan.csv row 3",
+        "client-billing-guidelines.md #10.1"
+      ]
+    },
+    {
+      "activity_id": "A-DOC-002",
+      "person": "Alex Rivera",
+      "date": "2026-09-16",
+      "activity_class": "deliverable_drafting",
+      "duration_hours": 0.8,
+      "subject": "implementation decision log",
+      "purpose": "summarize approved billing workflow assumptions",
+      "deliverable": "Implementation Decision Record",
+      "meeting_id": null,
+      "billable_signal": true,
+      "file_name": "implementation-decision-log.docx",
+      "source": "connector:engagement-document-activity",
+      "confidence": 0.94,
+      "citations": [
+        "raw/document-activity-log.csv row 3",
+        "raw/engagement-workplan.csv row 4",
+        "client-billing-guidelines.md #10.1"
+      ]
+    }
+  ],
+  "time_entries": [
+    {
+      "entry_id": "TE-A-001",
+      "person": "Alex Rivera",
+      "date": "2026-09-14",
+      "duration_hours": 1.2,
+      "narrative": "",
+      "activity_ids": [
+        "A-CAL-001"
+      ],
+      "submitted_phase_code": null,
+      "submitted_task_code": null,
+      "source": "connector:timesheet",
+      "confidence": 0.97,
+      "citations": [
+        "raw/timesheet.csv row 2"
+      ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": []
+    },
+    {
+      "entry_id": "TE-A-002",
+      "person": "Alex Rivera",
+      "date": "2026-09-15",
+      "duration_hours": 1.4,
+      "narrative": "",
+      "activity_ids": [
+        "A-DOC-001"
+      ],
+      "submitted_phase_code": null,
+      "submitted_task_code": null,
+      "source": "connector:timesheet",
+      "confidence": 0.97,
+      "citations": [
+        "raw/timesheet.csv row 3"
+      ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": []
+    },
+    {
+      "entry_id": "TE-A-003",
+      "person": "Alex Rivera",
+      "date": "2026-09-16",
+      "duration_hours": 0.8,
+      "narrative": "",
+      "activity_ids": [
+        "A-DOC-002"
+      ],
+      "submitted_phase_code": null,
+      "submitted_task_code": null,
+      "source": "connector:timesheet",
+      "confidence": 0.97,
+      "citations": [
+        "raw/timesheet.csv row 4"
+      ],
+      "excluded_activity_ids": [],
+      "cross_person_activity_ids": []
+    }
+  ],
+  "provenance": {
+    "demo_scenario": "scenario-a-happy",
+    "generated_at": "2026-09-23T00:00:00Z",
+    "engines": [
+      "activity_pull/1.0.6"
+    ],
+    "sources_read": [
+      "calendar",
+      "document_activity"
+    ],
+    "skipped_sources": [
+      {
+        "policy_key": "mailbox_metadata",
+        "file": "raw/mailbox-summary.txt",
+        "reason": "source disabled; file not opened",
+        "citations": [
+          "client-billing-guidelines.md #10.1"
+        ]
+      },
+      {
+        "policy_key": "mailbox_content",
+        "file": "raw/mailbox-summary.txt",
+        "reason": "source disabled; file not opened",
+        "citations": [
+          "client-billing-guidelines.md #10.1"
+        ]
+      }
+    ],
+    "out_of_scope_rows": [],
+    "excluded_signals": [],
+    "engagement_identity": {
+      "engagement_id": "ENG-SYN-042",
+      "client_name": "Orion Advisory Cooperative",
+      "matter_name": "Billing Controls Implementation",
+      "engagement_manager": "Dana Whitfield",
+      "recorded_by": "engine:activity_pull",
+      "citations": [
+        "raw/engagement-letter-extract.md #engagement",
+        "client-billing-guidelines.md #13.3"
+      ]
+    },
+    "timekeeper_scope": {
+      "mode": "self",
+      "requester": "Alex Rivera",
+      "people": [
+        "Alex Rivera"
+      ],
+      "team_view": null,
+      "withheld": null,
+      "citations": [
+        "client-billing-guidelines.md #12.1"
+      ]
+    },
+    "period_check": {
+      "requested": {
+        "start": "2026-09-14",
+        "end": "2026-09-18"
+      },
+      "data_dates_in_period": [
+        "2026-09-14",
+        "2026-09-16"
+      ],
+      "data_dates_available": [
+        "2026-09-14",
+        "2026-09-16"
+      ],
+      "status": "data_found",
+      "warning": null
+    },
+    "signal_policy": {
+      "enabled_sources": [
+        "calendar",
+        "document_activity"
+      ],
+      "disabled_sources": [
+        "mailbox_content",
+        "mailbox_metadata"
+      ],
+      "policies_applied": [
+        "config/signal-sources.json",
+        "packet signal_config"
+      ],
+      "rule": "most_restrictive_wins",
+      "engine": "signal_policy/1.0.6",
+      "citations": [
+        "client-billing-guidelines.md #10.1"
+      ]
+    }
+  }
+}

@@ -1,0 +1,1 @@
+Mailbox content is off by default in config/signal-sources.json. This demo file is a synthetic summary only; no mailbox body is used.
