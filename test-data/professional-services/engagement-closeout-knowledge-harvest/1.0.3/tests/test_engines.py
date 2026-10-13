@@ -2587,6 +2587,84 @@ class QARound6ScreeningTests(unittest.TestCase):
         self.assertLess(times[1] / times[0], 6, f"50 names: {times[0]:.2f} s, 200 names: {times[1]:.2f} s")
 
 
+# QA round 7 (#8.6): a clause split between a record's title and an anchor or sheet name, with a
+# source in between, in any ';' part. The first two pairs are the reviewer's.
+ROUND7_ANCHOR_SPLITS = (("Publi", "DOC-1#shThisRecord"), ("Publi", "DOC-1#intro; DOC-2#shThisRecord"),
+                        ("shThisRecord", "DOC-1#intro; DOC-2#Publi"), ("Sk", "DOC-1#ipThisRecord"),
+                        ("U", "DOC-4#seThisRecord"), ("Publi", "raw/a.xlsx sheet shThisRecord, row 2"),
+                        ("Release", "DOC-3#all-records"))
+# Touching ends that read as a noun phrase: a lead verb that is also a noun is the head of a longer title.
+ROUND7_ANCHOR_BENIGN = (("Go-live readiness review", "raw/go-live-runbook.md#all-sites"),
+                        ("Go-live readiness review", "raw/set-up-guide.md#all-records"),
+                        ("Data set", "DOC-3#all-records"), ("Asset list", "DOC-3#all-assets"),
+                        ("User research record", "raw/add-inventory.md#our-assets"),
+                        ("Publishing guidelines", "DOC-9#publishing-guidelines"))
+
+
+class QARound7Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 7, confidentiality-sanitisation-rules.md #8.6 item 7: every anchor and sheet name meets
+    the record's title at its touching ends, read by the strict boundary recogniser."""
+
+    def test_title_and_anchor_split_is_withheld_through_the_chain(self):
+        for title, citation in ROUND7_ANCHOR_SPLITS:
+            with self.subTest(title=title, citation=citation):
+                self.assertTrue(core.title_shape_ok(title))
+                self.assertTrue(core.citation_shape_ok(citation))
+                self.assertTrue(core.joined_spells_clause(title, citation))
+        for title, citation in ROUND7_ANCHOR_SPLITS[:2]:
+            raw = scenario_raw()
+            placed = {("candidate_assets", 0, "title"): title, ("candidate_assets", 0, "citation"): citation}
+            for path, value in placed.items():
+                set_path(raw, path, value)
+            with self.subTest(title=title, citation=citation, chain=True):
+                res = chain(raw)
+                self.assert_render_shape_holds(res, placed, location="record")
+                self.assertNotIn("shThisRecord", everything(res))
+
+    def test_noun_phrase_boundaries_and_the_corpus_pairs_stay_clear(self):
+        for title, citation in ROUND7_ANCHOR_BENIGN:
+            with self.subTest(title=title, citation=citation):
+                self.assertFalse(core.joined_spells_clause(title, citation))
+        corpus = render_corpus()
+        titles = corpus["regressions"]["titles"] + corpus["controls"] + corpus["titles"]
+        citations = corpus["regressions"]["citations"] + corpus["citations"]
+        self.assertEqual(9810, len(titles) * len(citations))
+        held = [(title, citation) for title in titles for citation in citations
+                if core.joined_spells_clause(title, citation)]
+        self.assertEqual([], held)
+        raw = scenario_raw()
+        for index, (title, citation) in enumerate(ROUND7_ANCHOR_BENIGN[:3]):
+            set_path(raw, ("candidate_assets", index, "title"), title)
+            set_path(raw, ("candidate_assets", index, "citation"), citation)
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], [hold["path"] for hold in holds(res)])
+
+
+class QARound7ScreeningTests(RefusalMixin, unittest.TestCase):
+    """QA round 7 (#8.1): the upstream escalations count toward the 2500-record total."""
+
+    def test_escalations_count_toward_the_total_ceiling(self):
+        at_bound = scaled_raw(1000, rows=750)
+        at_bound["candidate_assets"] = at_bound["candidate_assets"][:1000 - (sum(
+            len(at_bound[name]) for name in core.RAW_ARRAYS) - core.MAX_TOTAL_RECORDS)]
+        self.assertEqual(core.MAX_TOTAL_RECORDS, sum(len(at_bound[name]) for name in core.RAW_ARRAYS))
+        at_bound["escalations"] = ["Upstream source register incomplete for phase 2"]
+        needle = "the input arrays and escalations hold more than 2500 records together"
+        with self.assertRaises(core.InputError) as caught:
+            core.validate_input(at_bound)
+        self.assertIn(needle, str(caught.exception))
+        self.assert_refused(run_stage(asset_identify, at_bound), needle,
+                            forbid=("Upstream source register",))
+        at_bound["candidate_assets"].pop()
+        core.validate_input(at_bound)
+        over = scenario_raw()
+        over["escalations"] = [f"Upstream note {i}" for i in range(core.MAX_RECORDS + 1)]
+        with self.assertRaises(core.InputError) as caught:
+            core.validate_input(over)
+        self.assertIn("escalations has more than 1000 items", str(caught.exception))
+
+
 class DerivationTests(unittest.TestCase):
     def test_g4b_structured_inputs_re_derive_from_each_raw_pack(self):
         for scenario in SCENARIOS:
@@ -2790,10 +2868,10 @@ GROUPS = {
     "sanitisation": (SanitizationTests,),
     "policy": (PolicyTests,),
     "integrity": (IntegrityTests,),
-    "screening": (ScreeningTests, QARound5ScreeningTests, QARound6ScreeningTests),
+    "screening": (ScreeningTests, QARound5ScreeningTests, QARound6ScreeningTests, QARound7ScreeningTests),
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
-    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests),
+    "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),

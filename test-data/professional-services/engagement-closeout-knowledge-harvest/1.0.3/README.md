@@ -59,10 +59,10 @@ finishes (a failing subtest fails its test), prints failure details after the re
 | `sanitisation` | 7 | Govern holds, citations, raw-seed exclusion and engine versions (`/1.0.3`) |
 | `policy` | 9 | Ties, empty terms, release versus hold, precedence and provenance labels |
 | `integrity` | 9 | Every stage re-derives the previous stage's whole document and refuses edits |
-| `screening` | 17 | Embedded-instruction screen: families, locations, joins, oversize, rendered holds; single-pass scanning, the screening ceilings (1000 per array, 2500 in total, 200 per list), a timed 100-asset chain and linear scaling from 100 to 400 assets |
+| `screening` | 18 | Embedded-instruction screen: families, locations, joins, oversize, rendered holds; single-pass scanning, the screening ceilings (1000 per array or escalations list, 2500 across the arrays and escalations, 200 per list), a timed 100-asset chain and linear scaling from 100 to 400 assets |
 | `steering-corpus` | 5 | Vendored shared detector and corpus scored at the real call site |
 | `steering-sets` | 9 | Closeout attack, paraphrase and benign sets, and every detector-gap line in every rendered field, ID and draft slot |
-| `render-policy` | 27 | Titles, citations and IDs render only in an allow-shape (#8.6), including upper-case, CamelCase, fused, zero-width, combining-mark and look-alike-digit forms, short fused lead verbs and clauses split between a title and its citation, a citation's source and anchor, or adjacent citation parts; benign fused locators and the realistic render corpus still render; withheld flags and skeleton markers |
+| `render-policy` | 29 | Titles, citations and IDs render only in an allow-shape (#8.6), including upper-case, CamelCase, fused, zero-width, combining-mark and look-alike-digit forms, short fused lead verbs and clauses split between a title and its citation (source, file name or any anchor or sheet name), a citation's source and anchor, or adjacent citation parts; benign fused locators, the realistic render corpus and its 9,810 title and citation pairs still render; withheld flags and skeleton markers |
 | `drafting` | 7 | Knowledge-record skeleton and `record_check.py` refusal codes, including short-phrase copies |
 | `derivation` | 1 | Demo inputs re-derive from each scenario's raw pack (G4b) |
 | `goldens` | 1 | Both scenarios reproduce every `expected/` file byte for byte, LF only |
@@ -70,7 +70,7 @@ finishes (a failing subtest fails its test), prints failure details after the re
 | `release` | 8 | Guardrails, citations, routing, versions, stand-alone skills and the runner |
 | `harness` | 2 | A crashing test is reported as FAIL |
 
-The full suite (132 tests) takes about three minutes.
+The full suite (135 tests) takes about three minutes.
 
 ## What the scenarios cover
 

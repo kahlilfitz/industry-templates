@@ -521,9 +521,14 @@ def validate_input(doc, generated_at=None, prior=None):
         if len(doc[name]) > MAX_RECORDS:
             raise InputError(f"{name} has more than {MAX_RECORDS} records, above the screening ceiling (#8.1); "
                              f"nothing was screened (values not repeated)")
-    if sum(len(doc[name]) for name in RAW_ARRAYS) > MAX_TOTAL_RECORDS:
-        raise InputError(f"the input arrays hold more than {MAX_TOTAL_RECORDS} records together, above the screening "
-                         f"ceiling (#8.1); nothing was screened (values not repeated)")
+    # The upstream escalations are a screened top-level list too, so they count toward every ceiling.
+    upstream = len(doc["escalations"]) if type(doc.get("escalations")) is list else 0
+    if upstream > MAX_RECORDS:
+        raise InputError(f"escalations has more than {MAX_RECORDS} items, above the screening ceiling (#8.1); "
+                         f"nothing was screened (values not repeated)")
+    if sum(len(doc[name]) for name in RAW_ARRAYS) + upstream > MAX_TOTAL_RECORDS:
+        raise InputError(f"the input arrays and escalations hold more than {MAX_TOTAL_RECORDS} records together, "
+                         f"above the screening ceiling (#8.1); nothing was screened (values not repeated)")
     if "engagement" not in doc or type(doc["engagement"]) is not dict:
         raise InputError("missing or invalid required object: engagement")
 
@@ -550,8 +555,6 @@ def validate_input(doc, generated_at=None, prior=None):
     escalations, merged = [], set()
     if "escalations" in doc:
         need_list(doc["escalations"], "escalations")
-        if len(doc["escalations"]) > MAX_RECORDS:
-            raise InputError(f"escalations has more than {MAX_RECORDS} items, above the screening ceiling (#8.1)")
         for index, item in enumerate(doc["escalations"]):
             _check_text(item, f"escalations[{index}]", ctx)
             if item == WITHHELD or item not in merged:  # identical upstream escalations merge once (A8)
@@ -947,16 +950,78 @@ def citation_stems(citation):
     return found
 
 
+def _boundary_clause(left, right):
+    """The strict recogniser for one touching boundary (left's tail meets right's head), on comparison
+    skeletons: a steering word or verdict phrase that straddles the boundary, or a trigger verb that
+    starts a part of left and reaches its end, followed by clause material in full, as for a short fused
+    verb (_object_run: determiners then an object, or a pronoun object, optionally 'now'). The verb is
+    split across the boundary, or is left's last word; a lead verb that is also a noun ('review',
+    'record', 'set') and lies wholly in left counts only when it also starts left, since the last word
+    of a longer noun phrase is its head noun. 'Publi' + 'shThisRecord' and 'Review' + 'this-section'
+    are clauses; 'Go-live readiness review' + 'all-records' and 'Data set' + 'all-sites' are not."""
+    def split(text):
+        return [part.casefold() for run in re.findall(r"[^\W_]+", text) for part in _case_parts(run)]
+
+    head, tail = split(left), split(right)
+    if not head or not tail:
+        return False
+    parts = head + tail
+    collapsed, boundary = "".join(parts), len("".join(head))
+    starts, position = {}, 0
+    for index, part in enumerate(parts):
+        starts[position] = index
+        position += len(part)
+    for needle in _FUSED_NEEDLES:
+        start = collapsed.find(needle)
+        while start >= 0:
+            if start < boundary < start + len(needle):
+                return True
+            start = collapsed.find(needle, start + 1)
+    for verb in _TRIGGER_VERBS:
+        start = collapsed.find(verb)
+        while start >= 0:
+            end = start + len(verb)
+            if start in starts and start < boundary <= end and (
+                    end > boundary or start == 0 or verb in _TITLE_VERBS):
+                if end in starts:
+                    rest, later = "", parts[starts[end]:]
+                else:
+                    first = max(begin for begin in starts if begin < end)
+                    rest, later = parts[starts[first]][end - first:], parts[starts[first] + 1:]
+                if _object_run(rest, later):
+                    return True
+            start = collapsed.find(verb, start + 1)
+    return False
+
+
+def boundary_spells_clause(left, right):
+    """True when left followed directly by right spells a clause across their touching ends (#8.6)."""
+    return any(_boundary_clause(one, two)
+               for one in comparison_skeletons(left) for two in comparison_skeletons(right))
+
+
+def citation_names(citation):
+    """Every anchor and sheet or tab name of every ';' part of a citation, in rendering order."""
+    return [anchor or sheet for anchor, sheet in _CITE_WORDS.findall(citation)]
+
+
 def joined_spells_clause(title, citation):
     """A record's title and citation render together, so a clause split between them is refused: the
     canonical check (without the separator-token test each value already passed) reads the title
     followed by the citation's words and the reverse, and, because a directory prefix such as raw/ is
-    conventional, the title next to each source file name in either order. Only these contiguous
-    boundaries are read: the title is not paired with an anchor or sheet name further along."""
+    conventional, the title next to each source file name in either order. Each anchor and sheet name
+    of every ';' part also meets the title at its touching ends (title + name and name + title), read
+    only by the strict boundary recogniser (boundary_spells_clause), so 'Publi' with
+    'DOC-1#shThisRecord' is refused and 'Go-live readiness review' with '...#all-sites' is not."""
     pieces = citation_words(citation)
     joins = [[title] + pieces, pieces + [title]]
     joins += [pair for stem in citation_stems(citation) for pair in ([title, stem], [stem, title])]
-    return any(spells_clause(" ".join(join), r"\s+", tokens=False) for join in joins)
+    if any(spells_clause(" ".join(join), r"\s+", tokens=False) for join in joins):
+        return True
+    # Each anchor and sheet name meets the title at a boundary of its own (title tail + anchor head and
+    # anchor tail + title head), read by the strict boundary recogniser only.
+    return any(boundary_spells_clause(title, name) or boundary_spells_clause(name, title)
+               for name in citation_names(citation))
 
 
 def shape_hits(path, value):

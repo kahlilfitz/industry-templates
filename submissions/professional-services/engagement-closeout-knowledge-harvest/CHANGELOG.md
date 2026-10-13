@@ -124,9 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 132 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 135 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
-  round 6). It ships with:
+  round 6, 132 before QA round 7). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -524,4 +524,55 @@ so are the contract JSON copies.
   All four round-6 tests and the updated bounds test fail on `9f122f8` and pass now.
 
 **Golden differences (QA round 6).** None. Every `expected/` file in both scenarios is byte-for-byte
+unchanged.
+
+### QA round 7 (on `b366de4`)
+
+One Medium and one Low finding, fixed in the plugin. The knowledge-record output contract and the
+contract JSON copies are unchanged.
+
+- **Title and anchor boundary joins (Medium).** Round 6 narrowed the title join to the whole citation
+  and each source file name. That reopened a split with a source in between: title `Publi` with
+  citation `DOC-1#shThisRecord`, or with `DOC-1#intro; DOC-2#shThisRecord`, completed the chain with
+  no hold. Every anchor and sheet name of every `;` part now meets the title at its touching ends,
+  title then name and name then title. Both fields are withheld with a `render_shape` hold (location
+  `record`). These boundaries use a strict recogniser:
+  - a steering word or verdict phrase that straddles the boundary, or
+  - a trigger verb that starts a part of the left value and reaches its end, followed by clause
+    material in full: determiners then an object, or it, them or everything, optionally `now`. This
+    is the round-6 short-verb rule.
+
+  A lead verb that is also a noun and lies wholly in the left value counts only when it also starts
+  that value, because the last word of a longer noun phrase is its head noun. So `Release` with
+  `DOC-3#all-records` is withheld, while `Go-live readiness review` with `…#all-sites` or
+  `…#all-records`, and `Data set` with `DOC-3#all-records`, render. Without that head-noun condition,
+  10 of the 9,810 corpus title–citation pairs were held (titles ending in `review` or `record` next
+  to `#all-records` or `#our-assets`). With it, none are.
+- **Escalations count toward the total (Low).** The 2500-record total summed only the input arrays,
+  so 2500 records plus upstream escalations were accepted. The total now includes the `escalations`
+  list, and that list's own 1000-item ceiling is checked in the same place. Both are clean refusals
+  before anything is screened. The README, the `artifact-assemble` and `asset-identify` workflows
+  and #8.1 now state exactly this: 1000 per array or `escalations` list, 2500 across the arrays and
+  `escalations` together, and 200 per `named_people` or `third_party_products` list. The engines
+  replay only the input escalations (`provenance.input_escalations`), so an engine's own escalations
+  never push a later stage over the ceiling.
+- **False holds.** On the 238-item corpus, 0 items are held. On all 9,810 title–citation pairs, 0
+  are held.
+- **Timings.** 100 generated assets take 8.9 / 9.0 / 9.6 / 9.7 s per stage (37.2 s for the chain).
+  `b366de4` takes 37.2 s on the same machine, so the boundary joins add no measurable time.
+- **Reference.** #8.1 and #8.6 item 7 in all five byte-identical copies document the escalations in
+  the total and the strict anchor-boundary join.
+- **Tests (135 in 16 groups).**
+  - `QARound7Tests` in `render-policy` (2 tests):
+    - seven title–anchor splits, each of whose halves passes alone, are refused by the record join,
+      and both reported repros run through the real chain with both fields withheld;
+    - six noun-phrase boundaries and all 9,810 corpus pairs stay clear, and three of them run
+      through the chain with no hold.
+  - `QARound7ScreeningTests` in `screening` (1 test): 2500 records plus one escalation is a clean
+    refusal that does not echo the escalation, 2499 plus one is accepted, and 1001 escalations are
+    refused.
+
+  Both defect tests fail on `b366de4` and pass now. The benign-boundary test passes on both.
+
+**Golden differences (QA round 7).** None. Every `expected/` file in both scenarios is byte-for-byte
 unchanged.

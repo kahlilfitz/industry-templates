@@ -36,7 +36,7 @@ An engagement workspace or SharePoint folder, the deliverable register, decision
 
 ### Size and runtime
 
-Screening is linear in the number of records, so a large closeout is processed whole. Each input array (deliverable register, candidate assets, decision log, retrospective inputs) holds at most 1000 records, all of them together at most 2500, and each text or name list (`named_people`, `third_party_products`) at most 200 items. A larger input is refused before anything is screened (`input error: ... above the screening ceiling (#8.1)`); nothing is dropped silently. Harvest one workstream or phase per run instead, each with its own knowledge record. Each engine stage takes about 9 seconds per 100 candidate assets (about 35 seconds for 400, about 90 for 1000), and up to about 2.5 minutes at the 2500-record ceiling.
+Screening is linear in the number of records, so a large closeout is processed whole. Each input array (deliverable register, candidate assets, decision log, retrospective inputs, confidentiality terms) and the upstream `escalations` list holds at most 1000 records, the input arrays and `escalations` together at most 2500, and each text or name list inside a record (`named_people`, `third_party_products`) at most 200 items. A larger input is refused before anything is screened (`input error: ... above the screening ceiling (#8.1)`); nothing is dropped silently. Harvest one workstream or phase per run instead, each with its own knowledge record. Each engine stage takes about 9 seconds per 100 candidate assets (about 35 seconds for 400, about 90 for 1000), and up to about 2.5 minutes at the 2500-record ceiling.
 
 ## Package
 
