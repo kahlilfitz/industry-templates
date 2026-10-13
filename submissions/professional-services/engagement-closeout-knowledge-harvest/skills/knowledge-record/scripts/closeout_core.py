@@ -1038,33 +1038,61 @@ def _run_reads_clause(part):
 _SHORTHAND_VERBS = frozenset("go golive reuse ship proceed use deploy launch merge export".split())
 
 
-def _after_is_clause(parts):
-    """True when the parts after an allowlisted run-on begin clause material (#8.6): digit runs are
-    separators ('SafeTools2026Roadmap'), and a lone 2 or 4 is read as 'to' or 'for' before a verb
-    ('SafeTools2Reuse', 'SafeTools2Publish'), or before a verb that is also a noun only when clause
-    material follows it ('SafeTools2ShareThis'; 'SafeTools2Release' renders); the first word part is clause material when it is a clause word, determiner,
-    pronoun, object, preposition, strong verb or verdict word ('SafeTools_ThisRecord'), or a lower-case
-    run of such words ('SafeToolsThisrecord')."""
+# Clause material read later in the same token after an allowlisted run-on, once a verb has been read
+# there ('SafeTools2ReleaseRoadmapNow', 'SafeToolsReviewRoadmapNow'): determiners, pronoun objects and
+# 'now', without the short pronouns that end ordinary names ('MoveIT').
+_LATER_MATERIAL = frozenset(_DETERMINERS - {"it", "its", "us", "me", "my", "his", "her", "you", "your"})
+# Verbs that a later lone 2 or 4 does not turn into a clause on its own: they end product names
+# ('Teams2Go', 'Ready2Use').
+_LATER_SHORTHAND_NAMES = frozenset(("go", "use"))
+_RUN_VERBS = tuple(sorted({verb for verb in _TRIGGER_VERBS if len(verb) >= LEAD_RUN_MIN_CHARS} | _SHORTHAND_VERBS))
+
+
+def _after_is_clause(parts, reach=None):
+    """True when the parts after an allowlisted run-on hold clause material (#8.6). Digit runs are
+    separators ('SafeTools2026Roadmap'). The first word part, and the word after a verb that is also a
+    noun read after a lone 2 or 4 ('SafeTools2Release this record'), are clause material when they are a
+    clause word, determiner, pronoun, object, preposition, strong verb or verdict word (_NEXT_MATERIAL:
+    'SafeTools_ThisRecord'), or a lower-case run of such words ('SafeToolsThisrecord'). The scan then
+    reads every later part of the same token (the first reach parts), not only the first: a lone 2 or 4
+    read as 'to' or 'for' before a verb is a clause ('SafeTools2Reuse', 'SafeToolsPlan2Reuse'; after
+    the first word not before go or use, 'SafeToolsTeams2Go'), and once a verb has been read
+    (_TRIGGER_VERBS, a shorthand verb) a later determiner, pronoun object or 'now' (_LATER_MATERIAL), or
+    a lower-case run of clause words, completes the clause ('SafeTools2ReleaseRoadmapNow',
+    'SafeToolsReviewRoadmapNow'). 'SafeTools2Release', 'SafeTools2026Roadmap' and
+    'SafeToolsServiceNowMigration' render."""
+    reach = len(parts) if reach is None else reach
     tokens = []
     for index, part in enumerate(parts):
         # A look-alike digit folded inside a number ('2026' read '2o26') stays part of the number.
         folded = (len(part) == 1 and 0 < index < len(parts) - 1 and parts[index - 1].isdigit()
                   and parts[index + 1].isdigit())
         if (part.isdigit() or folded) and tokens and tokens[-1][0] == "number":
-            tokens[-1] = ("number", tokens[-1][1] + part)
+            tokens[-1] = ("number", tokens[-1][1] + part, tokens[-1][2])
         else:
-            tokens.append(("number" if part.isdigit() else "word", part))
-    shorthand = False
-    for index, (kind, part) in enumerate(tokens):
+            tokens.append(("number" if part.isdigit() else "word", part, index))
+    shorthand, pending, first, verb = False, True, True, False
+    for kind, part, origin in tokens:
         if kind == "number":
             shorthand = part in ("2", "4")
             continue
-        if shorthand and (part in _TITLE_VERBS or part in _SHORTHAND_VERBS):
+        if not pending and origin >= reach:
+            break
+        if shorthand and (part in _TITLE_VERBS or part in _SHORTHAND_VERBS) and (
+                first or part not in _LATER_SHORTHAND_NAMES):
             return True
-        if shorthand and part in _TITLE_LEAD_VERBS:
-            # A verb that is also a noun after a version number ('SafeTools2Release') needs clause material.
-            return _after_is_clause([text for _, text in tokens[index + 1:]])
-        return part in _NEXT_MATERIAL or _run_reads_clause(part)
+        # A verb that is also a noun after a version number ('SafeTools2Release', 'SafeTools2FilePlan')
+        # needs clause material after it.
+        noun_verb = shorthand and part in _TITLE_LEAD_VERBS
+        if pending and not noun_verb and (part in _NEXT_MATERIAL or _run_reads_clause(part)):
+            return True
+        if origin < reach and _run_reads_clause(part) and (verb or part.startswith(_RUN_VERBS)):
+            return True
+        if origin < reach and verb and part in _LATER_MATERIAL:
+            return True
+        pending = noun_verb
+        verb = verb or part in _TRIGGER_VERBS or part in _SHORTHAND_VERBS
+        shorthand, first = False, False
     return False
 
 
@@ -1080,7 +1108,7 @@ def _ordinary_word(word):
         word.endswith(suffix) and word[:-len(suffix)] + stem in _ORDINARY_RUN_ONS for suffix, stem in _INFLECTIONS)
 
 
-def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=()):
+def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=(), breaks=()):
     """A steering word or verdict phrase in the collapsed form. Inside one part (a run-together word,
     'pleaseapprove') it counts anywhere. Across parts it counts when it starts at a part start and ends
     at a part end ('Plea-se', not 'Roadmap lease'). Inside one value a verdict phrase also counts when a
@@ -1090,8 +1118,9 @@ def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=())
     begins inside the phrase and runs on in lower case (continuing) is held unless that whole word is
     an ordinary word (_ordinary_word: 'Safe|Toolkit', 'No|Needle', 'Safe|Tomorrow') whose letters after
     the phrase word begin no clause material (_rest_is_clause: 'They|Are|as' in 'TheyAreasClear') and
-    whose following parts begin no clause material (_after_is_clause: 'NoNeedsToReview',
-    'SafeToolsThisrecord', 'SafeTools2Reuse'); anything else is held
+    whose following parts, to the end of its token (up to a break: whitespace or a path break), hold
+    no clause material (_after_is_clause: 'NoNeedsToReview', 'SafeToolsThisrecord', 'SafeTools2Reuse',
+    'SafeToolsReviewRoadmapNow'); anything else is held
     ('SafeToreuse', 'SafeToarchive', 'TheyAreclear'; 'Xgood|to|Go' counts as before). A word
     inside the phrase always runs on into the phrase's next word, so only the phrase's end is read
     this way.
@@ -1111,7 +1140,10 @@ def _needle_hit(collapsed, starts, boundary=None, case_starts=(), continuing=())
         if not _ordinary_word(collapsed[first:stop]) or _rest_is_clause(collapsed[end:stop]):
             return False
         bounds = sorted(begin for begin in starts if begin >= stop) + [len(collapsed)]
-        return not _after_is_clause([collapsed[a:b] for a, b in zip(bounds, bounds[1:]) if b > a])
+        pieces = [(a, collapsed[a:b]) for a, b in zip(bounds, bounds[1:]) if b > a]
+        # The rest of the run-on's token: up to the next whitespace or path break (breaks).
+        limit = min([begin for begin in breaks if begin >= stop] + [len(collapsed)])
+        return not _after_is_clause([piece for _, piece in pieces], sum(1 for a, _ in pieces if a < limit))
     for needle in _FUSED_NEEDLES:
         start = collapsed.find(needle)
         while start >= 0:
@@ -1146,8 +1178,13 @@ def _spells_clause(text, separators, tokens):
             acronym = len(bare) >= 2 and bare.isupper()
             if low.endswith("n't") or (not acronym and low in _TITLE_CLAUSE_WORDS):
                 return True
-    parts, case_starts, continuing, position = [], set(), set(), 0
-    for run in re.findall(r"[^\W_]+", text):
+    parts, case_starts, continuing, breaks, position, previous = [], set(), set(), set(), 0, 0
+    for match in re.finditer(r"[^\W_]+", text):
+        run = match.group(0)
+        # Whitespace, a slash, backslash, '#', ',' or ';' ends a token for the run-on remainder scan.
+        if position and re.search(r"[\s/\\#,;]", text[previous:match.start()]):
+            breaks.add(position)
+        previous = match.end()
         for index, part in enumerate(_case_parts(run)):
             if index:
                 case_starts.add(position)
@@ -1164,7 +1201,7 @@ def _spells_clause(text, separators, tokens):
     for index, part in enumerate(parts):
         starts[position] = index
         position += len(part)
-    if _needle_hit(collapsed, starts, case_starts=case_starts, continuing=continuing):
+    if _needle_hit(collapsed, starts, case_starts=case_starts, continuing=continuing, breaks=breaks):
         return True
 
     def after(end):

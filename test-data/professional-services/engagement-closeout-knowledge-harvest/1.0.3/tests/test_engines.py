@@ -3341,6 +3341,80 @@ class QARound14Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
         self.assertNotIn("raw/to.go", everything(res))
 
 
+# QA round 15 (#8.6): the remainder scan after an allowlisted run-on reads every later part of the
+# same token, not only the first one.
+ROUND15_REPROS = ("SafeTools2ReleaseRoadmapNow", "SafeToolsReviewRoadmapNow", "SafeToolsPlan2Reuse")
+ROUND15_VARIANTS = ("NoNeedleTestingRoadmap2Ship", "SafeTools2ReviewGuideNow", "SafeTools-release-roadmap-now",
+                    "SafeTools_release_roadmap_now", "SafeTools2ReleaseRoadmapItNow",
+                    "SafeToolsShareRoadmapWithTheTeam", "NoNeedlesReleaseQ3RoadmapThisRecord",
+                    "SafeToolkitRoadmapReleasenow", "SafeToolsPlan2Publish", "SafeToolsRoadmapReusethis",
+                    "OkayToolkitPlanNowPlease")
+ROUND15_CLEAR = ("SafeTools2026RoadmapDraft", "SafeToolkitV2ReleaseNotes", "SafeTools2ReleaseNotes",
+                 "NoNeedles2025ReviewSummary", "SafeToolsReviewRoadmap", "SafeTomorrow2030Vision",
+                 "SafeToronto2026Office", "GoodTogether2Campaign", "SafeToolsReleaseCalendar2026",
+                 "NoNeedleTestingQ3Results", "SafeToolsRoadmapV2", "GoodTogetherWave4Rollout",
+                 "SafeToolkitPhase2Plan", "NoNeedleTestingRelease2Notes", "SafeToolsPro2026UserGuide",
+                 "SafeToolsServiceNowMigration", "SafeToolsTeams2Go", "SafeToolsRoadmapFineTuning",
+                 "SafeToolsRoadmapGoLivePlan", "SafeToolkitBook2GoApp", "SafeToolsReleaseNotesQ2",
+                 "SafeToolsReviewBoard2026", "NoNeedleRoadmapReadyReckoner", "SafeTools2FilePlan",
+                 "SafeTools2RecordRetention")
+ROUND15_SPACED_CLEAR = ("SafeTools rollout for the Nordics", "SafeToolkit guide for all teams")
+
+
+class QARound15Tests(RenderShapeMixin, RefusalMixin, unittest.TestCase):
+    """QA round 15, confidentiality-sanitisation-rules.md #8.6: after an allowlisted run-on, a verb
+    followed later in the same token by a determiner or 'now', or a later 2/4 before a verb, is
+    clause material even when other word parts come in between."""
+
+    place = QARound4Tests.place
+
+    def test_later_clause_material_in_the_same_token_is_withheld(self):
+        for value in ROUND15_REPROS + ROUND15_VARIANTS:
+            with self.subTest(value=value):
+                self.assertFalse(core.title_shape_ok(value))
+                self.assertFalse(core.id_shape_ok("AST-" + value))
+                self.assertFalse(core.citation_shape_ok(f"DOC-7#{value}"))
+                self.assertFalse(core.citation_shape_ok(f"raw/{value}.md"))
+
+    def test_reviewer_repros_are_withheld_through_the_chain(self):
+        raw, placed = self.place(ROUND15_REPROS[:2], tuple(f"DOC-7#{v}" for v in ROUND15_REPROS)
+                                 + ("raw/SafeTools-release-roadmap-now.md",))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        released = [asset["title"] for asset in governed(res)["knowledge_record"]["reusable_assets"]]
+        for value in ROUND15_REPROS:
+            self.assertNotIn(value, released)
+            self.assertNotIn(value, everything(res))
+        raw, placed = self.place((ROUND15_REPROS[2], ROUND15_VARIANTS[1]),
+                                 tuple(f"raw/{v}.md" for v in ROUND15_VARIANTS[:4]))
+        res = chain(raw)
+        self.assert_render_shape_holds(res, placed, location="field")
+        for value in (ROUND15_REPROS[2],) + ROUND15_VARIANTS[:4]:
+            self.assertNotIn(value, everything(res))
+        result = run_stage(asset_identify, with_value(("candidate_assets", 0, "asset_id"),
+                                                      "AST-SafeTools2ReleaseRoadmapNow"))
+        self.assert_refused(result, "candidate_assets[0].asset_id",
+                            forbid=("AST-SafeTools2ReleaseRoadmapNow", "SafeTools2ReleaseRoadmapNow"))
+
+    def test_ordinary_names_with_digits_still_render(self):
+        for value in ROUND15_CLEAR:
+            with self.subTest(value=value):
+                self.assertTrue(core.title_shape_ok(value))
+                self.assertTrue(core.id_shape_ok("AST-" + value))
+                self.assertTrue(core.citation_shape_ok(f"DOC-7#{value}"))
+                self.assertTrue(core.citation_shape_ok(f"raw/{value}.md"))
+        for value in ROUND15_SPACED_CLEAR:
+            with self.subTest(value=value):
+                self.assertTrue(core.title_shape_ok(value))
+        raw, placed = self.place(ROUND15_CLEAR[:2], tuple(f"DOC-7#{v}" for v in ROUND15_CLEAR[2:4])
+                                 + tuple(f"raw/{v}.md" for v in ROUND15_CLEAR[22:24]))
+        res = chain(raw)
+        self.assertEqual(0, res.exit, ascii_safe(res.stderr))
+        self.assertEqual([], holds(res))
+        for value in placed.values():
+            self.assertIn(value, res.texts["skeleton.md"])
+
+
 class DerivationTests(unittest.TestCase):
     def test_g4b_structured_inputs_re_derive_from_each_raw_pack(self):
         for scenario in SCENARIOS:
@@ -3548,7 +3622,8 @@ GROUPS = {
     "steering-corpus": (SteeringCorpusTests,),
     "steering-sets": (SteeringSetTests,),
     "render-policy": (RenderPolicyTests, FusedFormTests, QARound4Tests, QARound5Tests, QARound6Tests, QARound7Tests, QARound8Tests, QARound9Tests, QARound10Tests, QARound11Tests,
-                      QARound12Tests, QARound13Tests, QARound14Tests),
+                      QARound12Tests, QARound13Tests, QARound14Tests,
+                      QARound15Tests),
     "drafting": (DraftingTests,),
     "derivation": (DerivationTests,),
     "goldens": (GoldenTests,),

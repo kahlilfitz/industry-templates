@@ -124,9 +124,9 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   - The contract schema now states the strict input rules: required members, ID, token and
     `skill:`/`connector:` source patterns, and `additionalProperties: false`. On the output side,
     sections only gain members and `enum`/`const` values.
-- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 160 tests in 16 groups (97 in 15 before
+- **Tests.** `test-data/.../1.0.3/tests/test_engines.py` has 163 tests in 16 groups (97 in 15 before
   QA round 2, 109 before QA round 3, 116 before QA round 4, 121 before QA round 5, 128 before QA
-  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10, 148 before QA round 11, 151 before QA round 12, 154 before QA round 13, 157 before QA round 14). It ships with:
+  round 6, 132 before QA round 7, 135 before QA round 8, 138 before QA round 9, 142 before QA round 9b, 145 before QA round 10, 148 before QA round 11, 151 before QA round 12, 154 before QA round 13, 157 before QA round 14, 160 before QA round 15). It ships with:
   - `steering-corpus.json`, a byte-identical copy of `shared/steering-guard/corpus.json`;
   - `closeout-steering-sets.json`, the closeout sets: 25 attack lines, 14 paraphrases, 26 benign
     closeout and lessons lines, 7 attack pairs, 5 benign pairs, and 19 recorded detector gaps,
@@ -1268,3 +1268,103 @@ contract JSON copies are unchanged.
   All three fail on `c497678`.
 
 **Golden differences (QA round 14).** None.
+
+### QA round 15 (on `a06753c`)
+
+One Medium finding, fixed in the plugin. The knowledge-record output contract and the contract JSON
+copies are unchanged.
+
+- **Remainder scan stops at the first part (Medium, escape).** After an allowlisted run-on,
+  `_after_is_clause` returned at the first word part that was not clause material by itself. So the
+  title `SafeTools2ReleaseRoadmapNow` and the citation `DOC-7#SafeTools2ReleaseRoadmapNow` reached the
+  knowledge record and the skeleton with no hold. The 2 is read as "to", and `Release` is a verb that
+  is also a noun, so it needs clause material after it. The recursive check returned on `Roadmap`
+  without reading `Now`. `SafeToolsReviewRoadmapNow` and `SafeToolsPlan2Reuse` escaped the same way.
+  - **Fix:** the scan reads every later part of the run-on's token, not only the first. A token ends
+    at whitespace or at `/`, `\`, `#`, `,` or `;` (`breaks`, passed from `_spells_clause` through
+    `_needle_hit`). The rules are:
+    - the first part still counts when it is clause material or reads as clause words run together;
+      this check still crosses whitespace, as before;
+    - once a verb (a trigger or shorthand verb) has been read, a later determiner or `now`, or a later
+      run of words that reads as clause material, counts even with other word parts in between
+      (`SafeToolsReviewRoadmapNow`, `SafeToolsShareRoadmapWithTheTeam`);
+    - a later lone 2 or 4 before a verb counts as to or for, unless the verb is `go` or `use`, which
+      are also product-name words (`SafeToolsPlan2Reuse`, `NoNeedleTestingRoadmap2Ship`;
+      `SafeToolsTeams2Go` renders);
+    - a 2 before a verb that is also a noun (release, review, file, record) still needs clause material
+      later in the token, so `SafeTools2ReleaseNotes` and `SafeTools2FilePlan` render.
+  - **Why not any later clause word:** reading any later part against the next-part material list
+    held 398 ordinary names in a probe. `Fine`, `Good`, `Go`, `Now` (as in `ServiceNow`), `Use` and
+    `Ready` occur in product names. So a later word counts only after a verb in the same token, and a
+    later shorthand digit only before a verb.
+  - **Now withheld (title, ID and citation):** `SafeTools2ReleaseRoadmapNow`,
+    `SafeToolsReviewRoadmapNow`, `SafeToolsPlan2Reuse`, `NoNeedleTestingRoadmap2Ship`,
+    `SafeTools2ReviewGuideNow`, `SafeTools-release-roadmap-now`, `SafeTools_release_roadmap_now`,
+    `SafeTools2ReleaseRoadmapItNow`, `SafeToolsShareRoadmapWithTheTeam`,
+    `NoNeedlesReleaseQ3RoadmapThisRecord`, `SafeToolkitRoadmapReleasenow`, `SafeToolsPlan2Publish`,
+    `SafeToolsRoadmapReusethis`, `OkayToolkitPlanNowPlease`.
+  - **Still render:** 25 names with digits or later verbs, among them `SafeTools2026RoadmapDraft`,
+    `SafeToolkitV2ReleaseNotes`, `SafeTools2ReleaseNotes`, `NoNeedles2025ReviewSummary`,
+    `SafeToolsReviewRoadmap`, `SafeTomorrow2030Vision`, `GoodTogetherWave4Rollout`,
+    `SafeToolsServiceNowMigration`, `SafeToolsTeams2Go`, `SafeToolsRoadmapGoLivePlan`,
+    `SafeToolkitBook2GoApp`, `SafeTools2FilePlan` and `SafeTools2RecordRetention`, plus spaced prose
+    such as `SafeTools rollout for the Nordics`.
+  - `GoodTogetherReviewDeckNow` renders, as it did before: "good to" is a verdict phrase only with
+    "go", so `GoodTogether` is no phrase run-on, and the value is not in this class.
+- **False holds after the fix:**
+
+  | Set | Held |
+  | --- | --- |
+  | 238-item corpus | 0 |
+  | Title–citation pairs | 0 of 9,810 |
+  | Boundary extra check | 0 of 2,376 |
+  | Neighbour citation→citation pairs | 0 of 8,100 |
+  | Neighbour title→title pairs | 0 of 11,881 |
+  | Round-6 controls | 0 (`Setúbal` as a citation only, ASCII rule; `Setit pricing` held as before) |
+  | Ordinary words: 54,691 words × 3 casings | 837 held, identical to `a06753c`: none new, none freed |
+  | `SafeTools`, `NoNeedle`, `SafeTools2` + each ordinary word (164,073 forms) | 1,007 held, identical to `a06753c` |
+  | CamelCase name set | 36 of 221, unchanged |
+  | Dotted, extension-split, to-do and long-extension controls | 0 |
+
+  The ordinary-word set grew from 54,647 to 54,691 words because it is read from the repository text.
+- **Probe.** Eight heads (`SafeTools`, `NoNeedle`, `SafeToolkit`, `SafeTools2`, `SafeToolkit2026`,
+  `NoNeedles`, `GoodTogether`, `SafeTomorrow`) were placed before each CamelCase name, alone, with a
+  `2026` suffix and after `Roadmap`. `SafeToolsRoadmap`, `NoNeedle2` … `Plan` and `SafeTools` …
+  `Guide` were placed around each ordinary word. Of 169,253 forms, 2 more are held than on `a06753c`
+  and none is freed. Both are clause material: `SafeToolsRoadmapReusethis` and
+  `SafeToolsRoadmapUsethis`.
+  - Every allowlisted run-on (9,051 forms per tail) was combined with the noun tails `2ReleaseNotes`,
+    `ReviewRoadmap`, `2FilePlan`, `2026Roadmap`, `Plan`, `Review`, `Testing` and `Release`. None is
+    newly held.
+- **Pre-existing look-alike holds.** A few names hold on `a06753c` too, because a look-alike digit
+  inside a letter run is folded: `OkayToolkit3UserGuide`, `FineTools365Rollout`,
+  `SafeToolkitM365Edition`, `SafeTools3000Series`. They are unchanged.
+- **Sweep.** The sweep adds the round-15 tails (`2ReleaseRoadmapNow`, `ReviewRoadmapNow`,
+  `Plan2Reuse`, `Roadmap2Ship`, `2ReviewGuideNow`, `-release-roadmap-now`, `ShareRoadmapWithTheTeam`)
+  and the noun controls `2ReleaseNotes`, `ReviewRoadmap` and `2FilePlan`. It covers 1,835,664 forms.
+  - **Against `a06753c` and `c497678`:** nothing lost. 88,850 forms are newly held against
+    `a06753c`, all with a round-15 clause tail.
+  - **Against `7a20785`:** 127,944 forms held there pass. None is held on `a06753c`: they are the
+    allowlisted ordinary-word run-ons of rounds 12 to 14, alone or with a noun tail.
+  - **Extension-split citations:** none of the 4,153 forms passes.
+- **Known residual, not this class.** Run-ons after the four-letter phrases `ok to` and `as is`
+  (`OkToreuse`, `OkTolerance2ReleaseRoadmapNow`) render on `a06753c`, `c497678` and `7a20785` alike.
+  Phrases of fewer than five letters are not searched inside run-together text, so that `Oktoberfest`
+  and `basis` render. Their case-split forms (`OkToProceed`, `AsIsProcess`) are withheld. This is left
+  for an owner decision.
+- **Timings.** Under the same machine load, 100 assets take 64.6 s on this core and 65.3 s on
+  `a06753c`. 400 assets take 179.5 s (44.9 / 43.0 / 47.0 / 44.7 s per stage), 2.8 times as long as
+  100 assets. The scan adds no measurable time.
+- **Reference.** #8.6 item 4 is updated in all five byte-identical copies.
+- **Tests (163 in 16 groups).** `QARound15Tests` in `render-policy` has 3 tests:
+  - the three reproductions and the generalised variants are withheld as title, ID and citation
+    (`DOC-7#…` and `raw/….md`);
+  - the reproductions are withheld through the chain as titles and citations (`render_shape`, location
+    `field`), and are out of `reusable_assets` and every output file. The ID
+    `AST-SafeTools2ReleaseRoadmapNow` is refused without echo;
+  - the 25 names with digits and the spaced controls render, and six of them render through the chain
+    with no holds.
+
+  The first two fail on `a06753c`.
+
+**Golden differences (QA round 15).** None.
