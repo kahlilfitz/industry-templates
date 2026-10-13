@@ -13,9 +13,10 @@ file is the history and the current position; it does not repeat those procedure
 State as of 2026-10-13 morning. The five plugins moved to the MOS3 app package as new candidate
 versions; see the [2026-10-12 owner decision](#owner-decision-mos3-packaging-per-version-test-data-and-verdict-rename-2026-10-12).
 Mobilization 1.0.3, T&E 1.0.5 and DRQG 1.0.5 are frozen and await their Cowork runs. Closeout 1.0.3
-and Staffing 1.1.5 are not frozen: both wait on an owner decision about the shared steering
-detector (see [Open risks](#open-risks)), and Closeout also has two open Medium findings from QA
-round 10.
+and Staffing 1.1.5 are not frozen. On 2026-10-13 the owner chose to extend the shared steering
+detector to 1.1.3 ([decision](#owner-decision-extend-the-shared-steering-detector-2026-10-13)), so
+all five move to candidates carrying 1.1.3: Mobilization 1.0.4, DRQG 1.0.6, T&E 1.0.6, Closeout
+1.0.3 and Staffing 1.1.5. Closeout pre-freeze QA continues.
 
 ## Contents
 
@@ -165,6 +166,16 @@ New candidate versions: Closeout 1.0.3, Staffing 1.1.5, Mobilization 1.0.3, T&E 
 1.0.5 (Mobilization, T&E and DRQG frozen 2026-10-12; Closeout and Staffing not yet). They supersede Closeout 1.0.2 and Staffing 1.1.4
 (both Ready) and DRQG 1.0.4, T&E 1.0.4 and Mobilization 1.0.2 (evaluated, and accepted by the owner
 with missing evidence).
+
+### Owner decision: extend the shared steering detector (2026-10-13)
+
+On 2026-10-13 the owner chose option A for the shared-detector gap (see [Open risks](#open-risks)):
+extend `shared\steering-guard` to 1.1.3 for reworded imperative, suppression and authority-claim
+prose, re-vendor it into all five plugins, and score it on the operator's held-out set before any
+freeze. Because every submission's vendored copy must match `shared\`, the three frozen candidates
+move to new versions: Mobilization 1.0.4, DRQG 1.0.6 and T&E 1.0.6. Their frozen 1.0.3, 1.0.5 and
+1.0.5 builds (on 1.1.2) stay frozen and may still be evaluated, but the new versions are the release
+candidates. Closeout 1.0.3 and Staffing 1.1.5 were never frozen and keep their numbers.
 
 ### Wave 1 QA exit waiver (2026-10-05)
 
@@ -749,7 +760,7 @@ first, as was done for DRQG. The four 1.0.0 builds predate every lesson above.
 | Mobilization value framing | The scenario has no external quantification, so a reviewer may push for figures. | Frame value as cycle time and risk avoided. Do not invent percentages or hours. |
 | DRQG over-escalation perception | The broad `is_definitive_conclusion` rule and fail-closed registers raise more release blockers (Scenario B has 6). A judge or reviewer may read this as noise. | The rule is deliberate. If a run marks it down, tune with evidence from the report; do not quietly relax fail-closed behaviour. |
 | Thin health margin on Closeout `sanitize-check` | 82 against an 80 floor; a rerun could fall below. | Backlog item 4 in [01](#open-backlog-non-blocking-candidates-for-an-optional-103). |
-| Shared steering detector misses a class of reworded prose (found 2026-10-12) | The shared instruction detector (1.1.2) does not flag some reworded imperative, suppression and authority-claim lines. Closeout 1.0.3 copies such lines from description, lesson and owner fields into intermediate JSON (QA round 3, High), and Staffing 1.1.5's `detector-gaps` test group fails by design, so `evaluation:prepare` refuses to freeze it. Neither can be fixed inside the plugin without a plugin phrase list, which the shared-module rules forbid. | Owner decision, blocking Closeout 1.0.3 and Staffing 1.1.5: (A) extend the shared detector, re-vendor it into all five plugins and re-score it on the held-out set, which also re-opens the three frozen candidates for a later version; or (B) accept the lines as documented known gaps and adjust the tests. Mobilization 1.0.3, T&E 1.0.5 and DRQG 1.0.5 were frozen first on 1.1.2. |
+| Shared steering detector misses a class of reworded prose (found 2026-10-12) | The shared instruction detector (1.1.2) does not flag some reworded imperative, suppression and authority-claim lines. Closeout 1.0.3 copies such lines from description, lesson and owner fields into intermediate JSON (QA round 3, High), and Staffing 1.1.5's `detector-gaps` test group fails by design, so `evaluation:prepare` refuses to freeze it. Neither can be fixed inside the plugin without a plugin phrase list, which the shared-module rules forbid. | Owner chose (A) on 2026-10-13 ([decision](#owner-decision-extend-the-shared-steering-detector-2026-10-13)): extend the shared detector to 1.1.3, re-vendor it into all five plugins (Mobilization 1.0.4, DRQG 1.0.6, T&E 1.0.6, Closeout 1.0.3, Staffing 1.1.5) and score it on the held-out set before freezing. In progress. |
 | Dirty-worktree receipts | Receipts for early freezes record HEAD `1eaaee4`, not the source. | The ZIP SHA-256 is still authoritative. Commit before future freezes. |
 | Trackers are sensitivity-labelled | Sign-off state cannot be checked by script; `openpyxl` and LibreOffice cannot open the workbooks. | Check them in Excel desktop or through Excel COM automation, and record only the gate status here. |
 | Test-suite runtime growth | Measured 2026-10-05, run serially on one machine with endpoint scanning active: Mobilization 49 s (2026-10-01 baseline) to 65–71 s at `b9295dd` (390 checks); T&E 81 s to 100 s (957 checks); DRQG 57 s to 124–136 s (1,159 checks), and 147–154 s with the A23 sweep (`9c45c0c`, 1,267 checks). The instruction detector scales linearly. Most of the growth is repeated file reads in the test harnesses (20–39% of profiled time in file opens, made slower by endpoint scanning) and the whole-chain re-derivation required by A22 and A23. Mobilization's one wall-clock check failed at 20 s under ordinary load and was raised to 60 s (`2076c12`). Re-measured 2026-10-05 evening after QA rounds 12 to 19: Mobilization 210–250 s (483 checks), T&E 440–500 s (1,186 checks), DRQG 300–325 s (1,509 checks). | Accepted for Wave 1: every suite finishes well within the one-hour ceiling, which `evaluation:prepare` also has to fit. Harness-side read caching (never in the engines; mutated fixtures and A23 refusal tests always run the production engines) is backlog after the Wave 1 freezes. The load-sensitive wall-clock check is replaced by a per-call bound (`c461e3d`). At the 2026-10-07 freezes, run serially from the ZIP: Mobilization 385 s (525 checks), DRQG 429–473 s (1,716), T&E 13–15 min (1,283); `evaluation:prepare` took 7, 9 and 15 minutes. |
