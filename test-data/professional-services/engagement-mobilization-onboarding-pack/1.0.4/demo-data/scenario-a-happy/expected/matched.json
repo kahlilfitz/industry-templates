@@ -1,0 +1,212 @@
+{
+  "contract_version": "ps.engagement-mobilization-onboarding-pack.v1",
+  "run_metadata": {
+    "generated_at": "2026-10-01T00:00:00Z",
+    "demo_scenario": "scenario-a-happy"
+  },
+  "engagement": {
+    "engagement_id": "MOB-ORC-1042",
+    "matter_id": "ORC-1042-MOB",
+    "title": "Patient access operating model mobilization",
+    "client_name": "Orchard Ridge Clinics",
+    "affiliates": [
+      "Orchard Ridge Health Holdings"
+    ],
+    "sector": "healthcare",
+    "region": "Midwest US",
+    "source": "engine:scope_digest",
+    "confidence": 0.95,
+    "citation": "raw/sow-extract.md header; raw/pursuit-record.md context"
+  },
+  "joiner": {
+    "person": "Taylor Reed",
+    "role": "Delivery analyst",
+    "responsibilities": [
+      "Supports stakeholder map",
+      "prepares governance notes"
+    ],
+    "point_of_contact": "Ava Morgan",
+    "onboarding_status": "joining",
+    "assignment_status": "confirmed",
+    "source": "raw:confirmed-roster.csv",
+    "confidence": 0.97,
+    "citation": "raw/confirmed-roster.csv row 4"
+  },
+  "scope_summary": {
+    "objectives": [
+      "Mobilize the patient access workstream",
+      "prepare data migration readiness",
+      "align clinic leads on launch governance"
+    ],
+    "in_scope": [
+      "Patient access current-state review",
+      "data migration planning",
+      "stakeholder interview schedule",
+      "first sprint backlog"
+    ],
+    "exclusions": [
+      "Billing system configuration",
+      "production cutover execution"
+    ],
+    "deliverables": [
+      "Mobilization charter",
+      "stakeholder map",
+      "data migration readiness checklist",
+      "weekly governance cadence"
+    ],
+    "key_dates": [
+      "2026-10-05 kickoff",
+      "2026-10-12 data workstream start",
+      "2026-10-16 first governance huddle"
+    ],
+    "systems": [
+      "Engagement SharePoint",
+      "Delivery Planner",
+      "Client Teams channel",
+      "Knowledge Repository"
+    ],
+    "first_week_focus": [
+      "Review SOW scope and exclusions",
+      "meet delivery manager and data lead",
+      "read the onboarding checklist from the knowledge digest (pending practice review)",
+      "request viewer/member access only",
+      "attend first governance huddle"
+    ],
+    "source": "engine:scope_digest",
+    "confidence": 0.94,
+    "citation": "raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"
+  },
+  "engagement_terms": {
+    "confidentiality_terms": [
+      "Client information is internal to the engagement team",
+      "prior knowledge may be used only when sanitised and cleared for internal engagement reuse."
+    ],
+    "ethical_wall_terms": [
+      "Team members must be checked against the firm wall register before receiving prior engagement materials or client-confidential workspace access."
+    ],
+    "source": "raw:engagement-letter-extract.md",
+    "confidence": 0.93,
+    "citation": "raw/engagement-letter-extract.md"
+  },
+  "team_roster": [
+    {
+      "person": "Ava Morgan",
+      "role": "Client delivery manager",
+      "responsibilities": [
+        "Owns mobilization cadence",
+        "approves first-week plan"
+      ],
+      "point_of_contact": "Engagement partner",
+      "onboarding_status": "active",
+      "assignment_status": "confirmed",
+      "source": "raw:confirmed-roster.csv",
+      "confidence": 0.97,
+      "citation": "raw/confirmed-roster.csv row 2"
+    },
+    {
+      "person": "Leo Brooks",
+      "role": "Data migration consultant",
+      "responsibilities": [
+        "Leads data readiness checklist",
+        "coordinates source extracts"
+      ],
+      "point_of_contact": "Ava Morgan",
+      "onboarding_status": "active",
+      "assignment_status": "confirmed",
+      "source": "raw:confirmed-roster.csv",
+      "confidence": 0.97,
+      "citation": "raw/confirmed-roster.csv row 3"
+    },
+    {
+      "person": "Taylor Reed",
+      "role": "Delivery analyst",
+      "responsibilities": [
+        "Supports stakeholder map",
+        "prepares governance notes"
+      ],
+      "point_of_contact": "Ava Morgan",
+      "onboarding_status": "joining",
+      "assignment_status": "confirmed",
+      "source": "raw:confirmed-roster.csv",
+      "confidence": 0.97,
+      "citation": "raw/confirmed-roster.csv row 4"
+    }
+  ],
+  "proposed_staffing": [],
+  "staffing_exclusions": [],
+  "escalations": [],
+  "holds": [],
+  "provenance": {
+    "engines": [
+      "scope_digest/1.0.4",
+      "knowledge_match/1.0.4"
+    ],
+    "generated_at": "2026-10-01T00:00:00Z",
+    "sources": [
+      "raw/sow-extract.md",
+      "raw/engagement-letter-extract.md",
+      "raw/pursuit-record.md",
+      "raw/confirmed-roster.csv",
+      "upstream/staffing"
+    ]
+  },
+  "prior_knowledge_candidates": [
+    {
+      "knowledge_id": "AST-A-001",
+      "title": "Patient access onboarding checklist",
+      "summary": "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.",
+      "relevance_score": 0.79,
+      "matched_terms": [
+        "access",
+        "checklist",
+        "patient"
+      ],
+      "clearance_state": "RELEASE_CANDIDATE_SANITISED",
+      "confidentiality_permission": "release_candidate_state",
+      "review_status": "pending_practice_review",
+      "source": "adapter:closeout-governed.knowledge_record",
+      "confidence": 0.93,
+      "citations": [
+        "upstream closeout AST-A-001",
+        "upstream released_assets AST-A-001",
+        "knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"
+      ]
+    }
+  ],
+  "knowledge_digest": {
+    "status": "ready",
+    "items": [
+      {
+        "knowledge_id": "AST-A-001",
+        "title": "Patient access onboarding checklist",
+        "summary": "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.",
+        "relevance_score": 0.79,
+        "matched_terms": [
+          "access",
+          "checklist",
+          "patient"
+        ],
+        "clearance_state": "RELEASE_CANDIDATE_SANITISED",
+        "confidentiality_permission": "release_candidate_state",
+        "review_status": "pending_practice_review",
+        "source": "adapter:closeout-governed.knowledge_record",
+        "confidence": 0.93,
+        "citations": [
+          "upstream closeout AST-A-001",
+          "upstream released_assets AST-A-001",
+          "knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"
+        ]
+      }
+    ],
+    "excluded_items": [
+      {
+        "lesson_id": "LC-A-001",
+        "reason": "lesson_text_not_written_in_governed_closeout_record",
+        "citation": "knowledge-reuse-rules.md #2.4; synthetic decision log row 4; upstream closeout LC-A-001"
+      }
+    ],
+    "source": "engine:knowledge_match",
+    "confidence": 0.92,
+    "citation": "knowledge-reuse-rules.md #1.1-#3.2"
+  }
+}
