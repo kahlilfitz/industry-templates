@@ -1108,3 +1108,69 @@ class ConstraintHardeningTests(unittest.TestCase):
                         self.assertEqual(["C-101"], recommended_ids(document, "PSS-001"))
                         self.assertFalse(any("C-101" in item and "#9.11" in item for item in document["escalations"]),
                                          ascii_safe(document["escalations"]))  # noqa: F821
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 9: another client's row name is exempt only from its own identity; an entity that
+    # only partly matches the client is a review hold; the engine's fixed texts never count.
+    # ----------------------------------------------------------------------------------------
+    def test_qa9_client_name_screened_against_other_identities(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        advisory = re.compile(r"advisory|northwind", re.IGNORECASE)
+        own = dict(self.foreign_row("Northwind Advisory Group", "81"), candidate_id="C-101")
+        with self.subTest(case="row name contains another established client"):
+            self.assert_foreign_hold(bench, self.with_rows(self.foreign_row("Advisory Group"), own), advisory)
+        with self.subTest(case="row name and a bench value spell another client"):
+            self.assert_foreign_hold(
+                self.bench_with(location="Partners"),
+                self.with_rows(self.foreign_row("Advisory Partners"),
+                               dict(self.foreign_row("Northwind Advisory", "82"), candidate_id="C-101")),
+                re.compile(r"advisory|northwind|\bpartners\b", re.IGNORECASE))
+        # Control: a row for another client never matches its own identity.
+        governed, validated, texts = self.chain(bench, self.with_rows(own))
+        for name, text in texts.items():
+            self.assertEqual([], advisory.findall(text), name)
+        for document in (governed, validated):
+            self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+            self.assertFalse(any("C-101" in item and "#9.11" in item for item in document["escalations"]),
+                             ascii_safe(document["escalations"]))  # noqa: F821
+
+    def test_qa9_partial_entity_overlap_is_a_review_hold(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        for client, leak in (("Clinics Inc", r"Clinics Inc"),
+                             ("Orchard Ridge Clinics Pediatrics", r"Pediatrics"),
+                             ("Ridge Health Holdings", r"(?<!Orchard )Ridge Health Holdings")):
+            row = {"candidate_id": "C-101", "type": "prior_client_role", "client_name": client,
+                   "status": "closed", "role_type": "employee", "end_date": "2010-01-01",
+                   "source": "connector:conflicts-register", "confidence": 0.97, "citation": "conflicts extract row 83"}
+            with self.subTest(client=client):
+                governed, validated, texts = self.chain(bench, self.with_rows(row))
+                for name, text in texts.items():
+                    self.assertEqual([], re.findall(leak, text), name)
+                    self.assertNotIn("conflicts extract row 83", text, name)
+                for document in (governed, validated):
+                    self.assert_held(slate_row(document, "PSS-001", "C-101"), "#9.9")
+                    self.assertEqual(["C-103"], recommended_ids(document, "PSS-001"))
+                    self.assertTrue(any(item.startswith("C-101: conflicts register row ") and "#9.9" in item
+                                        and "cannot be matched reliably" in item for item in document["escalations"]),
+                                    ascii_safe(document["escalations"]))  # noqa: F821
+        # Control: the client's own name with a corporate suffix is the same entity.
+        row = dict(row, client_name="Orchard Ridge Clinics, LLC")
+        governed, validated, _texts = self.chain(bench, self.with_rows(row))
+        for document in (governed, validated):
+            self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+
+    def test_qa9_engine_source_text_is_not_candidate_content(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        foreign = self.foreign_row("Conflicts Register LLC")
+        for label, rows in (("standard sources", ()),
+                            ("folded spelling", (self.clear_row("CONNECTOR: Conflicts_Register"),))):
+            constraints = self.with_rows(foreign, *rows)
+            with self.subTest(source=label):
+                governed, validated, _texts = self.chain(bench, constraints)
+                for document in (governed, validated):
+                    self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+                    self.assertFalse(any("#9.11" in item for item in document["escalations"]),
+                                     ascii_safe(document["escalations"]))  # noqa: F821
+        # Control: a source naming the client with other text is still candidate content.
+        self.assert_foreign_hold(bench, self.with_rows(foreign, self.clear_row("Conflicts Register LLC feed")),
+                                 re.compile(r"register[\s\-_.]*llc", re.IGNORECASE))

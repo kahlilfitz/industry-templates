@@ -757,3 +757,35 @@ class ValidateHardeningTests(unittest.TestCase):
                             self.assertNotIn("notes", item)
                             rest = {key: value for key, value in item.items() if key != "client_name"}
                             self.assertNotIn("Unrelated Synthetic Client", json.dumps(rest))
+
+    # --- QA round 9: the engine's fixed texts never count; partial entity matches are unverifiable ---
+    def test_qa9_engine_text_and_partial_entity_in_governed_entries(self):
+        def with_c101_source(source):
+            document = self.a()
+            for role in document["governed_roles"]:
+                for slate in ("candidate_slate", "recommended_candidates"):
+                    for candidate in role[slate]:
+                        if candidate["candidate_id"] == "C-101":
+                            for item in candidate["constraints_considered"]:
+                                if item.get("type") == "clear":
+                                    item["source"] = source
+            return document
+        foreign = {"conflicts register"}
+        for source in ("connector:conflicts-register", "CONNECTOR: Conflicts_Register"):
+            with self.subTest(source=source):
+                result = slate_validate.validate(with_c101_source(source), (), foreign)
+                self.assertEqual(["C-101", "C-103"], self.recommended_ids(result, 0))
+                self.assertFalse(any("#9.11" in item for item in result["escalations"]))
+        result = slate_validate.validate(with_c101_source("Conflicts Register LLC feed"), (), foreign)
+        self.assertEqual(["C-103"], self.recommended_ids(result, 0))
+        self.assertEqual([], re.findall(r"register[\s\-_.]*llc", json.dumps(result), re.IGNORECASE))
+        # An entry marked for another client whose name only partly matches the client is unverifiable.
+        document = self.foreign_entry_document()
+        for role in document["governed_roles"]:
+            for slate in ("candidate_slate", "recommended_candidates"):
+                for candidate in role[slate]:
+                    for item in candidate["constraints_considered"]:
+                        if item.get("client_name") == "Unrelated Synthetic Client":
+                            item["client_name"] = "Clinics Inc"
+        result = slate_validate.validate(document, ())
+        self.assertEqual(["C-101"], self.recommended_ids(result, 0))

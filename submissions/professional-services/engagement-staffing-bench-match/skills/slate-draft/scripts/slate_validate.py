@@ -175,11 +175,13 @@ def matches_engagement(item, engagement):
     comparisons = [
         entity_names_match(record_name, target)
         for target in [engagement.get("client_name"), *affiliates]
-        if isinstance(target, str)
+        if isinstance(target, str) and normalize_entity_name(target)
     ]
     if any(value is True for value in comparisons):
         return True
-    return None if not comparisons or all(value is None for value in comparisons) else False
+    # A name that only partly matches the client or an affiliate (a whole-word part of it, or it of
+    # the entity) is never another client's: it cannot be verified either way (rule 9.9).
+    return None if not comparisons or any(value is None for value in comparisons) else False
 
 
 def _word(value):

@@ -330,6 +330,49 @@ the hardening phases change engine behaviour, but output contracts change only a
   now drops the source of C-101's own row, so C-101's entry genuinely carries the register's
   default. Its assertions are unchanged.
 
+### QA round 9 (phase 2)
+
+- **QA round 9 fixes (two High defects, one Medium).**
+  - **Per-identity `client_name` exemption (High, rule 9.11).** `verdict_sources()` skipped the
+    `client_name` of every row for another client. Repro: valid rows for "Advisory Group" (C-103)
+    and "Northwind Advisory Group" (C-101) left C-101 recommended. Such a name is now exempt only
+    from matching its own identity. It is screened against every other established identity,
+    alone and in the contributor search, in constraint-check (`verdict_sources()`) and in
+    slate-draft validation (`considered_texts()`, `withhold_considered()`). A hit withholds it,
+    holds the candidate and escalates under #9.11.
+  - **Exact entity match (High, rules 9.2 and 9.9).** `entity_names_match()` treated a whole-word
+    part as the same entity, so "Clinics Inc" matched "Orchard Ridge Clinics". The row was then
+    treated as the engagement's, with its name and citation exposed. Entities now match only
+    when equal after normalisation and corporate-suffix removal; there is no alias mechanism. A
+    partial whole-word overlap in either direction is ambiguous:
+    - constraint-check holds the row (needs_review, #9.2,#9.9), keeps it by position only
+      (`held_item()`, no name or citation) and escalates it by position;
+    - the row is never harvested as another client's identity;
+    - slate-draft validation's `matches_engagement()` returns "cannot verify" when any
+      comparison is ambiguous, so a not_applicable entry with such a name holds the candidate
+      and is not harvested as foreign.
+
+    Every caller was checked: applicability, the foreign-identity harvest in both engines,
+    `engagement_entity_label()` (exact `True` only) and the default-source rule.
+  - **Engine source vocabulary (Medium, rule 9.11).** Raw-row and default sources were filtered
+    by row vocabulary only, so the standard source `connector:conflicts-register` matched a
+    client named "Conflicts Register LLC" and held the whole slate. Any input value that is
+    exactly one of the engine's fixed texts is now the engine's vocabulary, never candidate
+    content. The comparison folds case, confusables and punctuation but keeps every word, so
+    "Conflicts Register LLC" is not "conflicts register". The exemption is applied in one place
+    (`_engine_value()`: `_foreign_hit()`, `contributors_of()`, `verdict_sources()`,
+    `withhold_considered()`), so constraint-check and slate-draft validation agree. A source
+    holding a client's name with other text ("Conflicts Register LLC feed") still holds.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies):
+  - 9.11 wording for the per-identity exemption and engine fixed texts;
+  - a rules 9.2/9.9 note: exact entity match, and a partial overlap is a review hold.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are four new regression tests, each failing on `5a8f823`:
+  - `ConstraintHardeningTests.test_qa9_client_name_screened_against_other_identities`
+  - `ConstraintHardeningTests.test_qa9_partial_entity_overlap_is_a_review_hold`
+  - `ConstraintHardeningTests.test_qa9_engine_source_text_is_not_candidate_content`
+  - `ValidateHardeningTests.test_qa9_engine_text_and_partial_entity_in_governed_entries`
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root
