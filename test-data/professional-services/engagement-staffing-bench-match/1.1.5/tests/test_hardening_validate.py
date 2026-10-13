@@ -636,3 +636,18 @@ class ValidateHardeningTests(unittest.TestCase):
             document["escalations"].append(f"{other}: independence review pending")
             with self.subTest(other=other):
                 self.assertEqual(["C-101", "C-103"], self.recommended_ids(slate_validate.validate(document), 0))
+
+
+    # --- QA round 2: an ID joined to a further component by punctuation is a longer ID (#9.5) ---
+    def test_qa2_escalation_id_never_matches_a_longer_id(self):
+        for longer in ("C-101/2", "C-101:2", "C-101#2", "C-101/A", "C-101/v2", "C-101#2:"):
+            document = self.a()
+            document["escalations"].append(f"{longer} independence review pending")
+            with self.subTest(longer=longer):
+                self.assertEqual(["C-101", "C-103"], self.recommended_ids(slate_validate.validate(document), 0))
+        for named in ("C-101: independence review pending", "Independence review pending for C-101.",
+                      "C-101/C-102: independence review pending", "C-101's clearance is pending"):
+            document = self.a()
+            document["escalations"].append(named)
+            with self.subTest(named=named):
+                self.assertEqual(["C-103"], self.recommended_ids(slate_validate.validate(document), 0))

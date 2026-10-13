@@ -119,6 +119,39 @@ the hardening phases change engine behaviour, but output contracts change only a
   The hand-built `ConstraintCheckTests.base_row` payload now sets `evidence_complete: true`, as
   fit_score always does; no assertion changed.
 
+### QA round 2 (phase 2)
+
+- **QA round 2 fixes (three High defects, one Medium).**
+  - **9.11 holds for carried-only fields (High).** Before, a value naming another client in a
+    bench, scored or ranked record field that is not on the slate row (for example `location`,
+    `skills`, `title`, `practice` or `notes`) was withheld, but the candidate stayed recommended
+    with no escalation. Hits in those sections are now mapped to candidate IDs. They feed the #9.11
+    hold and the escalation, by ID and without the value. `slate_validate` applies the same mapping.
+  - **Names split across fields (High).** Each candidate record is also screened with any two of
+    its values read together in either order. For example, name "Ava Unrelated Synthetic" plus
+    location "Client" forms the other client's name. Every contributing value is withheld wherever
+    it appears for that candidate, and the candidate is held and escalated. One shared word alone
+    (for example a location of "Client") is no hold.
+  - **ID boundary (Medium, rule 9.5).** `input_guard.mentions_id` (all three copies) no longer
+    finds C-101 in `C-101/2`, `C-101:2`, `C-101#2` or `C-101/A`. These are punctuation followed by
+    a component holding a digit or a single character. `C-101: …`, `C-101.` at the end of a
+    sentence, `C-101's` and `C-101/C-102` still match.
+  - **role_type vocabulary (High, rule 9.9).** An other-client prior client role must have a
+    `role_type` of `employee`, `officer` or `board_member` (aliases such as "board director" are
+    accepted). Anything else, such as "astronaut", now makes the row malformed: the candidate needs
+    review, every candidate with such a row gets an escalation by row position, and only recognised
+    vocabulary is carried (before, it became `other` and was scoped out). `slate_validate` no
+    longer refuses a governed document that carries such a held row.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): wording in 9.5 and
+  9.11, plus a note after the table extending 9.9 to unrecognised `role_type` values. The 9.9
+  row itself is unchanged; the docs-hardening test pins it verbatim.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are four new regression tests, each failing on `ea4b31b`:
+  - `ConstraintHardeningTests.test_qa2_passthrough_field_naming_another_client_holds_candidate`
+  - `ConstraintHardeningTests.test_qa2_name_split_across_fields_holds_candidate`
+  - `ConstraintHardeningTests.test_qa2_foreign_prior_role_with_unknown_role_type_needs_review`
+  - `ValidateHardeningTests.test_qa2_escalation_id_never_matches_a_longer_id`
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

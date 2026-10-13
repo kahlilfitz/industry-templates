@@ -719,3 +719,85 @@ class ConstraintHardeningTests(unittest.TestCase):
             self.assertEqual([], FOREIGN_CLIENT.findall(text), name)
         for document in (governed, validated):
             self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 2: rule 9.11 holds for carried-only fields and for names split across fields.
+    # ----------------------------------------------------------------------------------------
+    def assert_foreign_hold(self, bench, constraints, pattern=FOREIGN_CLIENT):
+        governed, validated, texts = self.chain(bench, constraints)
+        for name, text in texts.items():
+            self.assertEqual([], pattern.findall(text), name)
+        for document in (governed, validated):
+            self.assert_held(slate_row(document, "PSS-001", "C-101"), "#9.11")
+            self.assertEqual(["C-103"], recommended_ids(document, "PSS-001"))
+            self.assertTrue(any(item.startswith("PSS-001: C-101 - ") and "#9.11" in item
+                                for item in document["escalations"]),
+                            ascii_safe(document["escalations"]))  # noqa: F821
+        return governed, validated, texts
+
+    def bench_with(self, **fields):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        for candidate in bench["bench_candidates"]:
+            if candidate["candidate_id"] == "C-101":
+                for key, value in fields.items():
+                    if key == "skills":
+                        candidate["skills"] = candidate["skills"] + [value]
+                    else:
+                        candidate[key] = value
+        return bench
+
+    def test_qa2_passthrough_field_naming_another_client_holds_candidate(self):
+        _roles, _bench, constraints = scenario_inputs("scenario-a-happy")
+        for field in ("location", "skills", "title", "practice", "notes"):
+            with self.subTest(field=field):
+                self.assert_foreign_hold(self.bench_with(**{field: "Unrelated Synthetic Client"}), constraints)
+
+    def test_qa2_name_split_across_fields_holds_candidate(self):
+        _roles, _bench, constraints = scenario_inputs("scenario-a-happy")
+        fragment = re.compile(r"unrelated[\s\-_.]*synthetic", re.IGNORECASE)
+        for label, fields in (
+            ("name then location", {"name": "Ava Unrelated Synthetic", "location": "Client"}),
+            ("location then name", {"location": "Unrelated", "name": "Synthetic Client Morgan"}),
+            ("skill then notes", {"skills": "Unrelated Synthetic", "notes": "Client"}),
+        ):
+            with self.subTest(case=label):
+                _governed, _validated, texts = self.assert_foreign_hold(self.bench_with(**fields), constraints)
+                for name, text in texts.items():
+                    self.assertEqual([], fragment.findall(text), name)
+        # One shared word alone is no hold.
+        for label, fields in (("client alone", {"location": "Client"}),
+                              ("synthetic alone", {"notes": "Synthetic data migration"})):
+            with self.subTest(case=label):
+                governed, validated, _texts = self.chain(self.bench_with(**fields), constraints)
+                for document in (governed, validated):
+                    self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 2: an other-client prior role carries only recognised role_type vocabulary.
+    # ----------------------------------------------------------------------------------------
+    def test_qa2_foreign_prior_role_with_unknown_role_type_needs_review(self):
+        def foreign_role(role_type):
+            return {"candidate_id": "C-101", "type": "prior_client_role", "client_name": "Unrelated Synthetic Client",
+                    "status": "closed", "role_type": role_type, "end_date": "2020-01-01",
+                    "source": "connector:conflicts-register", "confidence": 0.97, "citation": "conflicts extract row 52"}
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        for role_type in ("astronaut", "other", "", "   "):
+            with self.subTest(role_type=role_type):
+                governed, validated, texts = self.chain(bench, self.with_rows(foreign_role(role_type)))
+                self.assertNotIn("astronaut", "".join(texts.values()))
+                for document in (governed, validated):
+                    row = slate_row(document, "PSS-001", "C-101")
+                    self.assert_held(row, "#9.9")
+                    self.assertNotIn("C-101", recommended_ids(document, "PSS-001"))
+                    self.assertTrue(any(item.startswith("C-101: conflicts register row 4 for another client is malformed")
+                                        and "#9.9" in item for item in document["escalations"]),
+                                    ascii_safe(document["escalations"]))  # noqa: F821
+                foreign = [item for item in slate_row(governed, "PSS-001", "C-101")["constraints_considered"]
+                           if item.get("client_name") == FOREIGN_LABEL]
+                self.assertEqual([""], [item["role_type"] for item in foreign])
+        # Recognised vocabulary (including the director alias) still scopes the row out.
+        for role_type in ("employee", "Board Director"):
+            with self.subTest(role_type=role_type):
+                governed, validated, _texts = self.chain(bench, self.with_rows(foreign_role(role_type)))
+                for document in (governed, validated):
+                    self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))

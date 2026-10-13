@@ -149,16 +149,35 @@ _ID_SEP = r"[\s\-_.\u2010-\u2015\u2212]"
 _ID_JOIN = r"[\-_.\u2010-\u2015\u2212]"
 
 
+_ID_TOKEN = re.compile(r"[^\W_]+(?:" + _ID_JOIN + r"+[^\W_]+)*")
+_ID_LIKE = re.compile(r"[^\W\d_]+" + _ID_SEP + r"+\d")
+
+
+def _extends_id(tail):
+    """True when ``tail`` (the text right after a matched ID) continues that ID: punctuation such as
+    '/', ':' or '#' directly followed by a component that holds a digit or is a single character
+    (C-101/2, C-101:2, C-101#2, C-101/A). Another whole ID (C-101/C-102), prose (C-101:review), a
+    space, an apostrophe or the end of a sentence does not."""
+    if len(tail) < 2 or tail[0].isspace() or tail[0] in "'\u2019" or re.match(r"\w", tail[0]):
+        return False
+    token = _ID_TOKEN.match(tail[1:])
+    if token is None or _ID_LIKE.match(token.group(0)):
+        return False
+    word = token.group(0)
+    return len(word) == 1 or any(char.isdigit() for char in word)
+
+
 def mentions_id(text, value):
     """True when free text names the ID ``value`` in id_key()'s canonical form (rule 9.5): any run of
     whitespace, '-', '_', '.' or a Unicode dash may separate its parts. Part of a longer ID never
-    matches (C-1 is not found in C-10, C-101 or C-1.5)."""
+    matches (C-1 is not found in C-10, C-101, C-1.5 or C-1/2)."""
     key = id_key(value)
     if key is None or not isinstance(text, str):
         return False
     body = (_ID_SEP + "+").join(re.escape(part) for part in key.split("-"))
     pattern = rf"(?<!\w)(?<!\w{_ID_JOIN}){body}(?!\w)(?!{_ID_JOIN}\w)"
-    return re.search(pattern, canonical(text)) is not None
+    folded = canonical(text)
+    return any(not _extends_id(folded[match.end():]) for match in re.finditer(pattern, folded))
 
 
 RESERVED_WORDS = {

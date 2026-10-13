@@ -632,6 +632,8 @@ def _check_identity(document, engagement, intake_engagements):
                     if not isinstance(name, str) or not name.strip() or has_marker(name) or is_suspect(name):
                         continue
                     where = f"governed_roles[{position}].{slate}[{index}].constraints_considered[{row_index}]"
+                    if name == constraint_check.FOREIGN_LABEL and row.get("disposition") == "needs_review":
+                        continue  # a malformed other-client row (#9.9): it can only hold the candidate
                     if _word(row.get("type")) == COVERAGE_TYPE:
                         need(client_marked or canonical(name) == canonical(client),
                              f"{where}.client_name names a different engagement client (rule 9.8)")
@@ -884,12 +886,18 @@ def validate(governed_payload, intake_engagements=(), foreign_names=()):
     escalations = merge_unique(payload["escalations"], log)
     foreign = set(foreign_names) | _governed_foreign(governed_payload, governed_payload["engagement"])
     foreign_held = set()
+    # Register rows are governed by #9.9 upstream; rule 9.11 screens the candidate's own values, in
+    # its slate rows and in every carried bench, scored and ranked record.
+    skip = constraint_check.FOREIGN_SKIP | {"constraints_considered"}
+    flagged = constraint_check.foreign_candidates(constraint_check.candidate_records(payload), foreign)
+    slate_rows = [candidate for role in payload["governed_roles"] for candidate in role["candidate_slate"]]
+    for key, values in constraint_check.foreign_candidates(slate_rows, foreign, skip).items():
+        flagged.setdefault(key, set()).update(values)
     for role_index, role in enumerate(payload["governed_roles"]):
         for index, candidate in enumerate(role["candidate_slate"]):
-            # Register rows are governed by #9.9 upstream; rule 9.11 screens the candidate's own values.
-            scrubbed, hits = constraint_check.withhold_foreign(
-                candidate, foreign, constraint_check.FOREIGN_SKIP | {"constraints_considered"})
-            if hits:
+            values = flagged.get(id_key(candidate["candidate_id"]), ())
+            scrubbed, hits = constraint_check.withhold_foreign(candidate, foreign, skip, values)
+            if hits or values:
                 candidate.clear()
                 candidate.update(scrubbed)
                 foreign_held.add((role_index, index))
@@ -897,7 +905,7 @@ def validate(governed_payload, intake_engagements=(), foreign_names=()):
                     f"governed_roles[{role_index}].candidate_slate[{index}]: {FOREIGN_REASON}; "
                     f"independence review required ({FOREIGN_RULE})"
                 )
-    constraint_check.withhold_foreign_sections(payload, foreign)
+    constraint_check.withhold_foreign_sections(payload, foreign, flagged)
     escalations = _withhold_foreign_escalations(escalations, foreign)
     open_escalations = list(governed_payload["escalations"])
     role_keys = {id_key(role["role_id"]) for role in governed_payload["governed_roles"]}

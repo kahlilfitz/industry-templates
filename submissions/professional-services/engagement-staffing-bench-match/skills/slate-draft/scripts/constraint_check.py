@@ -377,7 +377,7 @@ def foreign_item(item, index, disposition, reason, default_source):
         "client_name": FOREIGN_LABEL,
         "status": status if status in CLEAR_STATUSES | FI_STATUSES | WALL_STATUSES | DATED_STATUSES else "",
         "material": materiality_value(item),
-        "role_type": role_type if role_type in ROLE_TYPES else ("other" if role_type else ""),
+        "role_type": role_type if role_type in ROLE_TYPES else "",
         "process": "withheld" if _text(item, "process").strip() else "",
         "end_date": _text(item, "end_date") if _valid_date(item.get("end_date")) else "",
         "resolved_date": _text(item, "resolved_date") if _valid_date(item.get("resolved_date")) else "",
@@ -414,7 +414,7 @@ def foreign_row_problems(item):
     if status not in DATED_STATUSES:
         return True
     if kind == "prior_client_role":
-        return not _valid_date(item.get("end_date")) or not normalize_role_type(item.get("role_type"))
+        return not _valid_date(item.get("end_date")) or normalize_role_type(item.get("role_type")) not in ROLE_TYPES
     if kind == "prior_assurance_role":
         return not _valid_date(item.get("end_date")) or not _text(item, "process").strip()
     return not _valid_date(item.get("end_date"))
@@ -1072,37 +1072,108 @@ def _names_foreign(text, foreign):
     return any(f" {name} " in words for name in foreign)
 
 
-def withhold_foreign(value, foreign, skip=frozenset()):
-    """A16/D12/D24 (rule 9.11): every string under ``value`` that names another client becomes the
-    neutral FOREIGN_VALUE. Returns (new value, number of strings withheld); top-level members in
+def _contains_words(words, part):
+    return f" {part} " in f" {words} "
+
+
+def withhold_foreign(value, foreign, skip=frozenset(), contributors=()):
+    """A16/D12/D24 (rule 9.11): every string under ``value`` that names another client, or contains
+    one of the normalised ``contributors`` (values that name another client only when read together),
+    becomes the neutral FOREIGN_VALUE. Returns (new value, number of strings withheld); members in
     ``skip`` are kept as they are at every depth. The input is never mutated."""
     if isinstance(value, str):
-        return (FOREIGN_VALUE, 1) if _names_foreign(value, foreign) else (value, 0)
+        hit = _names_foreign(value, foreign) or (
+            contributors and any(_contains_words(normalize_entity_name(value), part) for part in contributors))
+        return (FOREIGN_VALUE, 1) if hit else (value, 0)
     if isinstance(value, dict):
         out, hits = {}, 0
         for key, item in value.items():
             if key in skip:
                 out[key] = item
                 continue
-            out[key], count = withhold_foreign(item, foreign, skip)
+            out[key], count = withhold_foreign(item, foreign, skip, contributors)
             hits += count
         return out, hits
     if isinstance(value, list):
         out, hits = [], 0
         for item in value:
-            new, count = withhold_foreign(item, foreign, skip)
+            new, count = withhold_foreign(item, foreign, skip, contributors)
             out.append(new)
             hits += count
         return out, hits
     return value, 0
 
 
-def withhold_foreign_sections(payload, foreign):
+def _leaf_texts(value, skip):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            if key not in skip:
+                yield from _leaf_texts(item, skip)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _leaf_texts(item, skip)
+
+
+def foreign_contributors(record, foreign, skip=FOREIGN_SKIP):
+    """Rule 9.11: the normalised values of one candidate record that name another client, alone or
+    when two of its values are read together in either order (a name split across fields). A value
+    that only shares a word with the other client's name never counts on its own."""
+    if not foreign:
+        return set()
+    names = [f" {name} " for name in foreign]
+    texts = list(dict.fromkeys(
+        words for words in (normalize_entity_name(text) for text in _leaf_texts(record, skip)) if words))
+    alone = {words for words in texts if any(name in f" {words} " for name in names)}
+    found = set(alone)
+    rest = [words for words in texts if words not in alone]
+    for first in rest:
+        for second in rest:
+            if first != second and any(name in f" {first} {second} " for name in names):
+                found.update((first, second))
+    return found
+
+
+def candidate_records(document):
+    """Every candidate record carried in the bench, scored and ranked sections of ``document``."""
+    for record in document.get("bench_candidates") or []:
+        yield record
+    for section, member in (("scored_roles", "candidate_scores"), ("ranked_roles", "candidate_slate")):
+        for role in document.get(section) or []:
+            if isinstance(role, dict):
+                yield from role.get(member) or []
+
+
+def foreign_candidates(records, foreign, skip=FOREIGN_SKIP):
+    """id_key(candidate_id) -> contributing normalised values, for each candidate with any record that
+    names another client (rule 9.11)."""
+    found = {}
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        key = id_key(record.get("candidate_id"))
+        contributors = foreign_contributors(record, foreign, skip)
+        if key is not None and contributors:
+            found.setdefault(key, set()).update(contributors)
+    return found
+
+
+def withhold_foreign_sections(payload, foreign, flagged=None):
     """Rule 9.11: the candidate records carried through unchanged (bench, scored and ranked sections)
-    are screened the same way, so a value naming another client never reaches any output."""
+    are screened the same way, so a value naming another client never reaches any output. ``flagged``
+    is the foreign_candidates() map; every contributing value of a flagged candidate is withheld."""
+    flagged = flagged if flagged is not None else foreign_candidates(candidate_records(payload), foreign)
     for section in PASSTHROUGH_SECTIONS:
         if section in payload:
             payload[section], _hits = withhold_foreign(payload[section], foreign, FOREIGN_SKIP)
+    for record in candidate_records(payload):
+        if isinstance(record, dict):
+            contributors = flagged.get(id_key(record.get("candidate_id")))
+            if contributors:
+                scrubbed, _hits = withhold_foreign(record, foreign, FOREIGN_SKIP, contributors)
+                record.clear()
+                record.update(scrubbed)
     return payload
 
 
@@ -1161,6 +1232,7 @@ def govern(ranked_payload, constraints_payload):
             f"- check candidate ID mapping ({RULES} #9.5)",
             f"{RULES} #9.5",
         )
+    flagged = foreign_candidates(candidate_records(payload), foreign)
     missing_reported = set()
     governed_roles = []
     gaps = []
@@ -1177,7 +1249,9 @@ def govern(ranked_payload, constraints_payload):
             holds = merge_unique(row.get("screening_holds") or [], ranked_holds)
             # Rule 9.11: a carried candidate value naming another client is withheld before any rule
             # or message reads it, and the candidate is held for review.
-            row, foreign_hits = withhold_foreign(row, foreign, FOREIGN_SKIP)
+            flagged_values = flagged.get(id_key(row["candidate_id"]), ())
+            row, foreign_hits = withhold_foreign(row, foreign, FOREIGN_SKIP, flagged_values)
+            foreign_hits += bool(flagged_values)
 
             def evaluate(hold):
                 verdict_row = dict(row, screening_holds=holds)
@@ -1200,12 +1274,20 @@ def govern(ranked_payload, constraints_payload):
                     FOREIGN_RULE,
                 )
             for index, item in register_rows:
-                if index not in candidate_held and status_problem(item) \
-                        and applies_to_client(item, constraints.get("engagement") or {}) is not False:
+                if index in candidate_held:
+                    continue
+                applies = applies_to_client(item, constraints.get("engagement") or {})
+                if status_problem(item) and applies is not False:
                     escalations.add(
                         f"{row['candidate_id']}: {_row_label(index)} status is missing or not recognised "
                         f"- independence review required ({RULES} #9.1)",
                         f"{RULES} #9.1",
+                    )
+                elif applies is False and foreign_row_problems(item):
+                    escalations.add(
+                        f"{row['candidate_id']}: {_row_label(index)} for another client is malformed "
+                        f"- independence review required ({RULES} #9.9)",
+                        f"{RULES} #9.9",
                     )
             fit = float(row["fit_score"])
             recommendation_status = "not_recommended"
@@ -1290,7 +1372,7 @@ def govern(ranked_payload, constraints_payload):
             "citation": f"{RULES} #1.1-#8.1",
         })
 
-    withhold_foreign_sections(payload, foreign)
+    withhold_foreign_sections(payload, foreign, flagged)
     payload["governed_roles"] = governed_roles
     payload["gaps"] = gaps
     rendered = []
