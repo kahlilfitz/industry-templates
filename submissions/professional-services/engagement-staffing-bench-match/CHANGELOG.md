@@ -491,6 +491,45 @@ the hardening phases change engine behaviour, but output contracts change only a
     client-name, single-word and zero-width wall controls)
   - `ValidateHardeningTests.test_qa12_withheld_identity_split_or_with_format_characters_is_held`
 
+### QA round 13 (phase 2)
+
+- **QA round 13 fixes (two Medium defects, one root cause).** The two format-character readings
+  (removed, and read as a word boundary) were applied inconsistently. One shared identity module
+  now classifies and reconciles every client name, in `safety_text.py` (vendored, byte-identical, in
+  fit-score, constraint-check and slate-draft): `entity_readings()`, `entity_key()`,
+  `entity_keys()`, `entity_matchable()`, `entity_names_match()` and `same_client()`, with
+  `ENTITY_SUFFIXES`/`ENTITY_DESIGNATORS`. constraint-check imports them in place of its own copies.
+  - **Client occurrence classified once (Medium, rules 9.9 and 9.11).**
+    - Both readings of a text now share one set of word positions, so "North\u200bStar" is one
+      occurrence whether it reads "northstar" or "north star".
+    - Screening (`_screen_forms()`, `_occurs()`, `_units()`) masks every occurrence of the client's
+      or an affiliate's name found in either reading, for rule 9.11 as well as rule 9.9.
+      `_foreign_names()` and slate-draft validation now give the other-client set the client's
+      names as `allowed`.
+    - New `screened_identities()` applies one precedence: client or affiliate, then rule 9.9, then
+      rule 9.11. A form held under rule 9.9 is not also screened as another client's, and
+      slate-draft validation applies the same precedence.
+    - Before this fix, a clear row "Orchard\u200bRidge Clinics" was held #9.11 next to another
+      client "OrchardRidge Clinics", or #9.9 next to an ambiguous "Orchard\u200bRidge". The
+      governed document was then rejected by slate-draft validation. The row is now the client's,
+      and the governed output validates.
+  - **One reconciliation (Medium, rule 9.10).** fit-score (bench against roles), constraint-check
+    (`same_entity()`, now `same_client()`) and slate-draft validation (`_same_identity()`) all
+    reconcile client names with `same_client()`. "Orchard\u200bRidge Clinics" therefore
+    reconciles with "Orchard Ridge Clinics" in every engine. "OrchardRidge Clinics" (no reading
+    matches) is still refused.
+- **Documentation.** `independence-eligibility-rules.md` (all five copies): the rules 9.2/9.9 note
+  states the single classification, its precedence and the shared reconciliation.
+- **Goldens and tests.** Goldens are unchanged: the chain reproduces all of them byte for byte.
+  There are three new regression tests, each failing on `e9c66f6`:
+  - `ConstraintHardeningTests.test_qa13_client_occurrence_is_never_screened_in_either_reading`
+    (with 9.11 and 9.9 hold controls)
+  - `ConstraintHardeningTests.test_qa13_client_names_reconcile_with_one_classifier` (with a
+    refused control)
+  - `ConstraintHardeningTests.test_qa13_format_character_matrix_validates_with_the_same_verdicts`
+    (5 client spellings x 5 other-entity spellings: governed output always validates, and
+    governed verdicts equal validated verdicts)
+
 ### Packaging and metadata
 
 - **MOS3 package.** The plugin is now a Microsoft 365 app package (manifest 1.28): new root

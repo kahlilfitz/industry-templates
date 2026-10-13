@@ -614,8 +614,8 @@ def _same_identity(expected, carried, key):
         return f"sha256={digest}" in carried
     if key == "engagement_id":
         return engagement_id_key(expected) == engagement_id_key(carried)
-    # Client names reconcile exactly as constraint-check reconciles them (rule 9.10).
-    return constraint_check.same_entity(expected, carried)
+    # Client names reconcile with the shared identity classifier every engine uses (rule 9.10).
+    return constraint_check.same_client(expected, carried)
 
 
 def _check_identity(document, engagement, intake_engagements):
@@ -927,9 +927,12 @@ def validate(governed_payload, intake_engagements=(), foreign_names=(), withheld
     hit_scopes = _hit_scopes(governed_payload, log)
     held |= hit_scopes
     escalations = merge_unique(payload["escalations"], log)
-    foreign = constraint_check.ForeignNames(
-        set(foreign_names) | _governed_foreign(governed_payload, governed_payload["engagement"]))
+    # One classification per identity, as constraint-check makes it: the client's own name (either
+    # reading) is never screened, and a form held under rule 9.9 is not also another client's.
     unverified = constraint_check.unverified_names(withheld_names, governed_payload["engagement"])
+    foreign = constraint_check.ForeignNames(
+        (set(foreign_names) | _governed_foreign(governed_payload, governed_payload["engagement"])) - set(unverified),
+        allowed=constraint_check.engagement_keys(governed_payload["engagement"]))
     foreign_held = _withhold_names(payload, foreign, FOREIGN_REASON, FOREIGN_RULE, escalations)
     unverified_held = _withhold_names(payload, unverified, UNVERIFIED_REASON, UNVERIFIED_RULE, escalations)
     escalations = _withhold_foreign_escalations(escalations, foreign, unverified)
@@ -1275,8 +1278,7 @@ def _main(argv):
         )
         if isinstance(payload, dict)
     ]
-    foreign = constraint_check._foreign_names(constraints_payload, expected["engagement"])
-    withheld = constraint_check.ambiguous_names(constraints_payload, expected["engagement"])
+    foreign, withheld = constraint_check.screened_identities(constraints_payload, expected["engagement"])
     payload = validate(expected, intake, foreign, withheld)
     draft = render_draft(payload)
     write_outputs(args.out, payload, args.draft_out, draft)

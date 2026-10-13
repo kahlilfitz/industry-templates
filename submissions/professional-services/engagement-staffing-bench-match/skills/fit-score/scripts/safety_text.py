@@ -10,9 +10,11 @@ field path, and one escalation per piece of text (ScreeningLog).
 import functools
 import hashlib
 import re
+import unicodedata
+from collections import Counter
 
 import steering_guard as sg
-from input_guard import has_marker
+from input_guard import canonical, has_marker
 
 STAFFING_HOOKS = {
     "extra_verdict_words": (
@@ -312,3 +314,144 @@ def sanitize_free_text(
                 )
         return safe
     return value
+
+
+# ---------------------------------------------------------------------------------------------
+# Entity identity (rules 9.2, 9.9, 9.10, 9.11): the one classifier every engine uses to compare,
+# reconcile or screen a client name. A text with format characters (category Cf) has two readings:
+# the characters removed, and the characters read as a word boundary. Both readings of one text
+# share one set of word positions (the words with format characters as boundaries), so a name
+# occurrence is the same occurrence in either reading and is classified once.
+# ---------------------------------------------------------------------------------------------
+# Corporate designators: only a trailing run of them is dropped from an entity name.
+ENTITY_SUFFIXES = {"llc", "inc", "ltd", "plc", "corp", "corporation", "co", "company"}
+# A name made only of these words (designators and the article) names no entity (rule 9.2).
+ENTITY_DESIGNATORS = ENTITY_SUFFIXES | {"the"}
+
+
+def _entity_words(text):
+    return re.sub(r"[\W_]+", " ", sg.normalize(canonical(text))).split()
+
+
+def _entity_bounds(words):
+    """The kept range of an entity's words: a name made only of designators stays as it is;
+    otherwise the trailing run of corporate designators and a leading "the" are dropped."""
+    if all(word in ENTITY_DESIGNATORS for word in words):
+        return 0, len(words)
+    end = len(words)
+    while words[end - 1] in ENTITY_SUFFIXES:
+        end -= 1
+    return (1 if words[0] == "the" and end > 1 else 0), end
+
+
+def _format_spaced(text):
+    return "".join(" " if unicodedata.category(char) == "Cf" else char for char in text)
+
+
+def _aligned(joined, split):
+    """Where each word of the format-removed reading lies among the words of the format-spaced
+    reading, as (first, end) positions; None when the readings do not line up word for word."""
+    spans, at = [], 0
+    for word in joined:
+        start, built = at, ""
+        while at < len(split) and len(built) < len(word):
+            built += split[at]
+            at += 1
+        if built != word:
+            return None
+        spans.append((start, at))
+    return spans if at == len(split) else None
+
+
+@functools.lru_cache(maxsize=1 << 16)
+def entity_readings(text):
+    """The readings of ``text`` as ``((words, spans), ...)``: format characters removed first and,
+    only when that differs, format characters read as a word boundary; each with its leading "the"
+    and trailing corporate designators dropped. ``spans[i]`` is the (first, end) range of word
+    ``i`` in positions both readings share, so "North\u200bStar" is one occurrence whether it reads
+    "northstar" or "north star". Readings that cannot be lined up get separate positions (neither
+    reading's occurrence then stands for the other's)."""
+    joined = _entity_words(text)
+    readings = [(joined, [(index, index + 1) for index in range(len(joined))])]
+    if any(unicodedata.category(char) == "Cf" for char in text):
+        split = _entity_words(_format_spaced(text))
+        spans = _aligned(joined, split)
+        if spans is None:
+            offset = len(split) + 1
+            spans = [(index + offset, index + offset + 1) for index in range(len(joined))]
+        readings = [(joined, spans), (split, [(index, index + 1) for index in range(len(split))])]
+    out = []
+    for words, spans in readings:
+        start, end = _entity_bounds(words) if words else (0, 0)
+        reading = (tuple(words[start:end]), tuple(spans[start:end]))
+        if all(reading[0] != kept[0] for kept in out):
+            out.append(reading)
+    return tuple(out)
+
+
+def _entity_text(name):
+    if name is None or isinstance(name, bool) or not isinstance(name, (str, int, float)):
+        return None
+    return str(name)
+
+
+def entity_key(name):
+    """The canonical form of an entity name: NFKC, format characters removed, confusables and
+    diacritics folded, case-folded, separators and punctuation as spaces, then only the trailing
+    run of corporate designators and a leading "the" dropped ("" for a non-name)."""
+    text = _entity_text(name)
+    return " ".join(entity_readings(text)[0][0]) if text is not None else ""
+
+
+def entity_keys(name):
+    """Every canonical form of an entity name (one per reading); empty forms are dropped."""
+    text = _entity_text(name)
+    if text is None:
+        return ()
+    return tuple(" ".join(words) for words, _spans in entity_readings(text) if words)
+
+
+def entity_matchable(name):
+    """A name that can identify an entity: it normalises to something other than corporate
+    designators alone ("The Company Inc" names no entity; rule 9.2)."""
+    words = entity_key(name).split()
+    return bool(words) and not all(word in ENTITY_DESIGNATORS for word in words)
+
+
+def _keys_match(left_name, right_name):
+    if not left_name or not right_name:
+        return None
+    left_tokens, right_tokens = left_name.split(), right_name.split()
+    if left_tokens == right_tokens:
+        return True
+    left_count, right_count = Counter(left_tokens), Counter(right_tokens)
+    if not left_count - right_count or not right_count - left_count:
+        return None
+    return False
+
+
+def entity_names_match(left, right):
+    """True only for one entity: equal after normalisation and trailing-designator removal, in
+    either reading of either name (a name is the entity when any reading is: fail closed, the row's
+    constraint applies). None when either name cannot be compared, or when every word of one is
+    also a word of the other in some reading, in any order and with gaps ("Orchard Clinics" for
+    "Orchard Ridge Clinics"): neither the same entity nor plainly another (rule 9.9). False only when
+    every reading pair is another entity, including names that only share some words."""
+    if not entity_matchable(left) or not entity_matchable(right):
+        return None
+    results = {_keys_match(left_name, right_name)
+               for left_name in entity_keys(left) for right_name in entity_keys(right)}
+    if True in results:
+        return True
+    return False if results == {False} else None
+
+
+def same_client(left, right):
+    """Two inputs name the same engagement client (rule 9.10): entity_names_match() is True. Names
+    that identify no entity (designators only, or nothing) compare by canonical form instead."""
+    if entity_matchable(left) and entity_matchable(right):
+        return entity_names_match(left, right) is True
+    left_key, right_key = entity_key(left), entity_key(right)
+    if left_key or right_key:
+        return left_key == right_key
+    return isinstance(left, str) and isinstance(right, str) and canonical(left) == canonical(right) != ""

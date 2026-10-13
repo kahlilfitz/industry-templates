@@ -1395,3 +1395,90 @@ class ConstraintHardeningTests(unittest.TestCase):
         # A wall naming the client with a format character still applies (fail closed).
         governed = self.governed(self.with_rows(wall_row(client_name="Orchard\u200bRidge Clinics")))
         self.assertEqual("ineligible", slate_row(governed, "PSS-001", "C-101")["eligibility"]["verdict"])
+
+    # ----------------------------------------------------------------------------------------
+    # QA round 13: one identity classification across format-character readings. An occurrence
+    # of the client's name (either reading) is never screened as another entity, and every engine
+    # reconciles client names with the same classifier.
+    # ----------------------------------------------------------------------------------------
+    def clear_named(self, name, candidate_id="C-101"):
+        return {"candidate_id": candidate_id, "type": "clear", "client_name": name, "status": "cleared",
+                "source": name + " register", "confidence": 0.97, "citation": "conflicts extract row 94"}
+
+    def other_named(self, name, kind):
+        if kind == "foreign":
+            return self.foreign_row(name, "95")
+        return dict(self.ambiguous_c103(), client_name=name, citation="conflicts extract row 96")
+
+    def test_qa13_client_occurrence_is_never_screened_in_either_reading(self):
+        _roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        zero = "\u200b"
+        for kind, other, expected in (("foreign", "OrchardRidge Clinics", ["C-101", "C-103"]),
+                                      ("ambiguous", "Orchard" + zero + "Ridge", ["C-101"])):
+            with self.subTest(kind=kind):
+                governed, validated, _texts = self.chain(
+                    bench, self.with_rows(self.clear_named("Orchard" + zero + "Ridge Clinics"),
+                                          self.other_named(other, kind)))
+                self.assert_same_verdicts(governed, validated)
+                for document in (governed, validated):
+                    self.assertEqual("eligible", slate_row(document, "PSS-001", "C-101")["eligibility"]["verdict"])
+                    self.assertEqual(expected, recommended_ids(document, "PSS-001"))
+        # Controls: the same identity outside the client's name still holds the candidate.
+        self.assert_foreign_hold(self.bench_with(notes="OrchardRidge Clinics alumni"),
+                                 self.with_rows(self.other_named("OrchardRidge Clinics", "foreign")),
+                                 re.compile(r"orchardridge", re.IGNORECASE))
+        self.assert_unverified_hold(self.bench_with(notes="Orchard" + zero + "Ridge site"),
+                                    self.with_rows(self.other_named("Orchard" + zero + "Ridge", "ambiguous")),
+                                    ["Orchard" + zero + "Ridge site"])
+
+    def test_qa13_client_names_reconcile_with_one_classifier(self):
+        roles, bench, constraints = scenario_inputs("scenario-a-happy")
+        zero = "\u200b"
+        spelled = "Orchard" + zero + "Ridge Clinics"
+        for where in ("constraints", "bench", "both"):
+            with self.subTest(where=where):
+                changed_bench, changed = copy.deepcopy(bench), copy.deepcopy(constraints)
+                if where in ("bench", "both"):
+                    changed_bench["engagement"]["client_name"] = spelled
+                if where in ("constraints", "both"):
+                    changed["engagement"]["client_name"] = spelled
+                fit_score.score(roles, changed_bench)
+                governed, validated, _texts = self.chain(changed_bench, changed)
+                self.assert_same_verdicts(governed, validated)
+                for document in (governed, validated):
+                    self.assertEqual("Orchard Ridge Clinics", document["engagement"]["client_name"])
+                    self.assertEqual(["C-101", "C-103"], recommended_ids(document, "PSS-001"))
+        # Control: a name no reading matches is still another client and refused (rule 9.10).
+        changed_bench = copy.deepcopy(bench)
+        changed_bench["engagement"]["client_name"] = "OrchardRidge Clinics"
+        with self.assertRaises(fit_score.InputError):
+            fit_score.score(roles, changed_bench)
+        changed = copy.deepcopy(constraints)
+        changed["engagement"]["client_name"] = "OrchardRidge Clinics"
+        result, out = self.check(roles, bench, changed)
+        self.assert_refused(result, out, contains="client_name does not match")
+
+    def test_qa13_format_character_matrix_validates_with_the_same_verdicts(self):
+        roles, bench, _constraints = scenario_inputs("scenario-a-happy")
+        slate_validate = _load("slate_validate", VALIDATE)
+        ranked = ranked_for(roles, bench)
+        zero = "\u200b"
+        clears = ("Orchard Ridge Clinics", "Orchard" + zero + "Ridge Clinics", "Orchard Ridge" + zero + "Clinics",
+                  "Orchard" + zero + "Ridge" + zero + "Clinics", "Orch" + zero + "ard Ridge Clinics")
+        others = (("foreign", "OrchardRidge Clinics"), ("foreign", "Orchard RidgeClinics"),
+                  ("foreign", "OrchardRidgeClinics"), ("ambiguous", "Orchard" + zero + "Ridge"),
+                  ("ambiguous", "Ridge" + zero + "Clinics"))
+        for clear in clears:
+            for kind, other in others:
+                with self.subTest(clear=ascii(clear), other=ascii(other)):
+                    constraints = self.with_rows(self.clear_named(clear), self.other_named(other, kind))
+                    governed = constraint_check.govern(ranked, constraints)
+                    foreign = constraint_check._foreign_names(constraints, governed["engagement"])
+                    withheld = constraint_check.ambiguous_names(constraints, governed["engagement"])
+                    validated = slate_validate.validate(governed, [], foreign, withheld)
+                    self.assert_same_verdicts(governed, validated)
+                    for document in (governed, validated):
+                        self.assertEqual("eligible", slate_row(document, "PSS-001", "C-101")["eligibility"]["verdict"])
+                        self.assertIn("C-101", recommended_ids(document, "PSS-001"))
+                        if kind == "foreign":
+                            self.assertNotIn(other, json.dumps(document, ensure_ascii=False))

@@ -16,7 +16,6 @@ validated before they are scoped out (#9.9) and are emitted only by position and
 import functools
 import re
 import sys
-import unicodedata
 from collections import Counter
 from datetime import date
 from pathlib import Path
@@ -47,7 +46,22 @@ from input_guard import (
     same_document,
     write_json,
 )
-from safety_text import HOLD_RULE, ScreeningLog, is_suspect, safe_citation, safe_text, sanitize_free_text
+from safety_text import (
+    ENTITY_DESIGNATORS,
+    ENTITY_SUFFIXES,
+    HOLD_RULE,
+    ScreeningLog,
+    entity_key,
+    entity_keys,
+    entity_matchable,
+    entity_names_match,
+    entity_readings,
+    is_suspect,
+    safe_citation,
+    safe_text,
+    same_client,
+    sanitize_free_text,
+)
 
 ENGINE = "engine:constraint_check"
 ENGINE_VERSION = "constraint_check/1.1.5"
@@ -125,10 +139,6 @@ _ENGINE_HOLD = re.compile(
 FOREIGN_CHAIN_BUDGET = 20000
 PASSTHROUGH_SECTIONS = ("bench_candidates", "scored_roles", "ranked_roles")
 REVIEW_FALLBACK = "conflicts, screening or availability evidence requires independence review"
-# Corporate designators: only a trailing run of them is dropped from an entity name.
-ENTITY_SUFFIXES = {"llc", "inc", "ltd", "plc", "corp", "corporation", "co", "company"}
-# A name made only of these words (designators and the article) names no entity (rule 9.2).
-ENTITY_DESIGNATORS = ENTITY_SUFFIXES | {"the"}
 _ENGINE_MARKER_DIGEST = re.compile(r"\[FLAGGED: [^\]]*sha256=([0-9a-f]{12})\]")
 _ROW_HIT = re.compile(r"^constraints_input\.constraints\[(\d+)\](?:\.([^.\[]+))?")
 
@@ -233,81 +243,13 @@ def _valid_date(value):
         return False
     return True
 
-@functools.lru_cache(maxsize=4096)
-def _entity_key(text):
-    folded = steering_guard.normalize(canonical(text))
-    words = re.sub(r"[\W_]+", " ", folded).split()
-    if all(word in ENTITY_DESIGNATORS for word in words):
-        return " ".join(words)  # a name made only of designators stays as it is
-    end = len(words)
-    while words[end - 1] in ENTITY_SUFFIXES:
-        end -= 1
-    start = 1 if words[0] == "the" and end > 1 else 0
-    return " ".join(words[start:end])
-
-def _format_spaced(text):
-    return "".join(" " if unicodedata.category(char) == "Cf" else char for char in text)
-
-@functools.lru_cache(maxsize=1 << 16)
-def _entity_keys(text):
-    """The canonical forms of a text: format characters removed (as normalize_entity_name() does) and
-    format characters read as a word boundary. One form when they agree."""
-    first = _entity_key(text)
-    if any(unicodedata.category(char) == "Cf" for char in text):
-        second = _entity_key(_format_spaced(text))
-        if second != first:
-            return (first, second)
-    return (first,)
-
-def entity_keys(name):
-    """Every canonical form of an entity name (see _entity_keys()); empty forms are dropped."""
-    if name is None or isinstance(name, bool) or not isinstance(name, (str, int, float)):
-        return ()
-    return tuple(key for key in _entity_keys(str(name)) if key)
-
 def normalize_entity_name(name):
     """Entity names compare in one canonical form: NFKC, format characters removed, confusables and
     diacritics folded, case-folded, separators and punctuation as spaces, then only the trailing run
     of corporate designators and a leading "the" dropped, never a designator inside the name or a
     trailing "the", so "Company Partners" stays "company partners" while "Partners Inc." is
     "partners", and "Orchard Ridge Clinics The" keeps its "the"."""
-    if name is None or isinstance(name, bool) or not isinstance(name, (str, int, float)):
-        return ""
-    return _entity_key(str(name))
-
-def entity_matchable(name):
-    """A name that can identify an entity: it normalises to something other than corporate
-    designators alone ("The Company Inc" names no entity; rule 9.2)."""
-    words = normalize_entity_name(name).split()
-    return bool(words) and not all(word in ENTITY_DESIGNATORS for word in words)
-
-def entity_names_match(left, right):
-    """True only for one entity: equal after normalisation and trailing-designator removal. None
-    when either name cannot be compared, or when every word of one is also a word of the other, in
-    any order and with gaps ("Clinics Inc" or "Orchard Clinics" for "Orchard Ridge Clinics"): such a
-    name is neither the same entity nor plainly another (rule 9.9). False otherwise, including two
-    names that only share some words ("Northwind Clinics" and "Orchard Ridge Clinics")."""
-    if not entity_matchable(left) or not entity_matchable(right):
-        return None
-    # A name with format characters is read two ways (removed, or read as a word boundary). It is the
-    # entity when either reading is (fail closed: the row's constraint applies), plainly another only
-    # when every reading is; otherwise it cannot be matched reliably.
-    results = {_keys_match(left_name, right_name) for left_name in entity_keys(left) for right_name in entity_keys(right)}
-    if True in results:
-        return True
-    return False if results == {False} else None
-
-def _keys_match(left_name, right_name):
-    if not left_name or not right_name:
-        return None
-    left_tokens = left_name.split()
-    right_tokens = right_name.split()
-    if left_tokens == right_tokens:
-        return True
-    left_count, right_count = Counter(left_tokens), Counter(right_tokens)
-    if not left_count - right_count or not right_count - left_count:
-        return None
-    return False
+    return entity_key(name)
 
 def _affiliates(engagement):
     affiliates = engagement.get("affiliates", [])
@@ -359,16 +301,24 @@ def ambiguous_names(constraints, engagement):
             names.update(entity_keys(item.get("client_name")))
     return unverified_names(names, engagement)
 
+def screened_identities(raw_constraints, engagement):
+    """The register identities screened out of every output, classified once with one precedence:
+    the client or a declared affiliate (either reading of a name matches) > an entity that cannot be
+    matched reliably (rule 9.9) > another client (rule 9.11). Returns (foreign, ambiguous); a form
+    held under rule 9.9 is never also screened as another client's, and an occurrence of the client's
+    own name (in either reading) is never screened as either."""
+    ambiguous = ambiguous_names(raw_constraints, engagement)
+    return _foreign_names(raw_constraints, engagement).without(ambiguous), ambiguous
+
+
 def unverified_text(text, ambiguous):
     """True for register text (not engine text) that names an identity withheld under rule 9.9."""
     return isinstance(text, str) and not _engine_value(text) and _names_foreign(text, ambiguous)
 
 def same_entity(left, right):
-    """One entity after canonical folding; names that fold to nothing compare in canonical form."""
-    left_key, right_key = normalize_entity_name(left), normalize_entity_name(right)
-    if left_key or right_key:
-        return left_key == right_key
-    return isinstance(left, str) and isinstance(right, str) and canonical(left) == canonical(right) != ""
+    """One engagement client (rule 9.10), decided by the shared identity classifier (same_client():
+    any reading of either name is the entity), as every engine reconciles client names."""
+    return same_client(left, right)
 
 def engagement_entity_label(item, engagement):
     name = str(item.get("client_name") or "").strip()
@@ -1228,53 +1178,56 @@ def _as_foreign(foreign):
 
 
 @functools.lru_cache(maxsize=1 << 16)
-def _variants_of(text):
-    return tuple(tuple(key.split()) for key in _entity_keys(text))
+def _screen_forms(text, allowed):
+    """The readings of ``text`` screened for withheld names, as ``(words, spans, masks)``: see
+    entity_readings() (format characters removed, and read as a word boundary, so neither
+    "Orchard\u200bClinics" nor "Orch\u200bard Clinics" escapes a name). ``masks`` are the ranges of
+    every occurrence of an ``allowed`` name (the client's or a declared affiliate's) in either
+    reading: an occurrence classified as the client is the client in both readings, and neither
+    reading of it is screened as another entity."""
+    readings = entity_readings(text)
+    masks = []
+    for words, spans in readings:
+        for part in allowed:
+            size = len(part)
+            for start in range(len(words) - size + 1):
+                if words[start:start + size] == part:
+                    masks.append((spans[start][0], spans[start + size - 1][1]))
+    masks = tuple(dict.fromkeys(masks))
+    return tuple((words, spans, masks) for words, spans in readings)
 
 
-def _text_variants(text):
-    """The token tuples a text is screened as: format characters removed, and (when that differs)
-    format characters read as a word boundary, so neither "Orchard\u200bClinics" nor
-    "Orch\u200bard Clinics" escapes a name."""
-    return _variants_of(text) if isinstance(text, str) else ()
+def _text_variants(text, allowed=()):
+    return _screen_forms(text, tuple(allowed)) if isinstance(text, str) else ()
 
 
-def _inside_allowed(words, at, width, allowed):
-    """True when words[at:at + width] lies wholly inside an occurrence of an ``allowed`` name."""
-    for part in allowed:
-        size = len(part)
-        for start in range(max(0, at + width - size), min(at, len(words) - size) + 1):
-            if words[start:start + size] == part:
-                return True
-    return False
+def _covered(masks, first, end):
+    return any(low <= first and end <= high for low, high in masks)
 
 
-def _occurs(words, name, allowed=()):
-    """True when the token tuple ``name`` appears in ``words`` as whole consecutive tokens, other
-    than wholly inside an occurrence of an ``allowed`` name."""
+def _occurs(form, name):
+    """True when the token tuple ``name`` appears in the reading ``form`` as whole consecutive
+    tokens, other than wholly inside an occurrence of the client's own name (in either reading)."""
+    words, spans, masks = form
     width = len(name)
     if not width or width > len(words):
         return False
     first = name[0]
-    return any(words[index:index + width] == name and not (allowed and _inside_allowed(words, index, width, allowed))
+    return any(words[index:index + width] == name
+               and not (masks and _covered(masks, spans[index][0], spans[index + width - 1][1]))
                for index in range(len(words) - width + 1) if words[index] == first)
 
 
-def _units(words, allowed):
-    """The parts of a token tuple a split name is assembled from: the whole tuple, or, with
-    ``allowed`` names, the runs between their occurrences (so the client's own name, wherever it is
-    carried, never spells part of a name it contains)."""
-    if not allowed:
+def _units(form):
+    """The parts of a reading a split name is assembled from: the whole reading, or the runs
+    between occurrences of the client's own name (so the client's name, wherever it is carried and
+    in either reading, never spells part of another name)."""
+    words, spans, masks = form
+    if not masks:
         return [words] if words else []
-    masked = [False] * len(words)
-    for part in allowed:
-        size = len(part)
-        for start in range(len(words) - size + 1):
-            if words[start:start + size] == part:
-                masked[start:start + size] = [True] * size
     units, current = [], []
-    for word, hidden in zip(words, masked):
-        if hidden:
+    for word, (first, end) in zip(words, spans):
+        if _covered(masks, first, end):
             if current:
                 units.append(tuple(current))
             current = []
@@ -1285,12 +1238,12 @@ def _units(words, allowed):
     return units
 
 
-def _names_in(words, foreign):
-    """True when the token tuple ``words`` holds a whole other-client name (cached per name set)."""
-    hit = foreign.hits.get(words)
+def _names_in(form, foreign):
+    """True when the reading ``form`` holds a whole withheld name (cached per name set)."""
+    hit = foreign.hits.get(form)
     if hit is None:
-        hit = foreign.hits[words] = any(
-            _occurs(words, name, foreign.allowed) for token in set(words) for name in foreign.filed.get(token, ()))
+        hit = foreign.hits[form] = any(
+            _occurs(form, name) for token in set(form[0]) for name in foreign.filed.get(token, ()))
     return hit
 
 
@@ -1301,14 +1254,14 @@ def _foreign_names(raw_constraints, engagement):
         name = item.get("client_name") if isinstance(item, dict) else None
         if isinstance(name, str) and name.strip() and applies_to_client(item, engagement) is False:
             names.update(entity_keys(name))
-    return ForeignNames(names)
+    return ForeignNames(names, allowed=engagement_keys(engagement))
 
 
 def _names_foreign(text, foreign):
     if not foreign or not isinstance(text, str):
         return False
     foreign = _as_foreign(foreign)
-    return any(_names_in(words, foreign) for words in _text_variants(text))
+    return any(_names_in(form, foreign) for form in _text_variants(text, foreign.allowed))
 
 
 # Top-level members of a candidate record whose names are engine vocabulary; every other member
@@ -1388,8 +1341,8 @@ def _foreign_hit(text, foreign, contributors):
     if not contributors:
         return False
     allowed = getattr(foreign, "allowed", ())
-    return any(_occurs(words, tuple(part.split()), allowed)
-               for words in _text_variants(text) for part in contributors)
+    return any(_occurs(form, tuple(part.split()))
+               for form in _text_variants(text, allowed) for part in contributors)
 
 
 def _withhold_value(value, foreign, contributors, screen_keys):
@@ -1583,16 +1536,16 @@ def contributors_of(texts, foreign):
         if _engine_value(text):
             continue
         own = _own_forms(own)
-        for tokens in _text_variants(text):
-            if tokens:
-                entries.append((tokens, own))
+        for form in _text_variants(text, allowed):
+            if form[0]:
+                entries.append((form, own))
     found, rest = set(), []
-    for tokens, own in entries:
-        if any(name not in own and _occurs(tokens, name, allowed)
-               for token in set(tokens) for name in foreign.filed.get(token, ())):
-            found.add(tokens)
+    for form, own in entries:
+        if any(name not in own and _occurs(form, name)
+               for token in set(form[0]) for name in foreign.filed.get(token, ())):
+            found.add(form[0])
         else:
-            rest.extend((unit, own) for unit in _units(tokens, allowed))  # every occurrence
+            rest.extend((unit, own) for unit in _units(form))  # every occurrence
     counts = Counter(token for unit, _own in rest for token in unit)
     for token in counts:
         for name in foreign.filed.get(token, ()):
@@ -1607,9 +1560,9 @@ def collection_keys(texts, foreign):
     keys = set()
     for entry in texts:
         text = entry[0] if isinstance(entry, tuple) else entry
-        for tokens in _text_variants(text):
-            keys.add(" ".join(tokens))
-            keys.update(" ".join(unit) for unit in _units(tokens, allowed))
+        for form in _text_variants(text, allowed):
+            keys.add(" ".join(form[0]))
+            keys.update(" ".join(unit) for unit in _units(form))
     return keys
 
 
@@ -1898,8 +1851,7 @@ def govern(ranked_payload, constraints_payload):
     if isinstance(constraints_payload.get("engagement"), dict):
         target_engagement["affiliates"] = merge_unique(
             _affiliates(ranked_payload["engagement"]), _affiliates(constraints_payload["engagement"]))
-    foreign = _foreign_names(constraints_payload, target_engagement)
-    ambiguous = ambiguous_names(constraints_payload, target_engagement)
+    foreign, ambiguous = screened_identities(constraints_payload, target_engagement)
 
     log = ScreeningLog()
     _seed_engine_markers(log, ranked_payload, "")

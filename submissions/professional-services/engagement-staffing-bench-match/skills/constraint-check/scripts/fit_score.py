@@ -22,7 +22,6 @@ if str(SCRIPT_DIR) not in sys.path:
 from input_guard import (
     ArgumentParser,
     InputError,
-    canonical,
     check_confidence,
     check_date,
     check_id,
@@ -41,7 +40,7 @@ from input_guard import (
     text_list,
     write_json,
 )
-from safety_text import ScreeningLog, is_suspect, safe_citation, safe_text, sanitize_free_text
+from safety_text import ScreeningLog, is_suspect, safe_citation, safe_text, same_client, sanitize_free_text
 
 ENGINE = "engine:fit_score"
 ENGINE_VERSION = "fit_score/1.1.5"
@@ -241,7 +240,7 @@ def validate_inputs(roles_payload, bench_payload):
     roles_engagement, roles_provenance = _labelled("roles.json", _validate_roles_document, roles_payload)
     bench_engagement, bench_provenance = _labelled("bench.json", _validate_bench_document, bench_payload)
     need(
-        canonical(roles_engagement["client_name"]) == canonical(bench_engagement["client_name"])
+        same_client(roles_engagement["client_name"], bench_engagement["client_name"])
         and engagement_id_key(roles_engagement["engagement_id"]) == engagement_id_key(bench_engagement["engagement_id"]),
         "bench.json: engagement does not match roles.json engagement (client_name, engagement_id)",
     )
