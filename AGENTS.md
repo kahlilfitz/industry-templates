@@ -8,6 +8,19 @@ archiving evidence, writing deployment docs or trackers, promoting a distributab
 status), read [docs/operator-runbook.md](docs/operator-runbook.md) and apply
 [docs/plugin-hardening-checklist.md](docs/plugin-hardening-checklist.md) before every freeze.
 
+## Change scope
+
+Cowork evaluation feedback decides what changes between versions
+([change policy](docs/operator-runbook.md#change-policy-evaluation-feedback-drives-changes)).
+
+- Change only what the task names: evaluation findings from the previous version's report, owner
+  decisions, freeze blockers, or regressions your own change caused. Report any other defect you
+  find; do not fix it.
+- Never relax, delete or change the expected result of an existing test or check. If a fix makes
+  an existing test fail, stop, do not commit, and report the conflict.
+- A change to `shared\` passes the shared-module gate before it is committed: every plugin's full
+  suite passes with the new copy, and the detector's held-out score does not drop.
+
 ## Skills in sub-agents
 
 QA review, fix and test sub-agents in this repository do not invoke skills unless their prompt

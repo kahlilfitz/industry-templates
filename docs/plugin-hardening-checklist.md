@@ -5,6 +5,11 @@ release candidate with `npm run evaluation:prepare`. Every item is a class of de
 already cost at least one Cowork evaluation cycle. Each line ends with a test idea: if you cannot
 point to a shipped regression check that does what the test idea says, the item is not done.
 
+The checklist verifies a version's changes; it does not widen the version's scope. Under the
+[change policy](operator-runbook.md#change-policy-evaluation-feedback-drives-changes), evaluation
+findings decide what changes, and a gap the checklist shows outside those changes goes to the
+plugin's backlog. New items are added from evaluation findings.
+
 Provenance notes in brackets cite public `CHANGELOG.md` entries under `submissions/` so you can see
 a real fix, or, where marked "evaluation", a finding summarised in the
 [Wave 1 log](professional-services/wave-1.md) whose fix is still in progress. They are examples,
@@ -375,8 +380,9 @@ How to read a report:
   hooks, not a plugin phrase list; `tests/steering-corpus.json` ships with the tests (in the
   test-data version folder for a MOS3 plugin) and passes through the plugin's real call site.
   [all three Wave 1 remediation candidates, 2026-10-01]
-  Test: `npm run check:shared`; the plugin's corpus test; the call site scores at least 90% with
-  no false positives on the operator's held-out set (runbook, "Held-out scoring").
+  Test: `npm run check:shared`; the plugin's corpus test; the call site's held-out score is
+  recorded and does not drop from the previous version (target: at least 90% with no false
+  positives; runbook, "Held-out scoring").
 - [ ] **D15. Long and fused text fails closed.** Text too long to screen holds for review (the
   detector's `oversize` hit) rather than being truncated; an instruction after a long benign
   prefix, appended to a clause with no punctuation, or fused onto the previous word with no space

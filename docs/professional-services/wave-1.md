@@ -18,6 +18,10 @@ detector to 1.1.3 ([decision](#owner-decision-extend-the-shared-steering-detecto
 all five move to candidates carrying 1.1.3: Mobilization 1.0.4, DRQG 1.0.6, T&E 1.0.6, Closeout
 1.0.3 and Staffing 1.1.5. Closeout pre-freeze QA continues.
 
+On 2026-10-14 the owner made Cowork evaluation feedback the source of changes between versions
+([decision](#owner-decision-evaluation-feedback-drives-changes-2026-10-14)); open-ended pre-freeze
+QA rounds end, and the detector version to freeze on is an open owner decision.
+
 ## Contents
 
 - [Keeping this file current](#keeping-this-file-current)
@@ -111,7 +115,7 @@ human testers).
 
 | # | Plugin (slug) | Current version | State | C1 | C2 | C3 | C4 | C5 | Next action | Owner |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 01 | `engagement-closeout-knowledge-harvest` | 1.0.3 (MOS3, pre-freeze QA) | 1.0.3 **pre-freeze QA**, not frozen; supersedes 1.0.2 (Ready, archived; human gate not completed). QA rounds 1 to 9 fixed (`c4a039a` to `7a20785`; 145 checks). QA round 10 (2026-10-13) has 2 open Medium, not fixed (paused): digit shorthand verdicts (`safe2reuse`, `fine2ship`) pass, and CamelCase names such as `SafeToolkit` are falsely withheld. One open High: reworded instruction-like prose the shared detector misses is copied from description, lesson and owner fields into intermediate JSON; it needs a shared-detector change | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Fix QA round 10, re-run QA until clean; owner decision on the shared detector; then freeze and evaluate | operator, owner |
+| 01 | `engagement-closeout-knowledge-harvest` | 1.0.3 (MOS3, pre-freeze QA) | 1.0.3 **pre-freeze QA**, not frozen; supersedes 1.0.2 (Ready, archived; human gate not completed). QA rounds 1 to 9 fixed (`c4a039a` to `7a20785`; 145 checks). QA round 10 (2026-10-13) has 2 open Medium, not fixed (paused): digit shorthand verdicts (`safe2reuse`, `fine2ship`) pass, and CamelCase names such as `SafeToolkit` are falsely withheld. One open High: reworded instruction-like prose the shared detector misses is copied from description, lesson and owner fields into intermediate JSON; it needs a shared-detector change | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Owner decision on the detector version to freeze on, then freeze and evaluate. QA round 10 items moved to the backlog under the [2026-10-14 change policy](#owner-decision-evaluation-feedback-drives-changes-2026-10-14) | operator, owner |
 | 02 | `engagement-staffing-bench-match` | 1.1.5 (MOS3, pre-freeze QA) | 1.1.5 **pre-freeze QA**, not frozen; supersedes 1.1.4 (Ready, archived; human gate not completed). Hardening phases 1 and 2 (`b6946b6`, `9517b5f`) and QA rounds 1 to 14 fixed (`ea4b31b` to `07e271f`); QA round 15 found nothing (194/196 checks, source and ZIP). The 2 failures are the `detector-gaps` group, which fails by design (shared-detector misses), so the freeze is refused until the owner decides | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Owner decision on the shared detector, then freeze and evaluate | owner, then operator |
 | 03 | `engagement-mobilization-onboarding-pack` | 1.0.3 (MOS3, frozen 2026-10-12); 1.0.2 evaluated | 1.0.3 **frozen 2026-10-12** (`87DEFE6F…A4F3`, receipt `16963eb`, clean; toolkit validated), in Cowork evaluation; supersedes 1.0.2. History: 1.0.0 Blocked (trust-and-safety gate); 1.0.1 **No-ship** 2026-10-07 (complete-chain functional case failed); 1.0.2 frozen 2026-10-07 (`C49C8EA7…A378`, receipt `9d27925`, clean) after QA round 3 (cap); evaluated **Blocked** 2026-10-08 on missing grader-calibration evidence only (no human reference labels); every measured bar met and the 1.0.1 defect did not recur; owner accepted 2026-10-08, no re-version | No | No | No (1.0.2: Yes) | No | No | Create the Cowork task, attach both frozen ZIPs, run the watcher | operator |
 | 04 | `time-expense-narrative-compliance` | 1.0.5 (MOS3, frozen 2026-10-12); 1.0.4 evaluated | 1.0.5 **frozen 2026-10-12** (`DA1E657B…4C02`, receipt `ace135d`, clean; toolkit validated), in Cowork evaluation; supersedes 1.0.4. History: 1.0.3 Blocked (trust-and-safety gate); 1.0.4 frozen 2026-10-07 (`1E1380E3…10B4`, receipt `f9518fd`, clean) after QA round 15 (cap, `e6925e4`); evaluated **No-ship** 2026-10-07 on missing grader-calibration evidence only (no human reference labels); every measured bar met; owner accepted 2026-10-08, no re-version | No | No | No (1.0.4: Yes) | No | No | Create the Cowork task, attach both frozen ZIPs, run the watcher | operator |
@@ -167,6 +171,32 @@ New candidate versions: Closeout 1.0.3, Staffing 1.1.5, Mobilization 1.0.3, T&E 
 (both Ready) and DRQG 1.0.4, T&E 1.0.4 and Mobilization 1.0.2 (evaluated, and accepted by the owner
 with missing evidence).
 
+### Owner decision: evaluation feedback drives changes (2026-10-14)
+
+From 2026-10-14 the Cowork evaluation, not internal review, decides what changes between versions
+([runbook change policy](../operator-runbook.md#change-policy-evaluation-feedback-drives-changes)).
+A version changes only for findings in the previous version's reports, owner decisions, freeze
+blockers and regressions its own changes cause. Open-ended pre-freeze QA rounds are replaced by one
+[verification review](../operator-runbook.md#pre-freeze-verification-review) of the version's
+changes. Other review findings and held-out misses go to the plugin's backlog. Existing tests are
+protected: relaxing one needs owner sign-off. Shared-module changes pass a gate (every plugin's
+suite, no held-out drop) before they are committed to `shared\`.
+
+This supersedes the [Wave 1 QA exit waiver](#wave-1-qa-exit-waiver-2026-10-05) and its round cap.
+
+Reason: QA rounds never converged (up to 20 per plugin), and shared detector 1.1.6, made for
+pre-freeze QA findings, reopened two High findings (T&E `4859572`, Closeout `3804144`) and led
+DRQG 1.0.6 (`e0e1e4f`) to relax two regression checks. Its held-out score stayed at 25/31 and
+1/20 false positives, the same as 1.1.2.
+
+Effect on in-flight work:
+
+- Closeout QA round 10's open Medium findings move to the backlog.
+- DRQG `e0e1e4f`'s relaxed SP-3 and SP-7 checks need owner sign-off under the protected-test
+  rule, or a revert.
+- The detector version to freeze on (1.1.5 or a 1.1.6 fix) is an open owner decision; T&E 1.0.6 and
+  Closeout 1.0.3 fail their existing regression tests on 1.1.6.
+
 ### Owner decision: extend the shared steering detector (2026-10-13)
 
 On 2026-10-13 the owner chose option A for the shared-detector gap (see [Open risks](#open-risks)):
@@ -179,7 +209,10 @@ candidates. Closeout 1.0.3 and Staffing 1.1.5 were never frozen and keep their n
 
 ### Wave 1 QA exit waiver (2026-10-05)
 
-The runbook's [pre-freeze QA review](../operator-runbook.md#pre-freeze-qa-review) says to repeat the
+*Superseded on 2026-10-14 by the [evaluation-driven change policy](#owner-decision-evaluation-feedback-drives-changes-2026-10-14).*
+
+The runbook's pre-freeze QA review (now the
+[verification review](../operator-runbook.md#pre-freeze-verification-review)) said to repeat the
 review until a round reproduces nothing. That rule is waived for Wave 1: freeze once a QA round
 returns only low-severity defects.
 
@@ -722,7 +755,7 @@ Each lesson below came from a specific Wave 1 finding. The resulting checks are 
 | Earn the higher floor rather than strip guardrail words. | Naming invoice, delete or send moves a skill into a higher risk tier. | Keep the words when the skill handles that material, and meet the 80 floor. |
 | Commit before freezing. | Every receipt so far records `gitDirty: true`. | Commit the plugin first; freeze from a clean worktree when possible so the receipt commit identifies the source. |
 | Guardrails and data minimisation must hold in every skill, not only the main one. | T&E 1.0.3: four of five skills lacked the no-external-recipient rule, an engine returned colleagues' rows, and a drafting step ran before the tripwire. | Checklist items C4, D8, D10, E7 and E9. Probe each skill on its own before freezing. |
-| Fix agents fix what is reported; adversarial reviewers find the next layer. | DRQG 1.0.3 needed three independent review rounds after its fix agent reported green tests; each round reproduced new fail-open inputs (wrong types, trusted self-declared sources, default-clean missing fields, denylists, poisoned aliases). | Run an executing adversarial code review on every candidate before `evaluation:prepare`, and repeat until a round reproduces nothing. Checklist items A5a, B1a, C5, D11, D12 and G2a. For Wave 1 the exit is relaxed to a round with only low-severity defects; see the [Wave 1 QA exit waiver](#wave-1-qa-exit-waiver-2026-10-05). |
+| Fix agents fix what is reported; adversarial reviewers find the next layer. | DRQG 1.0.3 needed three independent review rounds after its fix agent reported green tests; each round reproduced new fail-open inputs (wrong types, trusted self-declared sources, default-clean missing fields, denylists, poisoned aliases). | Run an executing adversarial code review on every candidate before `evaluation:prepare`, and repeat until a round reproduces nothing. Checklist items A5a, B1a, C5, D11, D12 and G2a. For Wave 1 the exit is relaxed to a round with only low-severity defects; see the [Wave 1 QA exit waiver](#wave-1-qa-exit-waiver-2026-10-05). Superseded 2026-10-14: one verification review of the version's changes, with evaluation findings setting scope ([decision](#owner-decision-evaluation-feedback-drives-changes-2026-10-14)). |
 | Phrase-list detectors don't generalise, and a held-out set leaks easily. | Each QA round found new instruction-like paraphrases the three plugins' detectors missed (7, 16 and 13 of 40 held-out lines caught). The shared detector then scored 38/40 on the first held-out set (2026-10-01a), but an overlap check found 16 of its 70 lines in the detector's corpus, via examples in the operator's own brief and benign lines taken from plugin tests. On the clean set (2026-10-01b, 0/70 overlap) detector 1.1.0 scored 34/40 (85%) with 0/30 false positives, below the 90% bar. 1.1.1 then scored 39/40 on that set, but fresh lines written after its misses were described scored only 17/28: describing a missed class to the detector author let it fit the wording, not the structure. 1.1.2, built against structural briefs and the author's own blind holdouts, scored 25/31 on a fresh set (1.1.1: 10/31): structure generalises, but regex rules plateau below 90% on open-ended wordings. | One shared detector (`shared/steering-guard/`, checklist D14 and D15), scored against a private held-out set that is checked for overlap and never used as examples (runbook "Creating a held-out set"). |
 | A defect found in one plugin is a class to sweep in all of them. | Pre-freeze QA rounds 1–5 on DRQG, T&E and Mobilization kept finding the same shapes in different plugins: later stages trusting intermediates, unscreened JSON keys and metadata subtrees, instructions split across array entries, duplicate CSV headers, holds merged after gating, and errors echoing input. | Send each confirmed defect to every plugin's fix agent as a class sweep, and record it in the checklist (A11 to A23, B5, B6, D16 to D21). |
 | Field-by-field reconciliation never converges. | Mobilization QA rounds 13 and 14 and T&E round 11: after each per-field reconciliation fix, the next round edited a different carried field (a roster responsibilities entry, a proposed role title, an appended excluded item, a deleted excluded-entry record) and it reached the output (`6b33a13`, `b379a94`, `777620f`). | Each downstream stage re-runs the upstream derivation on the screened raw inputs and requires deep equality on every engine-owned field, provenance included, with a justified allow-list; the final rendering step runs the same check. Checklist A23 (`dfbce9f`, `ace121a`). This is the reason for the [Wave 1 QA exit waiver](#wave-1-qa-exit-waiver-2026-10-05). |
