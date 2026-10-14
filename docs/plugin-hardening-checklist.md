@@ -584,13 +584,14 @@ the plugin ZIP (see [H](#h-mos3-and-partner-guide)).
   bundled file may link to or depend on them. A MOS3 ZIP holds only `manifest.json`, the two icons
   and `skills/**`, so every skill must be self-contained (H9).
   Test: list the built ZIP and resolve every relative link in every bundled file.
-- [ ] **G4a. Shipped tests pass from the extracted ZIP.** Tests must not read source-only files
-  (`metadata.json`, top-level `README.md`, `PACKAGE-NOTES.md`); fall back to `plugin.json` (or
-  `manifest.json` for MOS3) for the version, or skip the check when the file is absent. A MOS3
-  runner reads the plugin only through `--plugin-root` (H12). [deliverable-review-quality-gate
-  1.0.3]
-  Test: `npm run evaluation:prepare` runs the shipped tests from an extracted copy and refuses to
-  freeze on failure; run the same by hand before committing.
+- [ ] **G4a. Shipped tests run from the two ZIPs alone.** Tests must not read source-only files
+  (`metadata.json`, top-level `README.md`, `PACKAGE-NOTES.md`), another plugin, `shared\` or
+  anything else in the repository; fall back to `plugin.json` (or `manifest.json` for MOS3) for the
+  version. A MOS3 runner reads only `--plugin-root` and its own version folder (H12).
+  [deliverable-review-quality-gate 1.0.3]
+  Test: search the runners and helpers for `REPO_ROOT`, `parents[2]` or higher, `submissions`,
+  `shared` and `metadata.json`, and justify every hit. `evaluation:prepare` does not run the tests,
+  so Cowork is the first run from the ZIPs.
   Every line the test harness prints is ASCII-safe (escape the whole line, label included), so the
   suite does not crash on a cp1252 or ASCII console. [Wave 1 pre-freeze QA: DRQG round 13, T&E
   round 12]
@@ -692,8 +693,7 @@ H10 and H12 need a manual check. The packaging and test-data rules are in
   package but never tells the runtime to read them. At most 20 companion files per skill (5 MB
   each, 10 MB combined). Root dev copies that remain are byte-identical to the skill copies, with a
   runner assertion.
-  Test: search every file under `skills\` for those strings; run the regression against the
-  extracted ZIP (H12).
+  Test: search every file under `skills\` for those strings, and list the built ZIP (G4).
 - [ ] **H10. Listing metadata stays out of the package.** `listing-metadata.md` at the plugin root
   drafts the shared metadata template: `name.short` and `name.full`; `description.short` and
   `description.full` exactly as in the manifest; category and industry (left as an owner TODO);
@@ -715,8 +715,8 @@ H10 and H12 need a manual check. The packaging and test-data rules are in
   working directory; prints both roots at start; fails clearly when the plugin root has no
   `skills\`; and keeps `--group` and `--list-groups`. `check_shared_copies.py` accepts the same
   arguments. Moving the tests does not lower the check count.
-  Test: run from the version folder against the source and against a freshly extracted ZIP; both
-  pass with the same count, which is at least the pre-move baseline.
+  Test: run once from the version folder against the source; the count is at least the pre-move
+  baseline. Check the read paths under G4a.
 - [ ] **H13. Shared copies in test data match.** Vendored `steering-corpus.json` and
   `steering_guard.py` copies in unfrozen test-data folders stay byte-identical to `shared\`.
   Test: `npm run check:shared`.

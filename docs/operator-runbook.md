@@ -37,7 +37,8 @@ Typical elapsed time per iteration:
 | Activity | Time |
 |---|---|
 | Fix, test and commit a remediation | Hours, depending on the findings |
-| `evaluation:prepare` | About 5–15 minutes (it rebuilds every bundle, then runs the plugin's shipped tests from the ZIP). A MOS3 candidate adds the Agents Toolkit sign-in and validation |
+| Full suite, once per version before committing | Minutes to about 20 minutes, depending on the plugin |
+| `evaluation:prepare` | A few minutes: it checks and rebuilds every bundle and runs no test suite. A MOS3 candidate adds Agents Toolkit validation (no sign-in) |
 | Cowork evaluation | Usually 1–3 hours |
 | Watcher detect and archive | Within about a minute of the reports settling |
 | Human spot check | Depends on reviewer availability; plan for days, not hours |
@@ -142,22 +143,26 @@ overlap across plugins.
    npm run check:shared                      # vendored shared modules match shared/
    ```
 
-   For a MOS3 plugin, from its test-data version folder, against the source and then against the
-   built ZIP:
+   For a MOS3 plugin, run the full suite **once**, from its test-data version folder against the
+   source:
 
    ```powershell
-   npx tsx scripts/import-submissions.ts --only <slug>       # builds public\bundles\<slug>.zip only
-   $zip = Join-Path $env:TEMP "<slug>-zip"
-   Expand-Archive public\bundles\<slug>.zip $zip -Force
    Push-Location test-data\<industry>\<slug>\<version>
-   python tests\run_tests.py                                 # source: defaults to submissions\<industry>\<slug>
-   python tests\run_tests.py --plugin-root $zip              # extracted ZIP: same count
-   python tests\check_shared_copies.py --plugin-root $zip    # where the version ships one
+   python tests\run_tests.py                 # plugin root defaults to submissions\<industry>\<slug>
+   python tests\check_shared_copies.py       # where the version ships one
    Pop-Location
    npx tsx scripts/import-submissions.ts --check --only <slug>
    npm run check:test-data
    npm run check:shared                      # also covers unfrozen test-data folders
    ```
+
+   **One full suite run per version** (owner decision, 2026-10-14). This run is the only one before
+   Cowork: the bundler copies the plugin files byte for byte, `evaluation:prepare` runs no tests,
+   and Cowork runs the suite from the two frozen ZIPs. Run it on the final code; if the plugin or its
+   test data changes afterwards, run it again. Do not also run it against a built ZIP. Because
+   nothing reruns the suite from the ZIPs before Cowork, a runner must read only the plugin root and
+   its own version folder (see the [runner contract](#mos3-test-data)); a test that reads anything
+   else passes here and fails in Cowork.
 
    Every check must pass. Older plugins use `unittest` files instead of `run_tests.py`, and some
    MOS3 versions use `test_engines.py`; use whichever the plugin ships. When several plugins are
@@ -175,9 +180,8 @@ overlap across plugins.
    ```
 
    Never run two prepares (or a prepare and a `npm run build`) at once: each deletes and rebuilds
-   `public\bundles\`. Prepare also runs the shipped tests from an extracted copy of the built ZIP
-   and refuses to freeze if they fail there (usually a test reading a source-only file such as
-   `metadata.json`). Note the printed task name, SHA-256 and prompt path. Optionally inspect the
+   `public\bundles\`. Prepare only checks, packages and freezes; it runs no test suite and relies on
+   the step 2 run on the same code. Note the printed task name, SHA-256 and prompt path. Optionally inspect the
    frozen ZIP (see [Inspecting a frozen ZIP](#inspecting-a-frozen-zip)).
 
    Prepare has no `--only`: it validates every submission, runs `check:shared` and
@@ -191,8 +195,9 @@ overlap across plugins.
      stopped after 15 minutes. `--skip-atk` prints
      `LocalChecksOnly: not a deployable acceptance result` and records `"atkValidated": false`; use
      it only for local iteration and never send that candidate to Cowork.
-   - Prepare builds `<slug>-test-data-<version>.zip` and runs the test-data runners against the
-     extracted plugin ZIP with `--plugin-root`.
+   - Prepare refuses a version with no regression runner (`tests\run_tests.py` or
+     `tests\test_engines.py`) and builds `<slug>-test-data-<version>.zip`. It does not run the
+     runner.
    - Prepare writes `FROZEN.sha256` into the test-data version folder. Commit it straight away,
      on its own: `git add -- "test-data\<industry>\<slug>\<version>\FROZEN.sha256"`. From then on
      `check:test-data` fails if anything in that folder changes.
@@ -282,9 +287,13 @@ in `test-data\<industry>\<slug>\<version>\`, one folder per plugin version:
 
 - Fixtures never go into `submissions\<slug>\` for a MOS3 plugin.
 - **Runner contract:** `python tests\<runner> --plugin-root <dir>`, or the `PLUGIN_ROOT` variable.
-  The plugin root is an extracted plugin ZIP or the submission folder; without either, it defaults
-  to `submissions\<industry>\<slug>`. The runner finds `demo-data\` from its own location, not the
-  working directory.
+  The plugin root is the submission folder (before freezing) or an extracted plugin ZIP (in
+  Cowork); without either, it defaults to `submissions\<industry>\<slug>`. The runner finds
+  `demo-data\` from its own location, not the working directory.
+- **A runner reads only the plugin root and its own version folder**: never another plugin,
+  `shared\`, the repository root, or a source-only file such as `metadata.json`. Cowork runs it
+  from the two extracted ZIPs, where none of those exist, and nothing reruns it from the ZIPs
+  before then.
 - `npm run check:test-data` requires the current version's folder for every MOS3 submission, warns
   about other unfrozen versions, and fails on test data with no submission.
 - The test-data ZIP is evidence, not part of the candidate. Cowork gets it as a second attachment
@@ -449,8 +458,8 @@ change made for QA findings reopened two High findings in other plugins).
 1. Findings in the previous version's Cowork reports: each `FAIL`, `WEAK`, guardrail, security or
    trust-and-safety finding, and the reasons for a `Blocked` or `No-ship` verdict.
 2. Owner decisions recorded in the wave log.
-3. Anything that stops the candidate from freezing or running: shipped tests failing from the ZIP,
-   Agents Toolkit validation failing, a `check:shared` or `check:test-data` mismatch.
+3. Anything that stops the candidate from freezing or running: shipped tests failing, a runner
+   reading outside the plugin root and its version folder, Agents Toolkit validation failing, a `check:shared` or `check:test-data` mismatch.
 4. Regressions this version's own changes cause (a test that passed on the previous version and
    now fails).
 
@@ -476,8 +485,10 @@ change is committed to `shared\`:
 
 1. Make the change, bump `__version__` and pass the module's own tests.
 2. Copy it into every plugin's working tree (`npm run check:shared` lists them) without committing,
-   and run every plugin's full suite. Any existing test failure rejects the change; see "Existing
-   tests are protected".
+   and run every plugin's full suite once, from its test-data version folder against the source
+   (never against a ZIP). Any existing test failure rejects the change; see "Existing tests are
+   protected". If nothing else in a plugin changes before it freezes, this run is that version's
+   one full suite run (lifecycle step 2); do not rerun it.
 3. For the steering detector, score the module and every plugin call site on the
    [held-out set](#held-out-scoring). A drop from the previous version's score rejects the change.
 4. Only then commit `shared\` and the plugin copies, one commit per plugin.
@@ -568,7 +579,7 @@ review round found new paraphrases they missed (checklist D13 to D15).
   [shared-module gate](#change-policy-evaluation-feedback-drives-changes): edit
   `shared\steering-guard\`, bump `__version__`, run `python shared\steering-guard\test_steering_guard.py`
   (with `STEERING_GUARD_SLOW=1` before a release), copy the files into every plugin, run every
-  plugin's full suite and score the held-out set, and commit only if nothing regresses. Update both
+  plugin's full suite once from source and score the held-out set, and commit only if nothing regresses. Update both
   pins in each plugin's tests (`STEERING_GUARD_SHA256` and `STEERING_CORPUS_SHA256`) and run
   `npm run check:shared`. `evaluation:prepare` runs `check:shared` and refuses to freeze on a
   mismatch.
@@ -870,10 +881,10 @@ expected result of an existing test or check: if a fix makes an existing test fa
 commit, and report the conflict. Report any other defect you notice instead of fixing it.
 Iterate from the version folder with python tests\<runner> --group <name> (the
 plugin root defaults to the submission folder). Before committing, run the full
-runner once against the source and once with --plugin-root set to a fresh extraction of the ZIP
-built by npx tsx scripts/import-submissions.ts --only <slug>; both must pass with the same count.
-Then run npx tsx scripts/import-submissions.ts --check --only <slug>, npm run check:test-data and
-npm run check:shared. Commit with explicit git add -- <path>. Do not invoke skills; work from this
+runner once from the version folder against the source; do not run it against a built ZIP. Tests
+read only the plugin root and their own version folder, never another plugin, shared\ or
+metadata.json. Then run npx tsx scripts/import-submissions.ts --check --only <slug>,
+npm run check:test-data and npm run check:shared. Commit with explicit git add -- <path>. Do not invoke skills; work from this
 prompt and the repository.
 ```
 
@@ -886,7 +897,7 @@ over 90 minutes each, and a slow agent looked the same as a hung one.
 - Run full suites one at a time per machine.
 - Fix agents iterate with `python tests\run_tests.py --group <name>` (list groups with
   `--list-groups`) and run the full suite once before committing. For a MOS3 plugin they run it
-  from the test-data version folder with `--plugin-root`.
+  from the test-data version folder against the source, never against a built ZIP.
 - Start long runs asynchronously and poll at most every 10 minutes.
 - Agents commit their own plugin folder when they finish (explicit paths, never `git add -A`), so
   finished work is never left only in the working tree.
@@ -920,7 +931,7 @@ over 90 minutes each, and a slow agent looked the same as a hung one.
 | `EPERM`/`EBUSY: operation not permitted, rename '...tmp'` | OneDrive held the new staging folder longer than the script's retries (about 30 s) | The script already removed the staging folder and the receipt still says `prepared`; wait a minute and rerun `evaluation:archive` (or restart the watcher) |
 | Orchestrator keeps saying it is waiting on an agent, or a background agent seems hung | Completion notifications can be lost, and slow suites look like hangs | Read the agent's status directly (`read_agent`) and the todo table; check `git status` for finished but uncommitted work. Do not relaunch the agent |
 | `session host did not acknowledge … within 120s`, or a very slow orchestrator | A very long orchestration session (large event log, repeated compaction) | Commit finished work, then start a fresh session; the plan and todos carry over through files |
-| `evaluation:prepare` silent or slow during "Running shipped tests" | Large suites take 7–10 minutes | Watch the streamed output; raise `--test-timeout-minutes` if needed (see [evaluation-workflow.md](evaluation-workflow.md)) |
+| Cowork reports shipped tests failing that passed in lifecycle step 2 | A test reads outside the plugin root and its version folder (another plugin, `shared\`, `metadata.json`), which the ZIPs do not contain | Fix it in the next version so the runner follows the [runner contract](#mos3-test-data) |
 
 ### Recovering an interrupted archive
 

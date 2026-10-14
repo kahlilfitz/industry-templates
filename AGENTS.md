@@ -19,7 +19,8 @@ Cowork evaluation feedback decides what changes between versions
 - Never relax, delete or change the expected result of an existing test or check. If a fix makes
   an existing test fail, stop, do not commit, and report the conflict.
 - A change to `shared\` passes the shared-module gate before it is committed: every plugin's full
-  suite passes with the new copy, and the detector's held-out score does not drop.
+  suite passes with the new copy (run once, from source), and the detector's held-out score does
+  not drop.
 
 ## Skills in sub-agents
 
@@ -69,5 +70,8 @@ version of a MOS3 plugin ([docs/operator-runbook.md](docs/operator-runbook.md#mo
   `FROZEN.sha256`.
 - For MOS3 plugins, fixtures, demo data and tests never go into `submissions\<slug>\`.
 - Runners take the plugin as `python tests\<runner> --plugin-root <dir>` (or `PLUGIN_ROOT`): the
-  submission folder or an extracted plugin ZIP. Verify against both, from the version folder, and
-  run `npm run check:test-data`.
+  submission folder by default, or an extracted plugin ZIP in Cowork. A runner reads only the plugin
+  root and its own version folder, never another plugin, `shared\` or `metadata.json`.
+- Run the full suite once per version, from the version folder against the source, before
+  committing, then `npm run check:test-data`. Do not also run it against a built ZIP;
+  `evaluation:prepare` runs no tests.

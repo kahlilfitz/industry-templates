@@ -22,6 +22,12 @@ On 2026-10-14 the owner made Cowork evaluation feedback the source of changes be
 ([decision](#owner-decision-evaluation-feedback-drives-changes-2026-10-14)); open-ended pre-freeze
 QA rounds end, and the detector version to freeze on is an open owner decision.
 
+Later on 2026-10-14 the owner settled the detector on 1.1.7, signed off the T&E and DRQG expectation
+changes, skipped the verification review and made one full suite run per version the rule
+([decisions](#owner-decisions-detector-117-freeze-round-and-one-suite-run-2026-10-14)). T&E 1.0.6
+is frozen; Closeout 1.0.3 is held by a shipped test that reads another plugin; DRQG 1.0.6,
+Mobilization 1.0.4 and Staffing 1.1.5 are next to freeze.
+
 ## Contents
 
 - [Keeping this file current](#keeping-this-file-current)
@@ -115,10 +121,10 @@ human testers).
 
 | # | Plugin (slug) | Current version | State | C1 | C2 | C3 | C4 | C5 | Next action | Owner |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 01 | `engagement-closeout-knowledge-harvest` | 1.0.3 (MOS3, pre-freeze QA) | 1.0.3 **pre-freeze QA**, not frozen; supersedes 1.0.2 (Ready, archived; human gate not completed). QA rounds 1 to 9 fixed (`c4a039a` to `7a20785`; 145 checks). QA round 10 (2026-10-13) has 2 open Medium, not fixed (paused): digit shorthand verdicts (`safe2reuse`, `fine2ship`) pass, and CamelCase names such as `SafeToolkit` are falsely withheld. One open High: reworded instruction-like prose the shared detector misses is copied from description, lesson and owner fields into intermediate JSON; it needs a shared-detector change | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Owner decision on the detector version to freeze on, then freeze and evaluate. QA round 10 items moved to the backlog under the [2026-10-14 change policy](#owner-decision-evaluation-feedback-drives-changes-2026-10-14) | operator, owner |
-| 02 | `engagement-staffing-bench-match` | 1.1.5 (MOS3, pre-freeze QA) | 1.1.5 **pre-freeze QA**, not frozen; supersedes 1.1.4 (Ready, archived; human gate not completed). Hardening phases 1 and 2 (`b6946b6`, `9517b5f`) and QA rounds 1 to 14 fixed (`ea4b31b` to `07e271f`); QA round 15 found nothing (194/196 checks, source and ZIP). The 2 failures are the `detector-gaps` group, which fails by design (shared-detector misses), so the freeze is refused until the owner decides | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Owner decision on the shared detector, then freeze and evaluate | owner, then operator |
+| 01 | `engagement-closeout-knowledge-harvest` | 1.0.3 (MOS3, pre-freeze QA) | 1.0.3 **pre-freeze QA**, not frozen; supersedes 1.0.2 (Ready, archived; human gate not completed). QA rounds 1 to 9 fixed (`c4a039a` to `7a20785`; 145 checks). QA round 10 (2026-10-13) has 2 open Medium, not fixed (paused): digit shorthand verdicts (`safe2reuse`, `fine2ship`) pass, and CamelCase names such as `SafeToolkit` are falsely withheld. One open High: reworded instruction-like prose the shared detector misses is copied from description, lesson and owner fields into intermediate JSON; it needs a shared-detector change | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Owner decision on `test_mobilization_adapter_still_reads_closeout_output`, which reads another plugin and would fail in Cowork ([2026-10-14](#owner-decisions-detector-117-freeze-round-and-one-suite-run-2026-10-14)), then freeze on detector 1.1.7 and evaluate. QA round 10 items moved to the backlog under the [2026-10-14 change policy](#owner-decision-evaluation-feedback-drives-changes-2026-10-14) | owner, then operator |
+| 02 | `engagement-staffing-bench-match` | 1.1.5 (MOS3, pre-freeze QA) | 1.1.5 **pre-freeze QA**, not frozen; supersedes 1.1.4 (Ready, archived; human gate not completed). Hardening phases 1 and 2 (`b6946b6`, `9517b5f`) and QA rounds 1 to 14 fixed (`ea4b31b` to `07e271f`); QA round 15 found nothing (194/196 checks, source and ZIP). The 2 failures are the `detector-gaps` group, which fails by design (shared-detector misses), so the freeze is refused until the owner decides | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Freeze on detector 1.1.7 ([2026-10-14](#owner-decisions-detector-117-freeze-round-and-one-suite-run-2026-10-14)) and evaluate | operator |
 | 03 | `engagement-mobilization-onboarding-pack` | 1.0.3 (MOS3, frozen 2026-10-12); 1.0.2 evaluated | 1.0.3 **frozen 2026-10-12** (`87DEFE6F…A4F3`, receipt `16963eb`, clean; toolkit validated), in Cowork evaluation; supersedes 1.0.2. History: 1.0.0 Blocked (trust-and-safety gate); 1.0.1 **No-ship** 2026-10-07 (complete-chain functional case failed); 1.0.2 frozen 2026-10-07 (`C49C8EA7…A378`, receipt `9d27925`, clean) after QA round 3 (cap); evaluated **Blocked** 2026-10-08 on missing grader-calibration evidence only (no human reference labels); every measured bar met and the 1.0.1 defect did not recur; owner accepted 2026-10-08, no re-version | No | No | No (1.0.2: Yes) | No | No | Create the Cowork task, attach both frozen ZIPs, run the watcher | operator |
-| 04 | `time-expense-narrative-compliance` | 1.0.5 (MOS3, frozen 2026-10-12); 1.0.4 evaluated | 1.0.5 **frozen 2026-10-12** (`DA1E657B…4C02`, receipt `ace135d`, clean; toolkit validated), in Cowork evaluation; supersedes 1.0.4. History: 1.0.3 Blocked (trust-and-safety gate); 1.0.4 frozen 2026-10-07 (`1E1380E3…10B4`, receipt `f9518fd`, clean) after QA round 15 (cap, `e6925e4`); evaluated **No-ship** 2026-10-07 on missing grader-calibration evidence only (no human reference labels); every measured bar met; owner accepted 2026-10-08, no re-version | No | No | No (1.0.4: Yes) | No | No | Create the Cowork task, attach both frozen ZIPs, run the watcher | operator |
+| 04 | `time-expense-narrative-compliance` | 1.0.6 (MOS3, frozen 2026-10-14); 1.0.4 evaluated | 1.0.6 **frozen 2026-10-14** (`F67D299B…0BA`, test data `CBF8BF3E…FFAE`, receipt `dea94ab`, clean; toolkit validated; detector 1.1.7); supersedes 1.0.5 (frozen 2026-10-12, `DA1E657B…4C02`, receipt `ace135d`, detector 1.1.2). History: 1.0.3 Blocked (trust-and-safety gate); 1.0.4 frozen 2026-10-07 (`1E1380E3…10B4`, receipt `f9518fd`, clean) after QA round 15 (cap, `e6925e4`); evaluated **No-ship** 2026-10-07 on missing grader-calibration evidence only (no human reference labels); every measured bar met; owner accepted 2026-10-08, no re-version | No | No | No (1.0.4: Yes) | No | No | Create the Cowork task for 1.0.6, attach both frozen ZIPs, run the watcher | operator |
 | 05 | `deliverable-review-quality-gate` | 1.0.5 (MOS3, frozen 2026-10-12); 1.0.4 evaluated | 1.0.5 **frozen 2026-10-12** (`25551038…2BFD`, receipt `b183be9`, clean; toolkit validated), in Cowork evaluation; supersedes 1.0.4. History: 1.0.3 Blocked (B1 demo inputs not derivable from raw packs; B2 shipped tests read `metadata.json`), every measured gate met; 1.0.4 frozen 2026-10-07 (`4AE31530…316B`, receipt `f9518fd`, clean) after QA round 17 (cap, `1d20138`) and the T&E round 15 class sweep; evaluated **Blocked** 2026-10-07 on missing release evidence only (installed-runtime critical-path and independent grader calibration); every measured bar met; owner accepted 2026-10-07, no re-version | No | No | No (1.0.4: Yes) | No | No | Create the Cowork task, attach both frozen ZIPs, run the watcher | operator |
 
 Notes on the board:
@@ -170,6 +176,39 @@ New candidate versions: Closeout 1.0.3, Staffing 1.1.5, Mobilization 1.0.3, T&E 
 1.0.5 (Mobilization, T&E and DRQG frozen 2026-10-12; Closeout and Staffing not yet). They supersede Closeout 1.0.2 and Staffing 1.1.4
 (both Ready) and DRQG 1.0.4, T&E 1.0.4 and Mobilization 1.0.2 (evaluated, and accepted by the owner
 with missing evidence).
+
+### Owner decisions: detector 1.1.7 freeze round and one suite run (2026-10-14)
+
+1. **Detector.** Shared detector 1.1.7 (`d52596e`) passed the shared-module gate and is the
+   detector these candidates freeze on: T&E 1.0.6 (`c7ac5e9`), Closeout 1.0.3 (`b1dc427`), DRQG
+   1.0.6 (`d421d7b`), Mobilization 1.0.4 (`35ef567`) and Staffing 1.1.5 (`51aad8c`). This closes the
+   open detector decision below.
+2. **Expectation changes signed off** ("i am ok with all current edits"): T&E 1.0.6's split-control
+   expectation (`{"0","2"}` to `{"2"}`; the ID-only field is no longer withheld), and DRQG 1.0.6's
+   restored SP-7 check and its SP-3 and full-stop expectations. This is the sign-off the
+   protected-test rule requires.
+3. **Verification review skipped** for this round ("skip the verification review").
+4. **One full suite run per version** ("prepare should only be zipping the files, there should
+   only be one test suite run on the source code"). The suite runs once, from the test-data
+   version folder against the source, before committing; `evaluation:prepare` checks, packages,
+   validates and freezes, and runs no tests
+   ([runbook step 2](../operator-runbook.md#the-lifecycle-loop)). Reason: the bundler copies files
+   byte for byte and one agent changes the code, so the second run from the ZIPs repeated the first
+   (about 45 minutes across five plugins). Trade-off: a test that reads outside the plugin root and
+   its version folder now first fails in Cowork, so runners must follow the
+   [runner contract](../operator-runbook.md#mos3-test-data).
+
+Effect on in-flight work:
+
+- T&E 1.0.6 frozen 2026-10-14 before the change (`F67D299B…0BA`, test data `CBF8BF3E…FFAE`,
+  receipt `dea94ab`, clean; toolkit validated).
+- Closeout 1.0.3's prepare (still running the suite from the ZIPs) failed 187/188:
+  `test_mobilization_adapter_still_reads_closeout_output` (`tests/test_engines.py:437`, added in
+  `c4a039a`) reads the Mobilization plugin and its test data through the repository root, which the
+  test-data ZIP does not contain. It passes from the version folder, and would fail in Cowork. How
+  to fix it (skip when absent, or move the check out of the shipped suite) is an open owner decision;
+  changing the test needs sign-off under the protected-test rule.
+- DRQG 1.0.6, Mobilization 1.0.4 and Staffing 1.1.5 freeze under the new rule.
 
 ### Owner decision: evaluation feedback drives changes (2026-10-14)
 

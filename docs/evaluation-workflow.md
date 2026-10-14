@@ -76,12 +76,11 @@ The command:
 2. Rebuilds all reproducible bundles.
 3. Confirms the submission and plugin-manifest versions agree (`.claude-plugin/plugin.json`, or the
    root `manifest.json` for a MOS3 submission).
-4. Extracts the built ZIP to a temporary folder and runs any shipped `tests/run_tests.py`,
-   `tests/test_engines.py` and `tests/check_shared_copies.py` there with `python`, so tests that
-   depend on source-only files (such as `metadata.json`) fail before freezing, not in Cowork.
-   Each runner's output streams to the console. The command prints the runner name before it
-   starts, and the elapsed seconds and exit code when it finishes. Large suites take 5–10 minutes,
-   so a quiet console is not a hang.
+4. Refuses a MOS3 version whose test data ships no regression runner (`tests/run_tests.py` or
+   `tests/test_engines.py`). Preparation runs no test suite: the one full suite run happens before
+   committing, from the test-data version folder against the source
+   ([operator runbook](operator-runbook.md#the-lifecycle-loop), step 2). The bundler copies files byte
+   for byte, so the frozen ZIP holds the code that run tested.
 5. Copies the generated bundle into an immutable local run folder.
 6. Records the SHA-256, Git commit, dirty-worktree state, artifact version, and Cowork task name.
 7. Generates a ready-to-paste Cowork prompt.
@@ -91,15 +90,6 @@ Preparation always validates and rebuilds every submission; it has no `--only`. 
 plugins are changing in parallel, check or build one submission with
 `npx tsx scripts/import-submissions.ts --check --only <plugin-slug>` (or without `--check` to build
 only that bundle and leave the others in place), and prepare once every submission passes.
-
-Each shipped runner has a 30-minute timeout. A runner that exceeds it is stopped, and preparation
-fails with an error naming the runner. If the suite is only slow, raise the limit with the flag or
-the environment variable (the flag wins; fractional minutes are accepted):
-
-```powershell
-npm run evaluation:prepare -- --slug <plugin-slug> --test-timeout-minutes 60
-$env:EVALUATION_TEST_TIMEOUT_MINUTES = "60"
-```
 
 The generated Cowork prompt tells the evaluator that shipped suites can take about 15 minutes. It
 asks the evaluator to run them with a long command timeout, in the background, or by `--group` when
@@ -127,10 +117,9 @@ For a submission with `"packageFormat": "mos3"`, preparation also:
 
 1. Runs `npm run check:test-data` after the build.
 2. Builds `<plugin-slug>-test-data-<version>.zip` from `test-data\<industry>\<plugin-slug>\<version>\`.
-3. Extracts the plugin ZIP to `<tmp>\plugin` and the test-data ZIP to `<tmp>\test-data`, and runs
-   each runner in `<tmp>\test-data\tests\` with the test-data folder as its working directory,
-   `--plugin-root <tmp>\plugin` and `PLUGIN_ROOT` set to the same path. The timeout, streaming and
-   failure rules are the same as above. A version without test data fails.
+3. Does not run the runners. Cowork is the first to run them from the extracted ZIPs, so each
+   runner must read only `--plugin-root` and its own version folder (runbook
+   [runner contract](operator-runbook.md#mos3-test-data)).
 4. Validates the plugin ZIP with the Microsoft 365 Agents Toolkit CLI:
 
    ```powershell
