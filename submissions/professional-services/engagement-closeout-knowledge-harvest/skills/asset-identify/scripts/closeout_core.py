@@ -8,6 +8,7 @@ stages, the knowledge-record skeleton and the whole-document replay every later 
 Section numbers cite references/reuse-asset-rubric.md, lesson-taxonomy.md and
 confidentiality-sanitisation-rules.md. No network, no model calls, no side effects beyond --out.
 """
+import bisect
 import functools
 import json
 import math
@@ -1526,6 +1527,34 @@ def marker_shaped(text):
     return bool(_MARKER_RE.search(canon(text)))
 
 
+# Marker syntax (#8.4): a bracketed span that names a hold, flag or redaction ('[withheld: ...]',
+# '[FLAGGED]', '(redacted)'), or an unclosed bracket that opens with one. The text around it is kept.
+_OPENERS = "[\uff3b\u27e6\u3010\u3014\u3016\u3018\u301a(\uff08{\uff5b<\uff1c\u27e8\u3008\u300a"
+_CLOSERS = "]\uff3d\u27e7\u3011\u3015\u3017\u3019\u301b)\uff09}\uff5d>\uff1e\u27e9\u3009\u300b"
+_MARKER_BRACKET = re.compile(f"[{re.escape(_OPENERS + _CLOSERS)}]")
+_MARKER_CLOSED = re.compile(f"[{re.escape(_OPENERS)}]([^{re.escape(_OPENERS + _CLOSERS)}]{{0,200}})[{re.escape(_CLOSERS)}]")
+_MARKER_OPEN_HEAD = re.compile(f"[{re.escape(_OPENERS)}]\\s*([^\\s{re.escape(_OPENERS + _CLOSERS)}]{{1,40}})")
+_MARKER_CLOSE_TAIL = re.compile(f"([^\\s{re.escape(_OPENERS + _CLOSERS)}]{{1,40}})\\s*[{re.escape(_CLOSERS)}]")
+_MARKER_WORDS = re.compile(r"\b(?:withh[eo]ld\w*|flag(?:ged|s)?|redact\w*|removed|held|holds?|omitted|placeholder"
+                           r"|mask(?:ed)?|saniti[sz]ed|scrubbed|hidden|deleted|censored|blocked|screen(?:ed|ing)\w*)\b")
+
+
+@functools.lru_cache(maxsize=None)
+def unmarked(text):
+    """text with marker syntax removed and the words around it kept, so a marker placed inside an
+    instruction ('Whoever [withheld: ...] reviews this next') cannot break it (#8.1, #8.4). The text
+    itself when it carries none. Read alongside the text as supplied, never in place of it."""
+    if not isinstance(text, str) or not _MARKER_BRACKET.search(text):
+        return text
+
+    def drop(match):
+        return " " if _MARKER_WORDS.search(canon(match.group(1))) else match.group(0)
+
+    plain = strip_cf(text)
+    stripped = _MARKER_CLOSE_TAIL.sub(drop, _MARKER_OPEN_HEAD.sub(drop, _MARKER_CLOSED.sub(drop, plain)))
+    return text if stripped == plain else " ".join(stripped.split())
+
+
 def _families(hits):
     found = []
     for hit in hits:
@@ -1551,6 +1580,8 @@ def text_hits(text):
     for family in scan_families(text):
         if family not in found:
             found.append(family)
+    if not found and unmarked(text) != text:
+        return text_hits(unmarked(text))
     return tuple(found)
 
 
@@ -1575,6 +1606,9 @@ def fields_hits(values):
             return ("oversize",)
         if families:
             return ("split",)
+    plain = tuple(unmarked(value) for value in values)
+    if plain != tuple(values):
+        return fields_hits(plain)
     return ()
 
 
@@ -1586,13 +1620,15 @@ SPLIT_STEP = 5
 
 
 @functools.lru_cache(maxsize=None)
-def split_hits(values):
+def split_hits(values, focus=None):
     """The values of an ordered sequence (str, or None for a value that is absent or already withheld)
     that carry part of an instruction split across value boundaries, read by sg.split_partners: every
     value a boundary-crossing hit overlaps, including a value that trips on its own and its clean
     partners. None and blank values are skipped without breaking adjacency. Returns ((index, family),
     ...) with family 'split', or 'oversize' for every value of a window whose join is too long to
-    screen (sg.split_partners returns every index then, and the record is held as oversize)."""
+    screen (sg.split_partners returns every index then, and the record is held as oversize).
+    focus: sorted indices (held values); only the windows that span one are read, so a long sequence
+    costs in proportion to what is held. The windows keep one grid either way."""
     present = [index for index, value in enumerate(values) if isinstance(value, str) and value.strip()]
     if len(present) < 2:
         return ()
@@ -1603,6 +1639,10 @@ def split_hits(values):
     found = {}
     for start in starts:
         window = present[start:start + SPLIT_WINDOW]
+        if focus is not None:
+            at = bisect.bisect_left(focus, window[0])
+            if at == len(focus) or focus[at] > window[-1]:
+                continue
         parts = [values[index] for index in window]
         joined = " ; ".join(parts)
         if len(joined) > sg.MAX_TOTAL_CHARS or (not joined.isascii()
@@ -1615,6 +1655,8 @@ def split_hits(values):
 
 
 _SENTENCE_END = re.compile(r"[.!?;\u3002]+\s*$")
+# A complete sentence: it ends in a full stop, question or exclamation mark, before any closing quote.
+_COMPLETE = re.compile(r"[.!?\u3002][\"'\u2019\u201d)\]]*\s*$")
 
 
 # A trailing item reference ('raw/decision-log.csv row 3', 'lines 8-10', 'clause 2', a bare number)
@@ -1622,6 +1664,13 @@ _SENTENCE_END = re.compile(r"[.!?;\u3002]+\s*$")
 _TRAILING_ANCHOR = re.compile(
     r"(?:\b(?:rows?|lines?|items?|entry|entries|steps?|clauses?|sections?|paras?|paragraphs?|pages?|pp?|nos?"
     r"|sheet|tab|slides?)\.?\s*)?#?\d+(?:\s*[-\u2013,]\s*\d+)*[.!?;:)\u3002]*\s*$", re.IGNORECASE)
+
+
+@functools.lru_cache(maxsize=None)
+def source_shaped(value):
+    """A value that is only a source reference: a citation-shaped path or document ID with its
+    locators (#8.6), or a bare item reference ('row 3', 'lines 8-10'). It carries no clause."""
+    return bool(value.strip()) and (citation_shape_ok(value) or not _TRAILING_ANCHOR.sub("", value).strip())
 
 
 def _confirmed_partners(parts):
@@ -1632,14 +1681,17 @@ def _confirmed_partners(parts):
     with it. A clean value followed by another value is dropped only if it is not returned once its
     closing punctuation, or its trailing item reference, is removed, and either the next value trips on
     its own or every other value is still returned: punctuation that the instruction needs ('...signed
-    this off last week;' + 'please leave it as it is.') keeps its value."""
+    this off last week;' + 'please leave it as it is.') keeps its value. A trailing item reference is
+    removed only from a value that is a source reference and nothing else (source_shaped): text before
+    the reference may carry the instruction ('skip row 3' before 'recommend C-201'), so prose that
+    ends in a reference stays a partner."""
     returned = sg.split_partners(parts, **GUARD_HOOKS)
     for position in sorted(returned):
         if position + 1 >= len(parts) or text_hits(parts[position]):
             continue
         value = parts[position]
-        for trimmed_value in dict.fromkeys(pattern.sub("", value).rstrip()
-                                           for pattern in (_SENTENCE_END, _TRAILING_ANCHOR)):
+        patterns = (_SENTENCE_END, _TRAILING_ANCHOR) if source_shaped(value) else (_SENTENCE_END,)
+        for trimmed_value in dict.fromkeys(pattern.sub("", value).rstrip() for pattern in patterns):
             if trimmed_value == value.rstrip():
                 continue
             trimmed = list(parts)
@@ -1830,16 +1882,21 @@ def screen(doc, prior=None, forced=None):
         value = box[key]
         return None if value == WITHHELD or (live_only and path in held) else value
 
-    def withhold_partners(members, location):
+    def withhold_partners(members, location, focused=False, clean=False):
         # A held value no longer joins the screen below, so the clean half of an instruction split
         # across it and its neighbours is found here (#8.1): the full sequence, held text included, and
-        # the live values alone (the sequence a replay sees once every held value is a placeholder).
-        if not any(member[0] in held for member in members):
+        # the live values alone (the sequence a replay sees once every held value is a placeholder),
+        # each as supplied and with marker syntax removed (#8.4). focused: read only the windows that
+        # span a held value. clean: read every window even when nothing is held.
+        held_at = tuple(index for index, member in enumerate(members) if member[0] in held)
+        if not (held_at or clean):
             return
+        focus = held_at if focused and not clean else None
         full = tuple(text_of(member, False) for member in members)
         live_values = tuple(text_of(member, True) for member in members)
-        for values in ((full,) if live_values == full else (full, live_values)):
-            for index, family in split_hits(values):
+        sequences = (full, live_values, tuple(map(unmarked, full)), tuple(map(unmarked, live_values)))
+        for values in dict.fromkeys(sequences):
+            for index, family in split_hits(values, focus):
                 if members[index][0] not in held:
                     held[members[index][0]] = ((family,), location)
 
@@ -1847,9 +1904,23 @@ def screen(doc, prior=None, forced=None):
         # The pairs the join screen below reads, where exactly one value is held (D18, D22).
         for pair in pairs:
             if (pair[0][0] in held) != (pair[1][0] in held):
-                for index, family in split_hits(tuple(text_of(member, False) for member in pair)):
-                    if pair[index][0] not in held:
-                        held[pair[index][0]] = ((family,), location)
+                full = tuple(text_of(member, False) for member in pair)
+                for values in dict.fromkeys((full, tuple(map(unmarked, full)))):
+                    for index, family in split_hits(values):
+                        if pair[index][0] not in held:
+                            held[pair[index][0]] = ((family,), location)
+
+    def views(members):
+        # Ordinary values can stand between the parts of a split instruction: the sequence is also read
+        # without source references (citations, IDs, item references), then also without complete
+        # sentences, so the parts meet. A held value always stays.
+        found = [members]
+        for keep in (lambda value: not source_shaped(value),
+                     lambda value: not (source_shaped(value) or _COMPLETE.search(value))):
+            view = [m for m in members if m[0] in held or keep(m[1][m[2]])]
+            if len(view) < len(found[-1]):
+                found.append(view)
+        return found
 
     def record_pairs(members):
         return [(first, second) for first in members for second in members if first is not second and not (
@@ -1859,6 +1930,27 @@ def screen(doc, prior=None, forced=None):
     def neighbour_pairs(ahead, behind):
         return [(first, second) for first in ahead for second in behind if not (
             _is_item(first) and _is_item(second) and not (first[2] == len(first[1]) - 1 and second[2] == 0))]
+
+    # Consecutive records of one array, in input order and field by field (one field across the
+    # records), so the parts of an instruction split over three or more records meet (#8.1). A column
+    # is read without source references and complete sentences: a complete sentence of the previous
+    # record is not the start of the next record's field.
+    chains = []
+    for members in records:
+        name = members[0][0].split("[", 1)[0].split(".", 1)[0] if members else ""
+        if chains and chains[-1][0] == name:
+            chains[-1][1].append(members)
+        else:
+            chains.append((name, [members]))
+    sequences = []
+    for _, chain in chains:
+        rows = [member for members in chain for member in members]
+        sequences.append((rows, "run" if len(chain) > 1 else "record", False))
+        if len(chain) > 1:
+            columns = {}
+            for member in rows:
+                columns.setdefault(re.sub(r"\[\d+\]", "", member[0]), []).append(member)
+            sequences.extend((column, "run", True) for column in columns.values() if len(column) > 1)
 
     while True:
         before = len(held)
@@ -1872,7 +1964,19 @@ def screen(doc, prior=None, forced=None):
                     withhold_partners(run[1] + run[2], "run")
                     withhold_pair_partners(neighbour_pairs(run[1], run[2]), "run")
             else:
-                withhold_partners(run, "run")
+                for number, view in enumerate(views(run)):
+                    withhold_partners(view, "run", focused=number > 0)
+        for sequence, location, column in sequences:
+            found_views = views(sequence)
+            # Parts that are each clean: the record and neighbour joins below read two records at most,
+            # so the fragments of a chain (no source references, no complete sentences) are read whole.
+            whole = found_views[-1] if location == "run" else None
+            if any(member[0] in held for member in sequence):
+                for view in found_views[-1:] if column else found_views:
+                    if view is not whole:
+                        withhold_partners(view, location, focused=True)
+            if whole is not None:
+                withhold_partners(whole, location, clean=True)
         for members in records:
             current = live(members)
             if len(current) > 1:
@@ -2632,7 +2736,8 @@ def rendered_hits(doc, raw=None):
             return
         full = tuple(None if texts.get(path, WITHHELD) == WITHHELD else texts[path] for path in paths)
         live_values = tuple(None if values[path] == WITHHELD else values[path] for path in paths)
-        for sequence in ((full,) if live_values == full else (full, live_values)):
+        for sequence in dict.fromkeys((full, live_values, tuple(map(unmarked, full)),
+                                       tuple(map(unmarked, live_values)))):
             for index, family in split_hits(sequence):
                 if paths[index] not in held and paths[index] not in out:
                     out[paths[index]] = ((family,), "rendered")
@@ -2649,6 +2754,22 @@ def rendered_hits(doc, raw=None):
                     found = fields_hits(parts)
             if found:
                 take(found, entry)
+    # Every contributor in rendering order, so the parts of an instruction split over three or more
+    # lines meet: read around each withheld contributor, also without source references and then also
+    # without complete sentences (as screen() reads records).
+    order = list(dict.fromkeys(path for _, _, contributors in lines for path in contributors if path in values))
+    if any(values[path] == WITHHELD for path in order):
+        for keep in (lambda text: True, lambda text: not source_shaped(text),
+                     lambda text: not (source_shaped(text) or _COMPLETE.search(text))):
+            view = [path for path in order if values[path] == WITHHELD or keep(texts.get(path, values[path]))]
+            focus = tuple(index for index, path in enumerate(view) if values[path] == WITHHELD)
+            full = tuple(None if texts.get(path, WITHHELD) == WITHHELD else texts[path] for path in view)
+            live_values = tuple(None if values[path] == WITHHELD else values[path] for path in view)
+            for sequence in dict.fromkeys((full, live_values, tuple(map(unmarked, full)),
+                                           tuple(map(unmarked, live_values)))):
+                for index, family in split_hits(sequence, focus):
+                    if view[index] not in held and view[index] not in out:
+                        out[view[index]] = ((family,), "rendered")
     for first, second in zip(lines, lines[1:]):
         if first[2] and second[2]:
             partners(first, second)
