@@ -149,12 +149,13 @@ npm run evaluation:prepare -- --slug <plugin-slug>
 ```
 
 The command validates and builds the repository, then writes the immutable ZIP, its SHA-256 receipt,
-and a ready-to-paste Cowork prompt under `evaluation-inbox/<slug>/<version>/`. Attach that frozen ZIP
-to Cowork and require exactly `plugin-health.html`, `behavioral-test-report.html`, and
-`full-report.html`. For a MOS3 plugin it also validates the package with
+and a ready-to-paste Cowork prompt under `evaluation-inbox/<slug>/<version>/`. Attach only that
+frozen plugin ZIP to Cowork and require exactly `plugin-health.html`, `behavioral-test-report.html`,
+and `recommendations.html` (suggested fixes and the verdict, decided only from the other two). For a
+MOS3 plugin it also validates the package with
 `atk validate --package-file --interactive false` (no sign-in), builds
 `<slug>-test-data-<version>.zip` and writes `FROZEN.sha256` into the test-data folder, which you
-commit. Attach both ZIPs to Cowork; the test-data ZIP is for the regression only.
+commit. The test-data ZIP is not sent to Cowork; it is archived with the reports as the test record.
 
 After Cowork finishes, archive the reports and exact evaluated ZIP:
 

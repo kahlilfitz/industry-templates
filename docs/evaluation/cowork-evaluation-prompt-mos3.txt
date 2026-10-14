@@ -4,112 +4,50 @@ Plugin display name: {{DISPLAY_NAME}}
 Plugin slug: {{SLUG}}
 Artifact version: {{VERSION}}
 Cowork task/run label: {{RUN_LABEL}}
-Plugin ZIP: {{SLUG}}.zip
 Plugin artifact SHA-256: {{SHA256}}
-Test-data ZIP: {{TEST_DATA_FILE}}
-Test-data SHA-256: {{TEST_DATA_SHA256}}
 
-Two ZIPs are attached. {{SLUG}}.zip is immutable and is the exact release candidate. Do not rebuild,
-modify, rename internally, or substitute another copy. {{TEST_DATA_FILE}} is the shipped regression
-and its fixtures for this version. It is not part of the candidate and is never installed; it exists
-only so the regression can run against the candidate.
+{{SLUG}}.zip is immutable and is the exact release candidate. Do not rebuild, modify, rename
+internally, or substitute another copy. First compute its SHA-256 and compare it with {{SHA256}};
+on a mismatch, stop and report it.
 
-The target package channel is the MOS3 Microsoft 365 app package (manifest schema 1.28) described by
-the "Building a Cowork Plugin — Partner Team Guide". `.claude-plugin/plugin.json`, Agent Builder,
-Copilot Studio, and `packageMetadata.json` requirements are not applicable and must not be treated
-as blockers. The plugin ZIP has its files at the ZIP root with no wrapper folder and contains only
-manifest.json, color.png, outline.png and skills/**. The README, demo data, fixtures and tests are
-deliberately outside the package (they are in the test-data ZIP), so their absence from the plugin
-ZIP is correct and is not a defect.
+The package is a MOS3 Microsoft 365 app package (manifest schema 1.28): manifest.json, color.png,
+outline.png and skills/** at the ZIP root. `.claude-plugin/plugin.json`, Agent Builder, Copilot
+Studio and `packageMetadata.json` requirements do not apply. The README, demo data and tests are
+deliberately outside the package; their absence is not a defect.
 
-Identity checks (run these first; fail closed on any mismatch):
-- Compute the SHA-256 of the attached {{SLUG}}.zip and compare it with {{SHA256}}.
-- Compute the SHA-256 of the attached {{TEST_DATA_FILE}} and compare it with {{TEST_DATA_SHA256}}.
-
-Package checks on the plugin ZIP:
-- ZIP-root manifest.json: `$schema` is
-  https://developer.microsoft.com/json-schemas/teams/v1.28/MicrosoftTeams.schema.json and
-  `manifestVersion` is "1.28"; `id` is a GUID; `version` is {{VERSION}}; `developer.name` is
-  "Microsoft Corporation" and its websiteUrl, privacyUrl and termsOfUseUrl are HTTPS; `name.short`
-  is at most 30 characters and `name.full` at most 100; `description.short` is at most 80 characters
-  and `description.full` under 4000; `description.full` ends with the Sign up, Get started, Help and
-  Contact us links in that order; `accentColor` is #RRGGBB; there are no conversation starters or
-  other keys outside the 1.28 basics.
-- Icons: `icons.color` is color.png, a 192×192 PNG; `icons.outline` is outline.png, a 32×32 PNG
-  that is white on a transparent background.
-- agentSkills: a non-empty array of at most 20 `{ "folder": "./skills/<name>" }` entries, without
-  duplicates, that matches the skills/ folders exactly.
-- Each skills/<name>/ has exactly one SKILL.md at its root. Its frontmatter uses only name,
-  description, license, compatibility, metadata and allowed-tools; `name` equals the folder and is
-  kebab-case, at most 64 characters; the description is at most 1024 characters; `compatibility`,
-  if present, is at most 500 characters; `metadata.icon` is present and `metadata.version` is
-  {{VERSION}}. A skill has at most 20 companion files (each at most 5 MB, at most 10 MB combined),
-  no symlinks, and no `../` references that leave its own folder.
-
-Run the six Step 2 checks from the Partner Team Guide, plus the Industry Templates stages:
-- structural validation (the package checks above, malformed YAML, illegal frontmatter keys,
-  name/folder mismatch, description over the cap)
-- rubric score and risk-adjusted launch-floor scoring for every skill
-- safety and RAI scan, and trust-and-safety testing
-- conflict scan: skill-trigger conflicts inside the plugin and with Cowork's built-ins
-- tool description validation: N/A when the package declares no agentConnectors; state N/A and why
-- behavioral testing
-- security scanning
-
-For trigger conflicts, treat explicit semantic deferrals as resolved. Keyword-only overlap with an
-unrelated in-session skill is advisory unless both skills could reasonably own the same user request.
-
-Fail closed when evidence is missing or ambiguous. A favorable average does not override a skill below its launch floor or a safety or security blocker. A behavioral failure blocks the plugin regardless of its rubric score.
-
-Shipped regression: extract {{SLUG}}.zip to one folder and {{TEST_DATA_FILE}} to another. From the
-extracted test-data folder, run each runner in its tests/ folder (tests/run_tests.py or
-tests/test_engines.py, and tests/check_shared_copies.py when present) as
-`python tests/<runner> --plugin-root <extracted plugin folder>`. Do not copy the tests or fixtures
-into the plugin folder.
-
-Shipped regression suites can take up to about 15 minutes. Run them with a long command timeout or
-in the background, or run them in parts with `--group` when the runner lists groups via
-`--list-groups`, and record the pass and fail totals. A tool or sandbox timeout is not a test
-failure: re-run with a longer timeout or by group before concluding.
+Run the plugin evaluation defined in the testing strategy. Base the verdict only on what this
+evaluation observes and reports; do not depend on anything outside it.
 
 Produce exactly these files in the task output folder:
 1. plugin-health.html
 2. behavioral-test-report.html
-3. full-report.html
+3. recommendations.html
 
-The full report must visibly state:
+recommendations.html must visibly state, at the top:
 - plugin slug {{SLUG}}
 - artifact version {{VERSION}}
 - Cowork task/run label {{RUN_LABEL}}
 - plugin artifact SHA-256 {{SHA256}}
 - observed plugin ZIP SHA-256 and an explicit `Plugin SHA-256 check: MATCH` or `Plugin SHA-256 check: MISMATCH`
-- test-data SHA-256 {{TEST_DATA_SHA256}}
-- observed test-data ZIP SHA-256 and an explicit `Test-data SHA-256 check: MATCH` or `Test-data SHA-256 check: MISMATCH`
-- the MOS3 package-structure result (manifest, icons, agentSkills, skill frontmatter)
-- the result of each of the six Step 2 checks
-- every skill's score and risk-adjusted launch floor
-- behavioral pass and failure totals
-- trust-and-safety pass and failure totals
-- security scan result
-- unresolved trigger-conflict count
-- shipped regression pass and failure totals, run from the test-data ZIP against the extracted plugin
-- blockers and required follow-up
-- a "Pending human-review evidence" section (see below)
 - final automated verdict using exactly one of: Ready for human review, Blocked, or No-ship
+- the findings in plugin-health.html and behavioral-test-report.html that decide the verdict
 
-Automated verdicts (state exactly one, spelled exactly as written):
-- Ready for human review: every measured bar is met — identity/SHA match, package structure, every
-  skill at or above its launch floor, behavioral, trust and safety, security, trigger conflicts, and
-  the shipped regression. The only open items are evidence that the two-reviewer human review
-  supplies: installed-runtime critical-path runs, human grader-calibration labels, and human spot
-  checks. List those under "Pending human-review evidence"; they are not blockers.
-- Blocked: evidence is missing that human review cannot supply (for example a stage that did not run,
-  or an ambiguous artifact identity), or a gate failed closed for a reason that is not an observed
-  plugin defect.
+It then lists the suggested fixes, one per entry: an ID, the skill or file concerned, the evidence
+(which report, check or test case, and what was observed), the severity (blocker, required or
+advisory) and the suggested change. End with a "Pending human-review evidence" section (see below).
+
+Automated verdicts (state exactly one, spelled exactly as written), decided only from
+plugin-health.html and behavioral-test-report.html:
+- Ready for human review: every bar in those reports is met. The only open items are evidence that
+  the two-reviewer human review supplies: installed-runtime critical-path runs, human
+  grader-calibration labels, and human spot checks. List those under "Pending human-review
+  evidence"; they are not blockers.
+- Blocked: evidence is missing that human review cannot supply (for example a stage that did not
+  run, or an ambiguous artifact identity).
 - No-ship: an observed defect, a below-floor score, or a safety or security blocker.
 
 Do not use a bare "Ready", and do not report Blocked only because installed-runtime runs, human
-grader-calibration labels, or human spot checks are still to come; those belong in the
-"Pending human-review evidence" section. Ready for human review is never a publish signal.
+grader-calibration labels, or human spot checks are still to come. Ready for human review is never a
+publish signal.
 
 Do not call the plugin published. State that publication remains pending until two independent human reviewers complete the critical-path spot checks.

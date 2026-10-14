@@ -12,9 +12,9 @@ import {
   DEFAULT_INBOX_ROOT,
   REQUIRED_REPORTS,
   EvaluationRun,
+  VERDICT_REPORT,
   assertNonEmptyFile,
   confirmsArtifactMatch,
-  containsDigest,
   extractVerdict,
   findSubmission,
   htmlToText,
@@ -86,7 +86,8 @@ function main(): void {
     throw new Error("frozen evaluated ZIP no longer matches its recorded SHA-256");
   }
 
-  // A MOS3 candidate is evaluated with a second, non-candidate attachment: its test-data ZIP.
+  // A MOS3 candidate's test-data ZIP is not sent to Cowork; it is archived as the record of the
+  // tests and fixtures that version was verified against.
   let testDataPath: string | undefined;
   if (runData.testDataFile !== undefined) {
     if (runData.testDataFile !== `${slug}-test-data-${version}.zip` || !runData.testDataSha256) {
@@ -103,29 +104,20 @@ function main(): void {
     assertNonEmptyFile(join(source, report), report);
   }
 
-  const fullReportPath = join(source, "full-report.html");
-  const fullReport = readFileSync(fullReportPath, "utf8");
-  const fullReportText = htmlToText(fullReport).toLowerCase();
-  if (!fullReportText.includes(slug.toLowerCase())) {
-    throw new Error(`full-report.html does not identify plugin slug ${slug}`);
+  const verdictReport = readFileSync(join(source, VERDICT_REPORT), "utf8");
+  const verdictText = htmlToText(verdictReport).toLowerCase();
+  if (!verdictText.includes(slug.toLowerCase())) {
+    throw new Error(`${VERDICT_REPORT} does not identify plugin slug ${slug}`);
   }
-  if (!fullReportText.includes(version.toLowerCase())) {
+  if (!verdictText.includes(version.toLowerCase())) {
+    throw new Error(`${VERDICT_REPORT} does not identify artifact version ${version}`);
+  }
+  if (!confirmsArtifactMatch(verdictReport, runData.artifactSha256)) {
     throw new Error(
-      `full-report.html does not identify artifact version ${version}`,
+      `${VERDICT_REPORT} does not affirm that the evaluated artifact matches the frozen SHA-256`,
     );
   }
-  if (!confirmsArtifactMatch(fullReport, runData.artifactSha256)) {
-    throw new Error(
-      "full-report.html does not affirm that the evaluated artifact matches the frozen SHA-256",
-    );
-  }
-  const automatedVerdict = extractVerdict(fullReport);
-  if (runData.testDataSha256 !== undefined && !containsDigest(fullReport, runData.testDataSha256)) {
-    throw new Error(
-      "full-report.html does not state the frozen test-data ZIP SHA-256, so the shipped regression " +
-        "cannot be tied to the test data that was prepared",
-    );
-  }
+  const automatedVerdict = extractVerdict(verdictReport);
 
   const destination = join(
     sharepointRoot,

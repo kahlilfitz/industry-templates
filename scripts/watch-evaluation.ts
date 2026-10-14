@@ -6,6 +6,7 @@ import {
   REQUIRED_REPORTS,
   ROOT,
   EvaluationRun,
+  VERDICT_REPORT,
   assertNonEmptyFile,
   confirmsArtifactMatch,
   findSubmission,
@@ -72,12 +73,12 @@ function reportsMatchRun(
   version: string,
   digest: string,
 ): boolean {
-  const fullReport = readFileSync(join(source, "full-report.html"), "utf8");
-  const text = htmlToText(fullReport).toLowerCase();
+  const verdictReport = readFileSync(join(source, VERDICT_REPORT), "utf8");
+  const text = htmlToText(verdictReport).toLowerCase();
   return (
     text.includes(slug.toLowerCase()) &&
     text.includes(version.toLowerCase()) &&
-    confirmsArtifactMatch(fullReport, digest)
+    confirmsArtifactMatch(verdictReport, digest)
   );
 }
 

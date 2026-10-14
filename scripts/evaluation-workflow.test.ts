@@ -11,6 +11,7 @@ import {
   findSubmission,
   htmlToText,
   parseArgs,
+  REQUIRED_REPORTS,
   resolveSharepointRoot,
   sha256,
   verdictGuidance,
@@ -222,32 +223,30 @@ test("findSubmission reads a MOS3 version from manifest.json and requires it to 
   }
 });
 
-test("both Cowork prompt templates require the three verdicts and the pending human-review section", () => {
+test("both Cowork prompt templates request the two Cowork reports plus recommendations.html, verdict there", () => {
   const read = (name: string) => readFileSync(join(import.meta.dirname, "..", "docs", "evaluation", name), "utf8");
   const placeholders = (text: string) => [...new Set(text.match(/\{\{[A-Z0-9_]+\}\}/g))].sort();
   const claude = read("cowork-evaluation-prompt.txt");
   const mos3 = read("cowork-evaluation-prompt-mos3.txt");
+  assert.deepEqual(REQUIRED_REPORTS, ["plugin-health.html", "behavioral-test-report.html", "recommendations.html"]);
   for (const text of [claude, mos3]) {
+    for (const report of REQUIRED_REPORTS) assert.match(text, new RegExp(report.replace(".", "\\.")));
+    assert.doesNotMatch(text, /full-report\.html/);
+    assert.match(text, /recommendations\.html must visibly state/);
+    assert.match(text, /suggested fixes/);
+    assert.match(text, /decided only from\s+plugin-health\.html and behavioral-test-report\.html/);
     assert.match(text, /exactly one of: Ready for human review, Blocked, or No-ship/);
     assert.match(text, /a "Pending human-review evidence" section/);
-    assert.match(text, /never a publish signal/);
+    assert.match(text, /never a\s+publish signal/);
     assert.match(text, /publication remains pending until two independent human reviewers/);
-    assert.match(text, /--list-groups/);
+    // The verdict relies only on Cowork's own evaluation: no shipped regression, no test-data ZIP.
+    assert.doesNotMatch(text, /run_tests|test_engines|--plugin-root|shipped regression|test-data ZIP/i);
     assert.doesNotMatch(text, /one of: Ready, Blocked/);
   }
-  assert.deepEqual(placeholders(claude), ["{{DISPLAY_NAME}}", "{{RUN_LABEL}}", "{{SHA256}}", "{{SLUG}}", "{{VERSION}}"]);
-  assert.deepEqual(placeholders(mos3), [
-    "{{DISPLAY_NAME}}",
-    "{{RUN_LABEL}}",
-    "{{SHA256}}",
-    "{{SLUG}}",
-    "{{TEST_DATA_FILE}}",
-    "{{TEST_DATA_SHA256}}",
-    "{{VERSION}}",
-  ]);
+  const expected = ["{{DISPLAY_NAME}}", "{{RUN_LABEL}}", "{{SHA256}}", "{{SLUG}}", "{{VERSION}}"];
+  assert.deepEqual(placeholders(claude), expected);
+  assert.deepEqual(placeholders(mos3), expected);
+  assert.match(claude, /SHA-256 check: MATCH/);
   assert.match(mos3, /MOS3 Microsoft 365 app package \(manifest schema 1\.28\)/);
   assert.match(mos3, /Plugin SHA-256 check: MATCH/);
-  assert.match(mos3, /Test-data SHA-256 check: MATCH/);
-  assert.match(mos3, /--plugin-root <extracted plugin folder>/);
-  assert.match(mos3, /tool description validation: N\/A when the package declares no agentConnectors/);
 });

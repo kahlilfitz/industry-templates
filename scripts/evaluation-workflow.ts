@@ -21,10 +21,11 @@ export {
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_INBOX_ROOT = join(ROOT, "evaluation-inbox");
+export const VERDICT_REPORT = "recommendations.html";
 export const REQUIRED_REPORTS = [
   "plugin-health.html",
   "behavioral-test-report.html",
-  "full-report.html",
+  VERDICT_REPORT,
 ] as const;
 
 /**
@@ -199,7 +200,7 @@ export function confirmsArtifactMatch(html: string, digest: string): boolean {
 }
 
 /**
- * The automated verdict stated in full-report.html. "Ready for human review" is matched first so
+ * The automated verdict stated in recommendations.html. "Ready for human review" is matched first so
  * it is never read as a bare "Ready"; a bare legacy "Ready" maps to it, and "Stop" maps to No-ship.
  */
 export function extractVerdict(html: string): EvaluationVerdict {
@@ -209,7 +210,7 @@ export function extractVerdict(html: string): EvaluationVerdict {
   );
   if (!match) {
     throw new Error(
-      "full-report.html must state an automated verdict of Ready for human review, Blocked, or No-ship",
+      `${VERDICT_REPORT} must state an automated verdict of Ready for human review, Blocked, or No-ship`,
     );
   }
   const value = match[1].toLowerCase();

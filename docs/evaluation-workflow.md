@@ -14,13 +14,17 @@ Each evaluation archive contains exactly the evaluated ZIP and three Cowork repo
 ├── <plugin-slug>.zip
 ├── plugin-health.html
 ├── behavioral-test-report.html
-└── full-report.html
+└── recommendations.html
 ```
 
+`plugin-health.html` and `behavioral-test-report.html` are the two reports the testing strategy
+defines. `recommendations.html` states the identity check and the automated verdict, decided only
+from those two reports, and lists suggested fixes.
+
 A MOS3 candidate (see [MOS3 package format and test data](#mos3-package-format-and-test-data)) also
-archives the test-data ZIP it was evaluated with, next to the plugin ZIP:
-`<plugin-slug>-test-data-<artifact-version>.zip`. The test-data ZIP is evidence, not part of the
-candidate, and is never distributed.
+archives its test-data ZIP next to the plugin ZIP, as the record of the tests and fixtures that
+version was verified against: `<plugin-slug>-test-data-<artifact-version>.zip`. It is not sent to
+Cowork, is not part of the candidate, and is never distributed.
 
 Keep successful and failed evaluations. Never rebuild or replace an evaluated ZIP after the Cowork
 run. A changed artifact requires a new package version and a new evaluation folder.
@@ -91,10 +95,9 @@ plugins are changing in parallel, check or build one submission with
 `npx tsx scripts/import-submissions.ts --check --only <plugin-slug>` (or without `--check` to build
 only that bundle and leave the others in place), and prepare once every submission passes.
 
-The generated Cowork prompt tells the evaluator that shipped suites can take about 15 minutes. It
-asks the evaluator to run them with a long command timeout, in the background, or by `--group` when
-the runner lists groups with `--list-groups`, and to record the pass and fail totals. It also says a
-tool or sandbox timeout is not a test failure.
+The generated Cowork prompt asks Cowork to run the plugin evaluation defined in the testing
+strategy and nothing else. It does not run the shipped test suite; that runs once, before
+committing (see step 4 above).
 
 The result is:
 
@@ -117,9 +120,10 @@ For a submission with `"packageFormat": "mos3"`, preparation also:
 
 1. Runs `npm run check:test-data` after the build.
 2. Builds `<plugin-slug>-test-data-<version>.zip` from `test-data\<industry>\<plugin-slug>\<version>\`.
-3. Does not run the runners. Cowork is the first to run them from the extracted ZIPs, so each
-   runner must read only `--plugin-root` and its own version folder (runbook
-   [runner contract](operator-runbook.md#mos3-test-data)).
+3. Does not run the runners, and Cowork does not run them either. Each runner must still read only
+   `--plugin-root` and its own version folder (runbook
+   [runner contract](operator-runbook.md#mos3-test-data)), so the archived test-data ZIP reproduces
+   the run against the archived plugin ZIP.
 4. Validates the plugin ZIP with the Microsoft 365 Agents Toolkit CLI:
 
    ```powershell
@@ -131,10 +135,9 @@ For a submission with `"packageFormat": "mos3"`, preparation also:
    minutes. `--skip-atk` skips it for local iteration only: the command
    prints `LocalChecksOnly: not a deployable acceptance result` and records `"atkValidated": false`
    in the receipt. Do not send a `--skip-atk` candidate for formal evaluation.
-5. Copies both ZIPs into the inbox and records `packageFormat`, `testDataFile`, `testDataSha256` and
-   `atkValidated` in `evaluation-run.json`.
-6. Renders the prompt from `docs\evaluation\cowork-evaluation-prompt-mos3.txt`, which also carries
-   the test-data file name and SHA-256.
+5. Copies both ZIPs into the inbox (the test-data ZIP only for the archive) and records
+   `packageFormat`, `testDataFile`, `testDataSha256` and `atkValidated` in `evaluation-run.json`.
+6. Renders the prompt from `docs\evaluation\cowork-evaluation-prompt-mos3.txt`.
 7. Writes `FROZEN.sha256` into the test-data version folder. Commit it: from then on
    `check:test-data` fails if that folder changes.
 
@@ -153,21 +156,21 @@ repository scripts.
 
 1. Open Cowork.
 2. Create a task using the exact `coworkTaskName` from `evaluation-run.json`.
-3. Attach `<plugin-slug>.zip` from the frozen `evaluation-inbox` folder. For a MOS3 candidate, also
-   attach `<plugin-slug>-test-data-<artifact-version>.zip` from the same folder.
+3. Attach only `<plugin-slug>.zip` from the frozen `evaluation-inbox` folder. For a MOS3 candidate,
+   do not attach the test-data ZIP.
 4. Do not attach the mutable copies under `public/bundles/` or `public/test-data/`.
 5. Attach or reference `Industry-Templates-Plugin-Testing-Strategy.docx`.
 6. Paste the complete contents of `cowork-prompt.txt`.
 7. Confirm the prompt requests exactly:
    - `plugin-health.html`
    - `behavioral-test-report.html`
-   - `full-report.html`
+   - `recommendations.html`
 8. Start the task and wait for it to finish. Runs typically take 1–3 hours.
 9. Do not rename or edit the generated reports.
 
 Always create a new Cowork task for each artifact version. Reusing a task from an earlier version
 can save the new attachment as `<plugin-slug> (1).zip`, which the watcher never matches; can mix old
-and new reports, because the filenames are fixed and only `full-report.html` is hash-checked; and
+and new reports, because the filenames are fixed and only `recommendations.html` is hash-checked; and
 leaves the earlier verdict in the conversation, where it can bias the evaluator.
 
 Resuming a stalled run of the same version in the same task is fine: type
@@ -176,12 +179,12 @@ Resuming a stalled run of the same version in the same task is fine: type
 The Cowork task list can show a task as failed while the task page shows it still working. Trust
 the task page and whether the task's output folder is still changing.
 
-The full report must visibly state the plugin slug, artifact version, Cowork task/run label,
-artifact SHA-256, per-skill scores and launch floors, behavioral and safety totals, security result,
-unresolved-conflict count, blockers, a "Pending human-review evidence" section, and one automated
-verdict: `Ready for human review`, `Blocked`, or `No-ship`. A MOS3 full report also states the
-test-data SHA-256 with its own check, the package-structure result and the six Partner Team Guide
-Step 2 checks.
+`recommendations.html` must visibly state the plugin slug, artifact version, Cowork task/run label,
+artifact SHA-256 with an explicit `SHA-256 check: MATCH` or `MISMATCH` (`Plugin SHA-256 check` for
+MOS3), one automated verdict (`Ready for human review`, `Blocked`, or `No-ship`) decided only from
+`plugin-health.html` and `behavioral-test-report.html`, and the findings that decide it. It then
+lists the suggested fixes (ID, skill or file, evidence, severity, suggested change) and ends with a
+"Pending human-review evidence" section.
 
 ## Step 3: locate Cowork output
 
@@ -262,27 +265,28 @@ npm run evaluation:archive -- `
 The archive command:
 
 1. Requires all three report filenames and rejects empty files.
-2. Confirms `full-report.html` identifies the frozen slug and version.
-3. Confirms the full report contains the frozen ZIP's SHA-256 and, for a MOS3 candidate, the frozen
-   test-data ZIP's SHA-256. Any stated `SHA-256 check: MISMATCH` fails the archive.
-4. Extracts the automated verdict.
+2. Confirms `recommendations.html` identifies the frozen slug and version.
+3. Confirms `recommendations.html` affirms the frozen ZIP's SHA-256. Any stated
+   `SHA-256 check: MISMATCH` fails the archive.
+4. Extracts the automated verdict from `recommendations.html`.
 5. Copies only the three reports and frozen ZIP, plus the frozen test-data ZIP when the receipt
    records one (its SHA-256 is checked before and after the copy).
 6. Recomputes the copied ZIP's SHA-256.
 7. Refuses to overwrite an existing version folder.
 8. Updates the ignored local run receipt with the verdict and archive location.
 
-Matching and identity checks are keyed to the plugin ZIP's SHA-256; the test-data ZIP never selects
-a Cowork task.
+Matching and identity checks are keyed to the plugin ZIP's SHA-256.
 
 Archive `Blocked` and `No-ship` runs as evidence. Do not publish them.
 
 ### Interpreting the verdict
 
+The verdict is decided only from `plugin-health.html` and `behavioral-test-report.html`.
+
 | Verdict | Meaning |
 |---|---|
-| `Ready for human review` | Every measured bar is met: identity/SHA match, package structure, every skill at its floor, behavioral, trust and safety, security, conflicts, shipped regression. The only open items are evidence that the two-reviewer human review supplies (installed-runtime critical-path runs, human grader-calibration labels, human spot checks), listed under "Pending human-review evidence", not as blockers. |
-| `Blocked` | Evidence is missing that human review cannot supply (for example a stage that did not run, or an ambiguous artifact identity), or a gate failed closed for a reason that is not an observed plugin defect. |
+| `Ready for human review` | Every bar in the two Cowork reports is met. The only open items are evidence that the two-reviewer human review supplies (installed-runtime critical-path runs, human grader-calibration labels, human spot checks), listed under "Pending human-review evidence", not as blockers. |
+| `Blocked` | Evidence is missing that human review cannot supply (for example a stage that did not run, or an ambiguous artifact identity). |
 | `No-ship` | An observed defect, a below-floor score, or a safety or security blocker. |
 
 `Ready for human review` is never a publish signal. The archive and watch commands still read a
@@ -292,7 +296,7 @@ fails to parse. Under the current prompts, missing human-review evidence alone s
 the owner. Behavioral item 2 requires a pass rate of 95% or more, and `WEAK` cases count as not
 passing, so remediation must fix every `WEAK` case as well as every `FAIL`. See
 [Reading a verdict](operator-runbook.md#reading-a-verdict) in the operator runbook for where to find
-each finding in `full-report.html`.
+each finding in the reports.
 
 ## Step 5: complete the human gate
 
@@ -331,9 +335,9 @@ npm run test:evaluation
 ```
 
 These tests cover argument parsing, HTML normalization, verdict extraction (including the legacy
-`Ready` mapping and phrase ordering), both prompt templates, formatted SHA-256 matching, file
-hashing, and the from-ZIP shipped-test run (pass, failure and timeout, and the MOS3 run from a
-test-data ZIP against a plugin ZIP). They also cover MOS3 validation and packaging
+`Ready` mapping and phrase ordering), both prompt templates and the report set, formatted SHA-256
+matching, file hashing, and the check that a MOS3 version ships a regression runner. They also cover
+MOS3 validation and packaging
 (`scripts\mos3-package.test.ts`) and the test-data checks, freezing and ZIP
 (`scripts\test-data.test.ts`).
 

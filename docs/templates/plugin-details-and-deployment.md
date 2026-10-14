@@ -28,8 +28,9 @@ Required fields, all of which must be filled before the document is shared:
 | Human-gate status | Read-first note and section 8 |
 | Change history | Section 7 and the document change history |
 
-Take every number from the archived `full-report.html` for that version. Do not round, re-score or
-summarise differently from the report.
+Take every number from the archived reports for that version (`plugin-health.html`,
+`behavioral-test-report.html` and `recommendations.html`; `full-report.html` before 2026-10-14). Do
+not round, re-score or summarise differently from the reports.
 
 ---
 
@@ -229,7 +230,7 @@ human gate clears.
 ## 7. Evaluation history
 
 <!-- guidance: One row per evaluated version, oldest first, including Blocked and No-ship runs.
-Evidence summary quotes the full report: skills at floor, behavioral pass/total and percentage,
+Evidence summary quotes the archived reports: skills at floor, behavioral pass/total and percentage,
 WEAK and FAIL counts, trust and safety held/total, security result, unresolved conflicts, the
 blocker classes, and the SHA-256. -->
 
@@ -255,7 +256,7 @@ blocker classes, and the SHA-256. -->
 | Package integrity | <ZIP layout and member check from the report> |
 | Run label | `<Cowork run label>` |
 | Run currency | Run on the evaluated artifact, SHA `<SHA-256>` |
-| Evidence | `Evaluation/<version>/full-report.html`; `Evaluation/<version>/behavioral-test-report.html`; `Evaluation/<version>/plugin-health.html`; `Evaluation/<version>/<plugin-slug>.zip` |
+| Evidence | `Evaluation/<version>/recommendations.html`; `Evaluation/<version>/behavioral-test-report.html`; `Evaluation/<version>/plugin-health.html`; `Evaluation/<version>/<plugin-slug>.zip` |
 
 **Human-gate status: <Not started | In progress | Passed <date> | Failed>.** The tracker workbook in
 this folder is prepared with <n> prompts, including every critical-path prompt. Both reviewers run

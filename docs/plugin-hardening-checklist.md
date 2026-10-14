@@ -587,11 +587,11 @@ the plugin ZIP (see [H](#h-mos3-and-partner-guide)).
 - [ ] **G4a. Shipped tests run from the two ZIPs alone.** Tests must not read source-only files
   (`metadata.json`, top-level `README.md`, `PACKAGE-NOTES.md`), another plugin, `shared\` or
   anything else in the repository; fall back to `plugin.json` (or `manifest.json` for MOS3) for the
-  version. A MOS3 runner reads only `--plugin-root` and its own version folder (H12).
-  [deliverable-review-quality-gate 1.0.3]
+  version. A MOS3 runner reads only `--plugin-root` and its own version folder (H12), so the archived
+  ZIPs reproduce the run. [deliverable-review-quality-gate 1.0.3]
   Test: search the runners and helpers for `REPO_ROOT`, `parents[2]` or higher, `submissions`,
-  `shared` and `metadata.json`, and justify every hit. `evaluation:prepare` does not run the tests,
-  so Cowork is the first run from the ZIPs.
+  `shared` and `metadata.json`, and justify every hit. Neither `evaluation:prepare` nor Cowork runs
+  the tests, so the search is the only check.
   Every line the test harness prints is ASCII-safe (escape the whole line, label included), so the
   suite does not crash on a cp1252 or ASCII console. [Wave 1 pre-freeze QA: DRQG round 13, T&E
   round 12]
@@ -628,9 +628,9 @@ the plugin ZIP (see [H](#h-mos3-and-partner-guide)).
 - [ ] **G7. Shipped tests stream their results.** `tests/run_tests.py` prints each result as it
   runs, as an ASCII-safe `PASS` or `FAIL` line with flush. It supports `--list-groups` and a
   repeatable `--group <name>`. Its last line is still `N/M checks passed`, and it exits 1 on any
-  failure. Cowork runs shipped suites in a sandbox with an unknown command timeout; a silent
-  7-minute suite leaves no evidence if it is killed, and the DRQG 1.0.3 report asked for
-  incremental output. [Wave 1 pre-freeze, DRQG round 17 hang]
+  failure. Earlier Cowork prompts ran shipped suites in a sandbox with an unknown command timeout; a
+  silent 7-minute suite left no evidence when killed, and the DRQG 1.0.3 report asked for
+  incremental output. Streaming still helps the one source run. [Wave 1 pre-freeze, DRQG round 17 hang]
   Test: pipe the full suite and check that `PASS` lines appear before it ends; run one group from
   `--list-groups` and check the last line and the exit code.
 

@@ -174,9 +174,9 @@ repository as `sharepoint\` with `npm run sharepoint:link` — see
 
 Before treating a plugin as publishable, follow the
 [Cowork evaluation workflow](docs/evaluation-workflow.md). It defines how to freeze the exact ZIP
-(and, for MOS3, its test-data ZIP), run the manual Cowork task, archive the three required HTML
-reports, preserve failed runs, and complete the independent human-review gate. The passing
-automated verdict is `Ready for human review`; it is never a publish signal. Operators running the
+(and, for MOS3, its test-data ZIP), run the manual Cowork task on the plugin ZIP, archive the three
+required HTML reports, preserve failed runs, and complete the independent human-review gate. The
+passing automated verdict is `Ready for human review`; it is never a publish signal. Operators running the
 whole workstream (evaluation, remediation, human gate, promotion and status) should start with the
 [operator runbook](docs/operator-runbook.md).
 

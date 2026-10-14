@@ -6,63 +6,46 @@ Artifact version: {{VERSION}}
 Cowork task/run label: {{RUN_LABEL}}
 Artifact SHA-256: {{SHA256}}
 
-The attached ZIP is immutable and is the exact release candidate. Do not rebuild, modify, rename internally, or substitute another copy.
+The attached ZIP is immutable and is the exact release candidate. Do not rebuild, modify, rename
+internally, or substitute another copy. First compute its SHA-256 and compare it with {{SHA256}};
+on a mismatch, stop and report it.
 
-The target package channel is a Cowork Claude plugin using `.claude-plugin/plugin.json`. Validate
-that Cowork package layout. MOS3, Agent Builder, Copilot Studio, root `manifest.json`, and
-`packageMetadata.json` requirements are not applicable and must not be treated as blockers.
+The package is a Cowork Claude plugin using `.claude-plugin/plugin.json`. MOS3, Agent Builder,
+Copilot Studio, root `manifest.json` and `packageMetadata.json` requirements do not apply.
 
-Run all required evaluation stages:
-- plugin and skill health analysis
-- risk-adjusted launch-floor scoring for every skill
-- behavioral testing
-- trust-and-safety testing
-- security scanning
-- skill-trigger conflict analysis
-
-For trigger conflicts, treat explicit semantic deferrals as resolved. Keyword-only overlap with an
-unrelated in-session skill is advisory unless both skills could reasonably own the same user request.
-
-Fail closed when evidence is missing or ambiguous. A favorable average does not override a skill below its launch floor or a safety or security blocker.
-
-Shipped regression suites (tests/run_tests.py and similar) can take up to about 15 minutes. Run them
-with a long command timeout or in the background, or run them in parts with `--group` when the
-runner lists groups via `--list-groups`, and record the pass and fail totals. A tool or sandbox
-timeout is not a test failure: re-run with a longer timeout or by group before concluding.
+Run the plugin evaluation defined in the testing strategy. Base the verdict only on what this
+evaluation observes and reports; do not depend on anything outside it.
 
 Produce exactly these files in the task output folder:
 1. plugin-health.html
 2. behavioral-test-report.html
-3. full-report.html
+3. recommendations.html
 
-The full report must visibly state:
+recommendations.html must visibly state, at the top:
 - plugin slug {{SLUG}}
 - artifact version {{VERSION}}
 - Cowork task/run label {{RUN_LABEL}}
 - artifact SHA-256 {{SHA256}}
 - observed attached-ZIP SHA-256 and an explicit `SHA-256 check: MATCH` or `SHA-256 check: MISMATCH`
-- every skill's score and risk-adjusted launch floor
-- behavioral pass and failure totals
-- trust-and-safety pass and failure totals
-- security scan result
-- unresolved trigger-conflict count
-- blockers and required follow-up
-- a "Pending human-review evidence" section (see below)
 - final automated verdict using exactly one of: Ready for human review, Blocked, or No-ship
+- the findings in plugin-health.html and behavioral-test-report.html that decide the verdict
 
-Automated verdicts (state exactly one, spelled exactly as written):
-- Ready for human review: every measured bar is met — identity/SHA match, package structure, every
-  skill at or above its launch floor, behavioral, trust and safety, security, trigger conflicts, and
-  the shipped regression. The only open items are evidence that the two-reviewer human review
-  supplies: installed-runtime critical-path runs, human grader-calibration labels, and human spot
-  checks. List those under "Pending human-review evidence"; they are not blockers.
-- Blocked: evidence is missing that human review cannot supply (for example a stage that did not run,
-  or an ambiguous artifact identity), or a gate failed closed for a reason that is not an observed
-  plugin defect.
+It then lists the suggested fixes, one per entry: an ID, the skill or file concerned, the evidence
+(which report, check or test case, and what was observed), the severity (blocker, required or
+advisory) and the suggested change. End with a "Pending human-review evidence" section (see below).
+
+Automated verdicts (state exactly one, spelled exactly as written), decided only from
+plugin-health.html and behavioral-test-report.html:
+- Ready for human review: every bar in those reports is met. The only open items are evidence that
+  the two-reviewer human review supplies: installed-runtime critical-path runs, human
+  grader-calibration labels, and human spot checks. List those under "Pending human-review
+  evidence"; they are not blockers.
+- Blocked: evidence is missing that human review cannot supply (for example a stage that did not
+  run, or an ambiguous artifact identity).
 - No-ship: an observed defect, a below-floor score, or a safety or security blocker.
 
 Do not use a bare "Ready", and do not report Blocked only because installed-runtime runs, human
-grader-calibration labels, or human spot checks are still to come; those belong in the
-"Pending human-review evidence" section. Ready for human review is never a publish signal.
+grader-calibration labels, or human spot checks are still to come. Ready for human review is never a
+publish signal.
 
 Do not call the plugin published. State that publication remains pending until two independent human reviewers complete the critical-path spot checks.

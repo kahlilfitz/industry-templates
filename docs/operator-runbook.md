@@ -156,13 +156,13 @@ overlap across plugins.
    npm run check:shared                      # also covers unfrozen test-data folders
    ```
 
-   **One full suite run per version** (owner decision, 2026-10-14). This run is the only one before
-   Cowork: the bundler copies the plugin files byte for byte, `evaluation:prepare` runs no tests,
-   and Cowork runs the suite from the two frozen ZIPs. Run it on the final code; if the plugin or its
-   test data changes afterwards, run it again. Do not also run it against a built ZIP. Because
-   nothing reruns the suite from the ZIPs before Cowork, a runner must read only the plugin root and
-   its own version folder (see the [runner contract](#mos3-test-data)); a test that reads anything
-   else passes here and fails in Cowork.
+   **One full suite run per version** (owner decision, 2026-10-14). This is the only run: the
+   bundler copies the plugin files byte for byte, `evaluation:prepare` runs no tests, and Cowork
+   does not run the shipped suite (it runs its own evaluation from the testing strategy). Run it on
+   the final code; if the plugin or its test data changes afterwards, run it again. Do not also run
+   it against a built ZIP. A runner must still read only the plugin root and its own version
+   folder (see the [runner contract](#mos3-test-data)), so the archived test-data ZIP reproduces the
+   run against the archived plugin ZIP.
 
    Every check must pass. Older plugins use `unittest` files instead of `run_tests.py`, and some
    MOS3 versions use `test_engines.py`; use whichever the plugin ships. When several plugins are
@@ -202,10 +202,9 @@ overlap across plugins.
      on its own: `git add -- "test-data\<industry>\<slug>\<version>\FROZEN.sha256"`. From then on
      `check:test-data` fails if anything in that folder changes.
 5. **Launch Cowork** by hand, following [Cowork operating rules](#cowork-operating-rules): a new
-   task named with `coworkTaskName` from `evaluation-run.json`, the frozen ZIP from
-   `evaluation-inbox\<slug>\<version>\` (for MOS3, both frozen ZIPs: the plugin ZIP and
-   `<slug>-test-data-<version>.zip`), the testing-strategy document, and the full contents of
-   `cowork-prompt.txt`.
+   task named with `coworkTaskName` from `evaluation-run.json`, the frozen plugin ZIP from
+   `evaluation-inbox\<slug>\<version>\` (for MOS3, the plugin ZIP only; the test-data ZIP is not
+   sent), the testing-strategy document, and the full contents of `cowork-prompt.txt`.
 6. **Watch and archive** in a separate terminal:
 
    ```powershell
@@ -214,7 +213,7 @@ overlap across plugins.
 
    If the submission's version has moved on since you froze it, add `--version <frozen-version>`.
    See [Watcher operations](#watcher-operations).
-7. **Read the verdict** from the archive output and from `full-report.html` (see
+7. **Read the verdict** from the archive output and from `recommendations.html` (see
    [Reading a verdict](#reading-a-verdict)).
    - `Ready for human review`: go to [Ready path](#ready-path-human-gate-and-promotion).
    - `Blocked`: read the reason. If the only reason is human-review evidence that should have been
@@ -287,18 +286,17 @@ in `test-data\<industry>\<slug>\<version>\`, one folder per plugin version:
 
 - Fixtures never go into `submissions\<slug>\` for a MOS3 plugin.
 - **Runner contract:** `python tests\<runner> --plugin-root <dir>`, or the `PLUGIN_ROOT` variable.
-  The plugin root is the submission folder (before freezing) or an extracted plugin ZIP (in
-  Cowork); without either, it defaults to `submissions\<industry>\<slug>`. The runner finds
-  `demo-data\` from its own location, not the working directory.
+  The plugin root is the submission folder or an extracted plugin ZIP; without either, it defaults
+  to `submissions\<industry>\<slug>`. The runner finds `demo-data\` from its own location, not the
+  working directory.
 - **A runner reads only the plugin root and its own version folder**: never another plugin,
-  `shared\`, the repository root, or a source-only file such as `metadata.json`. Cowork runs it
-  from the two extracted ZIPs, where none of those exist, and nothing reruns it from the ZIPs
-  before then.
+  `shared\`, the repository root, or a source-only file such as `metadata.json`. Then the archived
+  test-data ZIP, extracted next to the archived plugin ZIP, reproduces the version's run on its own.
 - `npm run check:test-data` requires the current version's folder for every MOS3 submission, warns
   about other unfrozen versions, and fails on test data with no submission.
-- The test-data ZIP is evidence, not part of the candidate. Cowork gets it as a second attachment
-  for the regression only, the archive keeps it next to the plugin ZIP, and it is never promoted
-  or distributed.
+- The test-data ZIP is evidence, not part of the candidate. It is not sent to Cowork; the archive
+  keeps it next to the plugin ZIP as the record of the tests and fixtures the version was verified
+  against, and it is never promoted or distributed.
 
 ## Cowork operating rules
 
@@ -307,15 +305,15 @@ These rules come from real runs. Follow them every time.
 - **One new Cowork task per artifact version.** Name it exactly as `coworkTaskName` in
   `evaluation-run.json` (`evaluate-<slug>-v<version>-<date>`). Reusing an older task for a new
   version causes three problems:
-  - The second attachment may be saved as `<slug> (1).zip`. The watcher only looks for
+  - A reused task may save the new attachment as `<slug> (1).zip`. The watcher only looks for
     `input\<slug>.zip`, so it never matches the new run.
   - Report filenames are fixed, so old and new reports can mix in `output\`. Only
-    `full-report.html` is checked for the slug, version and hash; the other two are not.
+    `recommendations.html` is checked for the slug, version and hash; the other two are not.
   - The earlier verdict stays in the conversation and can bias the evaluator.
-- **Attach only the frozen ZIP** from `evaluation-inbox\`, never `public\bundles\`. For a MOS3
-  candidate, attach two files from the same inbox folder: `<slug>.zip` (the candidate) and
-  `<slug>-test-data-<version>.zip` (the regression and its fixtures only, never installed). Attach
-  the testing-strategy document and paste the whole prompt unchanged.
+- **Attach only the frozen plugin ZIP** from `evaluation-inbox\`, never `public\bundles\`. For a
+  MOS3 candidate, do not attach the test-data ZIP: Cowork runs its own evaluation, and the verdict
+  relies only on its reports. Attach the testing-strategy document and paste the whole prompt
+  unchanged.
 - **Resuming a stalled run of the same version is fine.** In the same task, type
   `continue and produce the 3 reports`. Nothing about the artifact changed, so the hash still
   matches.
@@ -339,9 +337,9 @@ These rules come from real runs. Follow them every time.
 | Behaviour | Detail |
 |---|---|
 | Receipt | Reads `evaluation-inbox\<slug>\<version>\evaluation-run.json`. `<version>` defaults to the submission's current version; pass `--version` for an older frozen candidate. The receipt must still be `prepared` |
-| Task match | Every folder under the tasks root whose `input\<slug>.zip` has the frozen SHA-256, newest first. The task name is not used, and the test-data ZIP never selects a task |
-| Report set | `output\` must hold `plugin-health.html`, `behavioral-test-report.html` and `full-report.html`, all non-empty and unchanged in size over 15 seconds |
-| Identity | `full-report.html` must mention the slug and version and affirm the hash (for example `SHA-256 check: MATCH`). Otherwise it logs `Reports in <task> do not affirm the matching version/hash; continuing to search.` For MOS3, the archive step also requires the frozen test-data SHA-256 in the report |
+| Task match | Every folder under the tasks root whose `input\<slug>.zip` has the frozen SHA-256, newest first. The task name is not used |
+| Report set | `output\` must hold `plugin-health.html`, `behavioral-test-report.html` and `recommendations.html`, all non-empty and unchanged in size over 15 seconds |
+| Identity | `recommendations.html` must mention the slug and version and affirm the hash (for example `SHA-256 check: MATCH`). Otherwise it logs `Reports in <task> do not affirm the matching version/hash; continuing to search.` |
 | Polling | Every 30 seconds (`--poll-seconds`); stability window `--stable-seconds` (15) |
 | Timeout | 180 minutes by default (`--timeout-minutes`) |
 | On match | Logs `All three reports are present and stable.` and runs `evaluation:archive`, which copies the frozen plugin ZIP (and, for MOS3, the frozen test-data ZIP) next to the reports |
@@ -374,18 +372,21 @@ Operating rules:
 
 ### Verdicts
 
-The current prompts (2026-10-12) define the three verdicts explicitly:
+The current prompts (2026-10-14) define the three verdicts explicitly and decide them only from
+`plugin-health.html` and `behavioral-test-report.html`; `recommendations.html` states the verdict.
 
 | Verdict | Meaning | Next |
 |---|---|---|
-| `Ready for human review` | Every measured bar is met (identity and SHA-256, package structure, every skill at its floor, behavioral, trust and safety, security, trigger conflicts, shipped regression). The only open items are evidence the two-reviewer human review supplies: installed-runtime critical-path runs, grader-calibration labels and spot checks, listed under "Pending human-review evidence" | [Ready path](#ready-path-human-gate-and-promotion). It is never a publish signal |
-| `Blocked` | Evidence is missing that human review cannot supply (for example a stage that did not run, or an ambiguous artifact identity), or a gate failed closed without an observed plugin defect | Fix the cause and re-evaluate as a new version. If missing human-review evidence is the only reason given, raise it with the owner first |
+| `Ready for human review` | Every bar in the two Cowork reports is met. The only open items are evidence the two-reviewer human review supplies: installed-runtime critical-path runs, grader-calibration labels and spot checks, listed under "Pending human-review evidence" | [Ready path](#ready-path-human-gate-and-promotion). It is never a publish signal |
+| `Blocked` | Evidence is missing that human review cannot supply (for example a stage that did not run, or an ambiguous artifact identity) | Fix the cause and re-evaluate as a new version. If missing human-review evidence is the only reason given, raise it with the owner first |
 | `No-ship` | An observed defect, a below-floor score, or a safety or security blocker | Remediate in a new version, hard stops first |
 
 Missing human-supplied evidence alone does not block `Ready for human review`. Publication still
 needs both reviewers, the tracker's Publish gate at `PASS` and an owner decision of `Publish`.
 
-Runs before 2026-10-12 used `Ready` and applied `Blocked` and `No-ship` with judgement: logic
+Runs before 2026-10-14 produced `full-report.html` instead of `recommendations.html`, and MOS3 runs
+also ran the shipped regression from a second, test-data ZIP. Runs before 2026-10-12 used `Ready`
+and applied `Blocked` and `No-ship` with judgement: logic
 defects and guardrail hard stops were labelled `Blocked`, and some candidates that met every
 measured bar were held `Blocked` or `No-ship` only for missing human-review evidence. Historical
 verdicts stay as recorded. The archive and watch scripts read a bare legacy `Ready` as
@@ -393,7 +394,7 @@ verdicts stay as recorded. The archive and watch scripts read a bare legacy `Rea
 
 ### The internal bar
 
-The full report scores each item from the testing strategy:
+The testing strategy scores each of these items; the two Cowork reports carry the scores:
 
 | # | Bar item | Notes |
 |---|---|---|
@@ -410,22 +411,20 @@ The practical consequence of item 2: with around 50 behavioral cases, at most tw
 other than `PASS`. Remediation must therefore fix every `WEAK` case, not only the `FAIL`s. A run
 with zero failures and six weak cases is not `Ready for human review`.
 
-### Where to look in `full-report.html`
+### Where to look in the reports
 
-1. **Release record**: slug, version, run label, expected and observed SHA-256, `SHA-256 check`,
-   and the final verdict with a one-line reason. A MOS3 report also gives the test-data SHA-256
-   with its own check, the package-structure result and the six Partner Team Guide Step 2 checks.
-2. **Internal bar** table: items 1–8 with `MET`, `NOT MET` or `PENDING` and evidence.
-3. **Blockers** table: class (hard stop, logic defect and so on), component and detail, in fix
-   order.
-4. **Pending human-review evidence**: what the two reviewers must supply (installed-runtime
-   critical paths, grader-calibration labels, spot checks). Copy it into the tracker tab, not into
-   the fix list.
-5. **Required follow-up and suggested changes**: rows such as *Required before re-evaluation*,
-   *Hardening*, *Description gap*, *Routing conflict*, *Weak output*. Fix all of them, not only
-   the required rows; advisory items often become blockers on the next run.
-6. **Per-skill cards** and `behavioral-test-report.html`: each `WEAK` and `FAIL` case with the
-   fixture, expected and observed behaviour. Every one becomes a regression test.
+1. **`recommendations.html`, top**: slug, version, run label, expected and observed SHA-256, the
+   `SHA-256 check`, the verdict, and the findings that decide it.
+2. **`recommendations.html`, suggested fixes**: one entry per fix with ID, skill or file, evidence,
+   severity (blocker, required or advisory) and the suggested change. Fix all of them, not only the
+   blockers; advisory items often become blockers on the next run.
+3. **`recommendations.html`, Pending human-review evidence**: what the two reviewers must supply
+   (installed-runtime critical paths, grader-calibration labels, spot checks). Copy it into the
+   tracker tab, not into the fix list.
+4. **`plugin-health.html`**: per-skill scores against their launch floors, trust and safety,
+   security and trigger conflicts.
+5. **`behavioral-test-report.html`**: each `WEAK` and `FAIL` case with the fixture, expected and
+   observed behaviour. Every one becomes a regression test.
 
 ### Extracting report text
 
@@ -440,7 +439,7 @@ raw = open(sys.argv[1], encoding="utf-8").read()
 raw = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", raw)
 text = html.unescape(re.sub(r"<[^>]+>", "\n", raw))
 open(sys.argv[2], "w", encoding="utf-8").write(re.sub(r"\n\s*\n+", "\n", text))
-'@ | python - "sharepoint\<Industry>\<slug>\Evaluation\<version>\full-report.html" "$env:TEMP\<slug>-<version>-full.txt"
+'@ | python - "sharepoint\<Industry>\<slug>\Evaluation\<version>\recommendations.html" "$env:TEMP\<slug>-<version>-recommendations.txt"
 ```
 
 Do not copy report text into the repository. Summarise findings in the plugin's `CHANGELOG.md` in
@@ -472,7 +471,8 @@ ideas, checklist gaps outside the version's changes, refactors. Record each in t
 promotes it.
 
 **Traceability.** Every `CHANGELOG.md` entry cites its source: the report and finding (for example
-"1.0.5 full report, behavioral case B-12 `WEAK`"), the owner decision, or the freeze blocker.
+"1.0.5 recommendations, fix R-3" or "1.0.5 behavioral case B-12 `WEAK`"), the owner decision, or
+the freeze blocker.
 
 **Existing tests are protected.** A fix must not relax, delete or change the expected result of an
 existing test or regression check. Goldens regenerated by the engines may change when every diff is
@@ -951,7 +951,7 @@ Get-ChildItem $dest | Select-Object Name, Length      # four files, none 0 bytes
 (Get-FileHash "$dest\<slug>.zip" -Algorithm SHA256).Hash -eq $run.artifactSha256   # True
 ```
 
-Then extract the text of `full-report.html` (see [Extracting report text](#extracting-report-text))
+Then extract the text of `recommendations.html` (see [Extracting report text](#extracting-report-text))
 and confirm it contains the slug, the version, the SHA-256 with `SHA-256 check: MATCH` (or
 equivalent wording), and an automated verdict. If all four checks pass, the evidence is valid and
 complete. Either leave the receipt as it is and record the verdict in the wave log, or, if you need
@@ -1000,5 +1000,5 @@ Day one:
 4. Check `git status`, `git log` and open pull requests for uncommitted, unpushed or unmerged work.
 5. For each `Ready for human review` plugin, check the tracker for reviewer progress, the publish
    gate and the owner decision, and chase the owner for reviewers or a decision.
-6. For each `Blocked` or `No-ship` plugin, read the latest `full-report.html` and the plugin's
+6. For each `Blocked` or `No-ship` plugin, read the latest `recommendations.html` and the plugin's
    `CHANGELOG.md`, then pick up the remediation loop.

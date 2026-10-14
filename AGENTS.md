@@ -70,7 +70,7 @@ version of a MOS3 plugin ([docs/operator-runbook.md](docs/operator-runbook.md#mo
   `FROZEN.sha256`.
 - For MOS3 plugins, fixtures, demo data and tests never go into `submissions\<slug>\`.
 - Runners take the plugin as `python tests\<runner> --plugin-root <dir>` (or `PLUGIN_ROOT`): the
-  submission folder by default, or an extracted plugin ZIP in Cowork. A runner reads only the plugin
+  submission folder by default, or an extracted plugin ZIP. A runner reads only the plugin
   root and its own version folder, never another plugin, `shared\` or `metadata.json`.
 - Run the full suite once per version, from the version folder against the source, before
   committing, then `npm run check:test-data`. Do not also run it against a built ZIP;

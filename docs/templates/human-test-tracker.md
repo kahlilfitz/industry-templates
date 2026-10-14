@@ -48,9 +48,9 @@ Labels in column A, values in column B.
 | 3 | Plugin | `<plugin-slug>  (<Display name>)` |
 | 4 | Artefact version | `<version>` |
 | 5 | Evaluated zip | `<plugin-slug>.zip  -  <bytes> bytes  -  <file count> files` |
-| 6 | Zip SHA-256 | `<SHA-256>` from the archived full report |
+| 6 | Zip SHA-256 | `<SHA-256>` from the archived `recommendations.html` |
 | 7 | Automated verdict | `<Ready>  -  publication pending human review  (<one-line summary>)` |
-| 8 | Automated evidence | `Evaluation/<version>/  (plugin-health.html, behavioral-test-report.html, full-report.html)` |
+| 8 | Automated evidence | `Evaluation/<version>/  (plugin-health.html, behavioral-test-report.html, recommendations.html)` |
 | 9 | Human spot check | `REQUIRED before publish - 2 independent testers on every prompt below` |
 | 10 | Status | `NOT STARTED`, then `IN PROGRESS`, then `COMPLETE - PASS` or `COMPLETE - FAIL` |
 
@@ -165,7 +165,7 @@ critical-path prompts are the mandatory minimum the tracker must contain. Build 
 | Should-trigger | 8 to 10 | One or two per skill, from the behavioral report's should-trigger cases |
 | Should-not-trigger | 4 | A prompt that belongs to a sibling, per skill boundary |
 | Injection probe | 1 or more | An instruction embedded in source data that tries to clear a hold |
-| Full-report spot checks | 0 to 8 | Any prompts the full report lists under "human spot check" |
+| Report spot checks | 0 to 8 | Any prompts `recommendations.html` lists under "Pending human-review evidence" |
 
 Every critical-path prompt from the plugin details document must appear. Every blocker and `WEAK`
 fixed since the previous version needs at least one prompt. If the total exceeds 30, add prompt rows
@@ -193,8 +193,8 @@ rules in column A with the text in column B:
    other's notes first. The critical-path prompts are the mandatory minimum the tracker must
    contain.
 3. Install the exact ZIP filed in `Evaluation/<version>/`. Do not rebuild it.
-4. The prompts come from `tests/sample-test-prompts.csv` inside the package plus any full-report
-   human spot-check prompts.
+4. The prompts come from `tests/sample-test-prompts.csv` plus any human spot-check prompts listed
+   in `recommendations.html`.
 5. Record Pass, Fail or Blocked in the T1/T2 result columns. Agreed outcome is calculated.
 6. `review` means the two testers disagree. Resolve it before publishing; note the resolution.
 7. The publish gate is PASS only when both testers pass every prompt and all agreed outcomes are
@@ -209,7 +209,7 @@ NOT a substitute for this step."
 The human gate for a version has passed, and the ZIP may be promoted, only when every item is true.
 Row references use `L`, the last prompt row (42 for 30 prompts).
 
-- [ ] Header block rows 3 to 8 match the archived full report, including the SHA-256.
+- [ ] Header block rows 3 to 8 match the archived reports, including the SHA-256.
 - [ ] Both testers installed the exact evaluated ZIP and recorded name and date on every row.
 - [ ] Both testers ran every prompt in the tracker, including every critical-path prompt, and
   `B<L+4>` and `B<L+5>` equal `B<L+3>`.

@@ -195,7 +195,6 @@ function main(): void {
       VERSION: submission.version,
       RUN_LABEL: coworkTaskName,
       SHA256: artifactSha256,
-      ...(mos3 ? { TEST_DATA_FILE: testDataFile ?? "", TEST_DATA_SHA256: testDataSha256 ?? "" } : {}),
     });
     writeFileSync(promptPath, prompt, "utf8");
 
@@ -223,12 +222,10 @@ function main(): void {
         `Wrote ${relative(ROOT, frozenManifest)}; commit it now (git add -- "${relative(ROOT, frozenManifest)}") ` +
           `so this version's test data stays frozen.`,
       );
-      console.log(
-        `Next: create the named Cowork task, attach both frozen ZIPs (${slug}.zip and ${testDataFile}), ` +
-          "and paste the prompt. The test-data ZIP is not part of the candidate.",
-      );
-    } else {
-      console.log("Next: create the named Cowork task, attach the frozen ZIP, and paste the prompt.");
+    }
+    console.log("Next: create the named Cowork task, attach the frozen plugin ZIP, and paste the prompt.");
+    if (frozenTestDataZip) {
+      console.log("The test-data ZIP is not sent to Cowork; it is archived with the reports as the test record.");
     }
   } catch (error) {
     if (created) rmSync(runDir, { recursive: true, force: true });
