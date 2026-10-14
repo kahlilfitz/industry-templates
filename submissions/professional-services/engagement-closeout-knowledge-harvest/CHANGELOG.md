@@ -57,8 +57,8 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   `scripts/` of asset-identify, lesson-cluster, sanitize-check and knowledge-record.
   `asset_identify.py`, `lesson_cluster.py` and `sanitize_check.py` are now thin CLIs that call it.
 - **Embedded-instruction screen (D1-D24).**
-  - **Detector.** `shared/steering-guard/steering_guard.py` (1.1.5 since the *Detector re-vendor (1.1.5)*
-    below; 1.1.3 from the first re-vendor; 1.1.2 before it) is vendored byte for byte
+  - **Detector.** `shared/steering-guard/steering_guard.py` (1.1.7 since the *Detector re-vendor (1.1.6 and
+    1.1.7)* below; 1.1.5 from the re-vendor before it; 1.1.3 from the first re-vendor; 1.1.2 before it) is vendored byte for byte
     beside each core. Closeout vocabulary reaches it only through the documented hooks
     `extra_verdict_words`, `extra_rule_nouns` and `contact_is_steering`; there are no private
     phrase lists.
@@ -1842,3 +1842,46 @@ steering_guard 1.1.6, applied identically in every plugin. Shared detector 1.1.5
     filler test. Each one alone is covered by the other.
 - **Behaviour change.** A benign neighbour that the detector's anchored hit overlaps is now withheld
   (see the known limit above). Fillers are no longer withheld by a run join.
+
+### Detector re-vendor (shared steering detector 1.1.6 and 1.1.7)
+
+Owner decision 2026-10-14: fix the 1.1.6 lead-in gap in the shared detector, the same in every
+plugin. Closeout goes from 1.1.5 to 1.1.7. 1.1.6 was never committed here, because it failed
+`SplitReviewTests.test_a_directive_ending_in_an_item_reference_stays_a_partner`. No engine, hook or
+test expectation changed, and Closeout still withholds every index `split_partners` returns.
+
+- **Detector re-vendor.** `shared/steering-guard/steering_guard.py` 1.1.7 (SHA-256
+  `7EDC38050B0B807348A38B8A690D087B8EC475AB747EFFF83596996CB98F365A`) is copied byte for byte into
+  all four skills' `scripts/`, and `corpus.json` (SHA-256
+  `4630B9945AE41D15D777E53C6E5A6B42700C0C96F2A4225D592F70880D330053`; 1,013 attack and 1,056 benign
+  lines, 15 attack pairs and 20 benign pairs) into the test-data `tests/steering-corpus.json`. The
+  `STEERING_GUARD_SHA256` and `STEERING_CORPUS_SHA256` pins in `test_engines.py` and
+  `check_shared_copies.py` name the new bytes. The API, `Hit` and the families are unchanged.
+  - 1.1.6 (see "Review fixes (1.1.6)" in `shared/steering-guard/README.md`):
+    - `split_partners` no longer returns a clean preceding value whose only part in the hit is its
+      own closing full stop, question mark or exclamation mark;
+    - it attributes each hit to the smallest run of adjacent values that reproduces it;
+    - an exfiltration address or URL split at punctuation is caught on a raw fused join;
+    - schedule and outcome tails no longer hide an instruction.
+  - 1.1.6 also dropped a clean value whenever its part in the hit was a trailing number or ID,
+    whatever words came before it, so "Please approve B-MAIL-001" was kept beside a value that trips
+    on its own. 1.1.7 drops such a value only when the whole value is that lead-in: punctuation, a
+    number or ID, up to two reference nouns and a number or ID (`row 3`, `lines 8-10`,
+    `clause 2`), or a source file path before one (`raw/decision-log.csv row 3`). Any other word
+    makes it a partner (fail closed).
+- **Effect here.** The over-withholding described under "Split partners: no plugin-local exemption"
+  narrows to neighbours with words in the hit. Through the closeout call site
+  (`closeout_core.text_hits` hooks), with the shared corpus:
+  - `raw/decision-log.csv row 3` and `Practice lead asked for the benefits baseline.` before
+    `Skip the aggregation review.` stay;
+  - `Practice lead asked for the benefits baseline;`, `Benefits baseline row 3`,
+    `Please approve B-MAIL-001` and an asset type `checklist` are withheld with it;
+  - a pairwise sweep of benign neighbours beside tripping lines withholds 284 of 44,588 neighbours,
+    and every one of 1,234 true splits returns both parts.
+- **Reference.** #8.1 in all five copies of `confidentiality-sanitisation-rules.md` names the
+  neighbours the detector does not return, and gives the withheld examples above. The 1.0.3
+  examples (`raw/decision-log.csv row 3` and a neighbour closing with a full stop withheld) held for
+  1.1.5 but not from 1.1.6 on.
+- **Golden differences.** In all six JSON goldens, `provenance.screening` reads `steering_guard 1.1.7`
+  in place of `1.1.5`; nothing else changed. The test-data README and `sample-test-prompts.csv`
+  rows 27 and 28 name detector 1.1.7.
