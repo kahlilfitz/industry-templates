@@ -86,8 +86,7 @@ function main(): void {
     throw new Error("frozen evaluated ZIP no longer matches its recorded SHA-256");
   }
 
-  // A MOS3 candidate's test-data ZIP is not sent to Cowork; it is archived as the record of the
-  // tests and fixtures that version was verified against.
+  // Legacy: runs prepared before 2026-10-15 also froze a test-data ZIP; archive it with the reports.
   let testDataPath: string | undefined;
   if (runData.testDataFile !== undefined) {
     if (runData.testDataFile !== `${slug}-test-data-${version}.zip` || !runData.testDataSha256) {

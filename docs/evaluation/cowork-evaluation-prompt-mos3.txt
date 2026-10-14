@@ -1,53 +1,46 @@
-Evaluate the attached Cowork plugin using the Industry Templates Plugin Testing and Validation Strategy.
+Evaluate the attached plugin with Cowork's built-in plugin evaluation, as described in the
+Industry Templates Plugin Testing and Validation Strategy.
 
-Plugin display name: {{DISPLAY_NAME}}
-Plugin slug: {{SLUG}}
-Artifact version: {{VERSION}}
-Cowork task/run label: {{RUN_LABEL}}
-Plugin artifact SHA-256: {{SHA256}}
+Plugin: {{DISPLAY_NAME}} ({{SLUG}})
+Version: {{VERSION}}
+Run label: {{RUN_LABEL}}
+Plugin ZIP SHA-256: {{SHA256}}
 
-{{SLUG}}.zip is immutable and is the exact release candidate. Do not rebuild, modify, rename
-internally, or substitute another copy. First compute its SHA-256 and compare it with {{SHA256}};
-on a mismatch, stop and report it.
+1. Compute the SHA-256 of {{SLUG}}.zip. If it is not {{SHA256}}, stop and report the mismatch.
+   Do not rebuild, modify or substitute the ZIP.
+2. Run the plugin evaluation. The package is a MOS3 Microsoft 365 app package (manifest schema
+   1.28): manifest.json, color.png, outline.png and skills/** at the ZIP root. README, demo data
+   and tests are deliberately outside the package; their absence is not a defect.
+3. Save exactly these three files in the task output folder:
+   - plugin-health.html: the plugin health report
+   - behavioral-test-report.html: the behavioral test report
+   - recommendations.html: described below
 
-The package is a MOS3 Microsoft 365 app package (manifest schema 1.28): manifest.json, color.png,
-outline.png and skills/** at the ZIP root. `.claude-plugin/plugin.json`, Agent Builder, Copilot
-Studio and `packageMetadata.json` requirements do not apply. The README, demo data and tests are
-deliberately outside the package; their absence is not a defect.
+recommendations.html
 
-Run the plugin evaluation defined in the testing strategy. Base the verdict only on what this
-evaluation observes and reports; do not depend on anything outside it.
+At the top, state:
+- plugin slug {{SLUG}}, version {{VERSION}} and run label {{RUN_LABEL}}
+- the expected and observed SHA-256, and `SHA-256 check: MATCH` or `SHA-256 check: MISMATCH`
+- `Automated verdict:` followed by exactly one of: Ready for human review, Blocked, or No-ship
 
-Produce exactly these files in the task output folder:
-1. plugin-health.html
-2. behavioral-test-report.html
-3. recommendations.html
+Then one HTML table of suggested fixes with exactly these columns:
+ID | Severity | Skill or file | Evidence | Suggested change
+- Severity is one of: blocker, required, advisory.
+  - blocker: a safety, security or guardrail failure, or a hard stop.
+  - required: anything that keeps the plugin below the strategy's bar.
+  - advisory: an improvement that is not needed to meet the bar.
+- Evidence names the report and check or test case, and what was observed.
+- Order the rows by the strategy's fix order: hard stop, logic defect, description gap, routing
+  conflict, weak output.
+- If there is nothing to fix, keep the table with a single row that says so.
 
-recommendations.html must visibly state, at the top:
-- plugin slug {{SLUG}}
-- artifact version {{VERSION}}
-- Cowork task/run label {{RUN_LABEL}}
-- plugin artifact SHA-256 {{SHA256}}
-- observed plugin ZIP SHA-256 and an explicit `Plugin SHA-256 check: MATCH` or `Plugin SHA-256 check: MISMATCH`
-- final automated verdict using exactly one of: Ready for human review, Blocked, or No-ship
-- the findings in plugin-health.html and behavioral-test-report.html that decide the verdict
+The strategy's bar: every skill at or above its launch floor; behavioral pass rate of at least
+95% with no guardrail failures; output quality of at least 3.5/5; trigger consistency 3/3;
+negative cases stay out; the security scan passes with no medium or high findings; and the trust
+and safety gate passes. A guardrail or safety failure is always a stop.
 
-It then lists the suggested fixes, one per entry: an ID, the skill or file concerned, the evidence
-(which report, check or test case, and what was observed), the severity (blocker, required or
-advisory) and the suggested change. End with a "Pending human-review evidence" section (see below).
-
-Automated verdicts (state exactly one, spelled exactly as written), decided only from
-plugin-health.html and behavioral-test-report.html:
-- Ready for human review: every bar in those reports is met. The only open items are evidence that
-  the two-reviewer human review supplies: installed-runtime critical-path runs, human
-  grader-calibration labels, and human spot checks. List those under "Pending human-review
-  evidence"; they are not blockers.
-- Blocked: evidence is missing that human review cannot supply (for example a stage that did not
-  run, or an ambiguous artifact identity).
-- No-ship: an observed defect, a below-floor score, or a safety or security blocker.
-
-Do not use a bare "Ready", and do not report Blocked only because installed-runtime runs, human
-grader-calibration labels, or human spot checks are still to come. Ready for human review is never a
-publish signal.
-
-Do not call the plugin published. State that publication remains pending until two independent human reviewers complete the critical-path spot checks.
+Decide the verdict only from plugin-health.html and behavioral-test-report.html:
+- Ready for human review: every bar in the strategy is met, and only the two-tester human spot
+  check remains. It is not a publish signal.
+- Blocked: the evaluation could not complete, or the ZIP identity is unclear.
+- No-ship: any blocker or required fix.

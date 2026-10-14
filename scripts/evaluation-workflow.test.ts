@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
-  assertShippedRegression,
   containsDigest,
   confirmsArtifactMatch,
   extractVerdict,
@@ -126,7 +125,7 @@ test("confirmsArtifactMatch requires affirmative identity evidence", () => {
     ),
     true,
   );
-  // MOS3 reports state a plugin check and a test-data check; a mismatch on either fails closed.
+  // A report that states two SHA checks fails closed on a mismatch in either.
   assert.equal(
     confirmsArtifactMatch(
       "<p>Plugin SHA-256: ABCDEF0123456789</p><p>Plugin SHA-256 check: MISMATCH</p>"
@@ -191,20 +190,6 @@ test("resolveSharepointRoot prefers flag, then env, then a link; refuses plain f
   }
 });
 
-test("assertShippedRegression refuses a MOS3 version with no regression runner, without running it", () => {
-  const dir = mkdtempSync(join(tmpdir(), "shipped-regression-"));
-  try {
-    mkdirSync(join(dir, "tests"));
-    writeFileSync(join(dir, "tests", "check_shared_copies.py"), "raise SystemExit(1)\n");
-    assert.throws(() => assertShippedRegression(dir, "demo-plugin"), /has no tests\/run_tests\.py or tests\/test_engines\.py/);
-    // A failing runner is not executed: preparation only checks it ships.
-    writeFileSync(join(dir, "tests", "test_engines.py"), "raise SystemExit(1)\n");
-    assertShippedRegression(dir, "demo-plugin");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 test("findSubmission reads a MOS3 version from manifest.json and requires it to match metadata", () => {
   const root = mkdtempSync(join(tmpdir(), "find-mos3-"));
   try {
@@ -231,22 +216,21 @@ test("both Cowork prompt templates request the two Cowork reports plus recommend
   assert.deepEqual(REQUIRED_REPORTS, ["plugin-health.html", "behavioral-test-report.html", "recommendations.html"]);
   for (const text of [claude, mos3]) {
     for (const report of REQUIRED_REPORTS) assert.match(text, new RegExp(report.replace(".", "\\.")));
-    assert.doesNotMatch(text, /full-report\.html/);
-    assert.match(text, /recommendations\.html must visibly state/);
-    assert.match(text, /suggested fixes/);
-    assert.match(text, /decided only from\s+plugin-health\.html and behavioral-test-report\.html/);
+    assert.match(text, /Cowork's built-in plugin evaluation/);
+    assert.match(text, /SHA-256 check: MATCH/);
+    assert.match(text, /Automated verdict:/);
     assert.match(text, /exactly one of: Ready for human review, Blocked, or No-ship/);
-    assert.match(text, /a "Pending human-review evidence" section/);
-    assert.match(text, /never a\s+publish signal/);
-    assert.match(text, /publication remains pending until two independent human reviewers/);
-    // The verdict relies only on Cowork's own evaluation: no shipped regression, no test-data ZIP.
-    assert.doesNotMatch(text, /run_tests|test_engines|--plugin-root|shipped regression|test-data ZIP/i);
-    assert.doesNotMatch(text, /one of: Ready, Blocked/);
+    // The fix step parses this table (scripts/recommendations.ts).
+    assert.match(text, /ID \| Severity \| Skill or file \| Evidence \| Suggested change/);
+    assert.match(text, /blocker, required, advisory/);
+    assert.match(text, /only from plugin-health\.html and behavioral-test-report\.html/);
+    assert.match(text, /not a publish signal/);
+    // The verdict relies only on Cowork's own evaluation.
+    assert.doesNotMatch(text, /run_tests|test_engines|--plugin-root|test-data/i);
   }
   const expected = ["{{DISPLAY_NAME}}", "{{RUN_LABEL}}", "{{SHA256}}", "{{SLUG}}", "{{VERSION}}"];
   assert.deepEqual(placeholders(claude), expected);
   assert.deepEqual(placeholders(mos3), expected);
-  assert.match(claude, /SHA-256 check: MATCH/);
-  assert.match(mos3, /MOS3 Microsoft 365 app package \(manifest schema 1\.28\)/);
-  assert.match(mos3, /Plugin SHA-256 check: MATCH/);
+  assert.match(mos3, /MOS3 Microsoft 365 app package \(manifest schema\s+1\.28\)/);
+  assert.match(claude, /\.claude-plugin\/plugin\.json/);
 });

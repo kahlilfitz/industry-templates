@@ -82,6 +82,14 @@ function reportsMatchRun(
   );
 }
 
+function runScript(script: string, args: string[]): void {
+  const tsxCli = join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
+  execFileSync(process.execPath, [tsxCli, join(ROOT, "scripts", script), ...args], {
+    cwd: ROOT,
+    stdio: "inherit",
+  });
+}
+
 function archive(
   slug: string,
   version: string,
@@ -89,7 +97,7 @@ function archive(
   inboxRoot: string,
   sharepointRoot: string,
 ): void {
-  const args = [
+  runScript("archive-evaluation.ts", [
     "--slug",
     slug,
     "--version",
@@ -100,18 +108,11 @@ function archive(
     inboxRoot,
     "--sharepoint-root",
     sharepointRoot,
-  ];
-
-  const tsxCli = join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
-  const archiveScript = join(ROOT, "scripts", "archive-evaluation.ts");
-  execFileSync(process.execPath, [tsxCli, archiveScript, ...args], {
-    cwd: ROOT,
-    stdio: "inherit",
-  });
+  ]);
 }
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(process.argv.slice(2), new Set(["no-fix"]));
   const slug = requiredArg(args, "slug");
   const submission = findSubmission(slug);
   const version = args.get("version")?.trim() || submission.version;
@@ -130,6 +131,7 @@ async function main(): Promise<void> {
     "--timeout-minutes",
   );
   const pollSeconds = positiveNumber(args.get("poll-seconds"), 30, "--poll-seconds");
+  const fix = !args.has("no-fix");
   const stableSeconds = positiveNumber(
     args.get("stable-seconds"),
     15,
@@ -137,7 +139,7 @@ async function main(): Promise<void> {
   );
 
   const manifestPath = join(inboxRoot, slug, version, "evaluation-run.json");
-  assertNonEmptyFile(manifestPath, "frozen evaluation-run.json");
+  assertNonEmptyFile(manifestPath, "evaluation-run.json");
   const runData = JSON.parse(readFileSync(manifestPath, "utf8")) as EvaluationRun;
   if (
     runData.schemaVersion !== 1 ||
@@ -145,17 +147,14 @@ async function main(): Promise<void> {
     runData.artifactVersion !== version ||
     runData.status !== "prepared"
   ) {
-    throw new Error("frozen evaluation manifest is not a prepared run for this slug/version");
+    throw new Error("evaluation-run.json is not a prepared run for this slug/version");
   }
 
   const deadline = Date.now() + timeoutMinutes * 60_000;
   console.log(`Watching ${tasksRoot} for ${slug} ${version}.`);
   console.log(`Expected ZIP SHA-256: ${runData.artifactSha256}`);
-  if (runData.testDataFile) {
-    // Tasks are matched on the plugin ZIP only; the archive step copies and re-verifies the test data.
-    console.log(`Test-data ZIP: ${runData.testDataFile} (SHA-256 ${runData.testDataSha256}); archived alongside the reports.`);
-  }
   console.log(`Archive root (${sharepointSource}): ${sharepointRoot}`);
+  console.log(fix ? "After archiving, the fix step starts a Copilot CLI agent (--no-fix to skip)." : "Fix step disabled (--no-fix).");
 
   const reportedTasks = new Set<string>();
   const reportedStaleOutput = new Set<string>();
@@ -197,6 +196,17 @@ async function main(): Promise<void> {
         }
         console.log("All three reports are present and stable.");
         archive(slug, version, candidate.source, inboxRoot, sharepointRoot);
+        if (fix) {
+          runScript("fix-evaluation.ts", [
+            "--slug",
+            slug,
+            "--version",
+            version,
+            "--inbox-root",
+            inboxRoot,
+            ...(args.has("model") ? ["--model", requiredArg(args, "model")] : []),
+          ]);
+        }
         return;
       }
     }

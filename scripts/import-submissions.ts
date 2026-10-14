@@ -57,6 +57,7 @@ const NEVER_BUNDLE = new Set([
   "metadata.yaml",
   "README.md",
   "PACKAGE-NOTES.md",
+  "BACKLOG.md",
   "tests",
 ]);
 

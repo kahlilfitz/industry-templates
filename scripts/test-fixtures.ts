@@ -1,4 +1,4 @@
-/** Throwaway fixtures for the MOS3 and test-data unit tests. Never used by the build. */
+/** Throwaway fixtures for the MOS3 and evaluation unit tests. Never used by the build. */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { deflateSync } from "node:zlib";

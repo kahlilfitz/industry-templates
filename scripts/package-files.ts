@@ -1,6 +1,5 @@
 /**
- * File-walking and reproducible ZIP helpers shared by the bundle builder, the MOS3 packager and
- * the test-data packager.
+ * File-walking and reproducible ZIP helpers shared by the bundle builder and the MOS3 packager.
  */
 import { readFileSync, readdirSync, lstatSync } from "node:fs";
 import { join, posix, relative, sep } from "node:path";

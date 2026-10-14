@@ -8,16 +8,6 @@ import {
 import { createHash } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findTestDataVersionDir, writeTestDataZip } from "./test-data.js";
-
-export {
-  FROZEN_MANIFEST,
-  checkTestData,
-  computeFrozenManifest,
-  findTestDataVersionDir,
-  verifyFrozenManifest,
-  writeFrozenManifest,
-} from "./test-data.js";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_INBOX_ROOT = join(ROOT, "evaluation-inbox");
@@ -50,6 +40,7 @@ export type EvaluationRun = {
   preparedAt: string;
   coworkTaskName: string;
   packageFormat?: PackageFormat;
+  /** Legacy: runs prepared before 2026-10-15 also froze a test-data ZIP, which archive still copies. */
   testDataFile?: string;
   testDataSha256?: string;
   atkValidated?: boolean;
@@ -57,7 +48,13 @@ export type EvaluationRun = {
   automatedVerdict?: EvaluationVerdict;
   reportSource?: string;
   archiveDestination?: string;
+  fixStatus?: FixStatus;
+  fixBrief?: string;
+  fixVersion?: string;
+  fixUpdatedAt?: string;
 };
+
+export type FixStatus = "nothing-to-fix" | "brief-written" | "agent-finished" | "agent-failed";
 
 export type Submission = {
   slug: string;
@@ -327,33 +324,13 @@ export function relativeToRoot(path: string): string {
   return relative(ROOT, path);
 }
 
-/**
- * A MOS3 candidate cannot be frozen without its shipped regression. The suite itself runs once,
- * from source, before the commit (docs/operator-runbook.md, lifecycle step 2); preparation only
- * packages and validates, and does not rerun it.
- */
-export function assertShippedRegression(testDataDir: string, slug: string): void {
-  if (!["run_tests.py", "test_engines.py"].some((name) => existsSync(join(testDataDir, "tests", name)))) {
-    throw new Error(
-      `the test data for ${slug} has no tests/run_tests.py or tests/test_engines.py; ` +
-        "a MOS3 candidate cannot be frozen without its shipped regression",
-    );
+/** Reads `<inbox>\<slug>\<version>\evaluation-run.json`. */
+export function readRun(inboxRoot: string, slug: string, version: string): { path: string; run: EvaluationRun } {
+  const path = join(inboxRoot, slug, version, "evaluation-run.json");
+  assertNonEmptyFile(path, "evaluation-run.json");
+  const run = JSON.parse(readFileSync(path, "utf8")) as EvaluationRun;
+  if (run.schemaVersion !== 1 || run.slug !== slug || run.artifactVersion !== version) {
+    throw new Error("evaluation-run.json does not match the requested plugin and version");
   }
-}
-
-/**
- * Builds `<slug>-test-data-<version>.zip` from `test-data\<industry>\<slug>\<version>\`: README.md,
- * demo-data/** and tests/** at the ZIP root, without build litter or FROZEN.sha256, with sorted
- * entries and a fixed timestamp. Returns the ZIP path.
- */
-export function buildTestDataZip(
-  slug: string,
-  version: string,
-  options: { root?: string; outDir?: string } = {},
-): string {
-  const root = options.root ?? ROOT;
-  const versionDir = findTestDataVersionDir(slug, version, root);
-  const outPath = join(options.outDir ?? join(root, "public", "test-data"), `${slug}-test-data-${version}.zip`);
-  writeTestDataZip(versionDir, outPath);
-  return outPath;
+  return { path, run };
 }

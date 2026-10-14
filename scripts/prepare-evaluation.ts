@@ -1,27 +1,23 @@
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+/**
+ * `npm run evaluation:prepare -- --slug <slug>`: package one plugin for a Cowork evaluation.
+ *
+ * Validates submissions, builds the bundles, runs Microsoft 365 Agents Toolkit validation for MOS3
+ * packages, copies the plugin ZIP into `evaluation-inbox\<slug>\<version>\`, records its SHA-256 in
+ * evaluation-run.json and renders the Cowork prompt. It runs no plugin tests and freezes nothing.
+ */
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
   DEFAULT_INBOX_ROOT,
   ROOT,
   EvaluationRun,
   assertNonEmptyFile,
-  assertShippedRegression,
-  buildTestDataZip,
   findSubmission,
-  findTestDataVersionDir,
   parseArgs,
   requiredArg,
   resolveInputPath,
   sha256,
-  writeFrozenManifest,
 } from "./evaluation-workflow.js";
 
 const ATK_PACKAGE = "@microsoft/m365agentstoolkit-cli";
@@ -101,27 +97,18 @@ function main(): void {
     console.log("Note: --skip-atk is ignored; Agents Toolkit validation applies only to MOS3 submissions.");
   }
 
-  console.log(`Validating submissions before freezing ${slug} ${submission.version}...`);
+  const runDir = join(inboxRoot, slug, submission.version);
+  if (existsSync(runDir)) {
+    throw new Error(`an evaluation candidate already exists for ${slug} ${submission.version}: ${runDir}`);
+  }
+
+  console.log(`Validating submissions before packaging ${slug} ${submission.version}...`);
   run("npm", ["run", "check:submissions"]);
-  run("npm", ["run", "check:shared"]);
   console.log("Building reproducible bundles...");
   run("npm", ["run", "build"]);
-  if (mos3) {
-    console.log("Checking per-version test data...");
-    run("npm", ["run", "check:test-data"]);
-  }
 
   const bundlePath = join(ROOT, "public", "bundles", `${slug}.zip`);
   assertNonEmptyFile(bundlePath, `generated bundle public\\bundles\\${slug}.zip`);
-
-  let testDataZip: string | undefined;
-  let testDataDir: string | undefined;
-  if (mos3) {
-    testDataDir = findTestDataVersionDir(slug, submission.version);
-    assertShippedRegression(testDataDir, slug);
-    testDataZip = buildTestDataZip(slug, submission.version);
-    assertNonEmptyFile(testDataZip, `test-data ZIP ${basename(testDataZip)}`);
-  }
 
   let atkValidated: boolean | undefined;
   if (mos3) {
@@ -135,40 +122,24 @@ function main(): void {
     }
   }
 
-  const runDir = join(inboxRoot, slug, submission.version);
   const artifactPath = join(runDir, `${slug}.zip`);
   const manifestPath = join(runDir, "evaluation-run.json");
   const promptPath = join(runDir, "cowork-prompt.txt");
-  const testDataFile = testDataZip ? basename(testDataZip) : undefined;
-  const frozenTestDataZip = testDataFile ? join(runDir, testDataFile) : undefined;
   let created = false;
 
   try {
-    if (existsSync(runDir)) {
-      throw new Error(`frozen evaluation candidate already exists: ${runDir}`);
-    }
     mkdirSync(dirname(runDir), { recursive: true });
     mkdirSync(runDir);
     created = true;
     copyFileSync(bundlePath, artifactPath);
     const artifactSha256 = sha256(artifactPath);
     if (artifactSha256 !== sha256(bundlePath)) {
-      throw new Error("frozen artifact hash does not match the generated bundle");
-    }
-    let testDataSha256: string | undefined;
-    if (testDataZip && frozenTestDataZip) {
-      copyFileSync(testDataZip, frozenTestDataZip);
-      testDataSha256 = sha256(frozenTestDataZip);
-      if (testDataSha256 !== sha256(testDataZip)) {
-        throw new Error("frozen test-data ZIP hash does not match the generated test-data ZIP");
-      }
+      throw new Error("copied plugin ZIP hash does not match the generated bundle");
     }
 
     const preparedAt = new Date().toISOString();
-    const date = preparedAt.slice(0, 10);
-    const gitCommit = git(["rev-parse", "HEAD"]);
+    const coworkTaskName = `evaluate-${slug}-v${submission.version}-${preparedAt.slice(0, 10)}`;
     const gitDirty = git(["status", "--porcelain"]).length > 0;
-    const coworkTaskName = `evaluate-${slug}-v${submission.version}-${date}`;
     const runData: EvaluationRun = {
       schemaVersion: 1,
       status: "prepared",
@@ -178,55 +149,41 @@ function main(): void {
       artifactVersion: submission.version,
       artifactFile: `${slug}.zip`,
       artifactSha256,
-      gitCommit,
+      gitCommit: git(["rev-parse", "HEAD"]),
       gitDirty,
       preparedAt,
       coworkTaskName,
-      ...(mos3 ? { packageFormat: "mos3" as const, testDataFile, testDataSha256, atkValidated } : {}),
+      ...(mos3 ? { packageFormat: "mos3" as const, atkValidated } : {}),
     };
     writeFileSync(manifestPath, `${JSON.stringify(runData, null, 2)}\n`, "utf8");
 
     const templateName = mos3 ? "cowork-evaluation-prompt-mos3.txt" : "cowork-evaluation-prompt.txt";
-    const templatePath = join(ROOT, "docs", "evaluation", templateName);
-    const template = readFileSync(templatePath, "utf8");
-    const prompt = renderPrompt(template, {
-      SLUG: slug,
-      DISPLAY_NAME: submission.displayName,
-      VERSION: submission.version,
-      RUN_LABEL: coworkTaskName,
-      SHA256: artifactSha256,
-    });
-    writeFileSync(promptPath, prompt, "utf8");
-
-    // Freeze the test data this candidate was verified against; check:test-data then refuses any edit.
-    let frozenManifest: string | undefined;
-    if (testDataDir) frozenManifest = writeFrozenManifest(testDataDir);
+    const template = readFileSync(join(ROOT, "docs", "evaluation", templateName), "utf8");
+    writeFileSync(
+      promptPath,
+      renderPrompt(template, {
+        SLUG: slug,
+        DISPLAY_NAME: submission.displayName,
+        VERSION: submission.version,
+        RUN_LABEL: coworkTaskName,
+        SHA256: artifactSha256,
+      }),
+      "utf8",
+    );
 
     console.log("");
     console.log("Evaluation candidate prepared.");
     console.log(`  Task name: ${coworkTaskName}`);
-    console.log(`  Frozen ZIP: ${artifactPath}`);
+    console.log(`  Plugin ZIP: ${artifactPath}`);
     console.log(`  SHA-256: ${artifactSha256}`);
-    if (frozenTestDataZip) {
-      console.log(`  Test-data ZIP: ${frozenTestDataZip}`);
-      console.log(`  Test-data SHA-256: ${testDataSha256}`);
+    if (mos3) {
       console.log(`  ATK validated: ${atkValidated ? "yes" : "no (LocalChecksOnly: not a deployable acceptance result)"}`);
     }
     console.log(`  Cowork prompt: ${promptPath}`);
-    if (gitDirty) {
-      console.log("  Note: the candidate was prepared from a dirty worktree; the commit is recorded.");
-    }
+    if (gitDirty) console.log("  Note: prepared from a dirty worktree; the commit is recorded.");
     console.log("");
-    if (frozenManifest) {
-      console.log(
-        `Wrote ${relative(ROOT, frozenManifest)}; commit it now (git add -- "${relative(ROOT, frozenManifest)}") ` +
-          `so this version's test data stays frozen.`,
-      );
-    }
-    console.log("Next: create the named Cowork task, attach the frozen plugin ZIP, and paste the prompt.");
-    if (frozenTestDataZip) {
-      console.log("The test-data ZIP is not sent to Cowork; it is archived with the reports as the test record.");
-    }
+    console.log("Next: create the named Cowork task, attach the plugin ZIP, and paste the prompt.");
+    console.log(`Then run: npm run evaluation:watch -- --slug ${slug}`);
   } catch (error) {
     if (created) rmSync(runDir, { recursive: true, force: true });
     throw error;

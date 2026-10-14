@@ -4,8 +4,8 @@
  *
  * The rules follow the "Building a Cowork Plugin — Partner Team Guide": a manifest 1.28
  * `manifest.json` at the ZIP root, the two icons next to it, and one canonical Agent Skill per
- * `skills/<name>/` folder. Nothing else ships: README, demo data and tests live outside the
- * package (test data under `test-data\<industry>\<slug>\<version>\`).
+ * `skills/<name>/` folder. Nothing else ships: README, demo data and tests stay in the submission
+ * folder (`demo-data\`, `tests\`) outside the package.
  */
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, posix } from "node:path";
@@ -692,7 +692,7 @@ export function validateMos3Submission(dir: string, meta: Record<string, unknown
   const version = typeof meta.version === "string" ? meta.version.trim() : "";
   if (!version) err("metadata.json version is required for a MOS3 package (it must equal manifest.json version)");
   if (meta.bundleTests !== undefined) {
-    err("bundleTests is not allowed with packageFormat mos3; tests live under test-data\\<industry>\\<slug>\\<version>\\");
+    err("bundleTests is not allowed with packageFormat mos3; tests and demo data stay in the submission folder, outside the package");
   }
   if (existsSync(join(dir, ".claude-plugin"))) {
     err(".claude-plugin/ must be removed; a MOS3 package is described by manifest.json at the submission root");

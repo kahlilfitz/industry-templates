@@ -8,15 +8,14 @@
     "build": "tsx scripts/import-submissions.ts",
     "import:submissions": "npm run build",
     "check:submissions": "tsx scripts/import-submissions.ts --check",
-    "check:shared": "tsx scripts/check-shared-modules.ts",
-    "check:test-data": "tsx scripts/check-test-data.ts",
     "evaluation:prepare": "tsx scripts/prepare-evaluation.ts",
     "evaluation:archive": "tsx scripts/archive-evaluation.ts",
     "evaluation:watch": "tsx scripts/watch-evaluation.ts",
+    "evaluation:fix": "tsx scripts/fix-evaluation.ts",
     "sharepoint:link": "tsx scripts/sharepoint.ts link",
     "sharepoint:doctor": "tsx scripts/sharepoint.ts doctor",
     "sharepoint:unlink": "tsx scripts/sharepoint.ts unlink",
-    "test:evaluation": "tsx --test scripts/evaluation-workflow.test.ts scripts/sharepoint-sync.test.ts scripts/shared-modules.test.ts scripts/mos3-package.test.ts scripts/test-data.test.ts"
+    "test:evaluation": "tsx --test scripts/evaluation-workflow.test.ts scripts/recommendations.test.ts scripts/sharepoint-sync.test.ts scripts/mos3-package.test.ts"
   },
   "dependencies": {},
   "devDependencies": {
