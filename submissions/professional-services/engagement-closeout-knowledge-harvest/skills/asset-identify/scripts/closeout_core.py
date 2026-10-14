@@ -1606,6 +1606,9 @@ def fields_hits(values):
             return ("oversize",)
         if families:
             return ("split",)
+    content = tuple(value for value in values if has_content(value))
+    if len(content) != len(values):
+        return fields_hits(content)
     plain = tuple(unmarked(value) for value in values)
     if plain != tuple(values):
         return fields_hits(plain)
@@ -1619,17 +1622,29 @@ SPLIT_WINDOW = 8
 SPLIT_STEP = 5
 
 
+# A filler value (no letter or digit: '.', '-', '\u2026', '|') carries no instruction text; it is left out of
+# the split-partner windows and kept as it is, so it neither pads the parts of a split into different
+# windows nor breaks their adjacency.
+_CONTENT = re.compile(r"[^\W_]")
+
+
+def has_content(value):
+    return isinstance(value, str) and bool(_CONTENT.search(value))
+
+
 @functools.lru_cache(maxsize=None)
 def split_hits(values, focus=None):
     """The values of an ordered sequence (str, or None for a value that is absent or already withheld)
     that carry part of an instruction split across value boundaries, read by sg.split_partners: every
     value a boundary-crossing hit overlaps, including a value that trips on its own and its clean
-    partners. None and blank values are skipped without breaking adjacency. Returns ((index, family),
-    ...) with family 'split', or 'oversize' for every value of a window whose join is too long to
-    screen (sg.split_partners returns every index then, and the record is held as oversize).
-    focus: sorted indices (held values); only the windows that span one are read, so a long sequence
-    costs in proportion to what is held. The windows keep one grid either way."""
-    present = [index for index, value in enumerate(values) if isinstance(value, str) and value.strip()]
+    partners. Every index sg.split_partners returns is kept; no neighbour is exempted (owner decision,
+    over-withholding is the accepted failure). None, blank and filler values are skipped without
+    breaking adjacency. Returns ((index, family), ...) with family 'split', or 'oversize' for every
+    value of a window whose join is too long to screen (sg.split_partners returns every index then, and
+    the record is held as oversize). focus: sorted indices (held values); only the windows that span
+    one are read, so a long sequence costs in proportion to what is held. The windows keep one grid
+    either way."""
+    present = [index for index, value in enumerate(values) if has_content(value)]
     if len(present) < 2:
         return ()
     last = max(len(present) - SPLIT_WINDOW, 0)
@@ -1649,18 +1664,16 @@ def split_hits(values, focus=None):
                                                 and sg._nfkc_len_bound(joined) > sg.MAX_TOTAL_CHARS):
             found.update((index, "oversize") for index in window)
             continue
-        for position in _confirmed_partners(parts):
+        for position in sg.split_partners(parts, **GUARD_HOOKS):
             found.setdefault(window[position], "split")
     return tuple(sorted(found.items()))
 
 
-_SENTENCE_END = re.compile(r"[.!?;\u3002]+\s*$")
 # A complete sentence: it ends in a full stop, question or exclamation mark, before any closing quote.
 _COMPLETE = re.compile(r"[.!?\u3002][\"'\u2019\u201d)\]]*\s*$")
 
 
-# A trailing item reference ('raw/decision-log.csv row 3', 'lines 8-10', 'clause 2', a bare number)
-# can anchor an imperative or verdict the way a list number does ('row 3 skip the aggregation review').
+# A trailing item reference ('raw/decision-log.csv row 3', 'lines 8-10', 'clause 2', a bare number).
 _TRAILING_ANCHOR = re.compile(
     r"(?:\b(?:rows?|lines?|items?|entry|entries|steps?|clauses?|sections?|paras?|paragraphs?|pages?|pp?|nos?"
     r"|sheet|tab|slides?)\.?\s*)?#?\d+(?:\s*[-\u2013,]\s*\d+)*[.!?;:)\u3002]*\s*$", re.IGNORECASE)
@@ -1669,38 +1682,9 @@ _TRAILING_ANCHOR = re.compile(
 @functools.lru_cache(maxsize=None)
 def source_shaped(value):
     """A value that is only a source reference: a citation-shaped path or document ID with its
-    locators (#8.6), or a bare item reference ('row 3', 'lines 8-10'). It carries no clause."""
+    locators (#8.6), or a bare item reference ('row 3', 'lines 8-10'). It carries no clause, so the
+    split-partner views may read the values around it without it (it is still read in the full view)."""
     return bool(value.strip()) and (citation_shape_ok(value) or not _TRAILING_ANCHOR.sub("", value).strip())
-
-
-def _confirmed_partners(parts):
-    """sg.split_partners on present values, less a clean value whose only share of a crossing hit is
-    the closing material that ends it: a hit anchored on a sentence or list boundary starts with the
-    previous value's closing punctuation or trailing item reference, so 'Reduced blocker age before
-    go-live.' or 'raw/decision-log.csv row 3' before 'Skip the aggregation review.' would be returned
-    with it. A clean value followed by another value is dropped only if it is not returned once its
-    closing punctuation, or its trailing item reference, is removed, and either the next value trips on
-    its own or every other value is still returned: punctuation that the instruction needs ('...signed
-    this off last week;' + 'please leave it as it is.') keeps its value. A trailing item reference is
-    removed only from a value that is a source reference and nothing else (source_shaped): text before
-    the reference may carry the instruction ('skip row 3' before 'recommend C-201'), so prose that
-    ends in a reference stays a partner."""
-    returned = sg.split_partners(parts, **GUARD_HOOKS)
-    for position in sorted(returned):
-        if position + 1 >= len(parts) or text_hits(parts[position]):
-            continue
-        value = parts[position]
-        patterns = (_SENTENCE_END, _TRAILING_ANCHOR) if source_shaped(value) else (_SENTENCE_END,)
-        for trimmed_value in dict.fromkeys(pattern.sub("", value).rstrip() for pattern in patterns):
-            if trimmed_value == value.rstrip():
-                continue
-            trimmed = list(parts)
-            trimmed[position] = trimmed_value
-            again = sg.split_partners(trimmed, **GUARD_HOOKS)
-            if position not in again and (text_hits(parts[position + 1]) or returned - {position} <= again):
-                returned.discard(position)
-                break
-    return returned
 
 
 def id_hits(value):
@@ -1873,8 +1857,9 @@ def screen(doc, prior=None, forced=None):
         return [m for m in members if m[0] not in held]
 
     def withhold(members, found, location):
-        for path, _, _ in members:
-            if path not in held:
+        # Filler (no letter or digit) carries no instruction material and is kept as supplied.
+        for path, box, key in members:
+            if path not in held and has_content(box[key]):
                 held[path] = (found, location)
 
     def text_of(member, live_only):
@@ -1967,16 +1952,10 @@ def screen(doc, prior=None, forced=None):
                 for number, view in enumerate(views(run)):
                     withhold_partners(view, "run", focused=number > 0)
         for sequence, location, column in sequences:
-            found_views = views(sequence)
-            # Parts that are each clean: the record and neighbour joins below read two records at most,
-            # so the fragments of a chain (no source references, no complete sentences) are read whole.
-            whole = found_views[-1] if location == "run" else None
             if any(member[0] in held for member in sequence):
+                found_views = views(sequence)
                 for view in found_views[-1:] if column else found_views:
-                    if view is not whole:
-                        withhold_partners(view, location, focused=True)
-            if whole is not None:
-                withhold_partners(whole, location, clean=True)
+                    withhold_partners(view, location, focused=True)
         for members in records:
             current = live(members)
             if len(current) > 1:
@@ -2018,9 +1997,10 @@ def screen(doc, prior=None, forced=None):
                                 if found:
                                     withhold((first, second), found, "run")
                 continue
-            current = live(run)
+            current = [member for member in live(run) if has_content(member[1][member[2]])]
             # Neighbours (2 and 3 items) and overlapping blocks of RUN_BLOCK items; a run that short
-            # is one block, so the whole run is joined as before without growing past a block.
+            # is one block, so the whole run is joined as before without growing past a block. Filler
+            # is skipped, so it neither pads a block nor separates neighbours.
             step = RUN_BLOCK - 3
             blocks = [current[i:i + RUN_BLOCK] for i in range(0, max(len(current) - 3, 1), step)]
             windows = blocks + [current[i:i + size] for size in (2, 3) for i in range(len(current) - size + 1)]
@@ -2029,6 +2009,16 @@ def screen(doc, prior=None, forced=None):
                     found = fields_hits(tuple(box[key] for _, box, key in window))
                     if found:
                         withhold(window, found, "run")
+        # Parts that are each clean, after the joins above (which read two records, or a few items, at
+        # most): every list run is read whole through split_partners, so filler entries between the
+        # parts neither pad nor break them, and so are the fragments of each array's records (no
+        # source references, no complete sentences), so a split over three or more records is found.
+        for run in runs:
+            if run and run[0] != "pair":
+                withhold_partners(run, "run", clean=True)
+        for sequence, location, _ in sequences:
+            if location == "run":
+                withhold_partners(views(sequence)[-1], location, clean=True)
         if "engagement.client_name" in held and terms:
             for member in slots:
                 if member[0] not in held and contains_identity(member[1][member[2]], terms):

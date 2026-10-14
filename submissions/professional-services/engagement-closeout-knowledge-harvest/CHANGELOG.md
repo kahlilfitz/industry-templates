@@ -1766,3 +1766,79 @@ vendored separately.
   - the rendered-order read: 1.
 
 No golden changes: the goldens are byte-for-byte unchanged.
+
+### Split partners: no plugin-local exemption (owner decision)
+
+The owner decision for all five plugins: no plugin-local over-attribution filters. Closeout now
+withholds every index `split_partners` returns. A proof-based exemption may come later from shared
+steering_guard 1.1.6, applied identically in every plugin. Shared detector 1.1.5 is unchanged.
+
+- **Exemption removed.** `_confirmed_partners` and its closing-punctuation and trailing-reference
+  exemption are gone. `split_hits` keeps every index that `sg.split_partners` returns. A clean
+  neighbour whose closing `.`, `?` or `;`, or trailing item reference (`row 3`), a boundary-anchored
+  hit overlaps is now withheld with the instruction, with family `split`.
+- **Known limit: benign over-withholding.** Over-withholding a benign neighbour is the accepted
+  failure. It is bounded: it reaches no further than the same record, the adjacent records and the
+  neighbouring list items read with the instruction. Measured against `3804144`:
+
+  | Sweep | `3804144` (exemption) | This core |
+  | --- | --- | --- |
+  | Pairwise: 140 attack lines × 156 ordinary neighbours, both orders | 566 of 43,680 neighbours (1.3%) | 5,403 of 43,680 (12.4%) |
+  | Chain placement: 58 attack lines × 8 placements × 2 scenarios | 906 of 928 exact, 43 extra holds | 558 of 928 exact, 833 extra holds |
+  | Multi-record: 58 attack lines in `decision_log[2].summary` of 5 records | 56 of 58 exact, 2 extra holds | 35 of 58 exact, 101 extra holds |
+  | Holds beyond the adjacent records (multi-record) | 0 | 0 |
+
+  The extra holds are the tripping record's own fields and the adjacent records' summary, impact and
+  citation fields. Each one ends in punctuation or a reference that the attack's anchored hit
+  overlaps. No true split is dropped: every index is kept. The benign sets give 0 holds, both demo
+  scenarios give 0 hits, and the goldens are byte-for-byte unchanged.
+- **Filler.** A filler value is an entry with no letter or digit (`.`, `-`, `…`, `—`, `*`, `|`, `...`,
+  `--`, ` - `).
+  - `split_hits` skips it without breaking adjacency, so it never separates the parts of an instruction
+    and never pads a window of 8.
+  - The list-run joins build their 2- and 3-item windows and 16-item blocks from the values with
+    content only.
+  - `withhold()` never withholds a filler. `fields_hits` re-screens the values with content when the
+    filler-laden join is clean.
+  - A filler is kept as supplied in every output.
+- **Every stage.** The split tests now check every stage's output: `asset_shortlist.json`,
+  `lessons_clustered.json` and the governed JSON each hold the split parts. A part's text is absent
+  from each stage's JSON, and a part longer than 12 characters is absent from every rendered file.
+- **Ordering.** The all-clean reads (each list run whole, and each multi-record array's fragment view)
+  now run after the existing joins in each pass. So a hit the joins already attribute keeps its
+  location: D18's adjacent-record pair stays `run`.
+- **Timings.** The full chain, timed in one process (old = `3804144`):
+
+  | Chain | `3804144` | This core |
+  | --- | --- | --- |
+  | 100 assets, benign | 6.0 s | 5.9 s |
+  | 400 assets, benign | 15.7 s | 23.4 s (machine load; within noise at 1000) |
+  | 1000 assets, benign | 33.4 s | 36.9 s |
+  | 100 assets, every description trips | 8.1 s | 9.2 s |
+  | 400 assets, every description trips | 23.7 s | 27.0 s |
+  | 1000 assets, every description trips | 52.6 s | 59.1 s |
+  | 1000 assets, descriptions split three ways across assets | 53.7 s (1,093 holds) | 59.5 s (1,093 holds) |
+- **Reference.** #8.1 is updated in all five byte-identical copies of
+  `confidentiality-sanitisation-rules.md`. It drops the exemption, states the accepted
+  over-withholding with its bound, and adds the filler rule.
+- **Tests (188 in 16 groups).**
+  - The split tests now allow, beyond the placed parts, only `split` holds in the same or the adjacent
+    record or entry (`assert_bounded_partners`). They also check withholding at every stage
+    (`assert_every_stage`).
+  - The tests that asserted a benign neighbour stays now assert the bound:
+    - a citation or ID beside a tripping entry is at most a split partner;
+    - an entry further away stays;
+    - a tripping record reaches no further than its neighbours.
+  - D21, B6 and the drafting short-source test now allow the record's split partners.
+  - The new `SplitFillerTests` in `screening` has 4 tests:
+    - nine filler forms, seven deep between split halves;
+    - 25 mixed fillers, more than a window, for each split pair;
+    - fillers between the parts of three- and four-way splits;
+    - fillers between `third_party_products` items and across decision records;
+    - a benign control: fillers among ordinary entries hold nothing at any stage.
+- **Mutation check.**
+  - Removing the filler skip in `split_hits` fails 3 of the 4 filler tests.
+  - Removing both the `withhold()` filler guard and the run-block filler skip fails the four-way
+    filler test. Each one alone is covered by the other.
+- **Behaviour change.** A benign neighbour that the detector's anchored hit overlaps is now withheld
+  (see the known limit above). Fillers are no longer withheld by a run join.
