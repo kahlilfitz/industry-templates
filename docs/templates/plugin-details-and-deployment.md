@@ -5,7 +5,7 @@
 > plugin's `Evaluation/` folder and human-test tracker. The filled-in document accompanies the
 > distributable ZIP and records the human-gate status and the people responsible for it, so it stays
 > in SharePoint with the evidence and is never committed to this repository. See
-> [What is public and what stays in SharePoint](../operator-runbook.md#what-is-public-and-what-stays-in-sharepoint).
+> [What is public and what stays in SharePoint](../release-process.md#what-is-public-and-what-stays-in-sharepoint).
 > Delete this blockquote, the required-fields table and every `<!-- guidance -->` comment when you
 > fill it in.
 

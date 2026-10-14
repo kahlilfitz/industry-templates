@@ -46,33 +46,27 @@ Professional Services Wave 1 plugins use it; every other submission is unchanged
 submissions/<industry>/<slug>/
 ├── metadata.json            # sidecar, never bundled ("packageFormat": "mos3", no bundleTests)
 ├── README.md, CHANGELOG.md  # never bundled
+├── BACKLOG.md               # advisory items from Cowork evaluations, never bundled
 ├── listing-metadata.md      # store listing draft for the shared metadata template, never bundled
+├── demo-data/               # synthetic demo data, never bundled
+├── tests/                   # the plugin's own tests, never bundled
 └── the package (the only files in the ZIP, at its root, no wrapper folder):
     ├── manifest.json        # 1.28 manifest: GUID id, "Microsoft Corporation" developer,
     │                        # description.full ending with the four required links
     ├── color.png            # 192×192
     ├── outline.png          # 32×32, white on transparent
     └── skills/<name>/       # SKILL.md with metadata.icon; self-contained scripts/, references/…
-
-test-data/<industry>/<slug>/<version>/   # one folder per plugin version, never bundled
-├── README.md
-├── demo-data/
-└── tests/                   # runners take --plugin-root <dir> or PLUGIN_ROOT
 ```
 
 `.claude-plugin/` must be removed and `bundleTests` must not be set. Each skill must stand alone:
 nothing outside `skills/<name>/` reaches the package, so a skill may not refer to root
 `contracts/`, `references/`, demo data or tests. Skill descriptions stay within 1,024 characters
 (target 800) with at least five quoted triggers and one "Do NOT use for" line, and bodies stay
-under 2,000 words. Fixtures never go into the submission folder: they live in the test-data
-version folder, which is frozen (`FROZEN.sha256`) when that version is evaluated and never edited
-afterwards; a new version copies the previous folder forward. See
-[MOS3 package format and test data](docs/evaluation-workflow.md#mos3-package-format-and-test-data)
-and section H of the [hardening checklist](docs/plugin-hardening-checklist.md#h-mos3-and-partner-guide).
+under 2,000 words. Demo data and tests stay in the submission folder, outside the package.
 
 > **A submission holds two kinds of file.** Everything **agent-facing** is bundled into the
 > download verbatim — the bundle *is* the package the agent loads. The **human-facing** files
-> (`metadata.json`, `README.md`, `tests/`, `PACKAGE-NOTES.md`) are never bundled, so they cost
+> (`metadata.json`, `README.md`, `tests/`, `PACKAGE-NOTES.md`, `BACKLOG.md`) are never bundled, so they cost
 > the agent nothing. Don't leave other notes next to the payload; put them in the pull request
 > description.
 
@@ -138,8 +132,7 @@ read from a single URL. Two consequences worth knowing:
 ```bash
 npm install
 npm run check:submissions   # validate metadata only, writes nothing
-npm run check:test-data     # MOS3 per-version test data is complete; frozen folders unchanged
-npm run check:shared        # vendored shared modules match shared/
+npm run test:evaluation     # repository script unit tests
 npm run build               # recreate public/bundles/
 ```
 
@@ -156,8 +149,7 @@ npx tsx scripts/import-submissions.ts --only <slug>
 On a pull request, [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 
 1. Validates every submission and fails with an itemised message if metadata or package layout
-   is invalid, then checks MOS3 test data (`check:test-data`) and vendored shared modules
-   (`check:shared`).
+   is invalid, then runs the repository script tests (`test:evaluation`).
 2. Recreates `public/bundles/<slug>.zip` for every submission.
 3. Exercises the flattened catalog export and uploads the bundles as a workflow artifact.
 
@@ -172,12 +164,15 @@ repository as `sharepoint\` with `npm run sharepoint:link` — see
 
 ## Evaluate a release candidate
 
-Before treating a plugin as publishable, follow the
-[Cowork evaluation workflow](docs/evaluation-workflow.md). It defines how to freeze the exact ZIP
-(and, for MOS3, its test-data ZIP), run the manual Cowork task on the plugin ZIP, archive the three
-required HTML reports, preserve failed runs, and complete the independent human-review gate. The
-passing automated verdict is `Ready for human review`; it is never a publish signal. Operators running the
-whole workstream (evaluation, remediation, human gate, promotion and status) should start with the
-[operator runbook](docs/operator-runbook.md).
+Before treating a plugin as publishable, follow the [release process](docs/release-process.md):
+
+1. package the exact ZIP with `npm run evaluation:prepare`;
+2. run Cowork's built-in evaluation on it, which produces the two strategy reports plus
+   `recommendations.html`;
+3. let the watcher archive the reports and start the fix agent on blocker and required fixes;
+4. repeat with the next version until the verdict is `Ready for human review`;
+5. run the two-tester human spot check.
+
+`Ready for human review` is never a publish signal.
 
 By contributing you agree your template is shared under the repository's [MIT license](LICENSE).

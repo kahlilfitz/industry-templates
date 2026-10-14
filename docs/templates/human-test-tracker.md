@@ -3,7 +3,7 @@
 This page specifies the human-test tracker workbook well enough to build one from scratch. The
 tracker records the two-person human spot check that must pass before an evaluated ZIP is
 published. An automated Cowork `Ready` verdict is not a substitute for it. See
-[Cowork evaluation workflow](../evaluation-workflow.md), step 5.
+[Release process](../release-process.md), step 5.
 
 ## File and location
 
@@ -150,8 +150,8 @@ Add conditional formatting: green for `Pass` and red for `Fail` in columns I, M 
 
 The publish gate covers the reviewers only. Promotion needs both the publish gate at `PASS` and
 the owner decision at `Publish`. `Fix and re-evaluate` and `Do not publish` both mean the ZIP is not
-promoted; see the operator runbook's
-[Ready path](../operator-runbook.md#ready-path-human-gate-and-promotion).
+promoted; see the release process,
+[step 6](../release-process.md#step-6-publish-and-file-the-evidence).
 
 ## Prompt set
 

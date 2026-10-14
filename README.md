@@ -99,26 +99,15 @@ submissions/<industry>/<slug>/   ← the only folder contributors touch
 ├── skills/ contracts/ references/ demo-data/
 └── tests/                   ← excluded by default; metadata.bundleTests may opt in reproducibility assets
                                (MOS3 submissions: manifest.json, color.png, outline.png and skills/
-                               instead, with no tests/ or demo-data/ and no bundleTests)
-
-test-data/<industry>/<slug>/<version>/   ← MOS3 only: README.md, demo-data/, tests/ per plugin version;
-                                           frozen by FROZEN.sha256 once evaluated, never bundled
+                               are bundled; tests/, demo-data/ and BACKLOG.md stay outside the ZIP)
 
 public/bundles/<slug>.zip    ← GENERATED download package
-
-shared/<module>/             ← source of truth for code vendored into several plugins
-├── vendor.json              ← canonical file → name each plugin vendors it under
-└── …                        ← module, corpus and tests (never bundled; plugins ship their copies)
 ```
-
-`shared/` holds modules that several plugins vendor byte-for-byte, such as the instruction
-detector in `shared/steering-guard/`. Edit the source there and copy it into each plugin;
-`npm run check:shared` fails if any vendored copy differs.
 
 A submission opts into the **MOS3 Microsoft 365 app package** (manifest schema 1.28) with
 `"packageFormat": "mos3"` in `metadata.json`. Its ZIP holds only `manifest.json`, `color.png`,
 `outline.png` and `skills/` at the root, with no wrapper folder, README or fixtures; its README,
-demo data and tests live in `test-data/`, one folder per version. `bundleTests` applies only to the
+demo data and tests stay in the submission folder. `bundleTests` applies only to the
 Claude layout. The Professional Services Wave 1 plugins use MOS3; the other submissions are
 unchanged. See [CONTRIBUTING](CONTRIBUTING.md#mos3-app-package-opt-in).
 
@@ -131,8 +120,7 @@ platform-specific; CI recreates them and publishes them as workflow artifacts.
 ```bash
 npm install
 npm run check:submissions   # validate metadata, write nothing
-npm run check:test-data     # MOS3 per-version test data present; frozen folders unchanged
-npm run check:shared        # vendored shared modules match shared/
+npm run test:evaluation     # repository script unit tests
 npm run build               # recreate public/bundles/
 ```
 
@@ -142,47 +130,29 @@ bundles in place.
 
 ## Evaluate a release candidate
 
-Freeze the exact bundle that Cowork will evaluate:
+The [release process](docs/release-process.md) follows the plugin testing strategy:
 
 ```bash
-npm run evaluation:prepare -- --slug <plugin-slug>
+npm run evaluation:prepare -- --slug <plugin-slug>   # build the exact ZIP, record its SHA-256, render the Cowork prompt
+npm run evaluation:watch -- --slug <plugin-slug>     # archive the Cowork reports, then start the fix agent
 ```
 
-The command validates and builds the repository, then writes the immutable ZIP, its SHA-256 receipt,
-and a ready-to-paste Cowork prompt under `evaluation-inbox/<slug>/<version>/`. Attach only that
-frozen plugin ZIP to Cowork and require exactly `plugin-health.html`, `behavioral-test-report.html`,
-and `recommendations.html` (suggested fixes and the verdict, decided only from the other two). For a
-MOS3 plugin it also validates the package with
-`atk validate --package-file --interactive false` (no sign-in), builds
-`<slug>-test-data-<version>.zip` and writes `FROZEN.sha256` into the test-data folder, which you
-commit. The test-data ZIP is not sent to Cowork; it is archived with the reports as the test record.
+1. `prepare` writes the ZIP, an `evaluation-run.json` receipt and `cowork-prompt.txt` under
+   `evaluation-inbox/<slug>/<version>/`. For MOS3 it also runs
+   `atk validate --package-file --interactive false` (no sign-in).
+2. Attach only that ZIP to a new Cowork task and paste the prompt. Cowork runs its built-in
+   evaluation and saves `plugin-health.html`, `behavioral-test-report.html` and
+   `recommendations.html` (suggested fixes with severities, and the verdict).
+3. The watcher archives the reports and the ZIP to
+   `sharepoint/<Industry>/<slug>/Evaluation/<version>/`. `sharepoint` is a gitignored link to the
+   OneDrive-synced Industry Templates library; see [SharePoint sync](docs/sharepoint-sync.md).
+4. The watcher then runs `evaluation:fix`:
+   - advisory items go to the submission's `BACKLOG.md`;
+   - blocker and required items go to a Copilot CLI agent, which fixes them, bumps the version
+     and commits locally for review.
 
-After Cowork finishes, archive the reports and exact evaluated ZIP:
-
-```bash
-npm run evaluation:archive -- --slug <plugin-slug> --source "<Cowork task output folder>"
-```
-
-Or watch the synchronized Cowork task directory and archive automatically:
-
-```bash
-npm run evaluation:watch -- --slug <plugin-slug>
-```
-
-Evidence is written to `sharepoint/<Industry>/<slug>/Evaluation/<version>/`, where `sharepoint`
-is a gitignored link to the OneDrive-synced Industry Templates library (set it up once with
-`npm run sharepoint:link`; see [SharePoint sync](docs/sharepoint-sync.md)). Set
-`INDUSTRY_TEMPLATES_SHAREPOINT_ROOT` or pass `--sharepoint-root` to target another synced folder.
-The command refuses an unsynced plain `sharepoint` folder, missing reports, identity/version/hash
-mismatches, and existing evidence folders. If the submission has advanced since preparation, pass the frozen
-candidate's `--version`. An automated `Ready for human review` verdict is never a publish signal:
-publication still needs two independent human reviews, the tracker's Publish gate and an owner
-decision of Publish.
-
-See [Cowork evaluation workflow](docs/evaluation-workflow.md) for the complete contributor runbook,
-including manual Cowork steps, archive validation, retry rules, and the human publication gate.
-If you are running the plugin workstream end to end, start with the
-[operator runbook](docs/operator-runbook.md).
+`Ready for human review` is never a publish signal. Publication still needs two independent
+human testers, the tracker's Publish gate and an owner decision of Publish.
 
 ## Contributing
 

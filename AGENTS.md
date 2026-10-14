@@ -1,26 +1,32 @@
 # Agent guide
 
 Follow [CONTRIBUTING.md](CONTRIBUTING.md) for submission conventions and
-[docs/evaluation-workflow.md](docs/evaluation-workflow.md) for release candidates.
-
-Before any workstream task (building or remediating a plugin, freezing or evaluating a candidate,
-archiving evidence, writing deployment docs or trackers, promoting a distributable or updating
-status), read [docs/operator-runbook.md](docs/operator-runbook.md) and apply
-[docs/plugin-hardening-checklist.md](docs/plugin-hardening-checklist.md) before every freeze.
+[docs/release-process.md](docs/release-process.md) for packaging, Cowork evaluation, fixes, human
+review and publishing.
 
 ## Change scope
 
-Cowork evaluation feedback decides what changes between versions
-([change policy](docs/operator-runbook.md#change-policy-evaluation-feedback-drives-changes)).
+Cowork's `recommendations.html` decides what changes between versions.
 
-- Change only what the task names: evaluation findings from the previous version's report, owner
-  decisions, freeze blockers, or regressions your own change caused. Report any other defect you
-  find; do not fix it.
+- Change only what the task names: blocker or required fixes from the latest archived
+  `recommendations.html`, owner decisions, or regressions your own change caused. Advisory items
+  go to the submission's `BACKLOG.md`, not into the plugin. Report any other defect you find; do
+  not fix it.
 - Never relax, delete or change the expected result of an existing test or check. If a fix makes
   an existing test fail, stop, do not commit, and report the conflict.
-- A change to `shared\` passes the shared-module gate before it is committed: every plugin's full
-  suite passes with the new copy (run once, from source), and the detector's held-out score does
-  not drop.
+- Every change sent to Cowork is a new version: bump `metadata.json` and the manifest together and
+  add a CHANGELOG entry.
+- Commit path-limited (`git commit -m ... -- <paths>`), never push, and stop for owner review.
+- Never infer an owner sign-off or a publish decision.
+
+## Tests and demo data
+
+- A MOS3 plugin's tests and demo data live in `submissions\<industry>\<slug>\tests\` and
+  `demo-data\`. They are never bundled; the package holds only `manifest.json`, the icons and
+  `skills\`.
+- The repository's regression tests are the script unit tests (`npm run test:evaluation`), which
+  CI runs. Plugin suites are optional and not CI-gated; run one only when the task asks for it.
+- Cowork's built-in evaluation is the plugin evaluation. Never send tests or demo data to Cowork.
 
 ## Skills in sub-agents
 
@@ -28,15 +34,6 @@ QA review, fix and test sub-agents in this repository do not invoke skills unles
 names one; they work from the prompt and the repository. A Cowork plugin-engineering skill (such as
 `cowork-plugin-engineer`) applies only to Cowork packaging, manifest, OAuth and ZIP-validation
 work, never to engine correctness reviews or fixes.
-
-## Shared modules (`shared\`)
-
-`shared\<module>\` is the source of truth for code vendored into several plugins, such as the
-instruction detector `shared\steering-guard\steering_guard.py`. Never edit a vendored copy inside
-`submissions\`: change `shared\`, bump its version, copy it byte-for-byte into every plugin listed
-by `npm run check:shared`, and rerun each plugin's tests. Plugin-specific vocabulary goes through
-the detector's hooks. The operator scores detectors against a private held-out set that agents are
-never given; do not look for it or ask for its contents.
 
 ## SharePoint library (`sharepoint\`)
 
@@ -58,20 +55,3 @@ Rules:
   (through `npm run evaluation:archive`/`evaluation:watch`) and documents the user asks for. Never
   delete, rename or overwrite other people's files, and never delete recursively through the link.
 - Never commit, copy into `submissions/`, or bundle anything from `sharepoint\`.
-
-## Test data (`test-data\`)
-
-`test-data\<industry>\<slug>\<version>\` holds the `README.md`, `demo-data\` and `tests\` for one
-version of a MOS3 plugin ([docs/operator-runbook.md](docs/operator-runbook.md#mos3-test-data)).
-
-- A folder with `FROZEN.sha256` is frozen: never edit, add or remove anything in it, and never
-  create `FROZEN.sha256` by hand (`evaluation:prepare` writes it).
-- A new version starts by copying the previous version's folder forward, without its
-  `FROZEN.sha256`.
-- For MOS3 plugins, fixtures, demo data and tests never go into `submissions\<slug>\`.
-- Runners take the plugin as `python tests\<runner> --plugin-root <dir>` (or `PLUGIN_ROOT`): the
-  submission folder by default, or an extracted plugin ZIP. A runner reads only the plugin
-  root and its own version folder, never another plugin, `shared\` or `metadata.json`.
-- Run the full suite once per version, from the version folder against the source, before
-  committing, then `npm run check:test-data`. Do not also run it against a built ZIP;
-  `evaluation:prepare` runs no tests.
