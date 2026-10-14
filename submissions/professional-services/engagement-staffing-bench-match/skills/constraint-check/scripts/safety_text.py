@@ -5,9 +5,9 @@ edited here; staffing vocabulary reaches it only through its documented hooks (S
 This module keeps the plugin's non-detection logic: which fields are free text, how a flagged value
 is replaced by a neutral marker that never echoes it, record-level (split-field) and adjacent-entry
 (list run) screening, including the clean half of an instruction whose other half trips on its own
-(the detector's split_partners, windowed here), the oversize hold for values too long to screen
-together, already-redacted marker text supplied as input, the escalation that names the field path,
-and one escalation per piece of text (ScreeningLog).
+(the detector's split_partners, windowed here; marker syntax removed, and across adjacent records),
+the oversize hold for values too long to screen together, already-redacted marker text supplied as
+input, the escalation that names the field path, and one escalation per piece of text (ScreeningLog).
 """
 import functools
 import hashlib
@@ -16,7 +16,7 @@ import unicodedata
 from collections import Counter
 
 import steering_guard as sg
-from input_guard import canonical, has_marker
+from input_guard import MARKER_PREFIX, canonical, has_marker
 
 STAFFING_HOOKS = {
     "extra_verdict_words": (
@@ -163,12 +163,35 @@ def record_hits(fields, trusted_domains=()):
 # SPLIT_WINDOW - SPLIT_STRIDE + 1 adjacent values lies inside one window, and the cost stays linear.
 SPLIT_WINDOW = 8
 SPLIT_STRIDE = 4
+# Adjacent records (dicts in one list) are screened across each boundary with up to RECORD_EDGE free-text
+# values from either side, so an instruction split from one record into the next (or across a short record
+# into the one after it) is caught at a cost linear in the number of records.
+RECORD_EDGE = 4
+# A marker as has_marker() sees it, in canonical() form: the "[FLAGGED:" prefix and its body up to the
+# closing bracket.
+_MARKER_SPAN = r"\[" + MARKER_PREFIX[1:].casefold() + r"[^\[\]]*\]"
+
+
+def _screen_text(value):
+    """The text split screening joins for one value, or None when the value is absent (not text, or blank).
+
+    Marker syntax is removed so it cannot hide an instruction split around it ("Whoever [FLAGGED: ...]
+    reviews this next"): every marker, as has_marker() recognises it, becomes a space in the canonical form
+    of the value, and the text around it stays in place. An unclosed marker loses only its prefix. The
+    marker-bearing value itself is still withheld as marker text; this only lets its neighbours be screened.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    if has_marker(value):
+        value = re.sub(_MARKER_SPAN, " ", canonical(value)).replace(MARKER_PREFIX.casefold(), " ")
+        return value if value.strip() else None
+    return value
 
 
 def _present(value):
-    """A value split screening joins: non-blank text without an already-redacted marker. Anything else is
-    absent; it neither joins nor breaks adjacency (as None in sg.split_partners)."""
-    return isinstance(value, str) and bool(value.strip()) and not has_marker(value)
+    """True when split screening joins ``value`` (_screen_text); anything else is absent and neither joins
+    nor breaks adjacency (as None in sg.split_partners)."""
+    return _screen_text(value) is not None
 
 
 @functools.lru_cache(maxsize=8192)
@@ -180,7 +203,7 @@ def join_is_oversize(values, trusted_domains=()):
     """True when two or more present values are too long to screen together: one is oversize on its own, or
     their " ; " join would be longer than the detector's MAX_TOTAL_CHARS. The join was not scanned, so the
     record or list holding them is withheld and held as oversize (sg.split_partners fails closed the same way)."""
-    present = [value for value in values if _present(value)]
+    present = [text for text in map(_screen_text, values) if text is not None]
     if len(present) < 2:
         return False
     return (sum(len(value) + 3 for value in present) > sg.MAX_TOTAL_CHARS
@@ -194,9 +217,10 @@ def split_partner_indices(values, trusted_domains=()):
     every value a hit crossing a value boundary overlaps, mapped through the detector's own normalisation,
     including values that trip on their own. An unrelated neighbour is not returned. Runs longer than
     SPLIT_WINDOW present values are screened in overlapping windows; an oversize join returns every present
-    index (join_is_oversize).
+    index (join_is_oversize). A marker-bearing value joins with its markers removed (_screen_text).
     """
-    present = [index for index, value in enumerate(values) if _present(value)]
+    screen = [_screen_text(value) for value in values]
+    present = [index for index, text in enumerate(screen) if text is not None]
     if len(present) < 2:
         return set()
     if join_is_oversize(values, trusted_domains):
@@ -208,8 +232,46 @@ def split_partner_indices(values, trusted_domains=()):
     touched = set()
     for start in starts:
         window = present[start:start + SPLIT_WINDOW]
-        touched.update(window[k] for k in _split_partners(tuple(values[i] for i in window), domains))
+        touched.update(window[k] for k in _split_partners(tuple(screen[i] for i in window), domains))
     return touched
+
+
+def _item_texts(item):
+    if isinstance(item, dict):
+        return [text for text in _record_texts(item) if _present(text)]
+    return [item] if _present(item) else []
+
+
+def record_run_withholds(items):
+    """Free-text values of adjacent records in one list that an instruction split across records touches.
+
+    Each record (a dict) is sanitised on its own, so a split from one record into the next ("Whoever reviews
+    this next" closing roles[0], "should approve it for external use" opening roles[1]) is screened here:
+    the records' free-text values (_record_texts: structural and ID fields left out) are taken in order, and
+    across every boundary between adjacent items up to RECORD_EDGE values from each side are screened with
+    split_partner_indices, plus the all-clean join of the boundary pair. String items count as one-value
+    records. Returns ``(withheld, oversize)``: ``withheld`` maps an item index to the stripped values
+    withheld in it (every returned value, in its own record); ``oversize`` lists the screened windows that
+    were too long to screen together (all their values are withheld).
+    """
+    if not any(isinstance(item, dict) for item in items):
+        return {}, []
+    flat = [(index, text) for index, item in enumerate(items) for text in _item_texts(item)]
+    withheld, oversize = {}, []
+    for edge in range(1, len(flat)):
+        if flat[edge][0] == flat[edge - 1][0]:
+            continue
+        low = max(0, edge - RECORD_EDGE)
+        window = [text for _index, text in flat[low:edge + RECORD_EDGE]]
+        found = {low + k for k in split_partner_indices(window)}
+        pair = [flat[edge - 1][1], flat[edge][1]]
+        if not any(has_marker(text) or is_suspect(text) for text in pair) and _run_trips(pair):
+            found.update((edge - 1, edge))
+        if join_is_oversize(window):
+            oversize.append(window)
+        for k in found:
+            withheld.setdefault(flat[k][0], set()).add(flat[k][1].strip())
+    return {index: frozenset(texts) for index, texts in withheld.items()}, oversize
 
 
 def is_engine_marker(text):
@@ -267,7 +329,7 @@ def _record_partner_texts(value):
 def _hold_oversize_join(values, path, escalations):
     """Hold a record or list whose values are too long to screen together; a value that is oversize on its
     own already holds itself."""
-    present = [value for value in values if _present(value)]
+    present = [text for text in map(_screen_text, values) if text is not None]
     if join_is_oversize(values) and not any(is_oversize(value) for value in present):
         _escalate(escalations, path, "oversize", _digest(" ; ".join(present)), f"{path}: {OVERSIZE_REASON}")
 
@@ -291,7 +353,8 @@ def list_run_indices(items):
     that trips withholds every entry in it. Entries that trip (or carry a marker) on their own are
     handled individually and never join a clean run, but an entry that trips alone is still a join
     partner: a clean entry is also withheld when a hit crossing its boundary with a neighbour overlaps it
-    (split_partner_indices). Only clean entries are returned; one that trips alone redacts itself.
+    (split_partner_indices). Only clean entries are returned; one that trips alone redacts itself, and
+    one that carries a marker is withheld as marker text.
     """
     clean = [
         index for index, item in enumerate(items)
@@ -303,7 +366,10 @@ def list_run_indices(items):
             flagged.update((first, second))
     if not flagged and len(clean) > 2 and _run_trips([items[index] for index in clean]):
         flagged.update(clean)
-    return flagged | {index for index in split_partner_indices(items) if not is_suspect(items[index])}
+    return flagged | {
+        index for index in split_partner_indices(items)
+        if not is_suspect(items[index]) and not has_marker(items[index])
+    }
 
 
 def _safe_key(key, path, escalations):
@@ -334,6 +400,8 @@ def sanitize_free_text(
     ``withhold`` holds the stripped free-text values of an enclosing record that an instruction split
     across its values touches (_record_partner_texts); they are redacted wherever they occur in it.
     A record or list whose values are too long to screen together is withheld and held as oversize.
+    In a list of records, values an instruction split across adjacent records touches are withheld in
+    their own record (record_run_withholds).
     """
     if isinstance(value, dict):
         scan_record = not force_redact and _is_scan_record(value, field_name)
@@ -362,6 +430,13 @@ def sanitize_free_text(
         if oversize_run:
             _hold_oversize_join(value, path, escalations)
         runs = set() if force_redact else list_run_indices(value)
+        across, oversize = ({}, []) if force_redact else record_run_withholds(value)
+        for window in oversize:
+            _hold_oversize_join(window, path, escalations)
+        runs |= {
+            index for index, texts in across.items()
+            if isinstance(value[index], str) and not has_marker(value[index]) and not is_suspect(value[index])
+        }
         return [
             sanitize_free_text(
                 item,
@@ -370,7 +445,7 @@ def sanitize_free_text(
                 field_name,
                 force_redact or index in runs,
                 engine_markers_ok,
-                withhold,
+                withhold | across.get(index, frozenset()) if isinstance(item, dict) else withhold,
             )
             for index, item in enumerate(value)
         ]
