@@ -11,7 +11,7 @@ import argparse, glob, hashlib, os, sys
 DATA_ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # The one place the vendored shared detector is pinned. On a byte-identical re-copy of a new steering_guard.py
 # release into every skill, update this constant and nothing else.
-STEERING_GUARD_SHA256="12fb2476517adb6c51af1ad3a6ba37ae890bad273c3a819bbcfbdbee18bade11"
+STEERING_GUARD_SHA256="7edc38050b0b807348a38b8a690d087b8ec475ab747efff83596996cb98f365a"
 CANONICAL_SKILL="engagement-retrieve"
 def default_plugin_root():
     slug_dir=os.path.dirname(DATA_ROOT); industry_dir=os.path.dirname(slug_dir); repo=os.path.dirname(os.path.dirname(industry_dir))
