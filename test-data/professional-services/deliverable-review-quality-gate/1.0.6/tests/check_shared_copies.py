@@ -65,7 +65,7 @@ ROOT = plugin_root_from(sys.argv[1:])
 
 # The one pin for the vendored shared detector steering_guard.py. It is copied byte-for-byte and never edited here;
 # to take a new release, copy the file into every folder in STEERING_GUARD_COPIES and update this constant only.
-STEERING_GUARD_SHA256 = "d8120dac2c728f04bfe08c3ffcc67d042c7e43a60e2dc099f7611a401b64e701"  # steering_guard 1.1.5
+STEERING_GUARD_SHA256 = "12fb2476517adb6c51af1ad3a6ba37ae890bad273c3a819bbcfbdbee18bade11"  # steering_guard 1.1.6
 STEERING_GUARD_COPIES = ("skills/assertion-map/scripts/steering_guard.py", "skills/gate-check/scripts/steering_guard.py",
                          "skills/review-packet/scripts/steering_guard.py")
 
