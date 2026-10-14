@@ -1502,7 +1502,7 @@ DocsHardeningTests = _load_test_helper("test_hardening_docs").DocsHardeningTests
 
 # sha256 of shared/steering-guard/steering_guard.py and corpus.json as vendored. A byte-identical
 # re-copy of a newer shared version needs only these two pins updated.
-STEERING_GUARD_SHA256 = "12fb2476517adb6c51af1ad3a6ba37ae890bad273c3a819bbcfbdbee18bade11"
+STEERING_GUARD_SHA256 = "7edc38050b0b807348a38b8a690d087b8ec475ab747efff83596996cb98f365a"
 STEERING_CORPUS_SHA256 = "4630b9945ae41d15d777e53c6e5a6b42700c0c96f2a4225d592f70880d330053"
 ENGINE_SKILLS = ("fit-score", "constraint-check", "slate-draft")
 safety = sys.modules["safety_text"]
