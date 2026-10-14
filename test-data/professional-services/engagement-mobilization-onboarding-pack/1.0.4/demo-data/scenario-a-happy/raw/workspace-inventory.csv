@@ -1,5 +1,0 @@
-workspace_id,name,workspace_type,system,default_permission,requested_permission,depends_on_knowledge,data_classification,citation
-WS-A-SP,ORC Engagement SharePoint,engagement-sharepoint,SharePoint,viewer,viewer,false,client_confidential,raw/workspace-inventory.csv row 2
-WS-A-PLAN,ORC Delivery Planner,delivery-planner,Planner,viewer,viewer,false,internal,raw/workspace-inventory.csv row 3
-WS-A-TEAMS,ORC Team Channel,client-teams-channel,Teams,member,member,false,client_confidential,raw/workspace-inventory.csv row 4
-WS-A-KNOW,Cleared Healthcare Mobilization Knowledge,knowledge-repository,Knowledge Repository,viewer,viewer,true,internal,raw/workspace-inventory.csv row 5

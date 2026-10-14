@@ -1,4 +1,0 @@
-person,role,responsibilities,point_of_contact,onboarding_status,assignment_status,citation
-Ava Morgan,Client delivery manager,Owns mobilization cadence; approves first-week plan,Engagement partner,active,confirmed,raw/confirmed-roster.csv row 2
-Leo Brooks,Data migration consultant,Leads data readiness checklist; coordinates source extracts,Ava Morgan,active,confirmed,raw/confirmed-roster.csv row 3
-Taylor Reed,Delivery analyst,Supports stakeholder map; prepares governance notes,Ava Morgan,joining,confirmed,raw/confirmed-roster.csv row 4

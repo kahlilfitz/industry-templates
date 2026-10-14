@@ -44,10 +44,10 @@ From 1.0.3 the plugin ships as a MOS3 Microsoft 365 app package (manifest 1.28).
 
 ## Tests and demo data
 
-Demo data and the regression suite are not in the package. They live, per plugin version, in [`test-data/professional-services/engagement-closeout-knowledge-harvest/1.0.3/`](../../../test-data/professional-services/engagement-closeout-knowledge-harvest/1.0.3/README.md). The two scenarios there include raw transcript, CSV and terms excerpts alongside structured JSON so the Connect path is real.
+Demo data and the regression suite are not in the package. They live in this folder's `demo-data/` and `tests/` (see [`tests/README.md`](tests/README.md)). The two scenarios there include raw transcript, CSV and terms excerpts alongside structured JSON so the Connect path is real.
 
 ```powershell
-cd test-data\professional-services\engagement-closeout-knowledge-harvest\1.0.3
+cd submissions\professional-services\engagement-closeout-knowledge-harvest
 python tests\test_engines.py                                 # against this submission folder
 python tests\test_engines.py --plugin-root <extracted ZIP>   # against a built package
 ```

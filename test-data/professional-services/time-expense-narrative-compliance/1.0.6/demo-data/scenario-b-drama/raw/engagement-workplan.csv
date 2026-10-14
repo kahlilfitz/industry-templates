@@ -1,7 +1,0 @@
-workplan_id,engagement_id,item_type,match_key,activity_class,deliverable,purpose
-WP-B-01,ENG-SYN-042,calendar_event,MTG-ORION-201,client_meeting,Implementation Plan,align implementation assumptions and next steps
-WP-B-02,ENG-SYN-042,document,integration-design-memo.docx,,Integration Design,identify implementation questions for client decision
-WP-B-03,ENG-SYN-042,document,security-exceptions-matrix.xlsx,,Security Exceptions Options Paper,prepare options for billing control implementation
-WP-B-04,ENG-SYN-042,document,api-mapping-appendix.docx,,Integration Design,document billing-system integration decisions
-WP-B-05,ENG-SYN-042,document,migration-worksheet.xlsx,,Migration Plan,validate billing-control assumptions
-WP-B-06,ENG-SYN-042,calendar_event,INT-STAFF-7,internal_admin,,coordinate team availability

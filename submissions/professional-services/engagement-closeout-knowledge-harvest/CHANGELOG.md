@@ -18,7 +18,7 @@ Scenario A golden. Every golden difference is listed under *Golden differences* 
   `.claude-plugin/`. `metadata.json` sets `"packageFormat": "mos3"`. The ZIP now holds only
   `manifest.json`, the two icons and `skills/`.
 - **Test data moved out of the plugin.** `demo-data/` and `tests/` moved to
-  `test-data/professional-services/engagement-closeout-knowledge-harvest/1.0.3/` with a README.
+  `test-data/professional-services/engagement-closeout-knowledge-harvest/1.0.3/` with a README. Later moved, unchanged, into this submission folder's `demo-data/` and `tests/` (outside the package); the versioned `test-data/` tree and its freezing are retired.
   `tests/test_engines.py` follows the runner contract: `--plugin-root <dir>` or `PLUGIN_ROOT`
   (default: this submission folder), `skills/...` resolved against the plugin root and
   `demo-data/...` against the version folder, both roots printed at start, a clear failure when the

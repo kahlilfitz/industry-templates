@@ -34,7 +34,7 @@ This plugin ships as a Microsoft 365 app package (MOS3, manifest 1.28): `manifes
 
 ## Tests and demo data
 
-Tests and demo data are not part of the package. For version 1.1.5 they live in [`test-data/professional-services/engagement-staffing-bench-match/1.1.5/`](../../../test-data/professional-services/engagement-staffing-bench-match/1.1.5/README.md): `demo-data/` holds the two scenarios with their goldens, and `tests/` holds `test_engines.py` and `sample-test-prompts.csv`. From that folder:
+Tests and demo data are not part of the package. They live in this folder (see [`tests/README.md`](tests/README.md)): `demo-data/` holds the two scenarios with their goldens, and `tests/` holds `test_engines.py` and `sample-test-prompts.csv`. From this folder:
 
 ```powershell
 python tests\test_engines.py                                   # against this submission folder

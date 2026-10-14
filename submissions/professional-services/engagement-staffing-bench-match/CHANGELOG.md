@@ -711,7 +711,7 @@ the hardening phases change engine behaviour, but output contracts change only a
   `"packageFormat": "mos3"`. The `.claude-plugin/` folder is removed. The built ZIP holds only
   `manifest.json`, the two icons and `skills/` at its root.
 - **Test data moved out of the plugin.** `demo-data/` and `tests/` moved to
-  `test-data/professional-services/engagement-staffing-bench-match/1.1.5/` with a README.
+  `test-data/professional-services/engagement-staffing-bench-match/1.1.5/` with a README. Later moved, unchanged, into this submission folder's `demo-data/` and `tests/` (outside the package); the versioned `test-data/` tree and its freezing are retired.
   `tests/test_engines.py` now follows the runner contract: `--plugin-root <dir>` or `PLUGIN_ROOT`,
   defaulting to this submission folder; `skills/...` resolves against the plugin root and
   `demo-data/...` against the version folder; it prints both roots and stops if the plugin root has

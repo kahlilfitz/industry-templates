@@ -40,7 +40,7 @@ Version 1.0.6 re-vendors the shared steering detector `steering_guard` 1.1.7 int
 
 ### Bundled engine copies
 
-Each skill runs only scripts inside its own folder, so a skill installed on its own still works. `gate-check` bundles the `assertion_map` engine it runs to recover a missing `assertion-mapped.json`, and `review-packet` bundles the `severity_rank` engine and the modules it imports for `--verify`. `deliverable-ingest` runs no script; it hands `review-input.json` to `assertion-map`. Change the canonical copy, then copy it byte-for-byte to the others; `tests/check_shared_copies.py` and the runner's `mos3_skill_isolation_tests` group fail on any drift, missing copy or stale copy.
+Each skill runs only scripts inside its own folder, so a skill installed on its own still works. `gate-check` bundles the `assertion_map` engine it runs to recover a missing `assertion-mapped.json`, and `review-packet` bundles the `severity_rank` engine and the modules it imports for `--verify`. `deliverable-ingest` runs no script; it hands `review-input.json` to `assertion-map`. Change the canonical copy, then copy it byte-for-byte to the others; `tests/run_tests.py` (its shared-copy and `mos3_skill_isolation_tests` checks) fails on any drift, missing copy or stale copy.
 
 | File | Canonical copy | Byte-identical copies |
 |------|----------------|-----------------------|
@@ -49,16 +49,15 @@ Each skill runs only scripts inside its own folder, so a skill installed on its 
 | `scripts/assertion_map.py` | `skills/assertion-map/` | `gate-check` |
 | `scripts/assertion_rules.py` | `skills/assertion-map/` | `gate-check`, `review-packet` |
 | `scripts/gate_check.py`, `scripts/severity_rank.py` | `skills/gate-check/` | `review-packet` |
-| `scripts/steering_guard.py` | `shared/steering-guard/` (repository) | `assertion-map`, `gate-check`, `review-packet` |
+| `scripts/steering_guard.py` | `skills/assertion-map/` (vendored detector, never edited here) | `gate-check`, `review-packet` |
 
 ## Tests and demo data
 
-Demo scenarios, goldens and tests live in [`test-data/professional-services/deliverable-review-quality-gate/1.0.6/`](../../../test-data/professional-services/deliverable-review-quality-gate/1.0.6/README.md). From that folder:
+Demo scenarios, goldens and tests live in this folder's `demo-data/` and `tests/` (see [`tests/README.md`](tests/README.md)); they are not packaged. From this folder:
 
 ```bash
 python tests/run_tests.py                              # against this source folder
 python tests/run_tests.py --plugin-root <extracted ZIP> # against a built package
-python tests/check_shared_copies.py
 ```
 
 ## The case that shows why it exists
@@ -77,7 +76,7 @@ A naive reviewer sees a professional report with a disclaimer. The engine starts
 
 ## What you bring
 
-A draft deliverable, its supporting evidence set, the applicable QRM gate criteria and required language, brand/formatting standards, and prior review findings. The demo scenarios include raw markdown drafts (with page markers and a distribution list), evidence indexes, QRM extracts, prior-review notes and release-control registers alongside structured inputs, so the Connect path is visible rather than assumed. Every structured value traces to the raw pack, and `python tests/derive_review_input.py`, run from `test-data/professional-services/deliverable-review-quality-gate/1.0.6/`, checks that it does.
+A draft deliverable, its supporting evidence set, the applicable QRM gate criteria and required language, brand/formatting standards, and prior review findings. The demo scenarios include raw markdown drafts (with page markers and a distribution list), evidence indexes, QRM extracts, prior-review notes and release-control registers alongside structured inputs, so the Connect path is visible rather than assumed. Every structured value traces to the raw pack, and `python tests/derive_review_input.py`, run from this folder, checks that it does.
 
 ## Boundaries
 
