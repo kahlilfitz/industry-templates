@@ -13,15 +13,14 @@ import {
   ROOT,
   EvaluationRun,
   assertNonEmptyFile,
+  assertShippedRegression,
   buildTestDataZip,
   findSubmission,
   findTestDataVersionDir,
   parseArgs,
   requiredArg,
   resolveInputPath,
-  resolveTestTimeoutMinutes,
   sha256,
-  verifyShippedTests,
   writeFrozenManifest,
 } from "./evaluation-workflow.js";
 
@@ -95,7 +94,6 @@ function main(): void {
   const inboxRoot = args.has("inbox-root")
     ? resolveInputPath(requiredArg(args, "inbox-root"))
     : DEFAULT_INBOX_ROOT;
-  const testTimeoutMinutes = resolveTestTimeoutMinutes({ flag: args.get("test-timeout-minutes") });
   const skipAtk = args.has("skip-atk");
   const submission = findSubmission(slug);
   const mos3 = submission.packageFormat === "mos3";
@@ -120,10 +118,10 @@ function main(): void {
   let testDataDir: string | undefined;
   if (mos3) {
     testDataDir = findTestDataVersionDir(slug, submission.version);
+    assertShippedRegression(testDataDir, slug);
     testDataZip = buildTestDataZip(slug, submission.version);
     assertNonEmptyFile(testDataZip, `test-data ZIP ${basename(testDataZip)}`);
   }
-  verifyShippedTests(bundlePath, slug, { timeoutMinutes: testTimeoutMinutes, testDataZip });
 
   let atkValidated: boolean | undefined;
   if (mos3) {

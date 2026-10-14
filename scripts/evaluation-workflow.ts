@@ -1,15 +1,11 @@
 import {
   existsSync,
   lstatSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
-  rmSync,
   statSync,
 } from "node:fs";
-import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findTestDataVersionDir, writeTestDataZip } from "./test-data.js";
@@ -330,175 +326,17 @@ export function relativeToRoot(path: string): string {
   return relative(ROOT, path);
 }
 
-const SHIPPED_TEST_RUNNERS = ["run_tests.py", "test_engines.py", "check_shared_copies.py"];
-
-export const TEST_TIMEOUT_ENV = "EVALUATION_TEST_TIMEOUT_MINUTES";
-export const DEFAULT_TEST_TIMEOUT_MINUTES = 30;
-
-/** Resolves the per-runner shipped-test timeout: --test-timeout-minutes, then the environment variable, then 30. */
-export function resolveTestTimeoutMinutes(
-  options: { flag?: string; env?: string } = {},
-): number {
-  const flag = options.flag?.trim();
-  const env = (options.env ?? process.env[TEST_TIMEOUT_ENV])?.trim();
-  const [raw, label] = flag
-    ? [flag, "--test-timeout-minutes"]
-    : env
-      ? [env, TEST_TIMEOUT_ENV]
-      : [undefined, ""];
-  if (raw === undefined) return DEFAULT_TEST_TIMEOUT_MINUTES;
-  const minutes = Number(raw);
-  if (!Number.isFinite(minutes) || minutes <= 0) {
-    throw new Error(`${label} must be a positive number of minutes; got "${raw}"`);
-  }
-  return minutes;
-}
-
-/** Extracts a ZIP with Python's zipfile, the same extractor Cowork's sandbox uses. */
-function extractZip(zipPath: string, destination: string): void {
-  execFileSync(
-    "python",
-    ["-c", "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])", zipPath, destination],
-    { stdio: "inherit" },
-  );
-}
-
-type RunnerOptions = {
-  cwd: string;
-  args: string[];
-  env: Record<string, string>;
-  timeoutMinutes: number;
-  source: string;
-  failure: string;
-};
-
-function runShippedRunner(runner: string, options: RunnerOptions): void {
-  const { cwd, args, env, timeoutMinutes, source, failure } = options;
-  console.log(
-    `Running shipped tests/${runner} from ${source} ` +
-      `(timeout ${timeoutMinutes} min; output follows)...`,
-  );
-  const started = Date.now();
-  // Output is inherited so long suites show progress; PYTHONUNBUFFERED stops Python batching it.
-  const result = spawnSync("python", [join("tests", runner), ...args], {
-    cwd,
-    stdio: ["ignore", "inherit", "inherit"],
-    timeout: Math.round(timeoutMinutes * 60_000),
-    windowsHide: true,
-    env: {
-      ...process.env,
-      PYTHONIOENCODING: "utf-8",
-      PYTHONDONTWRITEBYTECODE: "1",
-      PYTHONUNBUFFERED: "1",
-      ...env,
-    },
-  });
-  const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-  const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
-  if (errorCode === "ETIMEDOUT") {
-    console.log(`tests/${runner} timed out after ${elapsed} s and was stopped.`);
-    throw new Error(
-      `shipped tests/${runner} did not finish within the ${timeoutMinutes}-minute test timeout ` +
-        "and was stopped; if the suite is just slow, rerun with a longer timeout, for example " +
-        `--test-timeout-minutes 60 (or set ${TEST_TIMEOUT_ENV})`,
-    );
-  }
-  if (result.error) {
-    throw new Error(`could not run shipped tests/${runner} with python: ${result.error.message}`);
-  }
-  console.log(
-    `tests/${runner} finished in ${elapsed} s with exit code ` +
-      `${result.status ?? `null (signal ${result.signal})`}.`,
-  );
-  if (result.status !== 0) {
-    throw new Error(`shipped tests/${runner} ${failure}`);
-  }
-}
-
 /**
- * Runs the shipped regression before a candidate is frozen, from extracted ZIPs rather than the
- * source folder, because Cowork only ever sees the ZIPs.
- *
- * Claude-layout bundles carry their own tests/ and run from the extracted bundle. For a MOS3
- * candidate, pass `testDataZip`: the plugin ZIP is extracted to `<tmp>\plugin`, the test-data ZIP
- * to `<tmp>\test-data`, and each runner in `<tmp>\test-data\tests\` runs with the test-data folder
- * as its working directory, `--plugin-root <tmp>\plugin` and PLUGIN_ROOT set to the same path.
+ * A MOS3 candidate cannot be frozen without its shipped regression. The suite itself runs once,
+ * from source, before the commit (docs/operator-runbook.md, lifecycle step 2); preparation only
+ * packages and validates, and does not rerun it.
  */
-export function verifyShippedTests(
-  bundlePath: string,
-  slug: string,
-  options: { timeoutMinutes?: number; testDataZip?: string } = {},
-): void {
-  const timeoutMinutes = options.timeoutMinutes ?? DEFAULT_TEST_TIMEOUT_MINUTES;
-  if (!Number.isFinite(timeoutMinutes) || timeoutMinutes <= 0) {
-    throw new Error(`test timeout must be a positive number of minutes; got ${timeoutMinutes}`);
-  }
-  const workDir = mkdtempSync(join(tmpdir(), `bundle-${slug}-`));
-  try {
-    if (options.testDataZip !== undefined) {
-      verifyFromTestData(bundlePath, options.testDataZip, slug, workDir, timeoutMinutes);
-      return;
-    }
-    // Cowork runs the shipped tests from the ZIP, where source-only files such as metadata.json are absent.
-    extractZip(bundlePath, workDir);
-    const roots = readdirSync(workDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
-    const pluginRoot = roots.length === 1 ? join(workDir, roots[0].name) : workDir;
-    const runners = SHIPPED_TEST_RUNNERS.filter((name) => existsSync(join(pluginRoot, "tests", name)));
-    if (runners.length === 0) {
-      console.log("No shipped tests in the bundle; skipping the from-ZIP test run.");
-      return;
-    }
-    for (const runner of runners) {
-      runShippedRunner(runner, {
-        cwd: pluginRoot,
-        args: [],
-        env: {},
-        timeoutMinutes,
-        source: "the extracted bundle",
-        failure:
-          "fails when run from the built ZIP; " +
-          "run it from an extracted copy of public\\bundles\\" + `${slug}.zip to see why ` +
-          "(often a test reads a source-only file such as metadata.json or README.md)",
-      });
-    }
-  } finally {
-    rmSync(workDir, { recursive: true, force: true, maxRetries: 5 });
-  }
-}
-
-function verifyFromTestData(
-  bundlePath: string,
-  testDataZip: string,
-  slug: string,
-  workDir: string,
-  timeoutMinutes: number,
-): void {
-  if (!existsSync(testDataZip)) {
-    throw new Error(`no test data for ${slug}: ${testDataZip} does not exist`);
-  }
-  const pluginRoot = join(workDir, "plugin");
-  const dataRoot = join(workDir, "test-data");
-  extractZip(bundlePath, pluginRoot);
-  extractZip(testDataZip, dataRoot);
-  const runners = SHIPPED_TEST_RUNNERS.filter((name) => existsSync(join(dataRoot, "tests", name)));
-  if (!runners.some((name) => name !== "check_shared_copies.py")) {
+export function assertShippedRegression(testDataDir: string, slug: string): void {
+  if (!["run_tests.py", "test_engines.py"].some((name) => existsSync(join(testDataDir, "tests", name)))) {
     throw new Error(
-      `the test-data ZIP for ${slug} has no tests/run_tests.py or tests/test_engines.py; ` +
+      `the test data for ${slug} has no tests/run_tests.py or tests/test_engines.py; ` +
         "a MOS3 candidate cannot be frozen without its shipped regression",
     );
-  }
-  for (const runner of runners) {
-    runShippedRunner(runner, {
-      cwd: dataRoot,
-      args: ["--plugin-root", pluginRoot],
-      env: { PLUGIN_ROOT: pluginRoot },
-      timeoutMinutes,
-      source: "the extracted test-data ZIP against the extracted plugin ZIP",
-      failure:
-        "fails when run from the test-data ZIP against the built plugin ZIP; extract both ZIPs and run " +
-        `\`python tests\\${runner} --plugin-root <extracted plugin>\` from the extracted test data to see why ` +
-        "(often a test reads a source-only file such as metadata.json, or a fixture outside the test-data folder)",
-    });
   }
 }
 

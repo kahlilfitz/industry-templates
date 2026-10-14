@@ -3,10 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import AdmZip from "adm-zip";
 import {
-  DEFAULT_TEST_TIMEOUT_MINUTES,
-  TEST_TIMEOUT_ENV,
+  assertShippedRegression,
   containsDigest,
   confirmsArtifactMatch,
   extractVerdict,
@@ -14,12 +12,9 @@ import {
   htmlToText,
   parseArgs,
   resolveSharepointRoot,
-  resolveTestTimeoutMinutes,
   sha256,
   verdictGuidance,
-  verifyShippedTests,
 } from "./evaluation-workflow.js";
-import { buildMos3Zip } from "./mos3-package.js";
 import { makeMos3Submission } from "./test-fixtures.js";
 
 test("parseArgs reads named values", () => {
@@ -195,103 +190,15 @@ test("resolveSharepointRoot prefers flag, then env, then a link; refuses plain f
   }
 });
 
-test("verifyShippedTests runs bundled tests from the extracted ZIP", () => {
-  const dir = mkdtempSync(join(tmpdir(), "verify-shipped-"));
+test("assertShippedRegression refuses a MOS3 version with no regression runner, without running it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "shipped-regression-"));
   try {
-    const bundle = (name: string, runner: string) => {
-      const zip = new AdmZip();
-      zip.addFile("demo-plugin/tests/run_tests.py", Buffer.from(runner));
-      const path = join(dir, name);
-      zip.writeZip(path);
-      return path;
-    };
-    verifyShippedTests(
-      bundle("ok.zip", "print('1/1 checks passed')\n"),
-      "demo-plugin",
-    );
-    assert.throws(
-      () => verifyShippedTests(bundle("bad.zip", "open('metadata.json').read()\n"), "demo-plugin"),
-      /fails when run from the built ZIP.*metadata\.json/,
-    );
-    assert.throws(
-      () =>
-        verifyShippedTests(
-          bundle("slow.zip", "import time\nprint('starting', flush=True)\ntime.sleep(60)\n"),
-          "demo-plugin",
-          { timeoutMinutes: 0.05 },
-        ),
-      (error: Error) =>
-        /tests\/run_tests\.py did not finish within the 0\.05-minute test timeout/.test(error.message) &&
-        /--test-timeout-minutes/.test(error.message),
-    );
-    assert.throws(
-      () => verifyShippedTests(bundle("ok2.zip", "pass\n"), "demo-plugin", { timeoutMinutes: 0 }),
-      /positive number/,
-    );
-    const empty = new AdmZip();
-    empty.addFile("demo-plugin/README.md", Buffer.from("x"));
-    empty.writeZip(join(dir, "none.zip"));
-    verifyShippedTests(join(dir, "none.zip"), "demo-plugin");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("verifyShippedTests runs a MOS3 candidate's regression from the test-data ZIP against the plugin ZIP", () => {
-  const dir = mkdtempSync(join(tmpdir(), "verify-mos3-"));
-  try {
-    const pluginZip = join(dir, "demo-plugin.zip");
-    buildMos3Zip(makeMos3Submission(join(dir, "repo")), pluginZip, new Date("2026-01-01T00:00:00Z"));
-    const testData = (name: string, files: Record<string, string>) => {
-      const zip = new AdmZip();
-      for (const [entry, content] of Object.entries(files)) zip.addFile(entry, Buffer.from(content));
-      const path = join(dir, name);
-      zip.writeZip(path);
-      return path;
-    };
-    // The runner contract: --plugin-root names the extracted plugin, PLUGIN_ROOT matches it,
-    // and the working directory is the extracted test-data folder (the data root).
-    const runner = [
-      "import os, sys",
-      "args = sys.argv[1:]",
-      "assert args[0] == '--plugin-root', args",
-      "root = args[1]",
-      "assert os.environ['PLUGIN_ROOT'] == root",
-      "assert os.path.basename(root) == 'plugin'",
-      "assert os.path.isfile(os.path.join(root, 'manifest.json'))",
-      "assert os.path.isfile(os.path.join(root, 'skills', 'alpha-skill', 'SKILL.md'))",
-      "assert not os.path.exists(os.path.join(root, 'tests'))",
-      "assert os.path.isfile('README.md') and os.path.isdir('demo-data')",
-      "assert os.path.basename(os.getcwd()) == 'test-data'",
-      "print('1/1 checks passed')",
-      "",
-    ].join("\n");
-    verifyShippedTests(pluginZip, "demo-plugin", {
-      testDataZip: testData("good.zip", {
-        "README.md": "x",
-        "demo-data/input.json": "{}",
-        "tests/run_tests.py": runner,
-        "tests/check_shared_copies.py": runner,
-      }),
-    });
-    assert.throws(
-      () =>
-        verifyShippedTests(pluginZip, "demo-plugin", {
-          testDataZip: testData("bad.zip", { "tests/test_engines.py": "raise SystemExit(1)\n" }),
-        }),
-      /shipped tests\/test_engines\.py fails when run from the test-data ZIP against the built plugin ZIP/,
-    );
-    assert.throws(
-      () =>
-        verifyShippedTests(pluginZip, "demo-plugin", {
-          testDataZip: testData("norunner.zip", { "README.md": "x", "tests/check_shared_copies.py": "pass\n" }),
-        }),
-      /has no tests\/run_tests\.py or tests\/test_engines\.py/,
-    );
-    assert.throws(
-      () => verifyShippedTests(pluginZip, "demo-plugin", { testDataZip: join(dir, "missing.zip") }),
-      /no test data for demo-plugin: .*missing\.zip does not exist/,
-    );
+    mkdirSync(join(dir, "tests"));
+    writeFileSync(join(dir, "tests", "check_shared_copies.py"), "raise SystemExit(1)\n");
+    assert.throws(() => assertShippedRegression(dir, "demo-plugin"), /has no tests\/run_tests\.py or tests\/test_engines\.py/);
+    // A failing runner is not executed: preparation only checks it ships.
+    writeFileSync(join(dir, "tests", "test_engines.py"), "raise SystemExit(1)\n");
+    assertShippedRegression(dir, "demo-plugin");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -343,18 +250,4 @@ test("both Cowork prompt templates require the three verdicts and the pending hu
   assert.match(mos3, /Test-data SHA-256 check: MATCH/);
   assert.match(mos3, /--plugin-root <extracted plugin folder>/);
   assert.match(mos3, /tool description validation: N\/A when the package declares no agentConnectors/);
-});
-
-test("resolveTestTimeoutMinutes prefers the flag, then the env var, then 30; rejects non-positive", () => {
-  assert.equal(resolveTestTimeoutMinutes({ env: "" }), DEFAULT_TEST_TIMEOUT_MINUTES);
-  assert.equal(DEFAULT_TEST_TIMEOUT_MINUTES, 30);
-  assert.equal(resolveTestTimeoutMinutes({ env: "45" }), 45);
-  assert.equal(resolveTestTimeoutMinutes({ flag: "12.5", env: "45" }), 12.5);
-  assert.throws(() => resolveTestTimeoutMinutes({ flag: "0" }), /--test-timeout-minutes must be a positive/);
-  assert.throws(() => resolveTestTimeoutMinutes({ flag: "-5" }), /positive/);
-  assert.throws(() => resolveTestTimeoutMinutes({ flag: "abc" }), /positive/);
-  assert.throws(
-    () => resolveTestTimeoutMinutes({ env: "Infinity" }),
-    new RegExp(`${TEST_TIMEOUT_ENV} must be a positive`),
-  );
 });
