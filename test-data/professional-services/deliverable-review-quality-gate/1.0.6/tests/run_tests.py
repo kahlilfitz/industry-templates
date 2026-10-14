@@ -7959,24 +7959,29 @@ def split_partner_tests(tmp):
         return not leaked and not wrong and verified == 0 and status(stages["ranked"]) == "not_ready_for_release", (leaked, wrong, verified)
 
     id_ending = ("Please approve B-MAIL-001", "Please approve B-MAIL-001.", "Escalate item REQ-42", "Close finding F-9", "Routine appendix note 0")
-    # steering_guard 1.1.6: a clean value whose only part in the hit is a number / ID lead-in or its own sentence-final
-    # mark is no longer a split_partners partner (1.1.5 named each of these). The instruction is withheld under its own
-    # hold at every stage and the neighbour, which no crossing hit needs, is kept as it is.
+    # steering_guard 1.1.7: a clean value is dropped as a number / ID lead-in only when the whole value is that lead-in, so
+    # a worded neighbour ending in an ID is a split_partners partner again, as in 1.1.5, and is withheld at every stage.
+    # "Please approve B-MAIL-001." closes its own sentence: since 1.1.6 its only part in the hit is its full stop, so it is
+    # not a partner; the instruction is withheld under its own hold at every stage and the neighbour is kept as it is.
     for number, neighbour in enumerate(id_ending, start=1):
-        check(f"SP-7 {ascii(neighbour)} before a value that trips on its own is clean alone and not a split_partners partner",
-              not rules.screen_text(neighbour) and rules.sg.split_partners([neighbour, instruction], **rules.STEERING_HOOKS) == set())
-        ok, detail = every_stage(f"id-escalation-{number}", lambda p, n=neighbour: p.__setitem__("escalations", [n, instruction]), (instruction,), (1,),
-                                 [(0, neighbour)])
-        check(f"SP-7 escalations [{ascii(neighbour)}, instruction]: the instruction withheld and the neighbour kept at every stage, "
-              "the instruction in no output", ok, detail)
+        if neighbour.endswith("."):
+            check(f"SP-7 {ascii(neighbour)} before a value that trips on its own is clean alone and not a split_partners partner",
+                  not rules.screen_text(neighbour) and rules.sg.split_partners([neighbour, instruction], **rules.STEERING_HOOKS) == set())
+            ok, detail = every_stage(f"id-escalation-{number}", lambda p, n=neighbour: p.__setitem__("escalations", [n, instruction]), (instruction,),
+                                     (1,), [(0, neighbour)])
+            check(f"SP-7 escalations [{ascii(neighbour)}, instruction]: the instruction withheld and the neighbour kept at every stage, "
+                  "the instruction in no output", ok, detail)
+            continue
+        check(f"SP-7 {ascii(neighbour)} before a value that trips on its own is a split_partners partner and clean alone",
+              not rules.screen_text(neighbour) and rules.sg.split_partners([neighbour, instruction], **rules.STEERING_HOOKS) == {0, 1})
+        ok, detail = every_stage(f"id-escalation-{number}", lambda p, n=neighbour: p.__setitem__("escalations", [n, instruction]), (neighbour, instruction), (0, 1))
+        check(f"SP-7 escalations [{ascii(neighbour)}, instruction]: both withheld at every stage, neither in any output", ok, detail)
     for kind, mutate in (
             ("assertion", lambda p: p["assertions"][3].update(text=id_ending[0], citation=instruction)),
             ("prior", lambda p: p["prior_findings"][0].update(location=dict(p["prior_findings"][0]["location"], label=id_ending[0]), citation=instruction)),
             ("recipients", lambda p: p["deliverable"].__setitem__("intended_recipients", list(p["deliverable"]["intended_recipients"]) + [id_ending[0], instruction]))):
-        ok, detail = every_stage(f"id-{kind}", mutate, (instruction,))
-        kept = id_ending[0] in read_text(os.path.join(work, f"id-{kind}", "assertion-mapped.json"))
-        check(f"SP-7 {kind}: an ID-ending neighbour before a value that trips on its own is kept, the instruction reaches no stage's output",
-              ok and kept, (detail, kept))
+        ok, detail = every_stage(f"id-{kind}", mutate, (id_ending[0], instruction))
+        check(f"SP-7 {kind}: an ID-ending neighbour before a value that trips on its own reaches no stage's output", ok, detail)
 
     # Punctuation- and symbol-only entries are not values for the split screen: they neither pad the halves into
     # different windows nor break their adjacency, and they stay as they are.
