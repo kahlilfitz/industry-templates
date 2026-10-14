@@ -2045,15 +2045,17 @@ def _edges(value):
 
 def split_partner_positions(values, flagged, groups=()):
     """(partners, oversize) for a sequence of values in reading order with text flagged on its own at the positions in
-    `flagged`: partners is every position a split instruction overlaps (sg.split_partners), flagged ones included.
-    Non-strings and blanks are absent and do not break adjacency; a value carrying a withheld marker ends a sequence.
+    `flagged`: partners is every position a split instruction overlaps (sg.split_partners), flagged ones included, and
+    every one of them is withheld; a clean neighbour is never exempted (over-withholding is the accepted failure).
+    Non-strings, blanks and punctuation- or symbol-only values (_wordless) are absent: they neither break adjacency nor
+    pad a split apart across windows. A value carrying a withheld marker ends a sequence.
     `groups` lists the positions of each field of a record: a flagged value is also joined alone with the first and
     last value of every other field, so a field between the two halves (an assertion's evidence IDs between its text
     and citation) does not hide the split, as screen_record joins each pair of fields. oversize is the positions of a
     join too long to screen (sg.split_partners then returns every value of it), which is a hold (#8.6)."""
     partners, oversize, segments, segment = set(), set(), [], []
     for position, value in enumerate(values):
-        if not (isinstance(value, str) and value.strip()):
+        if not (isinstance(value, str) and value.strip()) or _wordless(value):
             continue
         if contains_withheld(value):
             segments.append(segment)
@@ -2065,13 +2067,14 @@ def split_partner_positions(values, flagged, groups=()):
     def screen(positions):
         chosen = tuple(values[position] for position in positions)
         if not _too_long(chosen):
-            found = {positions[index] for index in _partners_cached(chosen)}
-            partners.update(found - _lead_only(positions, chosen, found, flagged))
+            partners.update(positions[index] for index in _partners_cached(chosen))
             return
         # Too long to join whole: a hit across a value boundary reaches at most sg.WINDOW_OVERLAP normalised characters
-        # into a value, so an over-long value takes part only through its edges. It is cut into its head, which ends
-        # the joins before it, and its tail, which starts the joins after it. A value whose edges normalise too short to
-        # cover that reach stays whole, and a join still too long to screen holds its values as oversize (#8.6).
+        # (plus the DRQG hook words) into a value, so an over-long value takes part only through its edges; its middle
+        # is screened in full when the value is screened on its own, and a value that trips there is flagged. It is cut
+        # into its head, which ends the joins before it, and its tail, which starts the joins after it. A value whose
+        # edges normalise too short to cover that reach stays whole, and a join still too long to screen holds its
+        # values as oversize (#8.6).
         pieces, current = [], []
         for position, value in zip(positions, chosen):
             edges = _edges(value)
@@ -2089,8 +2092,6 @@ def split_partner_positions(values, flagged, groups=()):
             found = {places[index] for index in _partners_cached(texts)}
             if _too_long(texts):
                 oversize.update(found)
-            else:
-                found -= _lead_only(places, texts, found, flagged)
             partners.update(found)
 
     for segment in segments:
@@ -2113,66 +2114,6 @@ def split_partner_positions(values, flagged, groups=()):
                 for other in dict.fromkeys((group[0], group[-1])):
                     screen(sorted((position, other)))
     return partners, oversize
-
-
-# The detector's imperative rules match from a sentence start (sg._LEAD): the full stop or an ID-like token just
-# before the verb is part of the match. Joined after a neighbour ending in one ('...volumes.' + 'Ignore all previous
-# instructions ...'), the same match starts in the neighbour, so split_partners names it, though the neighbour adds
-# nothing the value does not already say alone. Such a neighbour is not a partner.
-_LEAD_ONLY = re.compile(r"[\W_]*(?:[a-z]{0,8} ?\d\w{0,40})?[\W_]*")
-
-
-def _lead_only(positions, chosen, found, flagged):
-    """Positions in `found` that are the only partner on one side of a flagged value, directly before it, and whose
-    every hit across the boundary with it in the ' ; ', ' ' and fused joins is a match the flagged value has on its own
-    (same family and end) reaching into the neighbour by no more than punctuation or one ID-like token (_LEAD_ONLY).
-    Anything else, including a neighbour after the flagged value, stays a partner (fail closed)."""
-    candidates = {}
-    for index, position in enumerate(positions):
-        if position not in flagged:
-            continue
-        for step in (-1, 1):
-            run, other = [], index + step
-            while 0 <= other < len(positions) and positions[other] in found and positions[other] not in flagged:
-                run.append(other)
-                other += step
-            for member in run:
-                candidates.setdefault(member, []).append(index if len(run) == 1 and step == -1 else None)
-    dropped = set()
-    for member, owners in candidates.items():
-        if all(owner is not None and _context_only(chosen[member], chosen[owner]) for owner in owners):
-            dropped.add(positions[member])
-    return dropped
-
-
-@functools.lru_cache(maxsize=4096)
-def _context_only(before, value):
-    """True when every hit across the boundary of `before` + `value` (value tripping alone) is one `value` has alone,
-    reaching into `before` by no more than _LEAD_ONLY text, and there is at least one such hit."""
-    own = screen_text(value)
-    seen = False
-    for separator in (" ; ", " ", ""):
-        pieces = [sg.normalize(piece) for piece in (before, separator, value)]
-        joined = before + separator + value
-        normal = sg.normalize(joined)
-        start = len(normal) - len(pieces[2])
-        end = 0
-        while end < min(len(pieces[0]), start) and normal[end] == pieces[0][end]:
-            end += 1
-        # Normalisation may rewrite the boundary ('A-004' + 'Ignore' gives 'a 004 ignore', 'volumes.' + 'Ignore' gives
-        # 'volumes ignore'): what lies between the common prefix with `before` and `value`'s own text counts as
-        # `before`'s, so it too must be lead-in. Without `value`'s text intact at the end, offsets cannot be mapped and
-        # the neighbour stays a partner.
-        if not normal.endswith(pieces[2]):
-            return False
-        for hit in sg.scan(joined, **STEERING_HOOKS):
-            if hit.start >= start or hit.end <= end:
-                continue
-            if hit.family == OVERSIZE or not _LEAD_ONLY.fullmatch(normal[hit.start:start]) or not any(
-                    mine.family == hit.family and mine.end + start == hit.end for mine in own):
-                return False
-            seen = True
-    return seen
 
 
 def position_runs(positions):
