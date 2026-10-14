@@ -8894,12 +8894,14 @@ def te106_split_tests(tmp):
     check("1.0.6 split _tripping_fields: one record's clean field is withheld with the tripping field it completes; "
           "the record ID is withheld too (a possible target, accepted over-withholding), the citation is kept",
           got == {"0", "1", "2"}, sorted(got))
+    # steering_guard 1.1.7 (owner decision 2026-10-14): a field that is only an ID ("A-1") is a whole-value lead-in, not a
+    # split partner, so beside a field that trips on its own only that field is withheld; the object is still held.
     got = (sp._tripping_fields({"0": "A-1", "1": TE106_ORDINARY[0], "2": whole, "3": TE106_ORDINARY[1]}),
            sp._tripping_fields({"1": TE106_ORDINARY[0], "2": whole, "3": TE106_ORDINARY[1]}),
            sp._tripping_fields({"0": "A-1", "1": TE106_ORDINARY[0], "3": TE106_ORDINARY[1]}))
-    check("1.0.6 split control: _tripping_fields withholds the tripping field of an ordinary record (and an ID field "
-          "beside it, a possible target), never its ordinary prose fields; a record with no tripping field is exact",
-          got == ({"0", "2"}, {"2"}, set()), [sorted(g) for g in got])
+    check("1.0.6 split control: _tripping_fields withholds the tripping field of an ordinary record, never its ID-only "
+          "field or its ordinary prose fields; a record with no tripping field is exact",
+          got == ({"2"}, {"2"}, set()), [sorted(g) for g in got])
     check("1.0.6 split field_withheld: a narrative that is the head of an instruction completed by the notes is "
           "withheld; an ordinary narrative beside a flagged note is not",
           sp.field_withheld({"narrative": TE106_SPLITS[0][0], "notes": TE106_SPLITS[0][1]}, "narrative")
