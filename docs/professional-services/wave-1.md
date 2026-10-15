@@ -250,11 +250,19 @@ Toolkit Validation from the process".
 - **Test policy** (owner: "keep only cowork driven additions. keep the packaging rules, keep
   regression protection"). New plugin-suite checks come only from Cowork findings; the
   `mos3-package.ts` packaging rules and the regression tests stay. Recorded in
-  `docs\release-process.md` and `AGENTS.md`. Open, not applied:
-  - whether the existing internal-QA checks in the five suites are deleted or kept frozen;
-  - where the plugin suites run (CI, `evaluation:prepare` or the fix agent; today nothing runs them);
+  `docs\release-process.md` and `AGENTS.md`.
+  - **Where the suites run: the fix agent** (owner: "run the suites with the fix agent"). The fix
+    brief now has it run the plugin's suite before and after applying fixes: every check that
+    passed before must still pass, and a fix that conflicts with an existing check is reverted and
+    reported. This replaces this morning's "do not run the plugin's own test suites" brief rule,
+    and its assertion in `recommendations.test.ts` is inverted by owner direction. CI and
+    `evaluation:prepare` do not run plugin suites.
+
+  Still open:
+  - whether the existing internal-QA checks in the five suites are deleted or kept frozen (they
+    stay as they are until decided);
   - whether the fix agent adds a regression check for each blocker or required fix. This would
-    replace this morning's "leave `tests\` alone" brief rule.
+    replace the "leave `tests\` alone" brief rule, which still applies.
 
 ### Owner decision: simplify the release process (2026-10-15)
 
