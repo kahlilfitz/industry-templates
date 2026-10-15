@@ -79,6 +79,9 @@ test("renderFixBrief lists only blocker and required fixes with the guardrails",
   assert.match(brief, /Set the version to 1\.0\.7/);
   assert.match(brief, /Do not invoke skills/);
   assert.match(brief, /Do not push/);
+  assert.match(brief, /listing-metadata\.md/);
+  assert.match(brief, /Do not run the plugin's own test suites/);
+  assert.match(brief, /Do not edit the plugin's tests\\ or demo-data\\ folders unless a fix cannot be applied without it/);
   assert.match(brief, /npm run test:evaluation/);
   assert.match(brief, /git commit -m "demo-plugin 1\.0\.7: apply Cowork recommendations" -- <paths>/);
 });

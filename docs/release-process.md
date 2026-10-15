@@ -114,8 +114,9 @@ The fix step:
 3. writes **blocker** and **required** items to `evaluation-inbox\<slug>\<version>\fix-brief.md`;
 4. starts a non-interactive Copilot CLI agent on the brief. The agent may not push. It:
    - applies the fixes in the strategy's fix order;
-   - bumps the patch version and adds a CHANGELOG entry;
-   - runs `check:submissions` and `test:evaluation`;
+   - bumps the patch version (including `listing-metadata.md`) and adds a CHANGELOG entry;
+   - runs `check:submissions` and `test:evaluation`, but not the plugin's own test suites;
+   - leaves `tests\` and `demo-data\` alone unless a fix requires an edit, and lists any such edit;
    - commits locally and stops.
 
 If there are no blocker or required items, the fix step does nothing and the plugin goes to step 5.
