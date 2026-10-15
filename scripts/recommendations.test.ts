@@ -80,6 +80,9 @@ test("renderFixBrief lists only blocker and required fixes with the guardrails",
   assert.match(brief, /Do not invoke skills/);
   assert.match(brief, /Do not push/);
   assert.match(brief, /listing-metadata\.md/);
+  assert.match(brief, /Set every engine version label .* to 1\.0\.7/);
+  assert.match(brief, /regenerate the expected outputs that record those labels/);
+  assert.match(brief, /leave the shared steering detector's `__version__` alone/);
   assert.doesNotMatch(brief, /Do not run the plugin's own test suites/);
   assert.match(brief, /Run the plugin's regression suite before applying any fix and again after/);
   assert.match(brief, /tests\\README\.md/);

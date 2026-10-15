@@ -59,7 +59,9 @@ Test policy (owner, 2026-10-15):
 
 Build or change the plugin as [CONTRIBUTING.md](../CONTRIBUTING.md) describes, then run
 `npm run check:submissions`. Bump the version in `metadata.json` and in the plugin manifest for
-every change you send to Cowork.
+every change you send to Cowork. Engine version labels (the `ENGINE_VERSION`-style constants the
+scripts stamp into their outputs, not the shared steering detector's `__version__`) match the plugin
+version in every release; regenerate the `demo-data` expected outputs that record them.
 
 ## Step 2: package
 
@@ -122,6 +124,9 @@ The fix step:
 4. starts a non-interactive Copilot CLI agent on the brief. The agent may not push. It:
    - applies the fixes in the strategy's fix order;
    - bumps the patch version (including `listing-metadata.md`) and adds a CHANGELOG entry;
+   - sets the engine version labels to the new version and regenerates the `demo-data` expected
+     outputs that record them (labels only); if an existing check asserts the old label, it leaves
+     the labels and reports the conflict;
    - runs the plugin's regression suite, if it has one (the commands in its `tests\README.md`),
      before and after the fixes: every check that passed before must still pass, and no existing
      check may be relaxed; a fix that conflicts with one is reverted, skipped and reported;

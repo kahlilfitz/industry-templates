@@ -15,7 +15,8 @@ Cowork's `recommendations.html` decides what changes between versions.
 - Never relax, delete or change the expected result of an existing test or check. If a fix makes
   an existing test fail, stop, do not commit, and report the conflict.
 - Every change sent to Cowork is a new version: bump `metadata.json` and the manifest together and
-  add a CHANGELOG entry.
+  add a CHANGELOG entry. Engine version labels (`ENGINE_VERSION`-style constants, not
+  `steering_guard.py` `__version__`) match the plugin version in every release.
 - Commit path-limited (`git commit -m ... -- <paths>`), never push, and stop for owner review.
 - Never infer an owner sign-off or a publish decision.
 
