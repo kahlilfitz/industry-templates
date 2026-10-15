@@ -247,6 +247,14 @@ Toolkit Validation from the process".
   are inverted by owner direction and three `packageName` checks are added. This reverses the 1.28
   choice of the 2026-10-12 decision. Cowork's PKG-M003 rows should clear; whether its PKG-V001
   schema check also accepts devPreview is confirmed by the round-2 reports.
+- **Test policy** (owner: "keep only cowork driven additions. keep the packaging rules, keep
+  regression protection"). New plugin-suite checks come only from Cowork findings; the
+  `mos3-package.ts` packaging rules and the regression tests stay. Recorded in
+  `docs\release-process.md` and `AGENTS.md`. Open, not applied:
+  - whether the existing internal-QA checks in the five suites are deleted or kept frozen;
+  - where the plugin suites run (CI, `evaluation:prepare` or the fix agent; today nothing runs them);
+  - whether the fix agent adds a regression check for each blocker or required fix. This would
+    replace this morning's "leave `tests\` alone" brief rule.
 
 ### Owner decision: simplify the release process (2026-10-15)
 

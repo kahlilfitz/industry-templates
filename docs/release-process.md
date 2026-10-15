@@ -24,6 +24,13 @@ The plugin's own `tests\` and `demo-data\` folders stay in the repository and ar
 Cowork. The only repository tests are the script unit tests (`npm run test:evaluation`), and CI runs
 them.
 
+Test policy (owner, 2026-10-15):
+
+- **Plugin suites** keep their existing checks. New checks are added only in response to a Cowork
+  finding, never from internal review.
+- **Packaging rules** in `scripts\mos3-package.ts` (`check:submissions`) stay.
+- **Regression protection** stays: the script unit tests, the packaging rules and the plugin suites.
+
 ## One-time setup
 
 1. Install Node.js 22 and run `npm install`. Install Python 3 if you run plugin engines locally.

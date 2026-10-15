@@ -26,6 +26,7 @@ Cowork's `recommendations.html` decides what changes between versions.
   `skills\`.
 - The repository's regression tests are the script unit tests (`npm run test:evaluation`), which
   CI runs. Plugin suites are optional and not CI-gated; run one only when the task asks for it.
+- Add a plugin check only in response to a Cowork finding; never add checks from internal review.
 - Cowork's built-in evaluation is the plugin evaluation. Never send tests or demo data to Cowork.
 
 ## Skills in sub-agents
