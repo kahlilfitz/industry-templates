@@ -41,6 +41,14 @@ engines already enforce. Advisory items F-04 to F-06 are recorded in `BACKLOG.md
   1.1.5 to 1.1.7, and the eight `demo-data\*\expected` JSON files that record them were regenerated;
   only the labels changed. `test_main_demotes_unsafe_recommendation` asserted the literal
   `slate_validate/1.1.5`; by owner direction it now reads the expected label from `metadata.json`.
+- **Regression checks for F-01 to F-03 (owner rule, 2026-10-15).** `tests\test_engines.py` gains
+  two groups. `skill-guardrails`: `test_f01_fit_score_guardrails_refuse_salary_and_home_address`,
+  `test_f02_slate_draft_guardrails_refuse_personal_data_in_every_part_of_draft` and
+  `test_f02_constraint_check_guardrails_carry_the_same_privacy_rule`. `input-contract`:
+  `test_f03_contract_source_enum_matches_engine_raw_sources`,
+  `test_f03_contract_requires_provenance_generated_at_in_engine_format` and
+  `test_f03_upstream_templates_build_input_the_engines_accept`. Each fails on the 1.1.6 files and
+  passes on 1.1.7; no existing check changed.
 
 ## 1.1.6 - 2026-10-14
 

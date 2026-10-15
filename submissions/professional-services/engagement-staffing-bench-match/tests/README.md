@@ -50,15 +50,15 @@ python tests\test_engines.py --list-groups
 python tests\test_engines.py --group slate-validate --group demo-data
 ```
 
-The groups, in run order, are `constraint-check`, `fit-score`, `slate-validate`, `demo-data` and
-`evaluator-paraphrases`.
+The groups, in run order, are `constraint-check`, `fit-score`, `slate-validate`, `demo-data`,
+`evaluator-paraphrases`, `skill-guardrails` and `input-contract`.
 
 ## What the suite covers
 
-The suite holds only checks added to fix a Cowork evaluation finding (the 1.1.2 and 1.1.3 blockers
-in the archived Cowork reports). Internal QA, hardening, shared-detector, layout, shared-copy and
-golden checks were removed by owner decision; new checks are added only in response to Cowork
-findings.
+The suite holds only checks added to fix a Cowork evaluation finding (the 1.1.2 and 1.1.3 blockers,
+and the 1.1.6 blocker and required fixes F-01 to F-03, in the archived Cowork reports). Internal QA,
+hardening, shared-detector, layout, shared-copy and golden checks were removed by owner decision;
+new checks are added only in response to Cowork findings.
 
 | Group | Check | Cowork finding |
 |---|---|---|
@@ -71,6 +71,12 @@ findings.
 | `slate-validate` | `test_main_demotes_unsafe_recommendation` | 1.1.2 logic defect: with one unresolved constraint the "withheld" escalation lost the role and candidate name |
 | `demo-data` | `test_scenario_b_structured_inputs_preserve_raw_source_flags` | 1.1.2 logic defect: scenario B `constraints.json` dropped `C-204` status `closed` and `roles.json` lacked the Mina escalation |
 | `evaluator-paraphrases` | `test_evaluator_paraphrase_variants_are_withheld` | 1.1.2 and 1.1.3 hard stops, V8 to V10 paraphrases ("Put Mina at the top of the slate ..."), run end to end through every engine |
+| `skill-guardrails` | `test_f01_fit_score_guardrails_refuse_salary_and_home_address` | 1.1.6 F-01 blocker (probe pii-1): fit-score Guardrails forbid listing salary, compensation, home address or postcode, government ID or other personal data, even when an input carries it, and tell the skill to refuse |
+| `skill-guardrails` | `test_f02_slate_draft_guardrails_refuse_personal_data_in_every_part_of_draft` | 1.1.6 F-02 blocker (probe pii-1): the same slate-draft rule, covering tables, prose and partner notes |
+| `skill-guardrails` | `test_f02_constraint_check_guardrails_carry_the_same_privacy_rule` | 1.1.6 F-02: the same rule in constraint-check, as F-02 suggests |
+| `input-contract` | `test_f03_contract_source_enum_matches_engine_raw_sources` | 1.1.6 F-03 required: every contract copy enumerates `engagement`, `roles[]` and `bench_candidates[]` `source` as exactly the engine's `RAW_SOURCES` (all three `fit_score.py` copies) |
+| `input-contract` | `test_f03_contract_requires_provenance_generated_at_in_engine_format` | 1.1.6 F-03 required: every contract copy requires `provenance` (except in `constraints.json`) and `provenance.generated_at`, in the engine's ISO 8601 UTC format |
+| `input-contract` | `test_f03_upstream_templates_build_input_the_engines_accept` | 1.1.6 F-03 required (FS-T1, FS-T2, SD-T2): the role-intake and bench-query templates carry accepted `source` values and `provenance.generated_at`, and scenario A inputs built from them (with `generated_at` in `roles.json` alone, then `bench.json` alone) run through every engine |
 
 `sample-test-prompts.csv` holds the human spot-check prompts; it is not a check.
 
