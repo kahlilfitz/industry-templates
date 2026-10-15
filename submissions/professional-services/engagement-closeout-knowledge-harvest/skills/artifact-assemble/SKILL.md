@@ -4,7 +4,7 @@ description: 'Retrieves and normalizes raw closeout sources (deliverable registe
 license: Proprietary
 compatibility: 'Reads user-supplied closeout files (deliverable register, decision and risk logs, retrospective notes, confidentiality terms) with the file-read tool or an existing SharePoint or OneDrive connection; optionally uses Python 3 to write engagement.json locally. No scripts to run, no write, send or publish connectors.'
 metadata:
-  version: "1.0.4"
+  version: "1.0.5"
   icon: ic_fluent_box_multiple_24_regular
   author: Microsoft Professional Services Skills
   category: writing

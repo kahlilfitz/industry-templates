@@ -292,6 +292,13 @@ class SanitizationTests(unittest.TestCase):
         self.assertEqual([], result["released_assets"])
         self.assertIn("contains the engagement client name", result["held_assets"][0]["reason"])
 
+    def test_held_asset_title_does_not_repeat_client_name(self):
+        result = self.run_payload(assets=[self.asset(title="Contoso Health pricing model workbook")])
+        held = result["held_assets"][0]
+        self.assertEqual("HOLD_REDACTION_REQUIRED", held["clearance_state"])
+        self.assertEqual("[client] pricing model workbook", held["title"])
+        self.assertNotIn("contoso", json.dumps(result["held_assets"]).lower())
+
     def test_untagged_named_person_blame_requires_rewrite(self):
         result = self.run_payload(
             assets=[self.asset()],
@@ -317,7 +324,7 @@ GROUPS = {
 GROUP_HELP = {
     "contract": "wrong contract version and a missing required array are refused (Cowork 1.0.0 assert finding; 1.0.1 P5, P6)",
     "lessons": "lesson clusters ranked and cited by category; unmatched evidence unclassified (Cowork 1.0.0)",
-    "sanitisation": "Govern holds, finding citations and raw-seed exclusion (Cowork 1.0.0; 1.0.1 P1, P1b, P2, P3, P9)",
+    "sanitisation": "Govern holds, finding citations, raw-seed exclusion and held-asset title redaction (Cowork 1.0.0; 1.0.1 P1, P1b, P2, P3, P9; 1.0.4 R-01)",
 }
 
 

@@ -3,7 +3,7 @@ Deterministic rules consumed by `closeout_core.py` (run by `asset_identify.py`, 
 
 ## 1. Client-identifying material
 ### 1.1 Direct identifiers
-Client names, logos, email domains, project codenames that are known outside the team, site names, account IDs and screenshots with visible tenant or workspace names are not reusable outside the engagement boundary without explicit approval. An asset that carries them is held as `HOLD_REDACTION_REQUIRED` until they are removed or approved.
+Client names, logos, email domains, project codenames that are known outside the team, site names, account IDs and screenshots with visible tenant or workspace names are not reusable outside the engagement boundary without explicit approval. An asset that carries them is held as `HOLD_REDACTION_REQUIRED` until they are removed or approved. Where the engine echoes a held asset's title (`held_assets[].title`), the engagement client name and its distinctive first word are replaced with `[client]`; if any form of the name would remain, the whole title is replaced with `[client]`.
 ### 1.2 Specific descriptors
 Sector and geography descriptors may be reusable only when broad enough that they do not identify the client alone or in combination. Narrow descriptors are treated as aggregation-risk tokens (#5, `HOLD_AGGREGATION_RISK`).
 ### 1.3 Client-specific configuration

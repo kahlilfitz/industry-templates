@@ -2,6 +2,26 @@
 
 Earlier versions (1.0.0 to 1.0.2) are recorded in the git history of this folder.
 
+## 1.0.5 - 2026-10-15
+
+Cowork rated 1.0.4 Ready for human review. By owner decision, this release applies one advisory
+item from that report, R-01. The other 1.0.4 advisories stay in `BACKLOG.md`.
+
+- **R-01 (advisory, applied by owner decision): client name in `held_assets[].title`.** A held
+  asset's title repeated the engagement client name word for word, although its finding says the
+  name is not repeated. Nothing leaked, because the asset stayed held. `closeout_core.py` now passes
+  every echoed asset title through `redact_identity`. This function replaces the client name and its
+  distinctive first word with `[client]`, matching case, width, zero-width and punctuation variants.
+  If any form of the name would still match, it replaces the whole title with `[client]`. Released
+  assets are unaffected: a title naming the client is always held (#1.1). The engine is re-vendored
+  byte-identically into `asset-identify`, `knowledge-record`, `lesson-cluster` and `sanitize-check`.
+  `confidentiality-sanitisation-rules.md` #1.1 (all five copies) and the sanitize-check `SKILL.md`
+  worked example describe the redaction. Regression check added:
+  `test_held_asset_title_does_not_repeat_client_name`.
+- The engine version constants (`ENGINE_VERSIONS`) are unchanged, pending the owner decision on
+  1.0.4 R-04.
+- Version set to 1.0.5 in `metadata.json`, `manifest.json` and every `SKILL.md` `metadata.version`.
+
 ## 1.0.4 - 2026-10-14
 
 Applies the Cowork 1.0.3 evaluation recommendations. No engine behaviour, contract or golden output

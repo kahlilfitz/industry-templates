@@ -45,7 +45,7 @@ With neither `--plugin-root` nor `PLUGIN_ROOT`, the plugin root defaults to the 
 The runner prints both resolved roots and fails with exit code 2 if the plugin root has no `skills\` or a group name is
 unknown. It streams an ASCII-safe `PASS <Class.test>` or `FAIL <Class.test>` line per test as the test
 finishes (a failing subtest fails its test), prints failure details after the results, and ends with
-`N/M checks passed`. The exit code is 1 on any failure. The suite has 9 tests and takes a few seconds.
+`N/M checks passed`. The exit code is 1 on any failure. The suite has 10 tests and takes a few seconds.
 
 ## Checks and the Cowork findings they cover
 
@@ -64,6 +64,7 @@ report asked to be added as regression fixtures). Rule numbers refer to
 | `sanitisation` | `test_named_person_markers_hold_assets` | 1.0.1 probes P1 and P1b: assets with `named_individual` or `named_person_blame` markers were released (#2.1, #2.2, #6.2) |
 | `sanitisation` | `test_commercial_markers_hold_until_sanitization_is_verified` | 1.0.1 probe P2: unbanded `contract_value`, `pricing` and `margin` assets were released (#3.1, #6.2) |
 | `sanitisation` | `test_client_name_in_asset_text_holds` | 1.0.1 probe P3: an asset title containing the client name was released (#1.1) |
+| `sanitisation` | `test_held_asset_title_does_not_repeat_client_name` | 1.0.4 R-01: a held asset's `held_assets[].title` repeated the client name word for word, although its finding says the name is not repeated (#1.1) |
 | `sanitisation` | `test_untagged_named_person_blame_requires_rewrite` | 1.0.1 probe P9: named-person blame in retrospective text with an empty `named_people` list produced no finding (#2.1, #2.2) |
 
 ## What the scenarios cover

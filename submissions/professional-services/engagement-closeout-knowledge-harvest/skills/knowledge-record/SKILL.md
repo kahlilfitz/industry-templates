@@ -4,7 +4,7 @@ description: 'Drafts a practice-review knowledge record, governed lesson themes,
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/record_check.py on governed.json from sanitize-check; drafts Markdown locally. No email, Teams, SharePoint-write, knowledge-base publishing or credential-creation tools.'
 metadata:
-  version: "1.0.4"
+  version: "1.0.5"
   icon: ic_fluent_book_add_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

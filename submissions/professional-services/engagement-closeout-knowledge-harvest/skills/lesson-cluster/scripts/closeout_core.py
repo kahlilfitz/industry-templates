@@ -1752,6 +1752,23 @@ def contains_identity(text, terms):
     return False
 
 
+CLIENT_TOKEN = "[client]"
+
+
+def redact_identity(text, terms):
+    """Replace the engagement client name in a value the engine echoes with CLIENT_TOKEN (#1.1).
+    If a form of the name survives the replacement, the whole value is replaced (fails closed)."""
+    if not terms or text == WITHHELD or not contains_identity(text, terms):
+        return text
+    out = unicodedata.normalize("NFKC", strip_cf(text))
+    for term in sorted(terms, key=len, reverse=True):
+        pattern = r"\s+".join(re.escape(part) for part in term.split())
+        if term.isalnum():
+            pattern = rf"(?<![a-z0-9]){pattern}(?![a-z0-9])"
+        out = re.sub(pattern, CLIENT_TOKEN, out, flags=re.IGNORECASE)
+    return CLIENT_TOKEN if contains_identity(out, terms) else out
+
+
 def _layout(doc):
     """Every screened free-text slot in a fixed order, the records whose fields render together and
     the runs of adjacent values. A slot is (path, container, key)."""
@@ -2408,7 +2425,7 @@ def stage_sanitize_check(doc):
             reasons.append("no individual hold marker detected; candidate still requires human review")
         rec = {
             "asset_id": asset["asset_id"],
-            "title": asset["title"],
+            "title": redact_identity(asset["title"], terms),
             "title_withheld": asset["title"] == WITHHELD,
             "reuse_score": asset["reuse_score"],
             "clearance_state": state,

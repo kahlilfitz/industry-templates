@@ -4,7 +4,7 @@ description: 'Applies the deterministic sanitize_check confidentiality Govern ga
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/sanitize_check.py on lessons_clustered.json from lesson-cluster; writes governed.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.4"
+  version: "1.0.5"
   icon: ic_fluent_shield_lock_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
@@ -70,7 +70,8 @@ edited, the engine exits 2 and writes nothing. Report the message and stop the c
 An asset marked `named_individual`, `contract_value` or containing the engagement client name in
 its title is `hold`, never `release_candidate`. The finding cites the applicable
 `confidentiality-sanitisation-rules.md` section, and the asset is absent from
-`knowledge_record.reusable_assets`.
+`knowledge_record.reusable_assets`. Its `held_assets[].title` shows the client name as `[client]`;
+quote it as the engine wrote it and never restore the name.
 ## Grounding requirements
 Every finding cites `confidentiality-sanitisation-rules.md`; every released asset carries `clearance_state`, confidence, source and citation.
 ## Guardrails
