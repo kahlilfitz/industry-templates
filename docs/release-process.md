@@ -33,6 +33,8 @@ Test policy (owner, 2026-10-15):
 - **Regression protection** stays: the script unit tests, the packaging rules and the plugin suites.
   The fix agent runs the plugin's suite before and after applying Cowork fixes (owner: "run the
   suites with the fix agent"); CI and `evaluation:prepare` do not run plugin suites.
+  Each blocker or required fix adds at least one regression check named for its fix ID (owner,
+  2026-10-15: "regression checks should be added for each blocker or required fix").
 
 ## One-time setup
 
@@ -131,7 +133,10 @@ The fix step:
      before and after the fixes: every check that passed before must still pass, and no existing
      check may be relaxed; a fix that conflicts with one is reverted, skipped and reported;
    - runs `check:submissions` and `test:evaluation`;
-   - leaves `tests\` and `demo-data\` alone unless a fix requires an edit, and lists any such edit;
+   - adds at least one regression check per blocker or required fix, named for the fix ID, that
+     fails before the fix and passes after (added only; existing checks are never changed);
+   - otherwise leaves `tests\` and `demo-data\` alone unless a fix requires an edit, and lists any
+     such edit;
    - commits locally and stops.
 
 If there are no blocker or required items, the fix step does nothing and the plugin goes to step 5.

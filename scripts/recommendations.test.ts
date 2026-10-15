@@ -90,6 +90,9 @@ test("renderFixBrief lists only blocker and required fixes with the guardrails",
   assert.match(brief, /If the plugin has no regression suite, skip this step/);
   assert.match(brief, /Never relax, delete or change the expected result of an existing check/);
   assert.match(brief, /Do not edit the plugin's tests\\ or demo-data\\ folders unless a fix cannot be applied without it/);
+  assert.match(brief, /For each blocker or required fix you apply, add at least one regression check/);
+  assert.match(brief, /fails on the unfixed version and passes after the fix/);
+  assert.match(brief, /Name the fix ID in the check's name or message/);
   assert.match(brief, /npm run test:evaluation/);
   assert.match(brief, /git commit -m "demo-plugin 1\.0\.7: apply Cowork recommendations" -- <paths>/);
 });

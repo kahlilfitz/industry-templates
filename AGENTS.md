@@ -28,6 +28,8 @@ Cowork's `recommendations.html` decides what changes between versions.
 - The repository's regression tests are the script unit tests (`npm run test:evaluation`), which
   CI runs. Plugin suites are not CI-gated; the evaluation fix agent runs its plugin's suite before
   and after applying fixes. Otherwise run one only when the task asks for it.
+- Every blocker or required Cowork fix adds at least one regression check, named for its fix ID,
+  that fails before the fix and passes after.
 - Plugin suites hold only checks that came from a Cowork finding (internal checks were deleted on
   2026-10-15). Add a plugin check only in response to a Cowork finding; never add checks from
   internal review.
