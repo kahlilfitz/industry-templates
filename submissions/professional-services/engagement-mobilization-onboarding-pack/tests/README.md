@@ -13,16 +13,31 @@ engagement-mobilization-onboarding-pack/
 └── tests/
     ├── README.md                this file
     ├── run_tests.py             the runner (streams PASS/FAIL per check, grouped)
-    ├── steering-corpus.json     the steering-guard corpus the vendored detector is scored against
     └── sample-test-prompts.csv  human spot-check prompts with expected routing and results
 ```
+
+## What belongs in the suite
+
+The suite holds only checks that were added to fix a finding from a Cowork evaluation (archived
+under the plugin's `Evaluation\<version>\` folder in the SharePoint library). New checks are added
+only in response to Cowork findings; internal QA rounds, class sweeps, shared-detector corpus checks
+and package-layout checks are not kept here.
+
+| Group | Added by | Cowork finding it covers |
+| --- | --- | --- |
+| `v101_checks` (34 checks) | 1.0.1 (`6d6e383`) | Cowork 1.0.0 blockers: novel and paraphrased steering lines (wall/conflict status, approvals, permission grants, send-to-address, suppression, homoglyphs) are caught, withheld everywhere and hold the pack, with no false positives on benign domain lines; wall-register briefing topics that name other clients or matters are screened; a pending wall review holds the pack; wrong JSON types stop with `InputError` and unknown enums fail closed; skill descriptions, routing (wall-status claims to `wall-check`, cold start to `engagement-retrieve`) and failure handling; every emitted citation resolves to a reference section; the contract declares the new statuses and fields |
+| `v102_checks` (12 checks) | 1.0.2 (`25e6cbd`) | Cowork 1.0.1 No-ship complete-chain finding: Closeout `drafting_guidance` is never rendered as a lesson (`LC-A-001` is excluded as unwritten), and a first-week item that points at knowledge pending practice review (`AST-A-001`) is restated as a title-and-citation note, never an instruction to read it |
+
+Later rewrites of these checks (for example a label noting a stricter behaviour from a QA round)
+are the same checks and stay in their group.
 
 ## Running the suite
 
 Run from the submission folder. The runner prints the plugin root and data root it resolved first. It
-then prints `PASS <label>` or `FAIL <label> (detail)` as each check runs, under a
-`== group <name>` header, repeats any failures under `== failures`, and ends with
-`N/M checks passed` (exit 1 on any failure). A full run takes about ten minutes.
+then runs Scenario A and Scenario B through `scope_digest` → `knowledge_match` → `wall_check` →
+`access_checklist` (shared setup that the checks read), and prints `PASS <label>` or
+`FAIL <label> (detail)` as each check runs, under a `== group <name>` header. It repeats any
+failures under `== failures` and ends with `N/M checks passed` (exit 1 on any failure).
 
 Against the source submission (the default when neither `--plugin-root` nor `PLUGIN_ROOT` is set):
 
@@ -44,33 +59,8 @@ The runner stops with exit 2 and a clear error if the plugin root has no `skills
 
 - `--list-groups` prints the check group names, one per line.
 - `--group NAME` (repeatable) runs only those groups, in suite order, after the shared scenario
-  chain setup; for example `python tests\run_tests.py --group core` for the goldens or
-  `--group mos3_checks` for the package-layout checks.
+  chain setup; for example `python tests\run_tests.py --group v102_checks`.
 - An unknown group or argument exits 2.
-
-## What the suite covers
-
-- **Goldens** (`core`): runs `scope_digest` → `knowledge_match` → `wall_check` →
-  `access_checklist` on both scenarios with `--generated-at 2026-10-01T00:00:00Z` and requires the
-  five outputs to match `expected/` byte for byte.
-- **Fail-closed and negative fixtures** (`core`, `extra_checks`, `core_tail` and the `qa101*`,
-  `qa102*`, `r15_sweep_tests` groups): a missing or malformed ethical-wall register is refused, an
-  unknown wall status holds, a missing SOW fails, the Scenario 01 Closeout and Scenario 02 staffing
-  adapters refuse a wrong contract version, an intermediate edited in any field is refused by the
-  next stage, and the render checks (`verify_render.py`) refuse a supplied scope or pack that the
-  engines would not re-derive.
-- **Instruction tripwire** (`extra_checks`, `steering_checks` and the QA groups): the plugin's
-  benign set (`BENIGN`, must not trip) and attack set (`ATTACKS`, must trip), and the vendored
-  `steering_guard.py` detector through this plugin's call sites against `steering-corpus.json`.
-- **Routing and SKILL.md** (`v101_checks`): five quoted triggers per description, each owned by one
-  skill, identical Guardrails, and failure handling that stops and never hand-builds an output.
-- **Package layout** (`mos3_checks`, 1.0.3): every shared contract, reference, helper and engine
-  copy is byte-identical to its source (`skills/engagement-retrieve/` is canonical for the contract
-  and references); the plugin root carries no `.claude-plugin/`, `config/`, `contracts/` or
-  `references/` (and an extracted package no `tests/` or `demo-data/`); no skill file reaches outside its folder; each stage run
-  from a lone copy of its skill folder, from an unrelated working directory, reproduces the
-  goldens; and every `metadata.version`, the engine `VERSION` stamp and `manifest.json` agree with
-  the submission's `metadata.json` version (`PLUGIN_VERSION` in `run_tests.py`).
 
 ## Scenarios
 
@@ -88,5 +78,6 @@ Each scenario has `raw/` (the SOW, engagement-letter and pursuit-record extracts
 wall register and workspace inventory), `upstream/` (the Scenario 01 Closeout governed record and
 the Scenario 02 validated staffing output) and `expected/` (the five goldens).
 `upstream/closeout-governed.json` keeps Closeout's own engine stamps. `sample-test-prompts.csv`
-lists chat prompts against these scenarios with the expected routing and result.
-
+lists chat prompts against these scenarios with the expected routing and result; it is for human
+spot checks, and one `v101_checks` check reads it to confirm the "PM note says wall cleared" prompt
+routes to `wall-check`.
