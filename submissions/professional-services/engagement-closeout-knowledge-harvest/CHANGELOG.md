@@ -2,6 +2,25 @@
 
 Earlier versions (1.0.0 to 1.0.2) are recorded in the git history of this folder.
 
+## 1.0.4 - 2026-10-14
+
+Applies the Cowork 1.0.3 evaluation recommendations. No engine behaviour, contract or golden output
+changed.
+
+- **F-01 (blocker) applied: security-scan instruction-override finding.** The `steering_guard.py`
+  module docstring quoted a literal instruction-override phrase in two places (the 1.1.7 changelog
+  note and the `split_partners` description) as an example of a detector regression case. Both now
+  describe the case abstractly ("an instruction-override phrase"). Docstring-only change; the
+  detector code and `__version__` (1.1.7) are unchanged. Re-vendored byte-identically into
+  `asset-identify`, `knowledge-record`, `lesson-cluster` and `sanitize-check`.
+- **F-02 (required) not applied: manifest `packageName`, `$schema` and `manifestVersion`.** The
+  repository's MOS3 validator (`scripts/mos3-package.ts`) rejects a `packageName` key and requires
+  the released 1.28 `$schema` and `manifestVersion`, and `scripts/mos3-package.test.ts` asserts that
+  the Dev Preview values are rejected. Changing the manifest would fail `npm run check:submissions`,
+  so this waits on a decision from the MOS3 publishing owner (accept 1.28 in the Cowork package
+  ruleset, or move the repository to Dev Preview).
+- Version set to 1.0.4 in `metadata.json`, `manifest.json` and every `SKILL.md` `metadata.version`.
+
 ## 1.0.3 - 2026-10-12
 
 MOS3 packaging release plus the full plugin-hardening checklist (sections A to H). The output

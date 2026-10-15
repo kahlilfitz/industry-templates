@@ -4,7 +4,7 @@ description: 'Applies the deterministic sanitize_check confidentiality Govern ga
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/sanitize_check.py on lessons_clustered.json from lesson-cluster; writes governed.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.3"
+  version: "1.0.4"
   icon: ic_fluent_shield_lock_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

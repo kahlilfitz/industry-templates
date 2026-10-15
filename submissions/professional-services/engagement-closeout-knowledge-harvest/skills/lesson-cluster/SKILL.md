@@ -4,7 +4,7 @@ description: 'Clusters cited decisions and retrospective inputs into ranked less
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/lesson_cluster.py on asset_shortlist.json from asset-identify; writes lessons_clustered.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.3"
+  version: "1.0.4"
   icon: ic_fluent_lightbulb_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

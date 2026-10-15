@@ -4,7 +4,7 @@ description: 'Scores candidate reusable assets and checks final-deliverable comp
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/asset_identify.py on the engagement.json payload from artifact-assemble; writes asset_shortlist.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.3"
+  version: "1.0.4"
   icon: ic_fluent_box_search_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
