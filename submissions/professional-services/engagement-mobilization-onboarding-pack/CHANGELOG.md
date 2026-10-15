@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.5 - 2026-10-14
+
+Applies the Cowork 1.0.4 evaluation recommendations (verdict No-ship). Advisory items are recorded in `BACKLOG.md`.
+
+- **R1 (blocker, applied).** The security scan flagged an instruction-override phrase in the `steering_guard.py` module docstring (the 1.1.7 changelog note quoting a regression-test string), once per copy. That example now reads "an instruction-override phrase followed by a recommendation for C-201". The change is in all five copies (`engagement-retrieve`, `roster-pull`, `knowledge-match`, `wall-check`, `pack-draft`), and the copies stay byte-identical (SHA-256 `EE350FF3906B37679BF6E6C88DBD7117644FF08B5931D8730F09E800DFE3BD57`). Only the docstring changed. The detector patterns, hooks and code did not. The literal test strings remain in `tests/`, outside the package. The copies no longer match the upstream steering_guard 1.1.7 byte for byte. Other plugins that vendor that release still contain the original docstring, and this release does not change them.
+- **R2 (required, skipped).** The evaluator asks for `$schema` and `manifestVersion` to be set to devPreview. The repository validator (`scripts/mos3-package.ts`) requires the released 1.28 schema and rejects devPreview. The release owner must decide which manifest version the MOS3 publish path accepts.
+- **R3 (required, skipped).** The evaluator asks for `packageName` to be added. The repository validator rejects that top-level key in a 1.28 manifest, and the team has not chosen a value yet. This needs an owner decision.
+- **Version declarations** are bumped to 1.0.5: `manifest.json` (same `id`), `metadata.json` (`updatedAt` 2026-10-14), each `SKILL.md` `metadata.version`, the engine `VERSION` stamp in `safety_text.py` (all five copies, byte-identical; the plugin's MOS3-6 check requires it), and `listing-metadata.md`. In the goldens, only the `provenance.engines` stamps changed (`/1.0.4` to `/1.0.5`), and the engines reproduce them byte for byte. Suite: 604/604 checks, the same count as the 1.0.4 baseline.
+
 ## 1.0.4 - 2026-10-13
 
 Supersedes 1.0.3 (frozen 2026-10-12, receipt b183be9's predecessor freeze; not evaluated as of this entry). Re-vendors the shared steering detector 1.1.5 (owner decision 2026-10-13: extend the shared detector for reworded imperative, suppression and authority-claim prose) and fixes the split-instruction gap (#4.5). Detector re-vendor: done, shared `steering_guard` 1.1.5 (commit 6fe8ed4); re-vendored to 1.1.6 (commit 1c76f18) on 2026-10-14, then to 1.1.7, see the last two bullet groups below.

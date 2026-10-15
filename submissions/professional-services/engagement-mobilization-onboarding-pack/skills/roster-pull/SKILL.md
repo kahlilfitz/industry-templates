@@ -4,7 +4,7 @@ description: "Explains the engine-built team roster in scope.json: who is confir
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run scripts/verify_render.py, which re-derives scope.json from the user-supplied SOW, letter and pursuit extracts, confirmed-roster CSV and Scenario 02 staffing JSON before the roster is shown. No connectors required; writes no files."
 metadata:
-  version: "1.0.4"
+  version: "1.0.5"
   icon: ic_fluent_people_list_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

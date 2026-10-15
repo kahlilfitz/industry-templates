@@ -138,8 +138,8 @@
   "holds": [],
   "provenance": {
     "engines": [
-      "scope_digest/1.0.4",
-      "knowledge_match/1.0.4"
+      "scope_digest/1.0.5",
+      "knowledge_match/1.0.5"
     ],
     "generated_at": "2026-10-01T00:00:00Z",
     "sources": [

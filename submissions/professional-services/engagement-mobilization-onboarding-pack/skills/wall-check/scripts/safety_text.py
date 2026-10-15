@@ -3,7 +3,7 @@ import contract_validate as _cv
 from contract_validate import canon_text, canon_person, canon_id, canon_header  # the one canonical comparison form (#1.3)
 from datetime import datetime
 CONTRACT_VERSION = "ps.engagement-mobilization-onboarding-pack.v1"
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 class InputError(Exception): pass
 
 # ---------------------------------------------------------------- I/O

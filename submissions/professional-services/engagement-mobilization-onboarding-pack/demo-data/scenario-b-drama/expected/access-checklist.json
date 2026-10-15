@@ -159,10 +159,10 @@
   ],
   "provenance": {
     "engines": [
-      "scope_digest/1.0.4",
-      "knowledge_match/1.0.4",
-      "wall_check/1.0.4",
-      "access_checklist/1.0.4"
+      "scope_digest/1.0.5",
+      "knowledge_match/1.0.5",
+      "wall_check/1.0.5",
+      "access_checklist/1.0.5"
     ],
     "generated_at": "2026-10-01T00:00:00Z",
     "sources": [

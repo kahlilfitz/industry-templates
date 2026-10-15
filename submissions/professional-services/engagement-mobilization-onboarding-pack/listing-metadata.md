@@ -1,6 +1,6 @@
 # Listing metadata - Engagement Mobilization & Onboarding Pack
 
-Draft values for the shared listing template. Not bundled in the package. Plugin version 1.0.4.
+Draft values for the shared listing template. Not bundled in the package. Plugin version 1.0.5.
 
 ## Name
 
