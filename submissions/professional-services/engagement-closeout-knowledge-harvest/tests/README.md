@@ -1,9 +1,13 @@
 # Engagement Closeout & Knowledge Harvest - tests and demo data
 
-Demo data and the engine regression suite for **Engagement Closeout & Knowledge Harvest**
+Demo data and the Cowork regression suite for **Engagement Closeout & Knowledge Harvest**
 (`engagement-closeout-knowledge-harvest`). They live in the submission folder beside `skills/`
 (`demo-data/` and `tests/`); the MOS3 package ships only `manifest.json`, the two icons and
 `skills/`, so neither folder is installed with the plugin.
+
+The suite holds only checks that came from a Cowork evaluation finding. Internal QA, hardening,
+steering-corpus, render-policy, golden, packaging and release checks were removed on 2026-10-15 by
+owner decision. A new check is added only in response to a Cowork finding.
 
 ## Layout
 
@@ -11,11 +15,8 @@ Demo data and the engine regression suite for **Engagement Closeout & Knowledge 
 |---|---|
 | `demo-data/scenario-a-happy/` | Raw closeout pack (`raw/`), structured input `engagement.json` (derivable from `raw/` by `skills/artifact-assemble/references/closeout-ingest-rules.md`), engine goldens and stdout (`expected/`), the knowledge-record skeleton and an accepted reviewer-filled example draft |
 | `demo-data/scenario-b-drama/` | Same layout; the aggregation-risk confidentiality case |
-| `tests/test_engines.py` | Engine regression suite (Python 3 standard library `unittest`) |
-| `tests/steering-corpus.json` | Embedded-instruction corpus for the vendored detector (attack, benign and field-pair lines) |
-| `tests/closeout-steering-sets.json` | Closeout sets: 25 attack, 14 paraphrase, 26 benign closeout and lessons lines, 7 attack pairs, 5 benign pairs, the 19 former detector-gap lines that shared detector 1.1.2 missed and 1.1.3 began catching (`detector_gaps_closed_in_1_1_3`; 1.1.7 still catches them; kept as render-policy evidence), the line the closeout hook vocabulary closed first, and 2 probes only the hook vocabulary catches |
-| `tests/closeout-render-corpus.json` | QA round 6 render corpus: 238 realistic titles, IDs and citations (19 reported false-withhold regressions, 13 control words) that must render with no hold (#8.6) |
-| `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker (one per 1.0.3 fix) |
+| `tests/test_engines.py` | Cowork regression suite (Python 3 standard library `unittest`) |
+| `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker (not an automated check) |
 
 ## Running the tests
 
@@ -37,35 +38,33 @@ $env:PLUGIN_ROOT = '<extracted ZIP folder>'; python tests\test_engines.py
 ```powershell
 # List the groups, then run only some of them (--group is repeatable)
 python tests\test_engines.py --list-groups
-python tests\test_engines.py --group goldens --group sanitisation
+python tests\test_engines.py --group sanitisation
 ```
 
 With neither `--plugin-root` nor `PLUGIN_ROOT`, the plugin root defaults to the submission folder.
 The runner prints both resolved roots and fails with exit code 2 if the plugin root has no `skills\` or a group name is
 unknown. It streams an ASCII-safe `PASS <Class.test>` or `FAIL <Class.test>` line per test as the test
 finishes (a failing subtest fails its test), prints failure details after the results, and ends with
-`N/M checks passed`. The exit code is 1 on any failure.
+`N/M checks passed`. The exit code is 1 on any failure. The suite has 9 tests and takes a few seconds.
 
-| Group | Tests | Covers |
+## Checks and the Cowork findings they cover
+
+The tests were added in 1.0.2 (commit `68902f7`) as regression fixtures for the findings of the
+Cowork 1.0.0 report (required fixes) and the 1.0.1 report (No-ship engine-layer probes, which the
+report asked to be added as regression fixtures). Rule numbers refer to
+`confidentiality-sanitisation-rules.md` and `lesson-taxonomy.md`.
+
+| Group | Test | Cowork finding |
 |---|---|---|
-| `contract` | 5 | Contract version, required arrays, output schema and the Mobilization Scenario 01 adapter |
-| `validation` | 21 | Strict input validation: types, enums, duplicates, depth, reserved labels, no echo |
-| `lessons` | 1 | Lesson clustering, ranking and taxonomy citations |
-| `sanitisation` | 7 | Govern holds, citations, raw-seed exclusion and engine versions (`/1.0.3`) |
-| `policy` | 9 | Ties, empty terms, release versus hold, precedence and provenance labels |
-| `integrity` | 9 | Every stage re-derives the previous stage's whole document and refuses edits |
-| `screening` | 40 | Embedded-instruction screen: families, locations, joins, oversize, rendered holds, split partners (the clean half of an instruction split around a value that trips on its own, a directive ending in an item reference, a split around a supplied marker of any bracket shape, and splits over three or more records, entries or rendered lines, with IDs and citations between the parts; every returned partner withheld at every stage, bounded to the same and adjacent records; filler entries neither break nor pad adjacency); single-pass scanning, the screening ceilings (1000 per array or escalations list, 2500 across the arrays and escalations, 200 per list), a timed 100-asset chain and linear scaling from 100 to 400 assets |
-| `steering-corpus` | 5 | Vendored detector (identical in every engine skill) and corpus scored at the real call site |
-| `steering-sets` | 10 | Closeout attack, paraphrase and benign sets; every former detector-gap line caught by shared detector 1.1.7 (default call and closeout hook path) and withheld in every rendered field, ID and draft slot; hook-only probes |
-| `render-policy` | 59 | Titles, citations and IDs render only in an allow-shape (#8.6), including upper-case, CamelCase, fused, zero-width, combining-mark and look-alike-digit forms, short fused lead verbs and clauses split between a title and its citation (source, file name or any anchor or sheet name), a citation's source and anchor, or adjacent citation parts or neighbour records in input and rendering order, read by the token-anchored boundary recogniser; case-evidenced fused phrases; short fused lead verbs with trailing complements; digit shorthand in verdict phrases (`safe2reuse`) while `B2B`-style identifiers render; case-evidenced phrases ending at token ends (`SafeToolkit` renders); dotted shorthand (`DOC-7#safe.2.reuse`) while dotted versions and extensions render; clause material running on after a case-evidenced phrase (`SafeToreuse`, `SafeToarchive`) unless the run-on part is an allowlisted ordinary word (`SafeToolkit`) not followed by clause material (`TheyAreasClear` is withheld); verdict phrases and shorthand split by an extension or anchor (`raw/safe2.md#reuse`, `raw/safe.md#to-reuse`, `raw/safe.markdown#to-reuse`) while noun to-do anchors render (`docs/status-okay.md#to-dos`) and `to.do` does not count as one; clause material anywhere after an allowlisted run-on (`SafeTools2Reuse`, `SafeTools-this-record`), read through every later part of the same token (`SafeTools2ReleaseRoadmapNow`, `SafeToolsPlan2Reuse`) while names with digits render (`SafeTools2ReleaseNotes`, `SafeToolsTeams2Go`); a later 2 or 4 before any verb but go or use (`SafeToolsPlan2Release`, `NoNeedleRoadmap4Share`) while ordinals render (`SafeToolsPhase2Review`) and product compounds are no later material (`SafeToolsReviewServiceNowMigration` renders); one extension rule at every extension site (`Project Good` with `raw/to.go` is withheld); benign fused locators, the realistic render corpus and its 9,810 title and citation pairs still render; withheld flags and skeleton markers |
-| `drafting` | 7 | Knowledge-record skeleton and `record_check.py` refusal codes, including short-phrase copies |
-| `derivation` | 1 | Demo inputs re-derive from each scenario's raw pack (G4b) |
-| `goldens` | 1 | Both scenarios reproduce every `expected/` file byte for byte, LF only |
-| `packaging` | 3 | Byte-identical skill copies, the MOS3 package boundary (`demo-data/` and `tests/` allowed only in the submission source tree) and LF-only text outside them (G3) |
-| `release` | 7 | Guardrails, citations, routing, versions, stand-alone skills and the runner |
-| `harness` | 2 | A crashing test is reported as FAIL |
-
-The full suite (187 tests) takes about three minutes.
+| `contract` | `test_wrong_contract_fails_explicitly_in_every_engine` | 1.0.0: replace the assert-based contract checks with an explicit failure; 1.0.1 probe P5 (wrong `contract_version`) |
+| `contract` | `test_asset_identify_rejects_missing_candidate_assets` | 1.0.1 probe P6: `asset_identify` exited 0 with `candidate_assets` missing and the chain ended in a release-candidate disposition (fail-open) |
+| `lessons` | `test_lesson_clusters_are_ranked_and_cited` | 1.0.0: clusters cite their own taxonomy section (not `#1.1` on every cluster), are ranked by priority, and unmatched evidence stays `unclassified` (`#1.5`) instead of defaulting to delivery-governance |
+| `sanitisation` | `test_every_finding_cites_confidentiality_rules` | 1.0.0: every sanitize-check finding cites `confidentiality-sanitisation-rules.md` |
+| `sanitisation` | `test_governed_knowledge_record_excludes_raw_seeds` | 1.0.0 confidentiality logic defect: `client_descriptor` and unflagged lesson `summary_seed` values reached the knowledge record and handoff |
+| `sanitisation` | `test_named_person_markers_hold_assets` | 1.0.1 probes P1 and P1b: assets with `named_individual` or `named_person_blame` markers were released (#2.1, #2.2, #6.2) |
+| `sanitisation` | `test_commercial_markers_hold_until_sanitization_is_verified` | 1.0.1 probe P2: unbanded `contract_value`, `pricing` and `margin` assets were released (#3.1, #6.2) |
+| `sanitisation` | `test_client_name_in_asset_text_holds` | 1.0.1 probe P3: an asset title containing the client name was released (#1.1) |
+| `sanitisation` | `test_untagged_named_person_blame_requires_rewrite` | 1.0.1 probe P9: named-person blame in retrospective text with an empty `named_people` list produced no finding (#2.1, #2.2) |
 
 ## What the scenarios cover
 
@@ -80,10 +79,3 @@ The full suite (187 tests) takes about three minutes.
   (#5.1, #5.2), holds the steering deck for an embedded client logo/name, and flags a named-person
   blame quote for role/process rewrite (#2.1, #2.2). Every member asset's own finding carries the
   group hold.
-
-The suite also builds hostile and malformed variants of these scenarios in memory: injected,
-obfuscated, split and rendered-only instructions; prose and former detector-gap lines in titles, citations
-and IDs; malformed, duplicated and over-deep input; forged
-or edited intermediates; unknown markers and empty terms; and filled drafts that leak held or client
-material. It also checks byte-identical copies, the package boundary, the guardrail block, citations,
-routing and version declarations.
