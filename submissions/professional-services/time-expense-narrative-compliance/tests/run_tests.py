@@ -8982,6 +8982,98 @@ def te106_split_tests(tmp):
           f"least 59 of {len(ATTACK_SET)} lines (38 before split_partners)", len(both) >= 59, len(both))
 
 
+def te107_tests(tmp):
+    """1.0.7 Cowork fixes. F02: an entry whose linked activities map in part (one known class, one unknown) gets its
+    own basis, partially_mapped_activity_classes, and its unmapped_code detail lists the class->code pairs that did
+    map instead of saying none did. F03: a purpose clause led by review / analyze / analyse / coordinate / draft is a
+    #1.2 purpose, so a narrative-draft narrative built from such a workplan purpose passes #1.2; the #3.2 vague-phrase
+    matcher catches inflected forms ("Worked on report")."""
+    br = MODULES["guideline_check"].billing_rules
+    sp = MODULES["guideline_check"].signal_policy
+
+    # --- F02: partly mapped entry --------------------------------------------------------------------------------
+    linked = [{"activity_id": "A-DOC-001", "activity_class": "document_analysis"},
+              {"activity_id": "A-DOC-003", "activity_class": "unclassified_document_activity"}]
+    m = br.code_mapping({"submitted_task_code": None}, linked)
+    detail = [f["detail"] for f in m["flags"] if f["flag"] == "unmapped_code"]
+    check("1.0.7 F02 code_mapping: a partly mapped entry is UNMAPPED at 0.40 with basis "
+          "partially_mapped_activity_classes and an unmapped_code hold",
+          m["recommended_task_code"] == "UNMAPPED" and m["confidence"] == 0.40
+          and m["basis"] == "partially_mapped_activity_classes"
+          and [f["severity"] for f in m["flags"]] == ["hold_for_review"], m)
+    check("1.0.7 F02 code_mapping: the detail lists the class->code pair that mapped and never says no class maps",
+          detail == ["1 of 2 linked signals have an activity class with no code; the others map to "
+                     "document_analysis->AN200; no code is recommended"], detail)
+    m = br.code_mapping({"submitted_task_code": None}, linked[1:])
+    check("1.0.7 F02 control: an entry with no mapped class keeps basis unknown_activity_class",
+          m["basis"] == "unknown_activity_class"
+          and [f["detail"] for f in m["flags"]] == ["no activity class or keyword maps to a code"], m)
+    check("1.0.7 F02: partially_mapped_activity_classes is a contract basis",
+          "partially_mapped_activity_classes" in sp.MAPPING_BASES)
+
+    raw = raw_copy(tmp, "te107-partial", scenario="scenario-a-happy")
+    with open(os.path.join(raw, "document-activity-log.csv"), "a", encoding="utf-8", newline="") as fh:
+        fh.write("A-DOC-003,2026-09-15,Alex Rivera,controls-notes.docx,summarize,0.2,ENG-SYN-042\n")
+    edit_csv(raw, "timesheet.csv", 2, "activity_ids", "A-DOC-001; A-DOC-003")
+    code, msg, act, _ = pull(tmp, "te107-partial", raw, *SCENARIO_A_ARGS)
+    check("1.0.7 F02 end to end: activity_pull accepts the partly mapped fixture", code == 0, msg)
+    if code == 0:
+        _, coded, governed = through_governed(tmp, "te107-partial", act)
+        cm = entry(coded, "TE-A-002")["code_mapping"]
+        detail = " ".join(f["detail"] for f in cm["flags"])
+        check("1.0.7 F02 end to end: TE-A-002 (A-DOC-001 document_analysis + an unclassified document) is held as "
+              "partially_mapped_activity_classes and its flag names document_analysis->AN200",
+              cm["basis"] == "partially_mapped_activity_classes" and cm["recommended_task_code"] == "UNMAPPED"
+              and "document_analysis->AN200" in detail and "no activity class or keyword maps" not in detail
+              and entry(governed, "TE-A-002")["compliance"]["verdict"] in ("hold_for_review", "reject"), cm)
+        code, msg, report = report_for(tmp, "te107-partial", governed)
+        check("1.0.7 F02 end to end: the governed packet with the new basis renders an exception report that quotes "
+              "the mapped pair", code == 0 and "document_analysis->AN200" in report, msg)
+
+    # --- F03: purpose verbs ----------------------------------------------------------------------------------------
+    for verb in ("review", "analyze", "analyse", "coordinate", "draft"):
+        text = f"Analyzed service catalog draft to {verb} billing workflow requirements for the client team."
+        check(f"1.0.7 F03 #1.2: a purpose clause led by '{verb}' is a purpose",
+              br.required_elements({"person": "Alex Rivera"}, text, [])["purpose"])
+    for verb in ("review", "analyze"):
+        raw = raw_copy(tmp, f"te107-{verb}", scenario="scenario-a-happy")
+        edit_csv(raw, "engagement-workplan.csv", 2, "purpose", f"{verb} billing workflow requirements")
+        code, msg, act, _ = pull(tmp, f"te107-{verb}", raw, *SCENARIO_A_ARGS)
+        check(f"1.0.7 F03 end to end ({verb}): activity_pull accepts the workplan purpose", code == 0, msg)
+        if code:
+            continue
+        drafted, _, governed = through_governed(tmp, f"te107-{verb}", act)
+        draft = entry(drafted, "TE-A-002")["draft"]["narrative"]
+        comp = entry(governed, "TE-A-002")["compliance"]
+        check(f"1.0.7 F03 end to end ({verb}): the narrative-draft narrative with the workplan purpose "
+              f"'to {verb} ...' passes #1.2 (no required_elements_missing, purpose credited)",
+              f" to {verb} billing workflow requirements" in draft and comp["required_elements"]["purpose"]
+              and "required_elements_missing" not in flags(governed, "TE-A-002"), (draft, comp))
+
+    # --- F03: #3.2 inflected vague phrases ---------------------------------------------------------------------------
+    for text, phrase in (("Worked on report", "work on"), ("working on the memo", "work on"),
+                         ("works on the deck", "work on"), ("handled client issues", "handle"),
+                         ("handling client issues", "handle"), ("followed up with the client", "follow up"),
+                         ("following up with the client", "follow up"), ("touched base with the team", "touch base"),
+                         ("reviewed and revised the memo", "review and revise")):
+        norm = br.normalize(text)
+        check(f"1.0.7 F03 #3.2: '{text}' matches the vague phrase '{phrase}'",
+              [p for p in br.VAGUE_PHRASES if br.VAGUE_RES[p].search(norm)] == [phrase])
+    for text in ("network on site", "worker onboarding plan", "handlebar design review", "follower update"):
+        norm = br.normalize(text)
+        check(f"1.0.7 F03 #3.2 control: '{text}' matches no vague phrase",
+              not [p for p in br.VAGUE_PHRASES if br.VAGUE_RES[p].search(norm)])
+    raw = raw_copy(tmp, "te107-vague", scenario="scenario-a-happy")
+    edit_csv(raw, "timesheet.csv", 2, "narrative", "Worked on report")
+    code, msg, act, _ = pull(tmp, "te107-vague", raw, *SCENARIO_A_ARGS)
+    check("1.0.7 F03 end to end: activity_pull accepts the 'Worked on report' narrative", code == 0, msg)
+    if code == 0:
+        _, _, governed = through_governed(tmp, "te107-vague", act)
+        vague = [f["detail"] for f in entry(governed, "TE-A-002")["compliance"]["flags"] if f["flag"] == "vague_phrase"]
+        check("1.0.7 F03 end to end: 'Worked on report' is caught as the vague phrase 'work on' (#3.2)",
+              vague == ["matched vague phrase 'work on' with no specific subject and purpose to cure it"], vague)
+
+
 # Every group in canonical order: (function, runs inside defence_in_depth()). A group's name is its function's name.
 GROUPS = (
     (golden_tests, False),
@@ -9023,6 +9115,7 @@ GROUPS = (
     (drqg17_tests, False),
     (qa15_tests, False),
     (te106_split_tests, False),
+    (te107_tests, False),
 )
 GROUP_NAMES = tuple(fn.__name__ for fn, _ in GROUPS)
 # Groups that read state an earlier group leaves behind; --group runs these first. qa13_tests requires the real gate to

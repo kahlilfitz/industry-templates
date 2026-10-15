@@ -2025,8 +2025,8 @@ DRAFT_STATUSES = ("engine_generated_from_activity", "existing_timesheet_narrativ
                   "needs_review_insufficient_detail", "needs_review_embedded_instruction", "needs_activity_evidence")
 REWRITE_STATUSES = ("engine_generated_from_activity", "needs_review", "needs_review_insufficient_detail",
                     "withheld_embedded_instruction")
-MAPPING_BASES = ("direct_activity_class", "conflicting_activity_classes", "unknown_activity_class",
-                 "keyword_inference", "unmapped")
+MAPPING_BASES = ("direct_activity_class", "conflicting_activity_classes", "partially_mapped_activity_classes",
+                 "unknown_activity_class", "keyword_inference", "unmapped")
 STAGES = ("activity", "drafted", "coded", "governed")
 STAGE_HINT = {"draft": "run narrative_draft.py first", "code_mapping": "run code_map.py first",
               "compliance": "run guideline_check.py first"}

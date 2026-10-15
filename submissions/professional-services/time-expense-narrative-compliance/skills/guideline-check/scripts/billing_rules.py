@@ -126,6 +126,8 @@ def choose_mapping(entry, linked):
 
     Every linked signal is mapped first; more than one target code (non-billable codes included)
     is a conflict and returns UNMAPPED at 0.40 (#5.3). There is no non-billable short-circuit.
+    Linked signals that all map to one code except for some unknown classes are partly mapped
+    (UNMAPPED at 0.40, basis partially_mapped_activity_classes); none mapping is unknown_activity_class.
     Keyword inference reads only usable (screened, non-withheld) narratives (D19).
     """
     if linked:
@@ -136,6 +138,8 @@ def choose_mapping(entry, linked):
             return UNMAPPED, UNKNOWN_CONFIDENCE, "conflicting_activity_classes"
         if len(known) == len(mappings) and len(codes) == 1:
             return known[0], DIRECT_MATCH_CONFIDENCE, "direct_activity_class"
+        if known:
+            return UNMAPPED, UNKNOWN_CONFIDENCE, "partially_mapped_activity_classes"
         return UNMAPPED, UNKNOWN_CONFIDENCE, "unknown_activity_class"
     draft_text, own, _, _ = usable_narratives(entry, linked)
     text = signal_policy.canon_text(" ".join([draft_text, own]))
@@ -154,17 +158,30 @@ def code_mapping(entry, linked):
     if task == "UNMAPPED":
         pairs = sorted({f"{signal_policy.redact(a.get('activity_class'))}->{(signal_mapping(a) or ('?', '?'))[1]}"
                         for a in linked})
-        detail = ("linked signals point to different codes (" + ", ".join(pairs) + "); no code is recommended"
-                  if basis == "conflicting_activity_classes" else "no activity class or keyword maps to a code")
+        mapped = sorted({f"{signal_policy.redact(a.get('activity_class'))}->{signal_mapping(a)[1]}"
+                         for a in linked if signal_mapping(a) is not None})
+        unknown = sum(signal_mapping(a) is None for a in linked)
+        partly = (f"{unknown} of {len(linked)} linked signals have an activity class with no code; the others map to "
+                  "{}; no code is recommended")
+        if basis == "conflicting_activity_classes":
+            detail = "linked signals point to different codes (" + ", ".join(pairs) + "); no code is recommended"
+        elif basis == "partially_mapped_activity_classes":
+            # The class->code pairs that did map are listed, so the detail never denies a mapping it shows (F02).
+            detail = partly.format(", ".join(mapped))
+        else:
+            detail = "no activity class or keyword maps to a code"
         if basis == "unmapped" and any(usable_narratives(entry, linked)[2:]):
             detail = f"{WITHHELD_MAPPING_NOTE}; no activity class maps to a code"
         if submitted_task:
             detail += f"; submitted {submitted_task} cannot be confirmed"
-        if basis == "conflicting_activity_classes" and signal_policy.composed_hits(
-                pairs + ([submitted_task] if isinstance(submitted_task, str) else []), detail):
+        submitted = [submitted_task] if isinstance(submitted_task, str) else []
+        if basis == "conflicting_activity_classes" and signal_policy.composed_hits(pairs + submitted, detail):
             # QA round 14: the class names and the submitted code read as an instruction together - counted only.
             detail = (f"linked signals point to {len({p.rsplit('->', 1)[1] for p in pairs})} different codes; "
                       f"{COMPOSED_CLASSES_NOTE}; no code is recommended"
+                      + ("; the submitted task code cannot be confirmed" if submitted_task else ""))
+        elif basis == "partially_mapped_activity_classes" and signal_policy.composed_hits(mapped + submitted, detail):
+            detail = (partly.format(f"one code ({COMPOSED_CLASSES_NOTE})")
                       + ("; the submitted task code cannot be confirmed" if submitted_task else ""))
         flags.append({
             "flag": "unmapped_code",
@@ -208,6 +225,16 @@ BLOCK_BILLING_CLASS_LIMIT = 1  # client-billing-guidelines.md #2.1
 RELATED_CLASS_LIMIT = 2  # client-billing-guidelines.md #2.2
 PROHIBITED_TERMS = ("attention to", "various matters", "miscellaneous", "work on file", "general follow up")  # #3.1
 VAGUE_PHRASES = ("review and revise", "work on", "handle", "follow up", "touch base")  # #3.2
+# #3.2 matches each vague phrase in its inflected forms too ("worked on", "handling", "followed up"); the flag detail
+# names the base phrase.
+VAGUE_FORMS = {
+    "review and revise": r"review(?:s|ed|ing)?\sand\srevis(?:e|es|ed|ing)",
+    "work on": r"work(?:s|ed|ing)?\son",
+    "handle": r"handl(?:e|es|ed|ing)",
+    "follow up": r"follow(?:s|ed|ing)?\sup",
+    "touch base": r"touch(?:es|ed|ing)?\sbase",
+}
+VAGUE_RES = {phrase: re.compile(r"\b" + VAGUE_FORMS[phrase] + r"\b") for phrase in VAGUE_PHRASES}
 NON_BILLABLE_CLASSES = signal_policy.NON_BILLABLE_CLASSES  # client-billing-guidelines.md #5.1
 NON_BILLABLE_TASK_CODES = ("NB900", "BH910")  # task-phase-codes.md #4.1 / #4.2
 ROUNDING_INCREMENT = Decimal("0.1")  # client-billing-guidelines.md #6.1
@@ -229,10 +256,10 @@ ACTION_VERBS = {
 }
 # #1.2 "client-facing purpose": an explicit purpose clause.
 PURPOSE_VERBS = (
-    "address", "advise", "agree", "align", "answer", "assess", "brief", "capture", "clarify", "confirm",
-    "decide", "define", "design", "determine", "discuss", "document", "evaluate", "finalize", "identify",
-    "inform", "map", "plan", "prepare", "present", "prioritize", "resolve", "respond", "scope", "summarize",
-    "support", "test", "update", "validate",
+    "address", "advise", "agree", "align", "analyse", "analyze", "answer", "assess", "brief", "capture", "clarify",
+    "confirm", "coordinate", "decide", "define", "design", "determine", "discuss", "document", "draft", "evaluate",
+    "finalize", "identify", "inform", "map", "plan", "prepare", "present", "prioritize", "resolve", "respond",
+    "review", "scope", "summarize", "support", "test", "update", "validate",
 )
 PURPOSE_RE = re.compile(r"\b(?:to|so that we can|in order to)\s+(?:" + "|".join(PURPOSE_VERBS) + r")\b")
 EMBEDDED_DEFAULT = ("narrative or linked activity text addresses the reviewer/engine, steers the verdict, "
@@ -528,7 +555,7 @@ def govern(out):
                          ["client-billing-guidelines.md #3.1", "client-billing-guidelines.md #3.3"], 0.99)
         cured = elements["subject"] and elements["purpose"]
         for phrase in VAGUE_PHRASES:
-            if re.search(r"\b" + re.escape(phrase) + r"\b", narrative_norm):
+            if VAGUE_RES[phrase].search(narrative_norm):
                 if cured:
                     add_flag(flags, "vague_phrase", "needs_review",
                              f"matched vague phrase '{phrase}' (cured by an explicit subject and purpose)",

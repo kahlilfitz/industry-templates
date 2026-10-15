@@ -606,6 +606,7 @@
                 "enum": [
                   "direct_activity_class",
                   "conflicting_activity_classes",
+                  "partially_mapped_activity_classes",
                   "unknown_activity_class",
                   "keyword_inference",
                   "unmapped"

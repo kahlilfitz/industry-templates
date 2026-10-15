@@ -11,7 +11,7 @@ Demo data and the engine regression suite for **Time & Expense Narrative Complia
 |---|---|
 | `demo-data/scenario-a-happy/` | Raw engagement exports (`raw/`), the activity packet `activity.json`, engine goldens (`expected/`) and a README with the run order |
 | `demo-data/scenario-b-drama/` | Same layout; the skim-proof rejection case |
-| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 39 groups |
+| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 40 groups |
 | `tests/steering-corpus.json` | Embedded-instruction corpus for the vendored detector, attack and benign sets |
 | `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker |
 

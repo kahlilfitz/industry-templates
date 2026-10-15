@@ -13,7 +13,7 @@ These excerpts are invented for the gallery package. They summarize the kind of 
 
 ## 3. Prohibited and vague wording
 3.1 Prohibited terms are: "attention to", "various matters", "miscellaneous", "work on file", and "general follow up".
-3.2 Vague verb phrases are: "review and revise", "work on", "handle", "follow up", and "touch base". A vague phrase is rejectable when no specific subject and purpose cure it.
+3.2 Vague verb phrases are: "review and revise", "work on", "handle", "follow up", and "touch base", in any inflected form ("worked on", "handling", "followed up"). A vague phrase is rejectable when no specific subject and purpose cure it.
 3.3 The engine reports the matched phrase exactly and cites this section; the model must not paraphrase away the flag.
 
 ## 4. Code mapping discipline
