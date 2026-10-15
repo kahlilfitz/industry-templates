@@ -11,8 +11,7 @@ Demo data and the engine regression suite for **Time & Expense Narrative Complia
 |---|---|
 | `demo-data/scenario-a-happy/` | Raw engagement exports (`raw/`), the activity packet `activity.json`, engine goldens (`expected/`) and a README with the run order |
 | `demo-data/scenario-b-drama/` | Same layout; the skim-proof rejection case |
-| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 40 groups |
-| `tests/steering-corpus.json` | Embedded-instruction corpus for the vendored detector, attack and benign sets |
+| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 4 groups, 169 checks |
 | `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker |
 
 ## Running the tests
@@ -37,8 +36,22 @@ The runner prints both
 resolved roots, exits 2 if the plugin root has no `skills\`, streams one `PASS`/`FAIL` line per check
 under `== group <name>` headers, repeats failures under `== failures` and ends with
 `N/M checks passed` (exit 1 on any failure). `--list-groups` prints the group names; `--group NAME`
-(repeatable) runs only those groups plus any group whose state they read. An unknown group or
-argument exits 2.
+(repeatable) runs only those groups. An unknown group or argument exits 2.
+
+## What the suite checks
+
+Every check answers a finding from a Cowork evaluation of this plugin. A check is added only in
+response to a Cowork finding; internal QA rounds do not add checks to this suite.
+
+| Group | Checks | Added in | Cowork finding it answers |
+|---|---|---|---|
+| `golden_tests` | 10 | 1.0.2 | 1.0.1 evaluation: re-running the whole chain on both scenarios with the fixed `--generated-at` reproduces `activity.json` and every `expected/` golden byte for byte |
+| `fixture_tests` | 62 | 1.0.2, 1.0.3 | 1.0.1 evaluation: privacy floor (disabled-source signals, stand-alone policy tampering), grounded rewrites with originals preserved, truthful exception sections, embedded authority/instruction text (including zero-width evasion), short narratives left unpadded, citation hygiene and bad input; 1.0.3 fixes for the canonical 1.0.1 Blocked findings B1 (conflicting-class code mapping, NB900/BH910), B2 (`no_linked_evidence`), B3 (additive `--signal-config`), B4 (instruction paraphrases) and the period caveat |
+| `hardening_tests` | 66 | 1.0.4 | Cowork 1.0.3 trust-and-safety blockers: external-recipient and timekeeper-scope guardrails in every `SKILL.md`, timekeeper scope (data minimisation) in every engine, embedded instructions in subjects, deliverables, missing-time rows and rewrites withheld everywhere, citation integrity, mixed-entry coverage, the empty-period warning, and the attack-paraphrase and benign domain-prose sets |
+| `te107_tests` | 31 | 1.0.7 | Cowork 1.0.6 recommendations F02 (`partially_mapped_activity_classes`) and F03 (purpose verbs and inflected vague phrases) |
+
+`fixture_tests` and `hardening_tests` run inside `defence_in_depth()`: their hand-edited packets
+pass the activity re-derivation gate so the defences behind it stay under test.
 
 ## What the scenarios cover
 
@@ -51,16 +64,3 @@ argument exits 2.
   elements, `UNMAPPED` at 0.40, linked activity on another date, evidence overrun), a duplicate
   meeting narrative, a wrong submitted task code, a mailbox link excluded under the off-by-default
   signal policy (#10.1), and three hours of document activity with no time entry (missing time).
-
-The suite also covers timekeeper scope and the engagement-manager team view, embedded-instruction
-screening with the corpus (attack lines must trip, benign lines must not), whole-chain
-re-derivation and reconciliation, contract and input validation, privacy exclusions, period checks,
-atomic writes and ASCII-safe output. MOS3-specific checks: every per-skill copy of a shared file
-(contract, references, config, `signal_policy.py`, `activity_pull.py`, `steering_guard.py`,
-`contract_check.py`; `billing_rules.py` from `skills/guideline-check/`) is byte-identical to its
-canonical copy in `skills/activity-pull/`; every skill carries
-`config/signal-sources.json` byte-identical to the canonical `skills/activity-pull/config/` copy;
-each engine loads only the copy in its own skill folder and never a file above it (without its copy
-a skill runs on the narrow default, mailbox sources off); and the package boundary (no demo data,
-tests (outside the submission source tree), `.claude-plugin` or root `config/`, `contracts/`,
-`references/` in the plugin root, and no SKILL.md or script reference that leaves its skill folder).
