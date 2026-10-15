@@ -175,9 +175,6 @@ function main(): void {
   if (runData.testDataFile) {
     console.log(`  Test-data ZIP: ${runData.testDataFile} (SHA-256 ${runData.testDataSha256})`);
   }
-  if (runData.atkValidated === false) {
-    console.log("  ATK validated: no (LocalChecksOnly: not a deployable acceptance result)");
-  }
   console.log(`  Reports: ${REQUIRED_REPORTS.map((report) => basename(report)).join(", ")}`);
   console.log("");
   for (const line of verdictGuidance(automatedVerdict)) console.log(line);

@@ -229,6 +229,19 @@ missing fix:
 The options are to keep 1.28 and tell Cowork in the prompt that these rows are a known, advisory
 exception, or to switch all five plugins and the validator to devPreview.
 
+### Owner decision: Cowork is the only source of rules and changes (2026-10-15)
+
+The owner's words: "All rules and changes should be in response to Cowork only. remove the Agents
+Toolkit Validation from the process".
+
+- `evaluation:prepare` no longer runs `atk validate`, and the `--skip-atk` flag and the
+  `atkValidated` receipt field are gone. Cowork's evaluation is the package check. This supersedes
+  the "Acceptance requires `atk validate --package-file`" sentence of the 2026-10-12 decision.
+  Version-history rows that recorded an `atk validate` result stay as written.
+- Still open: whether this also settles the manifest format above in Cowork's favour (devPreview
+  `$schema`, `manifestVersion: devPreview` and `packageName`). Doing so means changing the 1.28
+  check in `scripts\mos3-package.ts`, so it waits for an explicit owner answer.
+
 ### Owner decision: simplify the release process (2026-10-15)
 
 The owner's words: "I want to simplify this entire process. the goal is to rely on built in cowork

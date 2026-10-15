@@ -33,8 +33,6 @@ them.
 3. Keep Cowork's task folder synced at `<OneDrive>\Documents\Cowork\Tasks`. If it is somewhere
    else, pass `--tasks-root`.
 4. Install the GitHub Copilot CLI (`copilot`) and sign in. The fix step runs it.
-5. For MOS3 plugins, have network access to npm. `evaluation:prepare` runs the Microsoft 365 Agents
-   Toolkit validation with `--interactive false`, which needs no sign-in.
 
 ## Where things live
 
@@ -62,12 +60,11 @@ npm run evaluation:prepare -- --slug <slug>
 This command:
 
 1. validates every submission and builds the bundles;
-2. for MOS3 plugins, runs the Agents Toolkit validation;
-3. copies `public\bundles\<slug>.zip` to `evaluation-inbox\<slug>\<version>\`;
-4. records its SHA-256 in `evaluation-run.json`;
-5. writes `cowork-prompt.txt`, built from `docs\evaluation\cowork-evaluation-prompt[-mos3].txt`.
+2. copies `public\bundles\<slug>.zip` to `evaluation-inbox\<slug>\<version>\`;
+3. records its SHA-256 in `evaluation-run.json`;
+4. writes `cowork-prompt.txt`, built from `docs\evaluation\cowork-evaluation-prompt[-mos3].txt`.
 
-It runs no plugin tests. A version can be prepared only once; for a new run, bump the version.
+It runs no plugin tests and no external package validator; Cowork's evaluation is the package check. A version can be prepared only once; for a new run, bump the version.
 
 ## Step 3: evaluate in Cowork
 
@@ -213,7 +210,6 @@ Never copy report text or internal URLs into the repository, a commit message or
 | `no SharePoint root configured`, `plain local folder` or `broken link` | `npm run sharepoint:doctor`, then `npm run sharepoint:link` |
 | `an evaluation candidate already exists` | Bump the version; never delete the inbox folder to retry |
 | `version mismatch: metadata …, manifest …` | Make `metadata.json` and the manifest agree |
-| The Agents Toolkit validation times out | Check network access and rerun. Never send a `--skip-atk` candidate to Cowork |
 | The watcher never logs `Matched Cowork task` | Check `<task>\input\`: the wrong ZIP was attached, or the task has not synced. Start a new task with the inbox ZIP |
 | `do not affirm the matching version/hash` | Stale reports, or the report lacks `SHA-256 check: MATCH`. Ask Cowork, in the same task, to add the missing lines |
 | `SHA-256 check: MISMATCH` | Stop. Cowork evaluated a different file |

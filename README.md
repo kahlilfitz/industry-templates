@@ -138,8 +138,7 @@ npm run evaluation:watch -- --slug <plugin-slug>     # archive the Cowork report
 ```
 
 1. `prepare` writes the ZIP, an `evaluation-run.json` receipt and `cowork-prompt.txt` under
-   `evaluation-inbox/<slug>/<version>/`. For MOS3 it also runs
-   `atk validate --package-file --interactive false` (no sign-in).
+   `evaluation-inbox/<slug>/<version>/`.
 2. Attach only that ZIP to a new Cowork task and paste the prompt. Cowork runs its built-in
    evaluation and saves `plugin-health.html`, `behavioral-test-report.html` and
    `recommendations.html` (suggested fixes with severities, and the verdict).

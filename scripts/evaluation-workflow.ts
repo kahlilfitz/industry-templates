@@ -43,7 +43,6 @@ export type EvaluationRun = {
   /** Legacy: runs prepared before 2026-10-15 also froze a test-data ZIP, which archive still copies. */
   testDataFile?: string;
   testDataSha256?: string;
-  atkValidated?: boolean;
   archivedAt?: string;
   automatedVerdict?: EvaluationVerdict;
   reportSource?: string;

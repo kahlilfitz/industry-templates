@@ -1,13 +1,12 @@
 /**
  * `npm run evaluation:prepare -- --slug <slug>`: package one plugin for a Cowork evaluation.
  *
- * Validates submissions, builds the bundles, runs Microsoft 365 Agents Toolkit validation for MOS3
- * packages, copies the plugin ZIP into `evaluation-inbox\<slug>\<version>\`, records its SHA-256 in
+ * Validates submissions, builds the bundles, copies the plugin ZIP into `evaluation-inbox\<slug>\<version>\`, records its SHA-256 in
  * evaluation-run.json and renders the Cowork prompt. It runs no plugin tests and freezes nothing.
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { execFileSync, spawnSync } from "node:child_process";
-import { basename, dirname, join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { dirname, join } from "node:path";
 import {
   DEFAULT_INBOX_ROOT,
   ROOT,
@@ -20,8 +19,6 @@ import {
   sha256,
 } from "./evaluation-workflow.js";
 
-const ATK_PACKAGE = "@microsoft/m365agentstoolkit-cli";
-
 function run(command: string, args: string[]): void {
   if (process.platform === "win32") {
     const commandLine = [command, ...args].join(" ");
@@ -32,38 +29,6 @@ function run(command: string, args: string[]): void {
     return;
   }
   execFileSync(command, args, { cwd: ROOT, stdio: "inherit" });
-}
-
-/**
- * `npx --yes @microsoft/m365agentstoolkit-cli validate --package-file <zip> --interactive false`
- * (the toolkit's `atk validate`). Package validation needs no Microsoft 365 sign-in, and
- * `--interactive false` stops the toolkit opening a sign-in window. A non-zero exit fails preparation.
- */
-const ATK_TIMEOUT_MINUTES = 15;
-
-function atkValidate(packagePath: string): void {
-  const args = ["--yes", ATK_PACKAGE, "validate", "--package-file", packagePath, "--interactive", "false"];
-  console.log(`Validating the app package with the Microsoft 365 Agents Toolkit: npx ${args.join(" ")}`);
-  console.log(`It runs without a sign-in prompt and is stopped after ${ATK_TIMEOUT_MINUTES} minutes.`);
-  const quoted = ["npx", ...args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg))].join(" ");
-  const options = { cwd: ROOT, stdio: "inherit" as const, timeout: ATK_TIMEOUT_MINUTES * 60_000 };
-  const result =
-    process.platform === "win32"
-      ? spawnSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `"${quoted}"`], {
-          ...options,
-          windowsVerbatimArguments: true,
-        })
-      : spawnSync("npx", args, options);
-  const timedOut = (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
-  if (result.error || result.status !== 0) {
-    throw new Error(
-      `Microsoft 365 Agents Toolkit validation failed for ${basename(packagePath)} ` +
-        (timedOut
-          ? `(no result within ${ATK_TIMEOUT_MINUTES} minutes; check network access to the toolkit's acceptance-test service); `
-          : `(${result.error ? result.error.message : `exit code ${result.status ?? `null, signal ${result.signal}`}`}); `) +
-        "fix the package, or pass --skip-atk for a local-only check that is not a deployable acceptance result",
-    );
-  }
 }
 
 function git(args: string[]): string {
@@ -85,17 +50,13 @@ function renderPrompt(template: string, values: Record<string, string>): string 
 }
 
 function main(): void {
-  const args = parseArgs(process.argv.slice(2), new Set(["skip-atk"]));
+  const args = parseArgs(process.argv.slice(2));
   const slug = requiredArg(args, "slug");
   const inboxRoot = args.has("inbox-root")
     ? resolveInputPath(requiredArg(args, "inbox-root"))
     : DEFAULT_INBOX_ROOT;
-  const skipAtk = args.has("skip-atk");
   const submission = findSubmission(slug);
   const mos3 = submission.packageFormat === "mos3";
-  if (skipAtk && !mos3) {
-    console.log("Note: --skip-atk is ignored; Agents Toolkit validation applies only to MOS3 submissions.");
-  }
 
   const runDir = join(inboxRoot, slug, submission.version);
   if (existsSync(runDir)) {
@@ -109,18 +70,6 @@ function main(): void {
 
   const bundlePath = join(ROOT, "public", "bundles", `${slug}.zip`);
   assertNonEmptyFile(bundlePath, `generated bundle public\\bundles\\${slug}.zip`);
-
-  let atkValidated: boolean | undefined;
-  if (mos3) {
-    if (skipAtk) {
-      console.log("Skipping Microsoft 365 Agents Toolkit validation (--skip-atk).");
-      console.log("LocalChecksOnly: not a deployable acceptance result");
-      atkValidated = false;
-    } else {
-      atkValidate(bundlePath);
-      atkValidated = true;
-    }
-  }
 
   const artifactPath = join(runDir, `${slug}.zip`);
   const manifestPath = join(runDir, "evaluation-run.json");
@@ -153,7 +102,7 @@ function main(): void {
       gitDirty,
       preparedAt,
       coworkTaskName,
-      ...(mos3 ? { packageFormat: "mos3" as const, atkValidated } : {}),
+      ...(mos3 ? { packageFormat: "mos3" as const } : {}),
     };
     writeFileSync(manifestPath, `${JSON.stringify(runData, null, 2)}\n`, "utf8");
 
@@ -176,9 +125,6 @@ function main(): void {
     console.log(`  Task name: ${coworkTaskName}`);
     console.log(`  Plugin ZIP: ${artifactPath}`);
     console.log(`  SHA-256: ${artifactSha256}`);
-    if (mos3) {
-      console.log(`  ATK validated: ${atkValidated ? "yes" : "no (LocalChecksOnly: not a deployable acceptance result)"}`);
-    }
     console.log(`  Cowork prompt: ${promptPath}`);
     if (gitDirty) console.log("  Note: prepared from a dirty worktree; the commit is recorded.");
     console.log("");
