@@ -2,7 +2,7 @@
   "$schema": "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
   "manifestVersion": "devPreview",
   "packageName": "com.microsoft.cowork.engagement-mobilization-onboarding-pack",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "id": "d8823884-316f-473a-a404-a50c898c20cd",
   "developer": {
     "name": "Microsoft Corporation",

@@ -4,7 +4,7 @@ description: "Applies the deterministic ethical-wall Govern gate and least-privi
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run scripts/wall_check.py and scripts/access_checklist.py. Reads user-supplied files: matched.json or governed.json, the raw engagement inputs, staffing and Closeout JSON, the ethical-wall register and the workspace-inventory CSV. No connectors required; writes governed.json, access-checklist.json and mobilization-pack.md."
 metadata:
-  version: "1.0.5"
+  version: "1.0.6"
   icon: ic_fluent_shield_keyhole_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

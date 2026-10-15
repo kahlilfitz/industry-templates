@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.6 - 2026-10-15
+
+- **R-01 (blocker, applied).** Replaced literal instruction-override examples with abstract descriptions in the shared steering guard's attribution docstring and adjacent comment, the safety helper's comments/docstrings and the ethical-wall reference's split-instruction example. The canonical files in `engagement-retrieve` are re-vendored byte-identically into all five skills. Detector patterns, executable logic and the steering guard's `__version__` are unchanged; tests and attack vectors remain outside the package.
+- **Version declarations** are bumped to 1.0.6 in `metadata.json`, `manifest.json` (same application ID), all five `SKILL.md` files, `listing-metadata.md` and all five copies of the safety helper's engine `VERSION`. Regenerated both scenarios' `scope.json`, `matched.json`, `governed.json` and `access-checklist.json` goldens from the demo inputs; only `provenance.engines` version labels changed. Both `mobilization-pack.md` goldens and all raw/upstream inputs are unchanged.
+- **Validation and artifact.** Plugin regression suite: 46/46 before and after; no baseline failures or test edits. `npm run check:submissions` and `npm run test:evaluation` pass (39 repository checks). Rebuilt the reproducible 62-file MOS3 ZIP with the repository packager; SHA-256 `69d13bfa8f64ba6fffcd17254f1c93a94ebad72dbbd2c42a47ad24c5ddf886ae`. Packaged bytes match the source; the R-01 override phrase is absent, including whitespace/comment-line variants.
+- **Scope.** Advisory items remain in `BACKLOG.md`. Cowork's full evaluation of the new ZIP remains an operator step after owner review; this fix does not prepare, submit, publish or push a candidate.
+
 ## 1.0.5 - 2026-10-14
 
 Applies the Cowork 1.0.4 evaluation recommendations (verdict No-ship). Advisory items are recorded in `BACKLOG.md`.

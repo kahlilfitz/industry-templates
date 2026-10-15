@@ -4,7 +4,7 @@ description: "Drafts this engagement's internal mobilization pack, joiner briefi
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run scripts/verify_render.py, which re-derives access-checklist.json and mobilization-pack.md from the user-supplied raw inputs, staffing and Closeout JSON, wall register and workspace inventory. No connectors required; produces a Markdown draft for review."
 metadata:
-  version: "1.0.5"
+  version: "1.0.6"
   icon: ic_fluent_notepad_person_24_regular
   author: Microsoft Professional Services Skills
   category: writing
