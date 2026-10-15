@@ -1,5 +1,14 @@
 # Changelog - time-expense-narrative-compliance
 
+## 1.0.8 - 2026-10-15
+
+Applies only the two required fixes from the Cowork evaluation of 1.0.7. Advisory items remain in `BACKLOG.md`.
+
+- **F-01 (guideline-check, pasted narratives):** direct compliance requests now have a Step 0 that collects the engagement, period, requesting timekeeper, entry ID and raw exports, preserves the pasted narrative in the supplied timesheet row, and builds the missing activity-pull, narrative-draft and code-map packets. Missing inputs are named with an offer to run the earlier stage; no compliance determination is made from a paste alone, no packet is hand-edited, and engine errors still stop the check.
+- **F-02 (guideline-check, missing time):** Step 0 explicitly starts missing-time requests from raw exports through activity-pull, narrative-draft and code-map, without requiring an entry ID for unrecorded activity. Inputs and Step 1 make both `activity.json` and `coded.json` mandatory; re-derivation validates the supplied coded packet and does not replace it.
+- Version declarations move to 1.0.8 in `metadata.json`, `manifest.json`, each `SKILL.md` and `listing-metadata.md`. Engine and stage version stamps, including the signal-policy stamp, move from 1.0.6 to 1.0.8; copied scripts stay byte-identical and `steering_guard.py` remains unchanged at 1.1.7.
+- Regenerate both demo scenarios' `activity.json` and `expected/drafted.json`, `expected/coded.json`, `expected/governed.json` and `expected/exception-report.md` with the fixed timestamp. Only version labels change; no test, raw export or other demo file changes.
+
 ## 1.0.7 - 2026-10-14
 
 Applies the blocker and required fixes from the Cowork evaluation of 1.0.6 (automated verdict No-ship). The ten advisory items are in `BACKLOG.md`; only F09 is applied, by owner decision.

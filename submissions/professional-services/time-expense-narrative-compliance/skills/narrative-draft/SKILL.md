@@ -4,7 +4,7 @@ description: 'Drafts grounded time-entry narratives for entries that have none a
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/narrative_draft.py on activity.json from activity-pull (plus the raw exports for a team view); reads the config/signal-sources.json, contracts/ and references/ in this skill folder and writes drafted.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.7"
+  version: "1.0.8"
   icon: ic_fluent_compose_24_regular
   author: Microsoft Professional Services Skills
   category: writing

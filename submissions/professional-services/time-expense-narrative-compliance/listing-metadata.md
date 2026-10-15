@@ -3,6 +3,8 @@
 Draft for the shared "Skills and Plugin Metadata Template" workbook. Not packaged. Values marked
 "exactly as in the manifest" must stay in sync with `manifest.json`.
 
+Plugin version: **1.0.8**, matching `manifest.json` and `metadata.json`.
+
 ## Name
 
 - **name.short** (26/30): Time Entry Narrative Check
