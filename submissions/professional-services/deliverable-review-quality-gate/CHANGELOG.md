@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.7 - 2026-10-14
+
+Applies the blocker fixes from the Cowork evaluation of 1.0.6 (automated verdict No-ship: security scan failure, instruction-override phrasing in shipped files). Only reference prose, comments and docstrings change; no rule, pattern, engine logic, `steering_guard` `__version__` (still 1.1.7) or engine version stamp changes.
+
+- **F-01 (blocker, security scan):** `references/quality-gate-criteria.md` #8.5 quoted a literal instruction-override phrase as the example citation in the G8 withholding rule. It now describes it ("a citation that carries an instruction-override sentence"). The five skill copies stay byte-identical.
+- **F-02 (blocker, security scan):** the `steering_guard.py` module docstring (1.1.7 note) quoted the same phrase as a changelog example. It now reads "an instruction-override sentence recommending C-201". The same pass rewords the two copies split across lines in `steering_guard.py` (the `split_partners` docstring and the `_SENT_END` comment) and the one in the `split_partners` comment in `assertion_rules.py`, so no shipped file carries the phrase whole or split. The three skill copies of each file stay byte-identical; `steering_guard.py` now differs from the shared 1.1.7 source in those comment and docstring lines only.
+- Version 1.0.7 in `metadata.json`, `manifest.json` and every `SKILL.md`.
+
 ## 1.0.6 - 2026-10-13
 
 Supersedes 1.0.5 (frozen 2026-10-12; not evaluated as of this entry). Re-vendors the shared steering detector 1.1.5, then 1.1.6, then 1.1.7 (owner decision 2026-10-13: extend the shared detector for reworded imperative, suppression and authority-claim prose) and withholds the clean half of an instruction split across fields when the other half trips on its own.
