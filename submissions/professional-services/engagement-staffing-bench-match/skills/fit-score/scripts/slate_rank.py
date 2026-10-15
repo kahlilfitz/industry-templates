@@ -28,7 +28,7 @@ from input_guard import (
 )
 
 ENGINE = "engine:slate_rank"
-ENGINE_VERSION = "slate_rank/1.1.5"
+ENGINE_VERSION = "slate_rank/1.1.7"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 
 

@@ -383,7 +383,8 @@ class SlateValidateTests(unittest.TestCase):
             "R-1: secondary validation withheld Alex Smith - unrecognised record",
             result["escalations"],
         )
-        self.assertEqual("slate_validate/1.1.5", result["provenance"]["engines"][-1])
+        plugin_version = json.loads((DATA_ROOT / "metadata.json").read_text(encoding="utf-8"))["version"]
+        self.assertEqual("slate_validate/" + plugin_version, result["provenance"]["engines"][-1])
 
 
 class DemoDataTests(unittest.TestCase):

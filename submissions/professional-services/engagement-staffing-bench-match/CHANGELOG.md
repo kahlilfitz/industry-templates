@@ -36,6 +36,11 @@ engines already enforce. Advisory items F-04 to F-06 are recorded in `BACKLOG.md
   - The demo inputs and every engine output for both scenarios validate against the updated
     contract.
 - Version 1.1.7 in `metadata.json`, `manifest.json`, every `SKILL.md` and `listing-metadata.md`.
+- **Engine version labels (owner decision, 2026-10-15).** Engine labels now match the plugin
+  version on every release. The nine `ENGINE_VERSION` constants (all byte-identical copies) move from
+  1.1.5 to 1.1.7, and the eight `demo-data\*\expected` JSON files that record them were regenerated;
+  only the labels changed. `test_main_demotes_unsafe_recommendation` asserted the literal
+  `slate_validate/1.1.5`; by owner direction it now reads the expected label from `metadata.json`.
 
 ## 1.1.6 - 2026-10-14
 
