@@ -53,7 +53,11 @@ committed 1.0.8 (`75f0540`). The owner applied the engine-label rule to DRQG as 
 and to Staffing 1.1.7 (`b655af1`). Closeout 1.0.5 and DRQG 1.0.8 are unevaluated; all five next
 versions wait for round 3. The owner added a rule that every blocker or required fix carries a
 regression check (`5556eaf`); the round-2 fixes got theirs (`25eebc7`, `4c465e7`, `8c839aa`). All
-five were prepared for round 3 on 2026-10-15 from `8c839aa` and wait for their Cowork tasks.
+five were prepared for round 3 on 2026-10-15 from `8c839aa`.
+
+Round 3 ([results](#round-3-results-2026-10-15)): Closeout 1.0.5, Staffing 1.1.7, Mobilization 1.0.6
+and DRQG 1.0.8 came back **Ready for human review** with no blocker or required fixes. T&E 1.0.8 came
+back **No-ship** on three required fixes; its fix agent committed 1.0.9 (`a3ca975`).
 ## Contents
 
 - [Keeping this file current](#keeping-this-file-current)
@@ -148,11 +152,11 @@ human testers).
 
 | # | Plugin (slug) | Current version | State | C1 | C2 | C3 | C4 | C5 | Next action | Owner |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 01 | `engagement-closeout-knowledge-harvest` | 1.0.5 (`5d6b932`, `ee0b524`; prepared for round 3); 1.0.4 evaluated Ready for human review | 1.0.4 **Ready for human review** (evaluated 2026-10-15): 0 blocker or required fixes, 11 advisories. The owner applied R-01 (held-asset title redaction) and R-04 (engine labels) as 1.0.5; R-11 no action. Earlier history: [version history](#01-engagement-closeout--knowledge-harvest) | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Owner: create the Cowork task; the watcher archives the reports | operator |
-| 02 | `engagement-staffing-bench-match` | 1.1.7 (fix commit `4ebd9b8`; prepared for round 3); 1.1.6 evaluated No-ship | 1.1.6 **No-ship** (evaluated 2026-10-15): F-01 and F-02 (PII guardrail missing in `fit-score` and `slate-draft`) and F-03 (`source` and `generated_at` contract). 1.1.7 applies all three. Engine labels set to 1.1.7 and the label check now reads `metadata.json` (`b655af1`, [decision](#owner-decisions-round-2-results-2026-10-15)). Earlier history: [version history](#02-engagement-staffing--bench-match) | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Owner: create the Cowork task; the watcher archives the reports | operator |
-| 03 | `engagement-mobilization-onboarding-pack` | 1.0.6 (fix commit `cf66a5a`; prepared for round 3); 1.0.5 evaluated No-ship | 1.0.5 **No-ship** (evaluated 2026-10-15): security scan found the override phrase again, now in a `steering_guard.py` docstring (R-01). 1.0.6 rewords it and sets the engine labels to 1.0.6. Earlier history: [version history](#03-engagement-mobilization--onboarding-pack) | No | No | No (1.0.2: Yes) | No | No | Owner: create the Cowork task; the watcher archives the reports | operator |
-| 04 | `time-expense-narrative-compliance` | 1.0.8 (fix commit `75f0540`; prepared for round 3); 1.0.7 evaluated No-ship | 1.0.7 **No-ship** (evaluated 2026-10-15): F-01 and F-02 (required), `guideline-check` direct requests with pasted narratives or missing time. 1.0.8 applies both and sets the engine labels to 1.0.8. Earlier history: [version history](#04-time--expense-narrative-compliance) | No | No | No (1.0.4: Yes) | No | No | Owner: create the Cowork task; the watcher archives the reports | operator |
-| 05 | `deliverable-review-quality-gate` | 1.0.8 (`3fa387e`; prepared for round 3); 1.0.7 evaluated Ready for human review | 1.0.7 **Ready for human review** (evaluated 2026-10-15): 0 blocker or required fixes, 9 advisories; security scan and trust and safety (5/5 at 10/10) passed. The owner applied R-01 (engine labels, R-04 rule) as 1.0.8. Earlier history: [version history](#05-deliverable-review--quality-gate) | No | No | No (1.0.4: Yes) | No | No | Owner: create the Cowork task; the watcher archives the reports | operator |
+| 01 | `engagement-closeout-knowledge-harvest` | 1.0.5 (evaluated Ready for human review) | 1.0.5 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 12 advisories. 1.0.4 **Ready for human review** (evaluated 2026-10-15): 0 blocker or required fixes, 11 advisories. The owner applied R-01 (held-asset title redaction) and R-04 (engine labels) as 1.0.5; R-11 no action. Earlier history: [version history](#01-engagement-closeout--knowledge-harvest) | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
+| 02 | `engagement-staffing-bench-match` | 1.1.7 (evaluated Ready for human review) | 1.1.7 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 9 advisories. 1.1.6 **No-ship** (evaluated 2026-10-15): F-01 and F-02 (PII guardrail missing in `fit-score` and `slate-draft`) and F-03 (`source` and `generated_at` contract). 1.1.7 applies all three. Engine labels set to 1.1.7 and the label check now reads `metadata.json` (`b655af1`, [decision](#owner-decisions-round-2-results-2026-10-15)). Earlier history: [version history](#02-engagement-staffing--bench-match) | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
+| 03 | `engagement-mobilization-onboarding-pack` | 1.0.6 (evaluated Ready for human review) | 1.0.6 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 14 advisories. 1.0.5 **No-ship** (evaluated 2026-10-15): security scan found the override phrase again, now in a `steering_guard.py` docstring (R-01). 1.0.6 rewords it and sets the engine labels to 1.0.6. Earlier history: [version history](#03-engagement-mobilization--onboarding-pack) | No | No | No (1.0.2: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
+| 04 | `time-expense-narrative-compliance` | 1.0.9 (fix commit `a3ca975`, not prepared); 1.0.8 evaluated No-ship | 1.0.8 **No-ship** (evaluated 2026-10-15, round 3): F-01, F-02 and F-03 (required); 1.0.9 applies all three with 20 regression checks. 1.0.7 **No-ship** (evaluated 2026-10-15): F-01 and F-02 (required), `guideline-check` direct requests with pasted narratives or missing time. 1.0.8 applies both and sets the engine labels to 1.0.8. Earlier history: [version history](#04-time--expense-narrative-compliance) | No | No | No (1.0.4: Yes) | No | No | Owner go-ahead to prepare 1.0.9, push, create the Cowork task, then run the watcher | operator |
+| 05 | `deliverable-review-quality-gate` | 1.0.8 (evaluated Ready for human review) | 1.0.8 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 13 advisories. 1.0.7 **Ready for human review** (evaluated 2026-10-15): 0 blocker or required fixes, 9 advisories; security scan and trust and safety (5/5 at 10/10) passed. The owner applied R-01 (engine labels, R-04 rule) as 1.0.8. Earlier history: [version history](#05-deliverable-review--quality-gate) | No | No | No (1.0.4: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
 
 Notes on the board:
 
@@ -203,6 +207,28 @@ New candidate versions: Closeout 1.0.3, Staffing 1.1.5, Mobilization 1.0.3, T&E 
 1.0.5 (Mobilization, T&E and DRQG frozen 2026-10-12; Closeout and Staffing not yet). They supersede Closeout 1.0.2 and Staffing 1.1.4
 (both Ready) and DRQG 1.0.4, T&E 1.0.4 and Mobilization 1.0.2 (evaluated, and accepted by the owner
 with missing evidence).
+
+### Round 3 results (2026-10-15)
+
+The round-3 watchers archived these reports under `sharepoint\Professional Services\<slug>\Evaluation\<version>\`
+and appended the advisories to each `BACKLOG.md`.
+
+- **Closeout 1.0.5: Ready for human review**, 0 blocker or required fixes, 12 advisories.
+- **Staffing 1.1.7: Ready for human review**, 0 blocker or required fixes, 9 advisories.
+- **Mobilization 1.0.6: Ready for human review**, 0 blocker or required fixes, 14 advisories.
+- **DRQG 1.0.8: Ready for human review**, 0 blocker or required fixes, 13 advisories.
+- **T&E 1.0.8: No-ship**, 3 required fixes and 15 advisories. The fix agent committed 1.0.9
+  (`a3ca975`):
+  - F-01 (GC-03): `billing_rules.py` accepts "walk through" and "go over" as purpose phrases.
+  - F-02 (GR-01): `exception-report` refuses submit, approve and write-off requests even without a
+    packet, and its description quotes those triggers.
+  - F-03 (GR-05, AP-01): `activity-pull` excludes personal and rate data, checks manager authority
+    before offering a team view, and records withheld colleagues by position in self mode.
+  - Engine labels 1.0.9, demo outputs regenerated (labels only), copies byte-identical, the detector
+    unchanged. The agent added 20 regression checks that fail on 1.0.8 and pass on 1.0.9; the suite
+    is 202/202 and no existing check changed. It invoked the `skill-authoring-coach` skill, which the
+    brief now allows.
+- The four Ready plugins go to the owner's two-tester human spot check on the exact archived ZIP.
 
 ### Owner decisions: round-2 results (2026-10-15)
 
@@ -1117,11 +1143,11 @@ and matched; T&E 1.0.3 relies on the hash check `evaluation:archive` performs be
 | Mobilization | 1.0.5 | `evaluate-engagement-mobilization-onboarding-pack-v1.0.5-2026-10-15` | `943D0536FC615AF62C5E6C10E38D9C331198B71227C90837C45525D007E008A8` | `1900eab` (clean) | No-ship (2026-10-15); fixes in 1.0.6 `cf66a5a` |
 | T&E | 1.0.7 | `evaluate-time-expense-narrative-compliance-v1.0.7-2026-10-15` | `E2C0368C3460CC081DD4D21FBC352558EC87DC79E15830EF3A267BA601505542` | `1900eab` (clean) | No-ship (2026-10-15); fixes in 1.0.8 `75f0540` |
 | DRQG | 1.0.7 | `evaluate-deliverable-review-quality-gate-v1.0.7-2026-10-15` | `544461BB50D060C282452951EE22A5E5430D8E3B29E8E1E691AC37EF61523876` | `1900eab` (clean) | Ready for human review (2026-10-15) |
-| Closeout | 1.0.5 | `evaluate-engagement-closeout-knowledge-harvest-v1.0.5-2026-10-15` | `DA0EE97E7976E28439DA87C1F52FC345DAA0AF44861DAA4FDC4EBE868B42880A` | `8c839aa` (clean) | In Cowork evaluation |
-| Staffing | 1.1.7 | `evaluate-engagement-staffing-bench-match-v1.1.7-2026-10-15` | `3C2615ECCEF6CD98B06E80D56C4A900CB7A232BE8F49B2C949004F06EA8F8FA4` | `8c839aa` (clean) | In Cowork evaluation |
-| Mobilization | 1.0.6 | `evaluate-engagement-mobilization-onboarding-pack-v1.0.6-2026-10-15` | `69D13BFA8F64BA6FFFCD17254F1C93A94EBAD72DBBD2C42A47AD24C5DDF886AE` | `8c839aa` (clean) | In Cowork evaluation |
-| T&E | 1.0.8 | `evaluate-time-expense-narrative-compliance-v1.0.8-2026-10-15` | `E9AC27188056310950E17424D0372D5A6081B514EF2B56162FB4F590FFF5AC7D` | `8c839aa` (clean) | In Cowork evaluation |
-| DRQG | 1.0.8 | `evaluate-deliverable-review-quality-gate-v1.0.8-2026-10-15` | `33A196CC8A649BB6487BBFB25767035B7ED822A3159E41978D8CD6D5E2479F2A` | `8c839aa` (clean) | In Cowork evaluation |
+| Closeout | 1.0.5 | `evaluate-engagement-closeout-knowledge-harvest-v1.0.5-2026-10-15` | `DA0EE97E7976E28439DA87C1F52FC345DAA0AF44861DAA4FDC4EBE868B42880A` | `8c839aa` (clean) | Ready for human review (2026-10-15) |
+| Staffing | 1.1.7 | `evaluate-engagement-staffing-bench-match-v1.1.7-2026-10-15` | `3C2615ECCEF6CD98B06E80D56C4A900CB7A232BE8F49B2C949004F06EA8F8FA4` | `8c839aa` (clean) | Ready for human review (2026-10-15) |
+| Mobilization | 1.0.6 | `evaluate-engagement-mobilization-onboarding-pack-v1.0.6-2026-10-15` | `69D13BFA8F64BA6FFFCD17254F1C93A94EBAD72DBBD2C42A47AD24C5DDF886AE` | `8c839aa` (clean) | Ready for human review (2026-10-15) |
+| T&E | 1.0.8 | `evaluate-time-expense-narrative-compliance-v1.0.8-2026-10-15` | `E9AC27188056310950E17424D0372D5A6081B514EF2B56162FB4F590FFF5AC7D` | `8c839aa` (clean) | No-ship (2026-10-15); fixes in 1.0.9 `a3ca975` |
+| DRQG | 1.0.8 | `evaluate-deliverable-review-quality-gate-v1.0.8-2026-10-15` | `33A196CC8A649BB6487BBFB25767035B7ED822A3159E41978D8CD6D5E2479F2A` | `8c839aa` (clean) | Ready for human review (2026-10-15) |
 
 MOS3 test-data ZIPs frozen with these candidates (SHA-256): Mobilization 1.0.3
 `E06787F56180D8283EBE4EAA4CF0680BD0DA5C65C8DD573A756167F559A564A1`; DRQG 1.0.5
