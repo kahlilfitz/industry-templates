@@ -84,6 +84,7 @@ test("renderFixBrief lists only blocker and required fixes with the guardrails",
   assert.match(brief, /Run the plugin's regression suite before applying any fix and again after/);
   assert.match(brief, /tests\\README\.md/);
   assert.match(brief, /Every check that passed before must still pass afterwards/);
+  assert.match(brief, /If the plugin has no regression suite, skip this step/);
   assert.match(brief, /Never relax, delete or change the expected result of an existing check/);
   assert.match(brief, /Do not edit the plugin's tests\\ or demo-data\\ folders unless a fix cannot be applied without it/);
   assert.match(brief, /npm run test:evaluation/);

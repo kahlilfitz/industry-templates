@@ -256,13 +256,28 @@ Toolkit Validation from the process".
     passed before must still pass, and a fix that conflicts with an existing check is reverted and
     reported. This replaces this morning's "do not run the plugin's own test suites" brief rule,
     and its assertion in `recommendations.test.ts` is inverted by owner direction. CI and
-    `evaluation:prepare` do not run plugin suites.
+    `evaluation:prepare` do not run plugin suites. A plugin with no suite skips the step.
+  - **Internal checks deleted** (owner: "delete the internal checks that didn't come from
+    cowork"). Each suite keeps only checks that a Cowork-fix commit added to answer a Cowork
+    finding; QA rounds, class sweeps, hardening, detector corpora, shared-copy and MOS3 layout
+    checks are deleted (they remain in git history). Each plugin's `tests\README.md` maps every
+    kept check to its finding. `demo-data\` and `sample-test-prompts.csv` are unchanged; the
+    packages are unchanged, so no version bump.
 
-  Still open:
-  - whether the existing internal-QA checks in the five suites are deleted or kept frozen (they
-    stay as they are until decided);
-  - whether the fix agent adds a regression check for each blocker or required fix. This would
-    replace the "leave `tests\` alone" brief rule, which still applies.
+    | Plugin | Checks before → after | Kept from | Trimmed run |
+    |---|---|---|---|
+    | Closeout | 187 → 9 | `68902f7` (Cowork 1.0.0/1.0.1) | 9/9 |
+    | Staffing | 203 → 9 | `e1c10e1` (Cowork 1.1.2/1.1.3 blockers) | 9/9 |
+    | Mobilization | 604 → 46 | `6d6e383` (1.0.0), `25e6cbd` (1.0.1 No-ship) | 46/46 |
+    | T&E | 1,369 → 169 | `aaef41f`, `88b5b41` (1.0.1), `2b0cbc3` (1.0.3), `2ff1efb` (1.0.6) | 169/169 |
+    | DRQG | 1,824 → 101 | `7626d67` (1.0.1), `7166cb5` (1.0.2), `25a0076` (1.0.3) | 100/101 |
+
+    The DRQG failure predates the trim: version consistency, because the three engines still
+    carry `ENGINE_VERSION` 1.0.6 in 1.0.7 (`1096892`). It is in the prepared 1.0.7 package and
+    is reported, not fixed.
+
+  Still open: whether the fix agent adds a regression check for each blocker or required fix.
+  This would replace the "leave `tests\` alone" brief rule, which still applies.
 
 ### Owner decision: simplify the release process (2026-10-15)
 

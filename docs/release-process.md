@@ -26,8 +26,9 @@ them.
 
 Test policy (owner, 2026-10-15):
 
-- **Plugin suites** keep their existing checks. New checks are added only in response to a Cowork
-  finding, never from internal review.
+- **Plugin suites** hold only checks that came from a Cowork finding; checks from internal review
+  (QA rounds, class sweeps, hardening, detector corpora, MOS3 layout) were deleted on 2026-10-15.
+  A plugin with no Cowork-driven checks has no suite.
 - **Packaging rules** in `scripts\mos3-package.ts` (`check:submissions`) stay.
 - **Regression protection** stays: the script unit tests, the packaging rules and the plugin suites.
   The fix agent runs the plugin's suite before and after applying Cowork fixes (owner: "run the
@@ -121,9 +122,9 @@ The fix step:
 4. starts a non-interactive Copilot CLI agent on the brief. The agent may not push. It:
    - applies the fixes in the strategy's fix order;
    - bumps the patch version (including `listing-metadata.md`) and adds a CHANGELOG entry;
-   - runs the plugin's regression suite (the commands in its `tests\README.md`) before and after
-     the fixes: every check that passed before must still pass, and no existing check may be
-     relaxed; a fix that conflicts with one is reverted, skipped and reported;
+   - runs the plugin's regression suite, if it has one (the commands in its `tests\README.md`),
+     before and after the fixes: every check that passed before must still pass, and no existing
+     check may be relaxed; a fix that conflicts with one is reverted, skipped and reported;
    - runs `check:submissions` and `test:evaluation`;
    - leaves `tests\` and `demo-data\` alone unless a fix requires an edit, and lists any such edit;
    - commits locally and stops.

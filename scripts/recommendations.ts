@@ -129,7 +129,7 @@ export function renderFixBrief(input: BriefInput): string {
     "- Follow CONTRIBUTING.md and docs/release-process.md.",
     "- Change only files in the plugin folder. Include its BACKLOG.md in the commit if it has uncommitted changes.",
     `- Set the version to ${input.nextVersion} everywhere \`npm run check:submissions\` requires it to match, and in listing-metadata.md if the plugin has one.`,
-    "- Run the plugin's regression suite before applying any fix and again after, from the plugin folder, with the commands in its tests\\README.md (for example `python tests\\run_tests.py`). Every check that passed before must still pass afterwards; fix any check your change breaks. Checks that already failed before are not yours to fix; list them in your summary.",
+    "- Run the plugin's regression suite before applying any fix and again after, from the plugin folder, with the commands in its tests\\README.md (for example `python tests\\run_tests.py`). Every check that passed before must still pass afterwards; fix any check your change breaks. Checks that already failed before are not yours to fix; list them in your summary. If the plugin has no regression suite, skip this step and say so.",
     "- Never relax, delete or change the expected result of an existing check. If a fix cannot pass an existing check, revert that fix, skip it, and report the conflict.",
     "- Do not edit the plugin's tests\\ or demo-data\\ folders unless a fix cannot be applied without it; list every such edit in your summary.",
     `- Add a CHANGELOG.md entry for ${input.nextVersion} listing each fix ID and what changed.`,
