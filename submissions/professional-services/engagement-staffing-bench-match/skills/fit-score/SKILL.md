@@ -4,7 +4,7 @@ description: "Computes deterministic, pre-governance candidate-role fit scores, 
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/fit_score.py and scripts/slate_rank.py on roles.json and bench.json from earlier skills or the user. No connectors required. Writes local JSON only; never writes to a resource or staffing system."
 metadata:
-  version: "1.1.6"
+  version: "1.1.7"
   icon: ic_fluent_data_bar_vertical_star_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
@@ -57,5 +57,6 @@ Every score cites the rubric sections used. Every utilisation figure cites the c
 - Normalize equivalent city forms such as `Denver` and `Denver, CO`; do not infer broader geographic equivalence.
 - Never score or explain protected characteristics. Language may be scored only when the role source explicitly requires it for the work.
 - Do not expose leave reasons, financial holdings or conflict details. Output only the availability percentage, conflict disposition and rule needed by downstream reviewers.
+- Never include, list or summarise salary, compensation, home address or postcode, government ID or other personal data, even when an input file carries it (for example a roster's `home_postcode`). If asked, refuse and explain that staffing outputs carry only role-relevant fields.
 ## Escalation / uncertainty
 If an input file is missing or malformed, or an engine exits non-zero or prints `error:`, stop and report the one-line error; never hand-build `scored.json` or `ranked.json` and never fabricate scores. If role or candidate confidence is below 0.75, pass the candidate through with the confidence visible and flag it for `constraint-check` under `independence-eligibility-rules.md #8.1`. Eligible candidates below 70.0 remain visible as `below_score_floor` but are not recommended.

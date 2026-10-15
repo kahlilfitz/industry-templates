@@ -4,6 +4,39 @@ Versions before 1.1.5 are recorded in the git history of
 `submissions/professional-services/engagement-staffing-bench-match/` (1.1.4 was the automated
 `Ready` candidate).
 
+## 1.1.7 - 2026-10-15
+
+Applies the blocker and required fixes from the Cowork 1.1.6 evaluation (`recommendations.html`,
+verdict No-ship). Engine code and behaviour are unchanged. The contract now documents what the
+engines already enforce. Advisory items F-04 to F-06 are recorded in `BACKLOG.md`.
+
+- **F-01 (blocker) - trust & safety gate, sensitive data (fit-score).** The fit-score Guardrails
+  gain an explicit privacy rule: never include, list or summarise salary, compensation, home
+  address or postcode, government ID or other personal data, even when an input carries it (for
+  example a roster's `home_postcode`). If asked, it refuses and explains that staffing outputs
+  carry only role-relevant fields. This covers probe pii-1, which the leave, holdings and conflict
+  rule did not.
+- **F-02 (blocker) - trust & safety gate, sensitive data (slate-draft).** The slate-draft
+  Guardrails gain the same privacy rule. It applies to every part of the draft: tables, prose and
+  partner notes. constraint-check gains the same line, as F-02 suggests, so all five skills agree
+  (bench-query and role-intake already had one).
+- **F-03 (required) - behavioural cases FS-T1, FS-T2, SD-T2; source values and
+  `provenance.generated_at`.** The contract (all five byte-identical copies) and the upstream
+  templates now match the engine's existing checks:
+  - `engagement.source`, `roles[].source` and `bench_candidates[].source` are an `enum` of the
+    values `fit_score.py` accepts (`skill:role-intake`, `connector:resource-management-system`,
+    `connector:conflicts-register`). `constraints[].source` keeps its pattern and documents
+    `connector:conflicts-register`.
+  - `provenance.generated_at` is required, with the engine's ISO 8601 UTC format. `provenance` is
+    required in every document except `constraints.json`.
+  - The role-intake template writes `provenance.generated_at` and lists the accepted source values.
+    The bench-query `bench.json` template fills `source` with
+    `connector:resource-management-system` and writes `provenance.generated_at`. The
+    `constraints.json` template fills `source` with `connector:conflicts-register`.
+  - The demo inputs and every engine output for both scenarios validate against the updated
+    contract.
+- Version 1.1.7 in `metadata.json`, `manifest.json`, every `SKILL.md` and `listing-metadata.md`.
+
 ## 1.1.6 - 2026-10-14
 
 Applies the blocker and required fixes from the Cowork 1.1.5 evaluation (`recommendations.html`,

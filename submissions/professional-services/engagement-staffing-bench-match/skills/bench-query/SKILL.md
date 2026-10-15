@@ -4,7 +4,7 @@ description: "Normalizes bench, availability, rate and conflicts-register data i
 license: Proprietary
 compatibility: "Reads user-supplied roster, availability, leave, rate-card and conflicts-register exports (CSV or JSON) with the file-read tool; Python 3 to normalise them into bench.json and constraints.json. No bundled engine and no connectors required. Read-only: never writes to a resource or staffing system."
 metadata:
-  version: "1.1.6"
+  version: "1.1.7"
   icon: ic_fluent_people_search_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
@@ -44,8 +44,8 @@ Read the roster, calendar and rate files with the file-read tool; normalise with
  "bench_candidates": [{"candidate_id": "", "name": "", "seniority": "", "skills": [], "certifications": [],
    "industry_experience": [], "location": "", "languages": [], "rate": 0, "current_allocation_pct": 0,
    "target_utilization_pct": 0, "approved_leave": [], "soft_bookings": [],
-   "source": "", "confidence": 0.0, "citation": ""}],
- "escalations": []}
+   "source": "connector:resource-management-system", "confidence": 0.0, "citation": ""}],
+ "escalations": [], "provenance": {"generated_at": "YYYY-MM-DDTHH:MM:SSZ"}}
 ```
 
 `constraints.json`:
@@ -54,9 +54,11 @@ Read the roster, calendar and rate files with the file-read tool; normalise with
 {"contract_version": "ps.engagement-staffing-bench-match.v1", "engagement": {}, "roles": [],
  "constraints": [{"candidate_id": "", "type": "", "client_name": "", "status": "", "material": null,
    "role_type": "", "process": "", "end_date": "", "resolved_date": "",
-   "source": "", "confidence": 0.0, "citation": ""}],
- "source": "", "confidence": 0.0, "citation": ""}
+   "source": "connector:conflicts-register", "confidence": 0.0, "citation": ""}],
+ "source": "connector:conflicts-register", "confidence": 0.0, "citation": ""}
 ```
+
+The engines accept only these `source` values on `engagement{}`, `roles[]` and `bench_candidates[]`: `skill:role-intake`, `connector:resource-management-system` and `connector:conflicts-register`. Write `connector:resource-management-system` on every candidate and `connector:conflicts-register` on every constraint and on the `constraints.json` header, and keep the copied `engagement{}` and `roles[]` source (`skill:role-intake`) unchanged. Always write `provenance.generated_at` in `bench.json`, and in any `provenance` you add to `constraints.json`, as the UTC time you build it (`YYYY-MM-DDTHH:MM:SSZ`); fit-score refuses a run where neither `roles.json` nor `bench.json` carries it.
 
 Summarise candidate records separately from conflict normalization; do not expose sensitive conflict details in a general roster table:
 

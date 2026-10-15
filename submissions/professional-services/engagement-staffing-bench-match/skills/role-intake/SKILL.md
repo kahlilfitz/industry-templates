@@ -4,7 +4,7 @@ description: "Reads a signed engagement, SOW role extract, mobilisation note or 
 license: Proprietary
 compatibility: "Reads user-supplied files (staffing request email, SOW role extract, rate-card excerpt) with the file-read tool; Python 3 optional to build the JSON payload. No bundled engine and no connectors required. Read-only: never writes to a resource or staffing system."
 metadata:
-  version: "1.1.6"
+  version: "1.1.7"
   icon: ic_fluent_document_briefcase_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
@@ -45,9 +45,12 @@ Read the source files with the file-read tool; build the JSON payload with pytho
              "required_skills": [], "preferred_skills": [], "required_certifications": [],
              "industry_context": "", "rate_band": {"currency": "", "min": 0, "max": 0},
              "source": "skill:role-intake", "confidence": 0.0, "citation": ""}],
-  "escalations": []
+  "escalations": [],
+  "provenance": {"generated_at": "YYYY-MM-DDTHH:MM:SSZ"}
 }
 ```
+
+The engines accept only these `source` values on `engagement{}`, `roles[]` and `bench_candidates[]`: `skill:role-intake`, `connector:resource-management-system` and `connector:conflicts-register`. role-intake writes `skill:role-intake`. Always write `provenance.generated_at` as the UTC time you build the payload (`YYYY-MM-DDTHH:MM:SSZ`); fit-score refuses a run where neither `roles.json` nor `bench.json` carries it.
 
 Summarise it to the user as one markdown table:
 

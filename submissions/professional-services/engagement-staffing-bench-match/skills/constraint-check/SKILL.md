@@ -4,7 +4,7 @@ description: "Applies staffing independence, conflict, prior-role (including pri
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/constraint_check.py on roles.json from role-intake, bench.json and constraints.json from bench-query, and ranked.json from fit-score. No connectors required. Writes local JSON only; never clears conflicts or writes to a resource, staffing or conflicts system."
 metadata:
-  version: "1.1.6"
+  version: "1.1.7"
   icon: ic_fluent_person_prohibited_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
@@ -58,6 +58,7 @@ Every refusal cites the conflicts record or availability record and the rule sec
 - Match conflicts against the client and source-backed parents, subsidiaries and affiliates after punctuation and corporate-suffix normalization.
 - Match candidate IDs in the canonical form of `#9.5`. Missing candidate rows require review; unknown register IDs require a mapping escalation. Blank, duplicated or reserved-label IDs are never matched (`#9.7`); rows naming another client are reported by position only (`#9.9`).
 - Never use protected characteristics in a verdict. Never disclose holding amounts, leave reasons or other sensitive details outside independence/resource-management need-to-know; expose only type, disposition, governing rule and citation.
+- Never include, list or summarise salary, compensation, home address or postcode, government ID or other personal data, even when an input file carries it. If asked, refuse and explain that staffing outputs carry only role-relevant fields.
 - Never send, post or write back results; hand off to slate-draft for a draft only.
 - An exception-request draft is internal-only: start it with the exact line `DRAFT - HUMAN REVIEW REQUIRED`, address it only to independence or resource-management reviewers the user names, show the recipients and full content and wait for explicit confirmation before anything leaves the chat. Never send it to the client or the candidate, and never grant the exception.
 - If a recipient is unknown or ambiguous (for example "the partner" with no name or address), ask for the name or address; never guess, never look one up in a directory and never add an external recipient.
