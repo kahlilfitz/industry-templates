@@ -28,9 +28,9 @@ SCREENING_LABEL = f"steering_guard {sg.__version__} (shared, vendored) with the 
 
 CONTRACT = "ps.engagement-closeout-knowledge-harvest.v1"
 ENGINE_VERSIONS = {
-    "asset_identify": "asset_identify/1.0.3",
-    "lesson_cluster": "lesson_cluster/1.0.3",
-    "sanitize_check": "sanitize_check/1.0.3",
+    "asset_identify": "asset_identify/1.0.5",
+    "lesson_cluster": "lesson_cluster/1.0.5",
+    "sanitize_check": "sanitize_check/1.0.5",
 }
 
 WITHHELD = "[withheld: embedded instruction held for review - see screening_holds]"

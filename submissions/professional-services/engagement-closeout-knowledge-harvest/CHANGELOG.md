@@ -4,8 +4,9 @@ Earlier versions (1.0.0 to 1.0.2) are recorded in the git history of this folder
 
 ## 1.0.5 - 2026-10-15
 
-Cowork rated 1.0.4 Ready for human review. By owner decision, this release applies one advisory
-item from that report, R-01. The other 1.0.4 advisories stay in `BACKLOG.md`.
+Cowork rated 1.0.4 Ready for human review. By owner decision, this release applies two advisory
+items from that report, R-01 and R-04, and leaves R-11 alone. The other 1.0.4 advisories stay in
+`BACKLOG.md`.
 
 - **R-01 (advisory, applied by owner decision): client name in `held_assets[].title`.** A held
   asset's title repeated the engagement client name word for word, although its finding says the
@@ -18,8 +19,11 @@ item from that report, R-01. The other 1.0.4 advisories stay in `BACKLOG.md`.
   `confidentiality-sanitisation-rules.md` #1.1 (all five copies) and the sanitize-check `SKILL.md`
   worked example describe the redaction. Regression check added:
   `test_held_asset_title_does_not_repeat_client_name`.
-- The engine version constants (`ENGINE_VERSIONS`) are unchanged, pending the owner decision on
-  1.0.4 R-04.
+- **R-04 (advisory, applied by owner decision): engine version labels.** The engines stamped
+  `asset_identify/1.0.3`, `lesson_cluster/1.0.3` and `sanitize_check/1.0.3` into provenance, but the
+  plugin was at 1.0.4. The owner decided that engine labels match the plugin version on every
+  release, so `ENGINE_VERSIONS` in `closeout_core.py` (all four copies) is now 1.0.5. The six
+  `demo-data\*\expected` JSON files that record the labels were regenerated; only the labels changed.
 - Version set to 1.0.5 in `metadata.json`, `manifest.json` and every `SKILL.md` `metadata.version`.
 
 ## 1.0.4 - 2026-10-14

@@ -374,9 +374,9 @@
   ],
   "provenance": {
     "engines": [
-      "asset_identify/1.0.3",
-      "lesson_cluster/1.0.3",
-      "sanitize_check/1.0.3"
+      "asset_identify/1.0.5",
+      "lesson_cluster/1.0.5",
+      "sanitize_check/1.0.5"
     ],
     "generated_at": "2026-09-23T21:20:35Z",
     "demo_scenario": "scenario-b-drama",
