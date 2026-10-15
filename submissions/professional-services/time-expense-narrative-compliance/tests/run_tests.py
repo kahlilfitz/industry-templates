@@ -22,6 +22,8 @@ An unknown group or argument exits 2.
    subjects/deliverables/missing time/rewrites withheld everywhere, citation integrity, mixed-entry
    coverage, empty-period warning, and the attack paraphrase + benign domain-prose tripwire sets.
 4. te107_tests (1.0.7, Cowork 1.0.6 recommendations F02 and F03).
+5. te108_tests (1.0.8, Cowork 1.0.7 required fixes F-01 and F-02: guideline-check intake for pasted narratives and
+   missing time).
 Exit code 0 = all passed.
 """
 import copy
@@ -31,6 +33,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -1300,12 +1303,182 @@ def te107_tests(tmp):
               vague == ["matched vague phrase 'work on' with no specific subject and purpose to cure it"], vague)
 
 
+def md_section(text, heading):
+    """The body of the `## <heading>` section of a SKILL.md ("" when absent)."""
+    out, inside = [], False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            inside = line[3:].strip() == heading
+            continue
+        if inside:
+            out.append(line)
+    return "\n".join(out)
+
+
+def numbered_step(text, n):
+    """Step `n.` of the SKILL.md Steps section ("" when absent)."""
+    return next((line[len(f"{n}. "):] for line in md_section(text, "Steps").splitlines()
+                 if line.startswith(f"{n}. ")), "")
+
+
+def sentences(text):
+    return [s for s in re.split(r"(?<=\.)\s+(?=[A-Z\"`])", text) if s]
+
+
+# The earlier stages a direct guideline-check request has to build, by skill name: (engine, input flag, output packet).
+CHAIN_STAGES = {"activity-pull": ("activity_pull", "--raw-dir", "activity.json"),
+                "narrative-draft": ("narrative_draft", "--activity", "drafted.json"),
+                "code-map": ("code_map", "--drafted", "coded.json")}
+# Every raw export activity_pull reads (its module docstring lists them) and the word Step 0 must request it by.
+RAW_EXPORT_WORDS = {"calendar-export.csv": "calendar", "document-activity-log.csv": "document activity",
+                    "engagement-workplan.csv": "workplan", "timesheet.csv": "timesheet",
+                    "engagement-letter-extract.md": "engagement-letter"}
+
+
+def named_stages(text):
+    """The chain stages a SKILL.md passage names (as `skill-name`), in order of first mention."""
+    found = []
+    for name in re.findall(r"`([a-z-]+)`", text):
+        if name in CHAIN_STAGES and name not in found:
+            found.append(name)
+    return found
+
+
+def run_documented_chain(tmp, name, raw, stages, *who):
+    """Run the stages a SKILL.md names, in the order it names them, on raw exports, then guideline_check (Step 1).
+    Returns (governed packet or None, message). A wrong order feeds a stage the wrong packet and fails."""
+    if not stages:
+        return None, "the SKILL.md names no chain stages to build the packets"
+    work = os.path.join(tmp, name)
+    os.makedirs(work)
+    prev, activity = raw, None
+    for stage in stages:
+        engine, flag, packet = CHAIN_STAGES[stage]
+        out = os.path.join(work, packet)
+        argv = [flag, prev, "--out", out, "--generated-at", FIXED_TS]
+        if engine == "activity_pull":
+            argv += ["--period-start", "2026-09-14", "--period-end", "2026-09-18", *who]
+        elif activity:
+            argv += ["--activity", activity] if flag != "--activity" else []
+        code, msg = run(engine, *argv)
+        if code:
+            return None, f"{stage} failed: {msg}"
+        prev, activity = out, (out if engine == "activity_pull" else activity)
+    if os.path.basename(prev) != "coded.json" or not activity:
+        return None, f"the named stages {stages} do not end in activity.json and coded.json"
+    governed = os.path.join(work, "governed.json")
+    code, msg = run("guideline_check", "--coded", prev, "--activity", activity, "--out", governed,
+                    "--generated-at", FIXED_TS)
+    return (read(governed), "") if code == 0 else (None, f"guideline_check failed: {msg}")
+
+
+def te108_tests(tmp):
+    """1.0.8 Cowork fixes (1.0.7 evaluation), both in guideline-check. F-01 (GC-01): a direct request with a pasted
+    narrative has an intake path - Step 0 collects the engagement, period, requesting timekeeper, entry ID and the raw
+    exports, keeps the pasted narrative in its timesheet row, builds activity.json -> drafted.json -> coded.json, and a
+    missing input is named with an offer to run the earlier stage (never a determination from the paste alone).
+    F-02 (GC-02): a missing-time request starts from the raw exports through activity-pull, narrative-draft and
+    code-map, and both engine packets are mandatory. The end-to-end checks run the stages in the order Step 0 names."""
+    text = skill_text("guideline-check")
+    low = text.lower()
+    step0, step1 = numbered_step(text, 0), numbered_step(text, 1)
+    s0 = step0.lower()
+    when = md_section(text, "When to use").lower()
+    inputs = md_section(text, "Inputs").lower()
+    guard = [line.lower() for line in md_section(text, "Guardrails").splitlines() if line.startswith("- ")]
+
+    # --- F-01: pasted-narrative intake -----------------------------------------------------------------------------
+    check("1.0.8 F-01 guideline-check When to use: a direct request builds the missing packets in Step 0 instead of "
+          "requiring prebuilt ones", bool(step0) and "direct" in when and "step 0" in when
+          and re.search(r"(do not|does not|never) require[^.]*packet", when), when)
+    ask = next((s.lower() for s in sentences(step0) if "ask for" in s.lower()), "")
+    check("1.0.8 F-01 guideline-check Step 0 intake: asks for the engagement, period and requesting timekeeper "
+          "activity-pull needs", all(k in ask for k in ("engagement", "period", "timekeeper")), step0)
+    doc = MODULES["activity_pull"].__doc__ or ""
+    files = set(re.findall(r"raw/([\w.-]+\.(?:csv|md))\s", doc))
+    check("1.0.8 F-01 guideline-check Step 0 intake: requests every raw export activity_pull reads (calendar, document "
+          "activity, workplan, timesheet, engagement letter)",
+          files == set(RAW_EXPORT_WORDS) and "raw export" in s0
+          and all(word in s0 for word in RAW_EXPORT_WORDS.values()), (sorted(files), step0))
+    pasted = next((s.lower() for s in sentences(step0) if "pasted narrative" in s.lower()), "")
+    check("1.0.8 F-01 guideline-check Step 0 pasted narrative: asks for its entry ID and has the exact pasted "
+          "narrative put in the matching timesheet row, never replaced by a rewrite",
+          "entry id" in pasted and "timesheet" in pasted and "exact" in pasted
+          and re.search(r"(do not|never)[^.]*rewrite", pasted), pasted or step0)
+    packets = [p for p in re.findall(r"`(\w+\.json)`", step0) if p in ("activity.json", "drafted.json", "coded.json")]
+    check("1.0.8 F-01 guideline-check Step 0 chain: builds activity.json -> drafted.json -> coded.json with "
+          "activity-pull, narrative-draft and code-map in that order",
+          named_stages(step0) == list(CHAIN_STAGES) and packets[:3] == ["activity.json", "drafted.json", "coded.json"],
+          (named_stages(step0), packets))
+    check("1.0.8 F-01 guideline-check Step 0 missing inputs: names what is missing, offers to run the earlier stages, "
+          "and gives no compliance determination from the paste alone",
+          any("missing" in s.lower() and "offer" in s.lower() and "earlier stage" in s.lower() for s in sentences(step0))
+          and re.search(r"(do not|never)[^.]*compliance determination[^.]*paste", s0), step0)
+    missing_rule = [g for g in guard if "missing" in g and "packet" in g]
+    check("1.0.8 F-01 guideline-check Guardrails: a missing packet stops the check, is named, and gets an offer to run "
+          "its earlier stage through Step 0; packets are never hand-built or edited; engine errors still stop with no "
+          "hand-computed compliance",
+          len(missing_rule) == 1 and all(k in missing_rule[0] for k in (
+              "stop", "name the missing packet", "offer", "earlier stage", "step 0", "never hand-build",
+              "guideline_check.py errors", "do not hand-compute compliance")), missing_rule)
+    raw = raw_copy(tmp, "te108-pasted", scenario="scenario-a-happy")
+    pasted_text = "Reviewed documents; calls re project; prepared materials"  # the GC-01 prompt's narrative
+    edit_csv(raw, "timesheet.csv", 2, "narrative", pasted_text)
+    governed, msg = run_documented_chain(tmp, "te108-pasted-chain", raw, named_stages(step0), *SCENARIO_A_ARGS)
+    te = entry(governed, "TE-A-002") if governed else {}
+    comp = te.get("compliance", {})
+    check("1.0.8 F-01 end to end: the Step 0 chain run on raw exports with the GC-01 pasted narrative in its timesheet "
+          "row gives guideline_check a cited reject for that entry, the pasted narrative kept verbatim",
+          governed is not None and te.get("narrative") == pasted_text
+          and te["draft"]["narrative"] == pasted_text and te["draft"]["status"] == "existing_timesheet_narrative"
+          and comp.get("verdict") == "reject" and comp.get("flags")
+          and all(f.get("citations") for f in comp["flags"]), msg or comp)
+
+    # --- F-02: missing time from raw exports -----------------------------------------------------------------------
+    mt = next((s for s in sentences(step0) if "missing time" in s.lower()), "")
+    check("1.0.8 F-02 guideline-check Step 0 missing time: starts from the raw exports with activity-pull, then "
+          "narrative-draft and code-map, and needs no entry ID for unrecorded activity",
+          named_stages(mt) == list(CHAIN_STAGES) and "raw export" in mt.lower()
+          and re.search(r"(no|without an?|not need an?) entry id", mt.lower()), mt or step0)
+    check("1.0.8 F-02 guideline-check Inputs: activity.json and coded.json are both mandatory, for missing-time "
+          "requests too, and Step 0 builds them when absent; raw exports never go straight to guideline_check.py",
+          "`coded.json`" in inputs and "`activity.json`" in inputs and re.search(r"both[^.]*(mandatory|required)", inputs)
+          and re.search(r"missing[- ]time requests need both", inputs) and "step 0" in inputs
+          and re.search(r"(neither|never|cannot)[^.]*raw exports[^.]*guideline_check\.py", inputs), inputs)
+    s1 = step1.lower()
+    check("1.0.8 F-02 guideline-check Step 1: runs guideline_check only with both packets present; --coded is required "
+          "and the re-derivation validates it, never replaces a missing one",
+          re.search(r"with both `activity\.json` and `coded\.json` present", s1) and "--coded` is required" in s1
+          and re.search(r"not (to )?replace a missing", s1), step1)
+    code, msg = run("guideline_check", "--activity",
+                    os.path.join(DATA_ROOT, "demo-data", "scenario-a-happy", "activity.json"),
+                    "--out", os.path.join(tmp, "te108-no-coded.json"))
+    check("1.0.8 F-02 guideline-check Step 1 matches the engine: the SKILL.md says --coded is required and "
+          "guideline_check refuses a run without it", "--coded` is required" in s1 and code != 0
+          and not os.path.exists(os.path.join(tmp, "te108-no-coded.json")), (code, msg))
+    raw = raw_copy(tmp, "te108-missing", scenario="scenario-a-happy")
+    path = os.path.join(raw, "timesheet.csv")
+    with open(path, encoding="utf-8", newline="") as fh:
+        rows = [r for r in csv.reader(fh) if r[0] != "TE-A-003"]  # A-DOC-002 (0.8 h, 2026-09-16) is now unrecorded
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        csv.writer(fh, lineterminator="\n").writerows(rows)
+    governed, msg = run_documented_chain(tmp, "te108-missing-chain", raw, named_stages(mt), *SCENARIO_A_ARGS)
+    found = governed["missing_time_report"] if governed else []
+    check("1.0.8 F-02 end to end: the Step 0 missing-time chain run on raw exports with an unrecorded document activity "
+          "reports it as missing time with its export row and #8.1 cited",
+          [m["activity_id"] for m in found] == ["A-DOC-002"]
+          and "raw/document-activity-log.csv row 3" in found[0]["citations"]
+          and "client-billing-guidelines.md #8.1" in found[0]["citations"]
+          and governed["prebill_summary"]["missing_time_hours"] == 0.8, msg or found)
+
+
 # Every group in canonical order: (function, runs inside defence_in_depth()). A group's name is its function's name.
 GROUPS = (
     (golden_tests, False),
     (fixture_tests, True),
     (hardening_tests, True),
     (te107_tests, False),
+    (te108_tests, False),
 )
 GROUP_NAMES = tuple(fn.__name__ for fn, _ in GROUPS)
 USAGE = "usage: python3 tests/run_tests.py [--plugin-root DIR] [--list-groups] [--group NAME ...]"

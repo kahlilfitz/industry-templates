@@ -11,7 +11,7 @@ Demo data and the engine regression suite for **Time & Expense Narrative Complia
 |---|---|
 | `demo-data/scenario-a-happy/` | Raw engagement exports (`raw/`), the activity packet `activity.json`, engine goldens (`expected/`) and a README with the run order |
 | `demo-data/scenario-b-drama/` | Same layout; the skim-proof rejection case |
-| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 4 groups, 169 checks |
+| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 5 groups, 182 checks |
 | `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker |
 
 ## Running the tests
@@ -49,6 +49,7 @@ response to a Cowork finding; internal QA rounds do not add checks to this suite
 | `fixture_tests` | 62 | 1.0.2, 1.0.3 | 1.0.1 evaluation: privacy floor (disabled-source signals, stand-alone policy tampering), grounded rewrites with originals preserved, truthful exception sections, embedded authority/instruction text (including zero-width evasion), short narratives left unpadded, citation hygiene and bad input; 1.0.3 fixes for the canonical 1.0.1 Blocked findings B1 (conflicting-class code mapping, NB900/BH910), B2 (`no_linked_evidence`), B3 (additive `--signal-config`), B4 (instruction paraphrases) and the period caveat |
 | `hardening_tests` | 66 | 1.0.4 | Cowork 1.0.3 trust-and-safety blockers: external-recipient and timekeeper-scope guardrails in every `SKILL.md`, timekeeper scope (data minimisation) in every engine, embedded instructions in subjects, deliverables, missing-time rows and rewrites withheld everywhere, citation integrity, mixed-entry coverage, the empty-period warning, and the attack-paraphrase and benign domain-prose sets |
 | `te107_tests` | 31 | 1.0.7 | Cowork 1.0.6 recommendations F02 (`partially_mapped_activity_classes`) and F03 (purpose verbs and inflected vague phrases) |
+| `te108_tests` | 13 | 1.0.8 | Cowork 1.0.7 required fixes in guideline-check: F-01 (pasted-narrative intake: Step 0 asks for engagement, period, timekeeper, entry ID and every raw export, keeps the narrative in its timesheet row, builds activity → drafted → coded, names missing inputs and offers the earlier stage) and F-02 (missing time starts from raw exports through activity-pull, narrative-draft and code-map; both packets mandatory). The end-to-end checks run the stages in the order Step 0 names |
 
 `fixture_tests` and `hardening_tests` run inside `defence_in_depth()`: their hand-edited packets
 pass the activity re-derivation gate so the defences behind it stay under test.
