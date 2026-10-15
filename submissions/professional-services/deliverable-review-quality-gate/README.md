@@ -40,7 +40,7 @@ Version 1.0.6 re-vendors the shared steering detector `steering_guard` 1.1.7 int
 
 ### Bundled engine copies
 
-Each skill runs only scripts inside its own folder, so a skill installed on its own still works. `gate-check` bundles the `assertion_map` engine it runs to recover a missing `assertion-mapped.json`, and `review-packet` bundles the `severity_rank` engine and the modules it imports for `--verify`. `deliverable-ingest` runs no script; it hands `review-input.json` to `assertion-map`. Change the canonical copy, then copy it byte-for-byte to the others; `tests/run_tests.py` (its shared-copy and `mos3_skill_isolation_tests` checks) fails on any drift, missing copy or stale copy.
+Each skill runs only scripts inside its own folder, so a skill installed on its own still works. `gate-check` bundles the `assertion_map` engine it runs to recover a missing `assertion-mapped.json`, and `review-packet` bundles the `severity_rank` engine and the modules it imports for `--verify`. `deliverable-ingest` runs no script; it hands `review-input.json` to `assertion-map`. Change the canonical copy, then copy it byte-for-byte to the others.
 
 | File | Canonical copy | Byte-identical copies |
 |------|----------------|-----------------------|
