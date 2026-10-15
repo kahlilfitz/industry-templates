@@ -13,12 +13,11 @@ changed.
   describe the case abstractly ("an instruction-override phrase"). Docstring-only change; the
   detector code and `__version__` (1.1.7) are unchanged. Re-vendored byte-identically into
   `asset-identify`, `knowledge-record`, `lesson-cluster` and `sanitize-check`.
-- **F-02 (required) not applied: manifest `packageName`, `$schema` and `manifestVersion`.** The
-  repository's MOS3 validator (`scripts/mos3-package.ts`) rejects a `packageName` key and requires
-  the released 1.28 `$schema` and `manifestVersion`, and `scripts/mos3-package.test.ts` asserts that
-  the Dev Preview values are rejected. Changing the manifest would fail `npm run check:submissions`,
-  so this waits on a decision from the MOS3 publishing owner (accept 1.28 in the Cowork package
-  ruleset, or move the repository to Dev Preview).
+- **F-02 (required) applied: manifest `packageName`, `$schema` and `manifestVersion`.** Applied
+  after the owner decision of 2026-10-15 that Cowork is the only source of rules: `manifest.json`
+  moves to the devPreview `$schema` and `manifestVersion: devPreview` and adds `packageName`
+  `com.microsoft.cowork.engagement-closeout-knowledge-harvest`. The repository's MOS3 validator
+  (`scripts/mos3-package.ts`) now requires these values instead of 1.28.
 - Version set to 1.0.4 in `metadata.json`, `manifest.json` and every `SKILL.md` `metadata.version`.
 
 ## 1.0.3 - 2026-10-12

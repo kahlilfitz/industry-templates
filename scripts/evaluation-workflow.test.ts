@@ -231,6 +231,6 @@ test("both Cowork prompt templates request the two Cowork reports plus recommend
   const expected = ["{{DISPLAY_NAME}}", "{{RUN_LABEL}}", "{{SHA256}}", "{{SLUG}}", "{{VERSION}}"];
   assert.deepEqual(placeholders(claude), expected);
   assert.deepEqual(placeholders(mos3), expected);
-  assert.match(mos3, /MOS3 Microsoft 365 app package \(manifest schema\s+1\.28\)/);
+  assert.match(mos3, /MOS3 Microsoft 365 app package \(manifest schema\s+devPreview, with packageName\)/);
   assert.match(claude, /\.claude-plugin\/plugin\.json/);
 });

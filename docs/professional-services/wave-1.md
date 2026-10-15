@@ -39,8 +39,9 @@ Later on 2026-10-15 all five round-1 evaluations came back **No-ship**, and the 
 Closeout 1.0.4, Staffing 1.1.6, Mobilization 1.0.5, T&E 1.0.7 and DRQG 1.0.7 locally
 ([decisions](#owner-decisions-round-1-results-2026-10-15)). Every run flagged the same two things:
 the literal override phrase in the vendored `steering_guard.py` docstrings, and the package ruleset's
-devPreview and `packageName` rows. The manifest format is an open owner decision; nothing is
-prepared for round 2 yet.
+devPreview and `packageName` rows. The owner then ruled that Cowork is the only source of rules
+and switched all five manifests to devPreview ([decision](#owner-decision-cowork-is-the-only-source-of-rules-and-changes-2026-10-15));
+nothing is prepared for round 2 yet.
 
 ## Contents
 
@@ -136,11 +137,11 @@ human testers).
 
 | # | Plugin (slug) | Current version | State | C1 | C2 | C3 | C4 | C5 | Next action | Owner |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 01 | `engagement-closeout-knowledge-harvest` | 1.0.4 (fix commit `a543201`, not prepared); 1.0.3 evaluated No-ship | 1.0.3 **No-ship** (evaluated 2026-10-15): security scan failed on the override phrase in `steering_guard.py`; package ruleset wants devPreview. 1.0.4 fixes the phrase. Earlier history: [version history](#01-engagement-closeout--knowledge-harvest) | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Waiting on the owner's manifest decision ([2026-10-15 round 1](#owner-decisions-round-1-results-2026-10-15)), then prepare 1.0.4 and create its Cowork task | operator |
-| 02 | `engagement-staffing-bench-match` | 1.1.6 (fix commit `482f346`, not prepared); 1.1.5 evaluated No-ship | 1.1.5 **No-ship** (evaluated 2026-10-15): security scan and `fit-score` trust-and-safety (9/10) failed. 1.1.6 applies all three fixes. Earlier history: [version history](#02-engagement-staffing--bench-match) | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Waiting on the owner's manifest decision ([2026-10-15 round 1](#owner-decisions-round-1-results-2026-10-15)), then prepare 1.1.6 and create its Cowork task | operator |
-| 03 | `engagement-mobilization-onboarding-pack` | 1.0.5 (fix commit `57453b4`, not prepared); 1.0.4 evaluated No-ship | 1.0.4 **No-ship** (evaluated 2026-10-15): security scan failed on the override phrase; package ruleset wants devPreview and `packageName`. 1.0.5 fixes the phrase. Earlier history: [version history](#03-engagement-mobilization--onboarding-pack) | No | No | No (1.0.2: Yes) | No | No | Waiting on the owner's manifest decision ([2026-10-15 round 1](#owner-decisions-round-1-results-2026-10-15)), then prepare 1.0.5 and create its Cowork task | operator |
-| 04 | `time-expense-narrative-compliance` | 1.0.7 (fix commit `2ff1efb`, not prepared); 1.0.6 evaluated No-ship | 1.0.6 **No-ship** (evaluated 2026-10-15): behavioral 17/19 (89.5%) and security scan failed. 1.0.7 applies all three fixes. Earlier history: [version history](#04-time--expense-narrative-compliance) | No | No | No (1.0.4: Yes) | No | No | Waiting on the owner's manifest decision ([2026-10-15 round 1](#owner-decisions-round-1-results-2026-10-15)), then prepare 1.0.7 and create its Cowork task | operator |
-| 05 | `deliverable-review-quality-gate` | 1.0.7 (fix commit `1096892`, not prepared); 1.0.6 evaluated No-ship | 1.0.6 **No-ship** (evaluated 2026-10-15): security scan failed on the override phrase (8 findings). 1.0.7 applies both fixes. Earlier history: [version history](#05-deliverable-review--quality-gate) | No | No | No (1.0.4: Yes) | No | No | Waiting on the owner's manifest decision ([2026-10-15 round 1](#owner-decisions-round-1-results-2026-10-15)), then prepare 1.0.7 and create its Cowork task | operator |
+| 01 | `engagement-closeout-knowledge-harvest` | 1.0.4 (fix commit `a543201`, not prepared); 1.0.3 evaluated No-ship | 1.0.3 **No-ship** (evaluated 2026-10-15): security scan failed on the override phrase in `steering_guard.py`; package ruleset wants devPreview. 1.0.4 fixes the phrase. Earlier history: [version history](#01-engagement-closeout--knowledge-harvest) | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Manifest switched to devPreview; prepare 1.0.4 and create its Cowork task | operator |
+| 02 | `engagement-staffing-bench-match` | 1.1.6 (fix commit `482f346`, not prepared); 1.1.5 evaluated No-ship | 1.1.5 **No-ship** (evaluated 2026-10-15): security scan and `fit-score` trust-and-safety (9/10) failed. 1.1.6 applies all three fixes. Earlier history: [version history](#02-engagement-staffing--bench-match) | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Manifest switched to devPreview; prepare 1.1.6 and create its Cowork task | operator |
+| 03 | `engagement-mobilization-onboarding-pack` | 1.0.5 (fix commit `57453b4`, not prepared); 1.0.4 evaluated No-ship | 1.0.4 **No-ship** (evaluated 2026-10-15): security scan failed on the override phrase; package ruleset wants devPreview and `packageName`. 1.0.5 fixes the phrase. Earlier history: [version history](#03-engagement-mobilization--onboarding-pack) | No | No | No (1.0.2: Yes) | No | No | Manifest switched to devPreview; prepare 1.0.5 and create its Cowork task | operator |
+| 04 | `time-expense-narrative-compliance` | 1.0.7 (fix commit `2ff1efb`, not prepared); 1.0.6 evaluated No-ship | 1.0.6 **No-ship** (evaluated 2026-10-15): behavioral 17/19 (89.5%) and security scan failed. 1.0.7 applies all three fixes. Earlier history: [version history](#04-time--expense-narrative-compliance) | No | No | No (1.0.4: Yes) | No | No | Manifest switched to devPreview; prepare 1.0.7 and create its Cowork task | operator |
+| 05 | `deliverable-review-quality-gate` | 1.0.7 (fix commit `1096892`, not prepared); 1.0.6 evaluated No-ship | 1.0.6 **No-ship** (evaluated 2026-10-15): security scan failed on the override phrase (8 findings). 1.0.7 applies both fixes. Earlier history: [version history](#05-deliverable-review--quality-gate) | No | No | No (1.0.4: Yes) | No | No | Manifest switched to devPreview; prepare 1.0.7 and create its Cowork task | operator |
 
 Notes on the board:
 
@@ -213,7 +214,7 @@ Owner decisions:
 4. **Next round.** After the manifest decision: prepare all five new versions, push, then run the
    watchers on the owner's new Cowork tasks.
 
-Open: **manifest format.** Cowork's package ruleset (v9) fails every package on three rows: the
+Resolved below: **manifest format.** Cowork's package ruleset (v9) fails every package on three rows: the
 devPreview `$schema`, `manifestVersion: devPreview` and a missing `packageName`. Closeout and
 Mobilization rated them required; the other three rated them advisory. This is a conflict, not a
 missing fix:
@@ -238,9 +239,14 @@ Toolkit Validation from the process".
   `atkValidated` receipt field are gone. Cowork's evaluation is the package check. This supersedes
   the "Acceptance requires `atk validate --package-file`" sentence of the 2026-10-12 decision.
   Version-history rows that recorded an `atk validate` result stay as written.
-- Still open: whether this also settles the manifest format above in Cowork's favour (devPreview
-  `$schema`, `manifestVersion: devPreview` and `packageName`). Doing so means changing the 1.28
-  check in `scripts\mos3-package.ts`, so it waits for an explicit owner answer.
+- **Manifest format: devPreview** (owner: "switch to devPreview"). All five manifests move to the
+  devPreview `$schema`, `manifestVersion: devPreview` and `packageName`
+  `com.microsoft.cowork.<slug>`, in the pending versions (Closeout 1.0.4, Staffing 1.1.6,
+  Mobilization 1.0.5, T&E 1.0.7, DRQG 1.0.7) with CHANGELOG entries. `scripts\mos3-package.ts`
+  now requires these values and rejects 1.28; its two 1.28 assertions in `mos3-package.test.ts`
+  are inverted by owner direction and three `packageName` checks are added. This reverses the 1.28
+  choice of the 2026-10-12 decision. Cowork's PKG-M003 rows should clear; whether its PKG-V001
+  schema check also accepts devPreview is confirmed by the round-2 reports.
 
 ### Owner decision: simplify the release process (2026-10-15)
 

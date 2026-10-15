@@ -2,10 +2,11 @@
 
 ## 1.0.7 - 2026-10-14
 
-Applies the blocker fixes from the Cowork evaluation of 1.0.6 (automated verdict No-ship: security scan failure, instruction-override phrasing in shipped files). Only reference prose, comments and docstrings change; no rule, pattern, engine logic, `steering_guard` `__version__` (still 1.1.7) or engine version stamp changes.
+Applies the blocker fixes from the Cowork evaluation of 1.0.6 (automated verdict No-ship: security scan failure, instruction-override phrasing in shipped files). Apart from the manifest format (F-08), only reference prose, comments and docstrings change; no rule, pattern, engine logic, `steering_guard` `__version__` (still 1.1.7) or engine version stamp changes.
 
 - **F-01 (blocker, security scan):** `references/quality-gate-criteria.md` #8.5 quoted a literal instruction-override phrase as the example citation in the G8 withholding rule. It now describes it ("a citation that carries an instruction-override sentence"). The five skill copies stay byte-identical.
 - **F-02 (blocker, security scan):** the `steering_guard.py` module docstring (1.1.7 note) quoted the same phrase as a changelog example. It now reads "an instruction-override sentence recommending C-201". The same pass rewords the two copies split across lines in `steering_guard.py` (the `split_partners` docstring and the `_SENT_END` comment) and the one in the `split_partners` comment in `assertion_rules.py`, so no shipped file carries the phrase whole or split. The three skill copies of each file stay byte-identical; `steering_guard.py` now differs from the shared 1.1.7 source in those comment and docstring lines only.
+- **F-08 (manifest format, owner decision 2026-10-15):** `manifest.json` moves to the devPreview `$schema` and `manifestVersion: devPreview` and adds `packageName` `com.microsoft.cowork.deliverable-review-quality-gate`, as Cowork's package validation requires.
 - Version 1.0.7 in `metadata.json`, `manifest.json` and every `SKILL.md`.
 
 ## 1.0.6 - 2026-10-13

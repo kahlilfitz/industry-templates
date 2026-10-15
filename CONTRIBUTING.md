@@ -37,7 +37,8 @@ leaf folder name — lowercase and hyphenated, e.g. `quality-inspection` → `/t
 
 ### MOS3 app package (opt-in)
 
-A submission can instead build as a **MOS3 Microsoft 365 app package** (manifest schema 1.28), the
+A submission can instead build as a **MOS3 Microsoft 365 app package** (manifest schema
+devPreview with a `packageName`, as Cowork's package validation requires), the
 format in the "Building a Cowork Plugin — Partner Team Guide". Opt in with
 `"packageFormat": "mos3"` in `metadata.json`; without it the layout above applies. The five
 Professional Services Wave 1 plugins use it; every other submission is unchanged.
@@ -51,7 +52,8 @@ submissions/<industry>/<slug>/
 ├── demo-data/               # synthetic demo data, never bundled
 ├── tests/                   # the plugin's own tests, never bundled
 └── the package (the only files in the ZIP, at its root, no wrapper folder):
-    ├── manifest.json        # 1.28 manifest: GUID id, "Microsoft Corporation" developer,
+    ├── manifest.json        # devPreview manifest: packageName com.microsoft.cowork.<slug>,
+    │                        # GUID id, "Microsoft Corporation" developer,
     │                        # description.full ending with the four required links
     ├── color.png            # 192×192
     ├── outline.png          # 32×32, white on transparent

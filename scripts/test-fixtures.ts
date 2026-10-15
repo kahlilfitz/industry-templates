@@ -109,7 +109,8 @@ export function skillMd(name: string, version = "1.2.3", extra = ""): string {
 export function validManifest(version = "1.2.3", skills = ["alpha-skill", "beta-skill"]): Record<string, unknown> {
   return {
     $schema: MOS3_SCHEMA,
-    manifestVersion: "1.28",
+    manifestVersion: "devPreview",
+    packageName: "com.microsoft.cowork.demo-plugin",
     version,
     id: "0f8c3a52-6d1e-4b7a-9c2d-3e4f5a6b7c8d",
     developer: {

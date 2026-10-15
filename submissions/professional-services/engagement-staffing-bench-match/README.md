@@ -30,7 +30,7 @@ A signed SOW or mobilisation request, role requirements and start dates, skills 
 
 ## Package
 
-This plugin ships as a Microsoft 365 app package (MOS3, manifest 1.28): `manifest.json`, `color.png`, `outline.png` and the five `skills/<name>/` folders at the ZIP root. Each skill carries its own copy of the contract and both references, and the engine skills carry `scripts/safety_text.py`; `skills/fit-score/` holds the canonical copy of every shared file, and the test suite fails if any copy differs. This README, `CHANGELOG.md`, `metadata.json` and `listing-metadata.md` are not in the package.
+This plugin ships as a Microsoft 365 app package (MOS3, devPreview manifest with `packageName`): `manifest.json`, `color.png`, `outline.png` and the five `skills/<name>/` folders at the ZIP root. Each skill carries its own copy of the contract and both references, and the engine skills carry `scripts/safety_text.py`; `skills/fit-score/` holds the canonical copy of every shared file, and the test suite fails if any copy differs. This README, `CHANGELOG.md`, `metadata.json` and `listing-metadata.md` are not in the package.
 
 ## Tests and demo data
 

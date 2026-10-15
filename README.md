@@ -104,7 +104,7 @@ submissions/<industry>/<slug>/   ← the only folder contributors touch
 public/bundles/<slug>.zip    ← GENERATED download package
 ```
 
-A submission opts into the **MOS3 Microsoft 365 app package** (manifest schema 1.28) with
+A submission opts into the **MOS3 Microsoft 365 app package** (manifest schema devPreview with a `packageName`) with
 `"packageFormat": "mos3"` in `metadata.json`. Its ZIP holds only `manifest.json`, `color.png`,
 `outline.png` and `skills/` at the root, with no wrapper folder, README or fixtures; its README,
 demo data and tests stay in the submission folder. `bundleTests` applies only to the

@@ -135,8 +135,11 @@ test("the importer fails a bad MOS3 submission and an unknown packageFormat with
 
 test("manifest rules: schema, developer, links, identity, keys and agentSkills", () => {
   const manifest = (edit: (m: Record<string, any>) => void) => (dir: string) => editJson(join(dir, "manifest.json"), edit);
-  expectError(manifest((m) => (m.$schema = m.$schema.replace("v1.28", "vDevPreview"))), /\$schema must be exactly/);
-  expectError(manifest((m) => (m.manifestVersion = "devPreview")), /manifestVersion must be "1\.28"/);
+  expectError(manifest((m) => (m.$schema = m.$schema.replace("vDevPreview", "v1.28"))), /\$schema must be exactly/);
+  expectError(manifest((m) => (m.manifestVersion = "1.28")), /manifestVersion must be "devPreview"/);
+  expectError(manifest((m) => delete m.packageName), /packageName is required/);
+  expectError(manifest((m) => (m.packageName = `com.microsoft.${"x".repeat(51)}`)), /packageName is 65 characters/);
+  expectError(manifest((m) => (m.packageName = "DemoPlugin")), /packageName must be lowercase reverse-domain/);
   expectError(manifest((m) => (m.developer.name = "Microsoft")), /developer\.name must be exactly "Microsoft Corporation"/);
   expectError(manifest((m) => (m.developer.privacyUrl = "http://example.com")), /developer\.privacyUrl must be an https/);
   expectError(manifest((m) => (m.id = "demo-plugin")), /id must be a GUID/);

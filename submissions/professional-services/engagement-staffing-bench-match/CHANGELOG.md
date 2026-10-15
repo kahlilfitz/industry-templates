@@ -24,6 +24,9 @@ in `BACKLOG.md`.
   renames its `extra` callable parameter to `extra_contributors` (both copies, constraint-check and
   slate-draft), and the callers in `constraint_check.govern()` and `slate_validate.py` pass it by
   the new name, so Bandit's Django `.extra()` heuristic no longer matches. No behaviour change.
+- **F-09 (manifest format, owner decision 2026-10-15).** `manifest.json` moves to the devPreview
+  `$schema` and `manifestVersion: devPreview` and adds `packageName`
+  `com.microsoft.cowork.engagement-staffing-bench-match`, as Cowork's package validation requires.
 - Version 1.1.6 in `metadata.json`, `manifest.json` and every `SKILL.md`.
 
 ## 1.1.5 - 2026-10-12

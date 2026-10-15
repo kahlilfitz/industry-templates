@@ -2,8 +2,8 @@
  * MOS3 Microsoft 365 app package support: validation and packaging for submissions that set
  * `"packageFormat": "mos3"` in metadata.json.
  *
- * The rules follow the "Building a Cowork Plugin — Partner Team Guide": a manifest 1.28
- * `manifest.json` at the ZIP root, the two icons next to it, and one canonical Agent Skill per
+ * The rules follow the "Building a Cowork Plugin — Partner Team Guide", with the manifest format
+ * Cowork's package validation requires (devPreview schema with a `packageName`): `manifest.json` at the ZIP root, the two icons next to it, and one canonical Agent Skill per
  * `skills/<name>/` folder. Nothing else ships: README, demo data and tests stay in the submission
  * folder (`demo-data\`, `tests\`) outside the package.
  */
@@ -13,8 +13,11 @@ import { inflateSync } from "node:zlib";
 import { isBuildLitter, walkNoFollow, writeReproducibleZip } from "./package-files.js";
 
 export const MOS3_SCHEMA =
-  "https://developer.microsoft.com/json-schemas/teams/v1.28/MicrosoftTeams.schema.json";
-export const MOS3_MANIFEST_VERSION = "1.28";
+  "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json";
+export const MOS3_MANIFEST_VERSION = "devPreview";
+/** devPreview schema: reverse-domain notation, at most 64 characters. */
+export const MOS3_PACKAGE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$/;
+export const MOS3_PACKAGE_NAME_MAX = 64;
 export const MOS3_DEVELOPER_NAME = "Microsoft Corporation";
 
 /** The four links the Partner Team Guide requires at the end of `description.full`, in order. */
@@ -28,6 +31,7 @@ export const MOS3_REQUIRED_LINKS: ReadonlyArray<readonly [string, string]> = [
 export const MOS3_ALLOWED_MANIFEST_KEYS = new Set([
   "$schema",
   "manifestVersion",
+  "packageName",
   "version",
   "id",
   "developer",
@@ -513,7 +517,7 @@ function validateSkill(dir: string, name: string, version: string, out: Mos3Resu
       } else {
         const m = metadata as Record<string, unknown>;
         if (typeof m.icon !== "string" || !m.icon.trim()) {
-          err("SKILL.md metadata.icon is required (a Fluent icon ID); the 1.28 manifest has no per-skill icons");
+          err("SKILL.md metadata.icon is required (a Fluent icon ID); the manifest has no per-skill icons");
         }
         if (typeof m.version !== "string" || m.version !== version) {
           err(
@@ -579,13 +583,20 @@ function validateManifest(manifest: Record<string, unknown>, version: string, sk
   for (const key of Object.keys(manifest)) {
     if (MOS3_ALLOWED_MANIFEST_KEYS.has(key)) continue;
     if (/starter/i.test(key)) {
-      err(`"${key}" is not allowed; the 1.28 manifest has no conversation starters (keep them in the metadata template)`);
+      err(`"${key}" is not allowed; the manifest has no conversation starters (keep them in the metadata template)`);
     } else {
       err(`unknown top-level key "${key}"; allowed keys are ${[...MOS3_ALLOWED_MANIFEST_KEYS].join(", ")}`);
     }
   }
-  if (manifest.$schema !== MOS3_SCHEMA) err(`$schema must be exactly ${MOS3_SCHEMA} (the released 1.28 schema, not Dev Preview)`);
+  if (manifest.$schema !== MOS3_SCHEMA) err(`$schema must be exactly ${MOS3_SCHEMA} (Cowork's package validation requires devPreview)`);
   if (manifest.manifestVersion !== MOS3_MANIFEST_VERSION) err(`manifestVersion must be "${MOS3_MANIFEST_VERSION}"`);
+  if (typeof manifest.packageName !== "string" || !manifest.packageName.trim()) {
+    err("packageName is required (reverse-domain notation, for example com.microsoft.cowork.<slug>)");
+  } else if (manifest.packageName.length > MOS3_PACKAGE_NAME_MAX) {
+    err(`packageName is ${manifest.packageName.length} characters; it must be ${MOS3_PACKAGE_NAME_MAX} or fewer`);
+  } else if (!MOS3_PACKAGE_NAME.test(manifest.packageName)) {
+    err("packageName must be lowercase reverse-domain notation, for example com.microsoft.cowork.<slug>");
+  }
   if (typeof manifest.id !== "string" || !GUID.test(manifest.id)) err("id must be a GUID, not a text slug");
   if (typeof manifest.version !== "string" || !MANIFEST_SEMVER.test(manifest.version)) {
     err("version must be a MAJOR.MINOR.PATCH string");

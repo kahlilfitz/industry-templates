@@ -40,7 +40,7 @@ Screening is linear in the number of records, so a large closeout is processed w
 
 ## Package
 
-From 1.0.3 the plugin ships as a MOS3 Microsoft 365 app package (manifest 1.28). The ZIP holds only `manifest.json`, `color.png`, `outline.png` and `skills/`. Each skill is self-contained: it carries its own copy of the contract (`contracts/`), the three rule references (`references/`) and, for the engine skills, its Python engine (`scripts/`). The engines use the Python 3 standard library only and read and write only the paths given by `--input` and `--out`.
+From 1.0.3 the plugin ships as a MOS3 Microsoft 365 app package (devPreview manifest with `packageName`). The ZIP holds only `manifest.json`, `color.png`, `outline.png` and `skills/`. Each skill is self-contained: it carries its own copy of the contract (`contracts/`), the three rule references (`references/`) and, for the engine skills, its Python engine (`scripts/`). The engines use the Python 3 standard library only and read and write only the paths given by `--input` and `--out`.
 
 ## Tests and demo data
 
