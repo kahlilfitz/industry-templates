@@ -33,13 +33,6 @@ Cowork's `recommendations.html` decides what changes between versions.
   internal review.
 - Cowork's built-in evaluation is the plugin evaluation. Never send tests or demo data to Cowork.
 
-## Skills in sub-agents
-
-QA review, fix and test sub-agents in this repository do not invoke skills unless their prompt
-names one; they work from the prompt and the repository. A Cowork plugin-engineering skill (such as
-`cowork-plugin-engineer`) applies only to Cowork packaging, manifest, OAuth and ZIP-validation
-work, never to engine correctness reviews or fixes.
-
 ## SharePoint library (`sharepoint\`)
 
 `sharepoint\` is a gitignored link to the OneDrive-synced Industry Templates SharePoint library

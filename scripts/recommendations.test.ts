@@ -77,7 +77,7 @@ test("renderFixBrief lists only blocker and required fixes with the guardrails",
   assert.match(brief, /### R2 \(required\)/);
   assert.doesNotMatch(brief, /### R3/);
   assert.match(brief, /Set the version to 1\.0\.7/);
-  assert.match(brief, /Do not invoke skills/);
+  assert.doesNotMatch(brief, /Do not invoke skills/);
   assert.match(brief, /Do not push/);
   assert.match(brief, /listing-metadata\.md/);
   assert.match(brief, /Set every engine version label .* to 1\.0\.7/);

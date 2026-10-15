@@ -243,6 +243,11 @@ In every report so far, package validation (PKG-V001, ruleset v9) passed on the 
   Under the new rule it also set the engine labels (1.0.6) to 1.0.8 and regenerated the demo
   outputs (labels only). The result is 1.0.8 (`75f0540`), suite 169/169. 9 advisories to
   `BACKLOG.md`.
+- **Skills and the Agents Toolkit removed** (owner: "remove both and remove the don't use skills
+  instruction"). The user-level `cowork-plugin-engineer` skill, whose scripts run `atk`, and the
+  cached Agents Toolkit CLI were uninstalled. The fix brief no longer says "Do not invoke skills" (its
+  assertion in `recommendations.test.ts` is inverted by owner direction), and the "Skills in
+  sub-agents" section of `AGENTS.md` is deleted.
 - **Staffing labels: open.** Bumping Staffing 1.1.7's engine labels from 1.1.5 to 1.1.7 breaks an
   existing Cowork-driven check: `test_main_demotes_unsafe_recommendation` asserts the literal
   `slate_validate/1.1.5`. That change is held uncommitted for the owner, who must choose one of:

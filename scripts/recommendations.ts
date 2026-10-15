@@ -124,7 +124,6 @@ export function renderFixBrief(input: BriefInput): string {
     "",
     "## Rules",
     "",
-    "- Do not invoke skills; work from this brief and the repository.",
     "- Apply only the fixes listed below, in order. Each fix must address its evidence.",
     "- Follow CONTRIBUTING.md and docs/release-process.md.",
     "- Change only files in the plugin folder. Include its BACKLOG.md in the commit if it has uncommitted changes.",
