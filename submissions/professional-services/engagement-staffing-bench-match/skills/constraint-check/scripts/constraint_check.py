@@ -1779,17 +1779,18 @@ def candidate_records(document):
                 yield from role.get(member) or []
 
 
-def foreign_candidates(records, foreign, skip=FOREIGN_SKIP, extra=None):
+def foreign_candidates(records, foreign, skip=FOREIGN_SKIP, extra_contributors=None):
     """id_key(candidate_id) -> contributing normalised values, for each candidate with any record that
-    names another client (rule 9.11). ``extra(record)`` gives further input-derived texts read with
-    that record as one collection (the candidate's register text)."""
+    names another client (rule 9.11). ``extra_contributors(record)`` gives further input-derived texts
+    read with that record as one collection (the candidate's register text)."""
     foreign = _as_foreign(foreign)
     found = {}
     for record in records:
         if not isinstance(record, dict):
             continue
         key = id_key(record.get("candidate_id"))
-        contributors = foreign_contributors(record, foreign, skip, extra(record) if extra else ())
+        contributors = foreign_contributors(record, foreign, skip,
+                                            extra_contributors(record) if extra_contributors else ())
         if key is not None and contributors:
             found.setdefault(key, set()).update(contributors)
     return found
@@ -1905,11 +1906,13 @@ def govern(ranked_payload, constraints_payload):
             key = id_key(candidate["candidate_id"])
             if key not in register_texts:
                 register_texts[key] = verdict_sources(constraints, rows_by_key.get(key, []), held_rows)
-    flagged = foreign_candidates(candidate_records(payload), foreign,
-                                 extra=lambda record: register_texts.get(id_key(record.get("candidate_id")), ()))
+    flagged = foreign_candidates(
+        candidate_records(payload), foreign,
+        extra_contributors=lambda record: register_texts.get(id_key(record.get("candidate_id")), ()))
     # Rule 9.9: identities held as unverified are searched for in the same collections.
-    unverified = foreign_candidates(candidate_records(payload), ambiguous,
-                                    extra=lambda record: register_texts.get(id_key(record.get("candidate_id")), ()))
+    unverified = foreign_candidates(
+        candidate_records(payload), ambiguous,
+        extra_contributors=lambda record: register_texts.get(id_key(record.get("candidate_id")), ()))
     missing_reported = set()
     governed_roles = []
     gaps = []

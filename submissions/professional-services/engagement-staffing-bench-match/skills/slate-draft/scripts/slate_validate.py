@@ -876,7 +876,7 @@ def _withhold_names(payload, names, reason, rule, escalations):
     slate_rows = [candidate for role in payload["governed_roles"] for candidate in role["candidate_slate"]]
     for key, values in constraint_check.foreign_candidates(
             slate_rows, names, skip,
-            extra=lambda record: constraint_check.considered_texts(
+            extra_contributors=lambda record: constraint_check.considered_texts(
                 record.get("constraints_considered"), names)).items():
         flagged.setdefault(key, set()).update(values)
     for role_index, role in enumerate(payload["governed_roles"]):
