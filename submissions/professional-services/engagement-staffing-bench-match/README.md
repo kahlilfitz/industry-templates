@@ -30,7 +30,7 @@ A signed SOW or mobilisation request, role requirements and start dates, skills 
 
 ## Package
 
-This plugin ships as a Microsoft 365 app package (MOS3, devPreview manifest with `packageName`): `manifest.json`, `color.png`, `outline.png` and the five `skills/<name>/` folders at the ZIP root. Each skill carries its own copy of the contract and both references, and the engine skills carry `scripts/safety_text.py`; `skills/fit-score/` holds the canonical copy of every shared file, and the test suite fails if any copy differs. This README, `CHANGELOG.md`, `metadata.json` and `listing-metadata.md` are not in the package.
+This plugin ships as a Microsoft 365 app package (MOS3, devPreview manifest with `packageName`): `manifest.json`, `color.png`, `outline.png` and the five `skills/<name>/` folders at the ZIP root. Each skill carries its own copy of the contract and both references, and the engine skills carry `scripts/safety_text.py`; `skills/fit-score/` holds the canonical copy of every shared file. This README, `CHANGELOG.md`, `metadata.json` and `listing-metadata.md` are not in the package.
 
 ## Tests and demo data
 
@@ -42,8 +42,9 @@ python tests\test_engines.py --plugin-root <extracted ZIP>     # against a built
 python tests\test_engines.py --list-groups                     # then --group <name>, repeatable
 ```
 
-Each test prints a `PASS` or `FAIL` line as it finishes; the last line is `N/M checks passed`. See
-that folder's `README.md` for what each group and scenario covers.
+Each test prints a `PASS` or `FAIL` line as it finishes; the last line is `N/M checks passed`. The
+suite holds only checks that answer Cowork evaluation findings. See that folder's `README.md` for
+what each group and scenario covers.
 
 ## Boundaries
 

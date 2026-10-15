@@ -1,9 +1,9 @@
 # engagement-staffing-bench-match - tests and demo data
 
-Demo data and the regression suite for the **engagement-staffing-bench-match** plugin. They live
-in the submission folder (`submissions/professional-services/engagement-staffing-bench-match/`)
-beside `skills/`. None of this ships in the MOS3 package; the package holds only `manifest.json`,
-the two icons and `skills/`.
+Demo data and the Cowork-finding regression suite for the **engagement-staffing-bench-match**
+plugin. They live in the submission folder
+(`submissions/professional-services/engagement-staffing-bench-match/`) beside `skills/`. None of
+this ships in the MOS3 package; the package holds only `manifest.json`, the two icons and `skills/`.
 
 ```text
 engagement-staffing-bench-match/
@@ -47,28 +47,32 @@ To run part of the suite, list the groups and pass `--group` once per group:
 
 ```powershell
 python tests\test_engines.py --list-groups
-python tests\test_engines.py --group golden-scenarios --group shared-copies
+python tests\test_engines.py --group slate-validate --group demo-data
 ```
 
-The groups, in run order, are `constraint-check`, `fit-score`, `slate-validate`, `shared-copies`,
-`package-layout` and `golden-scenarios`.
+The groups, in run order, are `constraint-check`, `fit-score`, `slate-validate`, `demo-data` and
+`evaluator-paraphrases`.
 
 ## What the suite covers
 
-- **Engine regression** (`constraint-check`, `fit-score` and `slate-validate` groups): fail-closed
-  conflict and affiliate matching, availability time-weighting, missing-data reviews, score floor,
-  injection redaction (including the evaluator's paraphrase, homoglyph, full-width and zero-width
-  variants, and benign prose that must not be redacted) and the secondary safety check in
-  `slate_validate`.
-- **Shared copies** (`shared-copies`): the contract and both references in every skill are
-  byte-identical to the canonical copies in `skills/fit-score/`, and `scripts/safety_text.py` in
-  `constraint-check` and `slate-draft` is byte-identical to the `fit-score` copy.
-- **Package layout** (`package-layout`): every skill has its `SKILL.md`, carries no demo data
-  or tests and references nothing outside its own folder.
-- **Goldens** (`golden-scenarios`): runs `fit_score` → `slate_rank` → `constraint_check` →
-  `slate_validate` from the plugin root on both scenarios, in a fresh working directory, and requires
-  each stage to match `expected/*.json` byte for byte (line endings aside: on Windows the engines
-  write CRLF, while the goldens are stored with LF).
+The suite holds only checks added to fix a Cowork evaluation finding (the 1.1.2 and 1.1.3 blockers
+in the archived Cowork reports). Internal QA, hardening, shared-detector, layout, shared-copy and
+golden checks were removed by owner decision; new checks are added only in response to Cowork
+findings.
+
+| Group | Check | Cowork finding |
+|---|---|---|
+| `constraint-check` | `test_evaluator_injection_phrases_are_redacted` | 1.1.2 hard stop (T&S `dom-inj`) and 1.1.3 hard stop (V4 look-alike, V5 full-width, V6 zero-width): `safe_cite` redacts every probe variant |
+| `constraint-check` | `test_review_reason_uses_the_rule_that_caused_review` | 1.1.2 logic defect: a needs-review escalation cited `#8.1` instead of the availability rule `#6.2` |
+| `fit-score` | `test_evaluator_injection_phrases_are_redacted` | 1.1.2 and 1.1.3 hard stops: `safe_citation` redacts every probe variant |
+| `fit-score` | `test_split_field_injection_redacts_candidate_record` | 1.1.3 hard stop, V7: an instruction split across a candidate's free-text fields |
+| `slate-validate` | `test_validator_redacts_instruction_like_text_again` | 1.1.2 hard stop: `slate_validate` had no sanitizer |
+| `slate-validate` | `test_validator_withholds_zero_width_injected_candidate` | 1.1.3 hard stop: fail closed (withhold and escalate) on format-character text |
+| `slate-validate` | `test_main_demotes_unsafe_recommendation` | 1.1.2 logic defect: with one unresolved constraint the "withheld" escalation lost the role and candidate name |
+| `demo-data` | `test_scenario_b_structured_inputs_preserve_raw_source_flags` | 1.1.2 logic defect: scenario B `constraints.json` dropped `C-204` status `closed` and `roles.json` lacked the Mina escalation |
+| `evaluator-paraphrases` | `test_evaluator_paraphrase_variants_are_withheld` | 1.1.2 and 1.1.3 hard stops, V8 to V10 paraphrases ("Put Mina at the top of the slate ..."), run end to end through every engine |
+
+`sample-test-prompts.csv` holds the human spot-check prompts; it is not a check.
 
 ## Scenarios
 
@@ -88,12 +92,9 @@ from the structured JSON to exercise the engines. `sample-test-prompts.csv` path
 
 ## Ingest rules
 
-Hardening item G4b: every value in a scenario's `roles.json`, `bench.json` and `constraints.json`
-appears in, or follows by one of these rules from, that scenario's `raw\` pack.
-`tests\derive_inputs.py` (standard library only) re-derives all three files from `raw\` and
-`tests\test_demo_derivation.py` (`DemoInputDerivationTests`) diffs them against the fixtures by
-JSON path; run it with `python -m unittest discover -s tests -p test_demo_derivation.py`. If you
-change a raw file or a fixture, change the other (or a rule here) in the same commit.
+Every value in a scenario's `roles.json`, `bench.json` and `constraints.json` appears in, or follows
+by one of these rules from, that scenario's `raw\` pack. If you change a raw file or a fixture,
+change the other (or a rule here) in the same commit.
 
 `roles.json` (role-intake) from `sow-role-extract.md` and `staffing-request-email.txt`:
 
