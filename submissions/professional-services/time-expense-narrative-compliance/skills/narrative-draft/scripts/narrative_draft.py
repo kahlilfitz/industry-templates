@@ -43,7 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = signal_policy.DRAFT_ENGINE  # "engine:narrative_draft"
-ENGINE_VERSION = signal_policy.STAGE_VERSIONS["drafted"]  # "narrative_draft/1.0.8", shared with later re-derivations
+ENGINE_VERSION = signal_policy.STAGE_VERSIONS["drafted"]  # "narrative_draft/1.0.9", shared with later re-derivations
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 
 

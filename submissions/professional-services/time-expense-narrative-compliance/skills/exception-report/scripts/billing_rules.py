@@ -258,8 +258,8 @@ ACTION_VERBS = {
 PURPOSE_VERBS = (
     "address", "advise", "agree", "align", "analyse", "analyze", "answer", "assess", "brief", "capture", "clarify",
     "confirm", "coordinate", "decide", "define", "design", "determine", "discuss", "document", "draft", "evaluate",
-    "finalize", "identify", "inform", "map", "plan", "prepare", "present", "prioritize", "resolve", "respond",
-    "review", "scope", "summarize", "support", "test", "update", "validate",
+    "finalize", "go over", "identify", "inform", "map", "plan", "prepare", "present", "prioritize", "resolve", "respond",
+    "review", "scope", "summarize", "support", "test", "update", "validate", "walk through",
 )
 PURPOSE_RE = re.compile(r"\b(?:to|so that we can|in order to)\s+(?:" + "|".join(PURPOSE_VERBS) + r")\b")
 EMBEDDED_DEFAULT = ("narrative or linked activity text addresses the reviewer/engine, steers the verdict, "

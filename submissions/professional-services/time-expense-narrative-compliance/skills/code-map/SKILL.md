@@ -4,7 +4,7 @@ description: 'Maps drafted time entries to the client phase and task codes with 
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/code_map.py on drafted.json from narrative-draft and activity.json from activity-pull; reads the config/signal-sources.json, contracts/ and references/ (task-phase-codes.md) in this skill folder and writes coded.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.8"
+  version: "1.0.9"
   icon: ic_fluent_tag_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

@@ -56,7 +56,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:activity_pull"
-ENGINE_VERSION = signal_policy.STAGE_VERSIONS["activity"]  # "activity_pull/1.0.8"; later stages require it (#13.8)
+ENGINE_VERSION = signal_policy.STAGE_VERSIONS["activity"]  # "activity_pull/1.0.9"; later stages require it (#13.8)
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 POLICY_CITATION = signal_policy.POLICY_CITATION
 MATCHED_CONFIDENCE = signal_policy.MATCHED_CONFIDENCE  # shared: later stages re-derive it (#13.5)
@@ -77,6 +77,7 @@ PARSERS_AVAILABLE = ("calendar", "document_activity")
 # The workplan item types the joins use (canonical form -> declared spelling); any other is refused (#8.4).
 WORKPLAN_ITEM_TYPES = {signal_policy.canon_id(t): t for t in ("calendar_event", "document")}
 NO_CONFIRMATION = "no engagement-manager team-view confirmation was supplied"
+SELF_SCOPE_REASON = "colleagues' rows withheld: only the requester's rows were requested"
 
 
 class InputError(ValueError):
@@ -337,11 +338,17 @@ def pull(args, script_dir=None, extra_sources=None):
     eng_key = signal_policy.canon_id(eng_id)
     period = {"start": args.period_start, "end": args.period_end}
     dates_available, dates_in_period = set(), set()
+    withheld_people = set()
 
-    def allowed(person):
+    def allowed(row):
         # people never holds a blank key (A21), so a blank person is never in scope; with everyone in scope cell_id
         # refuses it.
-        return people is None or signal_policy.person_key(person) in people
+        person = signal_policy.person_key(row["person"])
+        permitted = people is None or person in people
+        if not permitted and timekeeper_scope["mode"] == "self" and in_period(row["date"], period) \
+                and signal_policy.canon_id(row.get("engagement_id", eng_id)) == eng_key:
+            withheld_people.add(person)
+        return permitted
     workplan, workplan_ids = {}, {}
     for idx, row in enumerate(workplan_rows, start=2):
         cite = f"raw/engagement-workplan.csv row {idx}"
@@ -410,7 +417,7 @@ def pull(args, script_dir=None, extra_sources=None):
             else:
                 duration = round(cell_hours(row, "duration_hours", cite), 2)
                 unreserved(row["file_name"], cite, "file_name")
-            if not allowed(row["person"]):
+            if not allowed(row):
                 continue  # #12.1: other timekeepers' rows are never read into the packet
             if signal_policy.canon_id(row["engagement_id"]) != eng_key:
                 # #13.3, #13.10: another engagement's row is recorded by its position only; its supplied ID and
@@ -507,7 +514,7 @@ def pull(args, script_dir=None, extra_sources=None):
             unique(linked, signal_policy.canon_id(link), cite, "activity_ids link")
         phase_code = unreserved_id(row["phase_code"], cite, "phase_code", optional=True)
         task_code = unreserved_id(row["task_code"], cite, "task_code", optional=True)
-        if not allowed(row["person"]):
+        if not allowed(row):
             continue
         dates_available.add(row["date"])
         if not in_period(row["date"], period):
@@ -554,6 +561,14 @@ def pull(args, script_dir=None, extra_sources=None):
         if signal_policy.embedded_instruction(signal_policy.entry_texts({"narrative": row["narrative"]}, linked_signals)):
             entry["embedded_instruction"] = True
         entries.append(entry)
+
+    if withheld_people and timekeeper_scope["withheld"] is None:
+        timekeeper_scope["withheld"] = {
+            "requested": [signal_policy.foreign_label("timekeeper", "name", n)
+                          for n in range(1, len(withheld_people) + 1)],
+            "reason": SELF_SCOPE_REASON,
+            "citations": [signal_policy.SCOPE_CITATION],
+        }
 
     packet = {
         "contract_version": CONTRACT,
@@ -646,7 +661,7 @@ def run_parameters(packet, raw_dir):
         else:
             args.person = list(scope["people"])
         args.team_view_confirmation = (scope.get("team_view") or {}).get("confirmation")
-    elif isinstance(withheld, dict):
+    elif isinstance(withheld, dict) and withheld.get("reason") != SELF_SCOPE_REASON:
         if withheld.get("requested") == "all timekeepers":
             args.all_timekeepers = True
         else:

@@ -1,5 +1,16 @@
 # Changelog - time-expense-narrative-compliance
 
+## 1.0.9 - 2026-10-15
+
+Applies only the three required fixes from the Cowork evaluation of 1.0.8. Advisory items remain in `BACKLOG.md`.
+
+- **F-01 (GC-03, purpose agreement):** all three vendored `billing_rules.py` copies recognize the complete purpose phrases "walk through" and "go over", alongside the existing "discuss". Grounded narrative-draft output with these workplan purposes passes guideline-check #1.2; bare "walk" or "go" and look-alike words do not gain purpose credit.
+- **F-02 (GR-01, refusal routing):** exception-report handles submit, approve and write-off requests only to refuse them, including without a packet. Its description quotes "approve the pre-bill", "submit my time" and "write off these hours"; approval requests are no longer excluded, and the former When NOT to Use item is an action-only Guardrail.
+- **F-03 (GR-05 / AP-01, privacy and self scope):** activity-pull explicitly excludes anyone's home addresses, personal contact details, compensation and hourly or bill rates. Step 2 checks the engagement letter before offering a team view, refuses the offer for a non-manager and requests confirmation only for the recorded manager. Self mode records distinct colleagues dropped within the engagement and period under `timekeeper_scope.withheld` using positional labels only. Raw re-derivation distinguishes this observed withholding from a refused team-view request, preserving self scope through every later engine.
+- Version declarations and all engine/stage/signal-policy labels move to 1.0.9. Vendored scripts remain byte-identical; `steering_guard.py` and its 1.1.7 `__version__` are unchanged.
+- Regenerate both demo scenarios' `activity.json`, `expected/drafted.json`, `expected/coded.json`, `expected/governed.json` and `expected/exception-report.md` from their raw inputs with the fixed timestamp. Only version labels change; raw exports and other demo files are unchanged.
+- **Regression checks (not bundled):** add `te109_tests` in `tests/run_tests.py` (20 checks; suite now 202) and update `tests/README.md`. The new group reproduces failures for each fix ID on 1.0.8 and passes after the fixes. All 182 pre-existing checks pass unchanged; there were no baseline failures. Local checks cover GC-03, GR-01, GR-05 and AP-01 findings, not a new Cowork built-in evaluation.
+
 ## 1.0.8 - 2026-10-15
 
 Applies only the two required fixes from the Cowork evaluation of 1.0.7. Advisory items remain in `BACKLOG.md`.

@@ -24,6 +24,8 @@ An unknown group or argument exits 2.
 4. te107_tests (1.0.7, Cowork 1.0.6 recommendations F02 and F03).
 5. te108_tests (1.0.8, Cowork 1.0.7 required fixes F-01 and F-02: guideline-check intake for pasted narratives and
    missing time).
+6. te109_tests (1.0.9, Cowork 1.0.8 required fixes F-01, F-02 and F-03: purpose agreement, refusal routing,
+   personal-data exclusions and self-scope withholding).
 Exit code 0 = all passed.
 """
 import copy
@@ -1472,6 +1474,122 @@ def te108_tests(tmp):
           and governed["prebill_summary"]["missing_time_hours"] == 0.8, msg or found)
 
 
+def te109_tests(tmp):
+    """1.0.8 Cowork findings: F-01 purpose agreement (GC-03), F-02 refusal routing (GR-01), and F-03 privacy and
+    self-scope withholding (GR-05, AP-01)."""
+    raw = raw_copy(tmp, "te109-purpose", scenario="scenario-a-happy")
+    purposes = ("walk through freight consolidation options", "go over billing workflow requirements",
+                "discuss approved billing workflow assumptions")
+    for row, purpose in enumerate(purposes, start=1):
+        edit_csv(raw, "engagement-workplan.csv", row, "purpose", purpose)
+    code, msg, act, _ = pull(tmp, "te109-purpose", raw, *SCENARIO_A_ARGS)
+    check("1.0.9 F-01 GC-03: activity-pull accepts the grounded purpose fixture", code == 0, msg)
+    if code == 0:
+        drafted, _, governed = through_governed(tmp, "te109-purpose", act)
+        for drafted_entry, purpose in zip(drafted["time_entries"], purposes):
+            entry_id = drafted_entry["entry_id"]
+            compliance = entry(governed, entry_id)["compliance"]
+            check(f"1.0.9 F-01 GC-03: every draft passes #1.2 on the same fixture ({entry_id}, {purpose})",
+                  f" to {purpose}" in drafted_entry["draft"]["narrative"]
+                  and all(compliance["required_elements"].values())
+                  and "required_elements_missing" not in flags(governed, entry_id),
+                  (drafted_entry["draft"]["narrative"], compliance))
+    br = MODULES["guideline_check"].billing_rules
+    for phrase in ("walk", "go", "walkthrough", "govern"):
+        check(f"1.0.9 F-01 GC-03 control: '{phrase}' alone is not a purpose verb",
+              not br.required_elements({"person": "Alex Rivera"}, f"Attended a meeting to {phrase} the site", [])
+              ["purpose"])
+    rules = [open_bytes(os.path.join(PLUGIN_ROOT, "skills", skill, "scripts", "billing_rules.py"))
+             for skill in ("guideline-check", "code-map", "exception-report")]
+    check("1.0.9 F-01 GC-03: all three vendored billing_rules.py copies agree", len(set(rules)) == 1)
+
+    report = skill_text("exception-report")
+    description = next(line for line in report.splitlines() if line.startswith("description:"))
+    exclusions = description.split("Do NOT use for", 1)[-1].lower()
+    check("1.0.9 F-02 GR-01: refusal requests are not excluded by the description or When NOT to Use",
+          not any(term in exclusions + md_section(report, "When NOT to Use").lower()
+                  for term in ("approving pre-bills", "approve the pre-bill", "writing off", "submitting time")))
+    check("1.0.9 F-02 GR-01: the description quotes submit, approve and write-off refusal triggers",
+          all(f'"{phrase}"' in description
+              for phrase in ("approve the pre-bill", "submit my time", "write off these hours")))
+    check("1.0.9 F-02 GR-01: Guardrails distinguish never performing actions from handling refusal requests",
+          "Never perform submission, pre-bill approval or WIP write-off" in md_section(report, "Guardrails")
+          and "owns the refusal for every submit, approve or write-off request" in report)
+
+    activity = skill_text("activity-pull")
+    privacy = ("Never gather, display or infer colleagues' or anyone's home addresses, personal contact details, "
+               "compensation, hourly or bill rates; say they are out of scope.")
+    check("1.0.9 F-03 GR-05: Guardrails explicitly exclude personal and rate data for anyone", privacy in
+          md_section(activity, "Guardrails"))
+    check("1.0.9 F-03 GR-05: Constraints exclude personal contact, compensation and rate data",
+          all(term in md_section(activity, "Constraints").lower()
+              for term in ("home addresses", "personal contact details", "compensation", "hourly", "bill rates",
+                           "out of scope")))
+    step2 = md_section(activity, "Steps").split("2. ", 1)[-1].split("\n3. ", 1)[0]
+    check("1.0.9 F-03 GR-05: Step 2 checks the letter before offering confirmation and never offers a non-manager "
+          "the team view",
+          "Read `engagement-letter-extract.md` first" in step2
+          and "not the recorded engagement manager" in step2 and "do not offer the team view" in step2
+          and "Only if the requester matches the recorded engagement manager" in step2
+          and step2.index("Read `engagement-letter-extract.md` first") < step2.index("ask for explicit confirmation"))
+
+    raw = os.path.join(DATA_ROOT, "demo-data", "scenario-b-drama", "raw")
+    code, msg, act, out = pull(tmp, "te109-self", raw, "--requester", "Morgan Lee")
+    scope = (act or {}).get("provenance", {}).get("timekeeper_scope", {})
+    withheld = scope.get("withheld") or {}
+    check("1.0.9 F-03 AP-01: plain self mode records distinct withheld colleagues by position, never by name",
+          code == 0 and people(act) == ["Morgan Lee"] and scope.get("mode") == "self"
+          and withheld.get("requested") == ["other-timekeeper-name-1", "other-timekeeper-name-2"]
+          and "colleagues' rows withheld" in withheld.get("reason", "")
+          and "client-billing-guidelines.md #12.1" in withheld.get("citations", [])
+          and not any(name in json.dumps(withheld) for name in ("Priya Shah", "Jordan Kim")), msg or withheld)
+    if code == 0:
+        work = os.path.join(tmp, "te109-self-chain")
+        os.makedirs(work)
+        packets, previous = [act], out
+        for engine, input_flag, filename in (
+                ("narrative_draft", "--activity", "drafted.json"),
+                ("code_map", "--drafted", "coded.json"),
+                ("guideline_check", "--coded", "governed.json"),
+                ("exception_report", "--governed", "exception-report.md")):
+            destination = os.path.join(work, filename)
+            argv = [input_flag, previous, "--raw-dir", raw, "--out", destination, "--generated-at", FIXED_TS]
+            if input_flag != "--activity":
+                argv += ["--activity", out]
+            code, msg = run(engine, *argv)
+            if code:
+                break
+            if engine != "exception_report":
+                packets.append(read(destination))
+            previous = destination
+        check("1.0.9 F-03 AP-01: every downstream stage re-derives the self packet and preserves withheld provenance",
+              code == 0 and len(packets) == 4 and bool(withheld)
+              and all(packet["provenance"]["timekeeper_scope"].get("withheld") == withheld
+                      and people(packet) == ["Morgan Lee"] for packet in packets), msg)
+
+    for filename, row in (
+            ("calendar-export.csv",
+             "A-CAL-002,MTG-ORION-102,2026-09-15,10:00,11:00,Casey Lane,planning meeting,Casey Lane,"
+             "Casey Lane,ENG-SYN-042\n"),
+            ("document-activity-log.csv",
+             "A-DOC-003,2026-09-15,Casey Lane,controls-notes.docx,summarize,0.2,ENG-SYN-042\n"),
+            ("timesheet.csv", "TE-A-004,2026-09-15,Casey Lane,0.2,,,,\n")):
+        raw = raw_copy(tmp, f"te109-{filename}", scenario="scenario-a-happy")
+        with open(os.path.join(raw, filename), "a", encoding="utf-8", newline="") as fh:
+            fh.write(row)
+        code, msg, act, _ = pull(tmp, f"te109-{filename}", raw, *SCENARIO_A_ARGS)
+        withheld = (act or {}).get("provenance", {}).get("timekeeper_scope", {}).get("withheld") or {}
+        check(f"1.0.9 F-03 AP-01: a colleague found only in {filename} is recorded anonymously in self mode",
+              code == 0 and people(act) == ["Alex Rivera"]
+              and withheld.get("requested") == ["other-timekeeper-name-1"]
+              and "Casey Lane" not in json.dumps(withheld), msg or withheld)
+
+
+def open_bytes(path):
+    with open(path, "rb") as fh:
+        return fh.read()
+
+
 # Every group in canonical order: (function, runs inside defence_in_depth()). A group's name is its function's name.
 GROUPS = (
     (golden_tests, False),
@@ -1479,6 +1597,7 @@ GROUPS = (
     (hardening_tests, True),
     (te107_tests, False),
     (te108_tests, False),
+    (te109_tests, False),
 )
 GROUP_NAMES = tuple(fn.__name__ for fn, _ in GROUPS)
 USAGE = "usage: python3 tests/run_tests.py [--plugin-root DIR] [--list-groups] [--group NAME ...]"
