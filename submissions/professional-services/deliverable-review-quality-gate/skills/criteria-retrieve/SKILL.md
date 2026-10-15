@@ -4,7 +4,7 @@ description: "Retrieves the applicable QRM quality framework, gate criteria, req
 license: Proprietary
 compatibility: "No scripts. Reads its bundled references/ and contracts/ plus the user-supplied criteria extract, required-language register and prior-review tracker read-only; no connector is required."
 metadata:
-  version: "1.0.7"
+  version: "1.0.8"
   author: Microsoft Professional Services Skills
   category: analysis
   icon: ic_fluent_clipboard_task_list_ltr_24_regular

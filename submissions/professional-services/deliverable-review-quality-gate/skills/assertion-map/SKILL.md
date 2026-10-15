@@ -4,7 +4,7 @@ description: "Maps each deliverable assertion to the support pack with the deter
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) for scripts/assertion_map.py. Reads review-input.json supplied by the user or deliverable-ingest and writes assertion-mapped.json; no network access or connector is required."
 metadata:
-  version: "1.0.7"
+  version: "1.0.8"
   author: Microsoft Professional Services Skills
   category: analysis
   icon: ic_fluent_link_multiple_24_regular

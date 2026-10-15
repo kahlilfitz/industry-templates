@@ -21,7 +21,7 @@ Advisory items from Cowork evaluations.
 
 ## 1.0.7 evaluation (evaluate-deliverable-review-quality-gate-v1.0.7-2026-10-15)
 
-- [ ] **R-01** (assertion-map, gate-check, review-packet: scripts/assertion_rules.py:28, scripts/gate_check.py:15, scripts/severity_rank.py): Bump every engine version constant to 1.0.7 in all vendored copies, or derive the value from a single source. Then re-run the evaluation on the exact ZIP you will publish.
+- [x] **R-01** (applied in 1.0.8, owner decision 2026-10-15) (assertion-map, gate-check, review-packet: scripts/assertion_rules.py:28, scripts/gate_check.py:15, scripts/severity_rank.py): Bump every engine version constant to 1.0.7 in all vendored copies, or derive the value from a single source. Then re-run the evaluation on the exact ZIP you will publish.
   - Evidence: behavioral-test-report.html, run summary: "the internal version label still saying 1.0.6". The engine constants are AM_ENGINE_VERSION = "1.0.6" and ENGINE_VERSION = "1.0.6" , so every ledger is stamped assertion_map/1.0.6 while manifest.json declares 1.0.7. The packet's provenance does not match the shipped package.
 - [ ] **R-02** (deliverable-ingest, criteria-retrieve, assertion-map, review-packet: SKILL.md): Name the concrete tools or scripts each skill uses in its instructions. Add explicit handling to criteria-retrieve for missing or partial criteria sets so its robustness score improves.
   - Evidence: plugin-health.html, per-skill health: each of these four skills was marked down for "no specific tools named". criteria-retrieve has the lowest score (88/100) and the weakest robustness sub-score (20/25). All four still clear the floor of 80.

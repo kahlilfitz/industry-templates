@@ -10,7 +10,7 @@ import assertion_rules as rules
 import gate_check as gc
 
 ENGINE = "engine:severity_rank"
-ENGINE_VERSION = "1.0.6"
+ENGINE_VERSION = "1.0.8"
 LEDGER_TAG = f"severity_rank/{ENGINE_VERSION}"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 SEVERITY_ORDER = {"release_blocker": 0, "must_fix": 1, "advisory": 2}  # severity-rules.md #1.1-#1.3

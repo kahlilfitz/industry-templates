@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 import steering_guard as sg  # vendored shared detector; never edit (tests/check_shared_copies.py pins its SHA-256)
 
 AM_ENGINE = "engine:assertion_map"
-AM_ENGINE_VERSION = "1.0.6"
+AM_ENGINE_VERSION = "1.0.8"
 AM_LEDGER_TAG = f"assertion_map/{AM_ENGINE_VERSION}"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 # The engines in run order; provenance.engines names them as `<engine>/<version>` (record_engine).

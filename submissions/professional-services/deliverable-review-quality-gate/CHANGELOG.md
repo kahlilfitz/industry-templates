@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.8 - 2026-10-15
+
+Brings the engine version labels in line with the plugin version (owner rule 2026-10-15: engine labels match the plugin version on every release). The Cowork evaluation of 1.0.7 found no blocker or required fix; this applies its advisory R-01 by owner decision. No rule, pattern, engine logic or `steering_guard` `__version__` (still 1.1.7) changes.
+
+- **R-01 (advisory, owner decision):** `AM_ENGINE_VERSION` in `assertion_rules.py` and `ENGINE_VERSION` in `gate_check.py` and `severity_rank.py` move from 1.0.6 to 1.0.8 in every vendored copy; the copies stay byte-identical. The demo expected outputs were regenerated from `review-input.json` and differ only in the `assertion_map/`, `gate_check/` and `severity_rank/` provenance labels; `engine-run.log` is unchanged.
+- `listing-metadata.md` now states plugin version 1.0.8 (it still said 1.0.6).
+- Version 1.0.8 in `metadata.json`, `manifest.json` and every `SKILL.md`.
+
 ## 1.0.7 - 2026-10-14
 
 Applies the blocker fixes from the Cowork evaluation of 1.0.6 (automated verdict No-ship: security scan failure, instruction-override phrasing in shipped files). Apart from the manifest format (F-08), only reference prose, comments and docstrings change; no rule, pattern, engine logic, `steering_guard` `__version__` (still 1.1.7) or engine version stamp changes.
