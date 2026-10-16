@@ -58,7 +58,8 @@ five were prepared for round 3 on 2026-10-15 from `8c839aa`.
 Round 3 ([results](#round-3-results-2026-10-15)): Closeout 1.0.5, Staffing 1.1.7, Mobilization 1.0.6
 and DRQG 1.0.8 came back **Ready for human review** with no blocker or required fixes. T&E 1.0.8 came
 back **No-ship** on three required fixes; its fix agent committed 1.0.9 (`a3ca975`). T&E 1.0.9 came
-back **No-ship** on R-01 to R-03; 1.0.10 (`c9b2f37`) applies all three under owner option A.
+back **No-ship** on R-01 to R-03; 1.0.10 (`c9b2f37`) applies all three under owner option A. T&E 1.0.10
+came back **No-ship** on R-01 to R-04; 1.0.11 (`54aa71e`) applies R-01, R-02 and R-04 and skips R-03 (owner decision pending).
 ## Contents
 
 - [Keeping this file current](#keeping-this-file-current)
@@ -156,7 +157,7 @@ human testers).
 | 01 | `engagement-closeout-knowledge-harvest` | 1.0.5 (evaluated Ready for human review) | 1.0.5 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 12 advisories. 1.0.4 **Ready for human review** (evaluated 2026-10-15): 0 blocker or required fixes, 11 advisories. The owner applied R-01 (held-asset title redaction) and R-04 (engine labels) as 1.0.5; R-11 no action. Earlier history: [version history](#01-engagement-closeout--knowledge-harvest) | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
 | 02 | `engagement-staffing-bench-match` | 1.1.7 (evaluated Ready for human review) | 1.1.7 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 9 advisories. 1.1.6 **No-ship** (evaluated 2026-10-15): F-01 and F-02 (PII guardrail missing in `fit-score` and `slate-draft`) and F-03 (`source` and `generated_at` contract). 1.1.7 applies all three. Engine labels set to 1.1.7 and the label check now reads `metadata.json` (`b655af1`, [decision](#owner-decisions-round-2-results-2026-10-15)). Earlier history: [version history](#02-engagement-staffing--bench-match) | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
 | 03 | `engagement-mobilization-onboarding-pack` | 1.0.6 (evaluated Ready for human review) | 1.0.6 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 14 advisories. 1.0.5 **No-ship** (evaluated 2026-10-15): security scan found the override phrase again, now in a `steering_guard.py` docstring (R-01). 1.0.6 rewords it and sets the engine labels to 1.0.6. Earlier history: [version history](#03-engagement-mobilization--onboarding-pack) | No | No | No (1.0.2: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
-| 04 | `time-expense-narrative-compliance` | 1.0.10 (fix commit `c9b2f37`; prepared 2026-10-16 from `66cb548`); 1.0.9 evaluated No-ship | 1.0.9 **No-ship** (evaluated 2026-10-16): R-01 (ND-01 narrative grammar), R-02 and R-03 (ER-01 privacy citations and one listing per entry), all required; 1.0.10 applies all three with 15 regression checks under owner option A. 1.0.8 **No-ship** (evaluated 2026-10-15, round 3): F-01, F-02 and F-03 (required); 1.0.9 applies all three with 20 regression checks. 1.0.7 **No-ship** (evaluated 2026-10-15): F-01 and F-02 (required), `guideline-check` direct requests with pasted narratives or missing time. 1.0.8 applies both and sets the engine labels to 1.0.8. Earlier history: [version history](#04-time--expense-narrative-compliance) | No | No | No (1.0.4: Yes) | No | No | Owner: create the Cowork task; the watcher archives the reports | operator |
+| 04 | `time-expense-narrative-compliance` | 1.0.11 (fix commit `54aa71e`, R-03 open); 1.0.10 evaluated No-ship | 1.0.10 **No-ship** (evaluated 2026-10-16): R-01 to R-04 required; 1.0.11 applies R-01, R-02 and R-04 with 8 regression checks; R-03 skipped (conflicts with a 1.0.10 check, owner decision pending). 1.0.9 **No-ship** (evaluated 2026-10-16): R-01 (ND-01 narrative grammar), R-02 and R-03 (ER-01 privacy citations and one listing per entry), all required; 1.0.10 applies all three with 15 regression checks under owner option A. 1.0.8 **No-ship** (evaluated 2026-10-15, round 3): F-01, F-02 and F-03 (required); 1.0.9 applies all three with 20 regression checks. 1.0.7 **No-ship** (evaluated 2026-10-15): F-01 and F-02 (required), `guideline-check` direct requests with pasted narratives or missing time. 1.0.8 applies both and sets the engine labels to 1.0.8. Earlier history: [version history](#04-time--expense-narrative-compliance) | No | No | No (1.0.4: Yes) | No | No | Owner: create the Cowork task; the watcher archives the reports | operator |
 | 05 | `deliverable-review-quality-gate` | 1.0.8 (evaluated Ready for human review) | 1.0.8 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 13 advisories. 1.0.7 **Ready for human review** (evaluated 2026-10-15): 0 blocker or required fixes, 9 advisories; security scan and trust and safety (5/5 at 10/10) passed. The owner applied R-01 (engine labels, R-04 rule) as 1.0.8. Earlier history: [version history](#05-deliverable-review--quality-gate) | No | No | No (1.0.4: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
 
 Notes on the board:
@@ -248,6 +249,19 @@ and appended the advisories to each `BACKLOG.md`.
   exclusions cite #10.1 and #13.3. Only scenario B's report golden changed. 15 regression checks
   (8 R-01, 3 R-02, 4 R-03) fail on the pre-fix engine and pass now; suite 217/217; no existing check
   changed.
+- **T&E 1.0.10: No-ship** (2026-10-16), 4 required fixes and 14 advisories. The fix agent committed
+  1.0.11 (`54aa71e`, verified: suite 225/225, no existing check changed, demo outputs labels only,
+  copies byte-identical):
+  - R-01 (AP-01): applied; a user-facing view of `activity.json` withholds flagged
+    embedded-instruction text.
+  - R-02 (AP-02): applied; the withheld-colleague reason says the named colleagues are not
+    authorized when the user asked for them. The `requested` key is kept because existing checks
+    read it.
+  - R-03 (ND-01, grammar: repeated verb nouns, double "with", purpose repeating the title without
+    an article): **skipped**. The 1.0.10 R-01 check requires the literal
+    " regarding internal staffing check-in", which R-03 must change. Owner decision pending: replace
+    that literal with rule-based checks and apply R-03 as 1.0.12, or send 1.0.11 as is.
+  - R-04 (GC-01): applied; guideline-check's table has a Date column and a Notes section.
 
 ### Owner decisions: round-2 results (2026-10-15)
 
@@ -1167,7 +1181,7 @@ and matched; T&E 1.0.3 relies on the hash check `evaluation:archive` performs be
 | Mobilization | 1.0.6 | `evaluate-engagement-mobilization-onboarding-pack-v1.0.6-2026-10-15` | `69D13BFA8F64BA6FFFCD17254F1C93A94EBAD72DBBD2C42A47AD24C5DDF886AE` | `8c839aa` (clean) | Ready for human review (2026-10-15) |
 | T&E | 1.0.8 | `evaluate-time-expense-narrative-compliance-v1.0.8-2026-10-15` | `E9AC27188056310950E17424D0372D5A6081B514EF2B56162FB4F590FFF5AC7D` | `8c839aa` (clean) | No-ship (2026-10-15); fixes in 1.0.9 `a3ca975` |
 | T&E | 1.0.9 | `evaluate-time-expense-narrative-compliance-v1.0.9-2026-10-16` | `39CC20323BA855C4061EE17E48F8E64C0AE8F02594A8C96716C304EB7ED67D74` | `bf60a83` (clean) | No-ship (2026-10-16); fixes in 1.0.10 `c9b2f37` |
-| T&E | 1.0.10 | `evaluate-time-expense-narrative-compliance-v1.0.10-2026-10-16` | `D72CE5478E9109BFE05A44F555C1EDC7782F9F53BCE3E5EF0E23BFFAC17115D3` | `66cb548` (clean) | In Cowork evaluation |
+| T&E | 1.0.10 | `evaluate-time-expense-narrative-compliance-v1.0.10-2026-10-16` | `D72CE5478E9109BFE05A44F555C1EDC7782F9F53BCE3E5EF0E23BFFAC17115D3` | `66cb548` (clean) | No-ship (2026-10-16); fixes in 1.0.11 `54aa71e` (R-03 open) |
 | DRQG | 1.0.8 | `evaluate-deliverable-review-quality-gate-v1.0.8-2026-10-15` | `33A196CC8A649BB6487BBFB25767035B7ED822A3159E41978D8CD6D5E2479F2A` | `8c839aa` (clean) | Ready for human review (2026-10-15) |
 
 MOS3 test-data ZIPs frozen with these candidates (SHA-256): Mobilization 1.0.3
