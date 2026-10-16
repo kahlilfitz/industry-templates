@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import {
   DEFAULT_INBOX_ROOT,
   EVAL_QUEUE_STAGES,
@@ -86,15 +86,6 @@ function reportsMatchRun(
   );
 }
 
-/** The archive step reads exact report names; timestamped names are copied to a local folder first. */
-function archiveSource(dir: string, reports: Map<string, string>, runDir: string): string {
-  if (REQUIRED_REPORTS.every((report) => basename(reports.get(report) ?? "") === report)) return dir;
-  const staged = join(runDir, "cowork-reports");
-  mkdirSync(staged, { recursive: true });
-  for (const report of REQUIRED_REPORTS) copyFileSync(reports.get(report) as string, join(staged, report));
-  return staged;
-}
-
 function runScript(script: string, args: string[]): void {
   const tsxCli = join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
   execFileSync(process.execPath, [tsxCli, join(ROOT, "scripts", script), ...args], {
@@ -168,7 +159,6 @@ async function main(): Promise<void> {
     ? resolveInputPath(requiredArg(args, "queue-root"))
     : defaultQueueRoot();
   const useQueue = Boolean(queueRoot && existsSync(queueRoot));
-  const runDir = join(inboxRoot, slug, version);
   const pair = queuePairNames(slug, version);
   console.log(`Watching ${tasksRoot} for ${slug} ${version}.`);
   if (useQueue) console.log(`Watching the Cowork queue ${queueRoot} for ${pair.zip}.`);
@@ -233,7 +223,7 @@ async function main(): Promise<void> {
           continue;
         }
         console.log(`All three reports are present and stable: ${candidate.dir}`);
-        archive(slug, version, archiveSource(candidate.dir, now, runDir), inboxRoot, sharepointRoot);
+        archive(slug, version, candidate.dir, inboxRoot, sharepointRoot);
         if (fix) {
           runScript("fix-evaluation.ts", [
             "--slug",

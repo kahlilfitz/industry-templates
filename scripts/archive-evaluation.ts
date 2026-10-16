@@ -17,6 +17,7 @@ import {
   confirmsArtifactMatch,
   evaluationArchiveDir,
   extractVerdict,
+  findReports,
   findSubmission,
   htmlToText,
   parseArgs,
@@ -100,11 +101,16 @@ function main(): void {
     }
   }
 
-  for (const report of REQUIRED_REPORTS) {
-    assertNonEmptyFile(join(source, report), report);
+  // Exact report names, or Cowork's timestamped ones (a queue run's `3 - Evaluated` folder).
+  const reports = findReports(source);
+  if (!reports) {
+    for (const report of REQUIRED_REPORTS) {
+      assertNonEmptyFile(join(source, report), report);
+    }
   }
+  const reportPath = (report: string): string => reports?.get(report) ?? join(source, report);
 
-  const verdictReport = readFileSync(join(source, VERDICT_REPORT), "utf8");
+  const verdictReport = readFileSync(reportPath(VERDICT_REPORT), "utf8");
   const verdictText = htmlToText(verdictReport).toLowerCase();
   if (!verdictText.includes(slug.toLowerCase())) {
     throw new Error(`${VERDICT_REPORT} does not identify plugin slug ${slug}`);
@@ -133,7 +139,7 @@ function main(): void {
     const archivedArtifact = join(staging, `${slug}.zip`);
     copyFileSync(artifactPath, archivedArtifact);
     for (const report of REQUIRED_REPORTS) {
-      copyFileSync(join(source, report), join(staging, report));
+      copyFileSync(reportPath(report), join(staging, report));
     }
     if (sha256(archivedArtifact) !== runData.artifactSha256) {
       throw new Error("archived ZIP hash verification failed");

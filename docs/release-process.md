@@ -153,8 +153,7 @@ The watcher:
 
 1. finds the Cowork run whose ZIP has the recorded SHA-256: a task's `input\<slug>.zip`, or a
    queue folder `3 - Evaluated\<slug>\v<version> - *\<slug>-v<version>.zip`. It stops with the
-   paths if Cowork moved the pair to `4 - Needs attention`. Timestamped report names are accepted
-   and copied under their exact names to `evaluation-inbox\<slug>\<version>\cowork-reports\`;
+   paths if Cowork moved the pair to `4 - Needs attention`. Timestamped report names are accepted;
 2. waits until the three reports are present and stable;
 3. **archives** them with the ZIP to `sharepoint\<Industry>\<slug>\Evaluation\<version>\` (Retail
    layout: `<Industry>\Wave <n>\<Title Case Slug>\Evaluation\v<version>\`)
@@ -191,12 +190,14 @@ If there are no blocker or required items, the fix step does nothing and the plu
 
 1. Review the agent's commit: `git --no-pager log -1 --stat`, then `git --no-pager show`. Amend or
    revert it as needed.
-2. Go back to step 2 for the new version. Each fix-and-re-run cycle is a new version and a new
-   Cowork task.
+2. Go back to step 2 for the new version. Each fix-and-re-run cycle is a new version: a new queue
+   pair, or a new Cowork task when you are not using the queue.
 
 **Running the steps by hand:**
 
-- `npm run evaluation:archive -- --slug <slug> --source "<task>\output"` archives a run.
+- `npm run evaluation:archive -- --slug <slug> --source "<folder>"` archives a run. `<folder>` is
+  the queue run folder (`3 - Evaluated\<slug>\v<version> - <timestamp>`) or a task's `output\`.
+  Timestamped report names are accepted.
 - `npm run evaluation:fix -- --slug <slug>` runs the fix step on an archived run. Add `--dry-run`
   to write the brief and the backlog without starting the agent.
 
