@@ -18,7 +18,9 @@ Cowork's `recommendations.html` decides what changes between versions.
 - Every change sent to Cowork is a new version: bump `metadata.json` and the manifest together and
   add a CHANGELOG entry. Engine version labels (`ENGINE_VERSION`-style constants, not
   `steering_guard.py` `__version__`) match the plugin version in every release.
-- Commit path-limited (`git commit -m ... -- <paths>`), never push, and stop for owner review.
+- Commit path-limited (`git commit -m ... -- <paths>`) and stop for owner review. Push only when
+  the owner explicitly asks in the current session, only to the current branch's tracked remote,
+  never force-push, and never push to `main`. The unattended `evaluation:fix` agent never pushes.
 - Never infer an owner sign-off or a publish decision.
 
 ## One-time owner exception: T&E R-03
