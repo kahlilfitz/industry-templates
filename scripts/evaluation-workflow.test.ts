@@ -6,13 +6,16 @@ import test from "node:test";
 import {
   containsDigest,
   confirmsArtifactMatch,
+  evaluationArchiveDir,
   extractVerdict,
   findSubmission,
   htmlToText,
   parseArgs,
+  pluginFolderName,
   REQUIRED_REPORTS,
   resolveSharepointRoot,
   sha256,
+  sharepointPluginDir,
   verdictGuidance,
 } from "./evaluation-workflow.js";
 import { makeMos3Submission } from "./test-fixtures.js";
@@ -188,6 +191,27 @@ test("resolveSharepointRoot prefers flag, then env, then a link; refuses plain f
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("Professional Services Wave 1 archives use the Retail library layout; other plugins keep theirs", () => {
+  const root = join("C:", "library");
+  assert.equal(pluginFolderName("time-expense-narrative-compliance"), "Time Expense Narrative Compliance");
+  assert.equal(
+    sharepointPluginDir(root, "Professional Services", "time-expense-narrative-compliance"),
+    join(root, "Professional Services", "Wave 1", "Time Expense Narrative Compliance"),
+  );
+  assert.equal(
+    evaluationArchiveDir(root, "Professional Services", "deliverable-review-quality-gate", "1.0.8"),
+    join(root, "Professional Services", "Wave 1", "Deliverable Review Quality Gate", "Evaluation", "v1.0.8"),
+  );
+  assert.equal(
+    evaluationArchiveDir(root, "Professional Services", "client-status-qbr", "1.0.0"),
+    join(root, "Professional Services", "client-status-qbr", "Evaluation", "1.0.0"),
+  );
+  assert.equal(
+    evaluationArchiveDir(root, "Healthcare", "time-expense-narrative-compliance", "1.0.0"),
+    join(root, "Healthcare", "time-expense-narrative-compliance", "Evaluation", "1.0.0"),
+  );
 });
 
 test("findSubmission reads a MOS3 version from manifest.json and requires it to match metadata", () => {

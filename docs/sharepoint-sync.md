@@ -73,6 +73,9 @@ A plain `sharepoint` folder (not a link) is refused unless passed explicitly wit
 - Read and edit files under `sharepoint\` like any local folder; OneDrive uploads changes.
 - Evaluation archives land directly in the library as
   `sharepoint\<Industry>\<slug>\Evaluation\<version>\` and are visible to everyone once synced.
+  Plugins listed in `SHAREPOINT_WAVES` (`scripts\evaluation-workflow.ts`, currently Professional
+  Services Wave 1) use the Retail layout instead:
+  `sharepoint\<Industry>\Wave <n>\<Title Case Slug>\Evaluation\v<version>\`.
 - Close Excel or Word trackers when done. If two people edit offline at once, OneDrive keeps both as
   `<name>-<COMPUTERNAME>.<ext>`. `sharepoint:doctor` lists these; merge and delete the copy.
 - Check the OneDrive tray icon is not paused before archiving evidence.

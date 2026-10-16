@@ -57,6 +57,12 @@ Test policy (owner, 2026-10-15):
 | `sharepoint\<Industry>\<slug>\Evaluation\<version>\` | The archived ZIP and the three reports | No (SharePoint) |
 | `sharepoint\<Industry>\<slug>\` | The deployment doc, the tracker workbook and promoted ZIPs | No (SharePoint) |
 
+Professional Services Wave 1 uses the Retail library layout instead: the plugin folder is
+`sharepoint\Professional Services\Wave 1\<Title Case Slug>\`, archives go to `Evaluation\v<version>\`,
+the tracker is `<Title Case Slug> - Human Test Tracker.xlsx`, and the promoted ZIP is
+`<slug>-cowork.zip`. `SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts` lists the plugins that use
+it; the archive script follows it automatically.
+
 ## Step 1: build the plugin
 
 Build or change the plugin as [CONTRIBUTING.md](../CONTRIBUTING.md) describes, then run
@@ -113,7 +119,8 @@ The watcher:
 
 1. finds the Cowork task whose `input\<slug>.zip` has the recorded SHA-256;
 2. waits until the three reports are present and stable;
-3. **archives** them with the ZIP to `sharepoint\<Industry>\<slug>\Evaluation\<version>\`
+3. **archives** them with the ZIP to `sharepoint\<Industry>\<slug>\Evaluation\<version>\` (Retail
+   layout: `<Industry>\Wave <n>\<Title Case Slug>\Evaluation\v<version>\`)
    (`evaluation:archive`). `recommendations.html` must state the slug, the version,
    `SHA-256 check: MATCH` and the verdict, or nothing is archived;
 4. runs the **fix step** (`evaluation:fix`).
@@ -208,10 +215,12 @@ engine fix; their implementation and evaluation status are recorded in the Wave 
 
 Do this after a `Ready for human review` verdict.
 
-1. Create `sharepoint\<Industry>\<slug>\PLUGIN-DETAILS-AND-DEPLOYMENT.md` from the
+1. Create `PLUGIN-DETAILS-AND-DEPLOYMENT.md` in the plugin folder (`sharepoint\<Industry>\<slug>\`,
+   or the Retail-layout folder above) from the
    [deployment-doc template](templates/plugin-details-and-deployment.md). Record the evaluated
    SHA-256 in it.
-2. Add a tab for this version to `sharepoint\<Industry>\<slug>\<slug>-human-test-tracker.xlsx`,
+2. Add a tab for this version to the plugin's tracker workbook (`<slug>-human-test-tracker.xlsx`,
+   or `<Title Case Slug> - Human Test Tracker.xlsx` in the Retail layout),
    following the [tracker spec](templates/human-test-tracker.md). There is one workbook per
    plugin and one tab per version.
 3. Two independent testers install the archived ZIP and run the critical-path prompts. They record
@@ -230,6 +239,15 @@ Promote the evaluated ZIP byte for byte. Never rebuild it.
 $dir = "sharepoint\<Industry>\<slug>"
 Copy-Item "$dir\Evaluation\<version>\<slug>.zip" "$dir\<slug>-plugin-v<version>.zip"
 Get-FileHash "$dir\Evaluation\<version>\<slug>.zip", "$dir\<slug>-plugin-v<version>.zip" -Algorithm SHA256
+```
+
+For a plugin in the Retail layout (Professional Services Wave 1), the target is the latest
+distributable `<slug>-cowork.zip`:
+
+```powershell
+$dir = "sharepoint\Professional Services\Wave 1\<Title Case Slug>"
+Copy-Item "$dir\Evaluation\v<version>\<slug>.zip" "$dir\<slug>-cowork.zip"
+Get-FileHash "$dir\Evaluation\v<version>\<slug>.zip", "$dir\<slug>-cowork.zip" -Algorithm SHA256
 ```
 
 Both hashes must equal `artifactSha256` in the receipt. Then update the status in

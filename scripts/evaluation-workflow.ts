@@ -149,6 +149,48 @@ export function resolveSharepointRoot(
   return { root: linkPath, source: "link" };
 }
 
+/**
+ * Plugins filed in the Retail library layout, `<Industry>\Wave <n>\<Title Case Slug>\`, with
+ * evaluations under `Evaluation\v<version>\`. Every other plugin keeps `<Industry>\<slug>\`.
+ */
+export const SHAREPOINT_WAVES: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  "Professional Services": {
+    "engagement-closeout-knowledge-harvest": 1,
+    "engagement-staffing-bench-match": 1,
+    "engagement-mobilization-onboarding-pack": 1,
+    "time-expense-narrative-compliance": 1,
+    "deliverable-review-quality-gate": 1,
+  },
+};
+
+export function pluginFolderName(slug: string): string {
+  return slug
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function sharepointWave(industry: string, slug: string): number | undefined {
+  return SHAREPOINT_WAVES[industry]?.[slug];
+}
+
+export function sharepointPluginDir(sharepointRoot: string, industry: string, slug: string): string {
+  const wave = sharepointWave(industry, slug);
+  return wave === undefined
+    ? join(sharepointRoot, industry, slug)
+    : join(sharepointRoot, industry, `Wave ${wave}`, pluginFolderName(slug));
+}
+
+export function evaluationArchiveDir(
+  sharepointRoot: string,
+  industry: string,
+  slug: string,
+  version: string,
+): string {
+  const folder = sharepointWave(industry, slug) === undefined ? version : `v${version}`;
+  return join(sharepointPluginDir(sharepointRoot, industry, slug), "Evaluation", folder);
+}
+
 export function sha256(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex").toUpperCase();
 }

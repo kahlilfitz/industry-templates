@@ -7,7 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
   DEFAULT_INBOX_ROOT,
   REQUIRED_REPORTS,
@@ -15,6 +15,7 @@ import {
   VERDICT_REPORT,
   assertNonEmptyFile,
   confirmsArtifactMatch,
+  evaluationArchiveDir,
   extractVerdict,
   findSubmission,
   htmlToText,
@@ -118,18 +119,12 @@ function main(): void {
   }
   const automatedVerdict = extractVerdict(verdictReport);
 
-  const destination = join(
-    sharepointRoot,
-    runData.industry,
-    slug,
-    "Evaluation",
-    version,
-  );
+  const destination = evaluationArchiveDir(sharepointRoot, runData.industry, slug, version);
   if (existsSync(destination)) {
     throw new Error(`evaluation archive already exists: ${destination}`);
   }
 
-  const parent = join(sharepointRoot, runData.industry, slug, "Evaluation");
+  const parent = dirname(destination);
   mkdirSync(parent, { recursive: true });
   const staging = join(parent, `.${version}-${process.pid}.tmp`);
   mkdirSync(staging);

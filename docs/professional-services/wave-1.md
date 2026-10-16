@@ -105,7 +105,11 @@ Rules:
   colleague or reviewer names, e-mail addresses, internal URLs, tenant-specific absolute paths,
   tracker results, owner decision records, or scores and evidence from the confidential
   scenario scoring document. Write SharePoint locations in the relative form
-  `sharepoint\Professional Services\<slug>\...`.
+  `sharepoint\Professional Services\Wave 1\<Title Case Slug>\...`. On 2026-10-16 the five Wave 1
+  plugin folders moved from `Professional Services\<slug>\` to that Retail layout (`Evaluation\<version>\`
+  became `Evaluation\v<version>\`; the tracker became `<Title Case Slug> - Human Test Tracker.xlsx`;
+  all 143 files were hash-verified unchanged). History rows below keep the paths in force when
+  they were written.
 
 Where things live:
 
@@ -114,9 +118,10 @@ Where things live:
 | Plugin source | `submissions\professional-services\<slug>\` |
 | Test data (MOS3 versions) | `test-data\professional-services\<slug>\<version>\` (`README.md`, `demo-data\`, `tests\`, and `FROZEN.sha256` once frozen) |
 | Frozen candidate and receipt (gitignored, local) | `evaluation-inbox\<slug>\<version>\` (`<slug>.zip`, for MOS3 `<slug>-test-data-<version>.zip`, `evaluation-run.json`, `cowork-prompt.txt`) |
-| Archived evidence | `sharepoint\Professional Services\<slug>\Evaluation\<version>\` |
-| Deployment doc and tracker | `sharepoint\Professional Services\<slug>\PLUGIN-DETAILS-AND-DEPLOYMENT.md` and `<slug>-human-test-tracker.xlsx` |
-| Promoted distributable | `sharepoint\Professional Services\<slug>\<slug>-plugin-v<version>.zip` |
+| Plugin folder (Retail layout, since 2026-10-16) | `sharepoint\Professional Services\Wave 1\<Title Case Slug>\` (for example `Wave 1\Time Expense Narrative Compliance\`) |
+| Archived evidence | `<plugin folder>\Evaluation\v<version>\` |
+| Deployment doc and tracker | `<plugin folder>\PLUGIN-DETAILS-AND-DEPLOYMENT.md` and `<Title Case Slug> - Human Test Tracker.xlsx` |
+| Promoted distributable | `<plugin folder>\<slug>-cowork.zip` (only after C2) |
 | Industry status page | `sharepoint\Professional Services\README.md` |
 | Scenario specification | `sharepoint\Professional Services\professional-services-scenarios.md` |
 
@@ -139,10 +144,10 @@ A plugin is done when all five conditions hold. Wave 1 is done when all five plu
 
 | Condition | Meaning |
 |---|---|
-| C1 | The automated Cowork verdict is **Ready for human review** (recorded as **Ready** before 2026-10-12), and the three hash-matched reports plus the evaluated ZIP (and, for a MOS3 candidate, its test-data ZIP) are archived under `Evaluation\<version>\`. Evidence that only the two-reviewer human review can supply (installed-runtime critical-path runs, grader-calibration labels, spot checks) does not block C1; the report lists it under "Pending human-review evidence" and C2 supplies it. |
-| C2 | Two independent human testers have each run every prompt in `<slug>-human-test-tracker.xlsx`, on a tab for that version (the critical-path prompts are the mandatory minimum the tracker must contain), the tab's publish gate reads `PASS`, and the accountable owner's decision on that tab is `Publish`. |
+| C1 | The automated Cowork verdict is **Ready for human review** (recorded as **Ready** before 2026-10-12), and the three hash-matched reports plus the evaluated ZIP (and, for a MOS3 candidate, its test-data ZIP) are archived under `Evaluation\v<version>\`. Evidence that only the two-reviewer human review can supply (installed-runtime critical-path runs, grader-calibration labels, spot checks) does not block C1; the report lists it under "Pending human-review evidence" and C2 supplies it. |
+| C2 | Two independent human testers have each run every prompt in `<Title Case Slug> - Human Test Tracker.xlsx`, on a tab for that version (the critical-path prompts are the mandatory minimum the tracker must contain), the tab's publish gate reads `PASS`, and the accountable owner's decision on that tab is `Publish`. |
 | C3 | `PLUGIN-DETAILS-AND-DEPLOYMENT.md` exists and records the evaluated SHA-256. |
-| C4 | Only after C2: the distributable `<slug>-plugin-v<version>.zip` is promoted to the plugin folder and is byte-identical to the evaluated ZIP. |
+| C4 | Only after C2: the distributable `<slug>-cowork.zip` (Retail name; formerly `<slug>-plugin-v<version>.zip`) is promoted to the plugin folder and is byte-identical to the evaluated ZIP. |
 | C5 | The Professional Services `README.md` status table shows the plugin as published. |
 
 An automated Ready for human review is not a publication decision. C2 is the publication gate, and C4 and C5 only

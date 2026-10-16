@@ -58,8 +58,13 @@ This is not a general waiver, an evaluation verdict, or a publish decision.
 ([docs/sharepoint-sync.md](docs/sharepoint-sync.md)). It holds the planning context agents need:
 
 - `sharepoint\<Industry>\*-scenarios*.md` and `*-references*.md` — scenario lists, scoring and evidence.
-- `sharepoint\<Industry>\<slug>\Evaluation\<version>\` — archived Cowork reports and evaluated ZIPs.
-- `sharepoint\<Industry>\<slug>\PLUGIN-DETAILS-AND-DEPLOYMENT.md` and `*-human-test-tracker.xlsx`.
+- `sharepoint\<Industry>\<plugin folder>\Evaluation\<version folder>\` — archived Cowork reports and
+  evaluated ZIPs. Professional Services Wave 1 mirrors Retail: `Wave 1\<Title Case Slug>\` and
+  `Evaluation\v<version>\` (`SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts`). Every other
+  plugin uses `<slug>\` and `Evaluation\<version>\`.
+- `PLUGIN-DETAILS-AND-DEPLOYMENT.md` and the human-test tracker in each plugin folder
+  (`<Title Case Slug> - Human Test Tracker.xlsx` in the Retail layout, otherwise
+  `<slug>-human-test-tracker.xlsx`).
 - `sharepoint\Industry-Templates-Plugin-Testing-Strategy.docx` — release bar and testing strategy.
 
 Rules:
