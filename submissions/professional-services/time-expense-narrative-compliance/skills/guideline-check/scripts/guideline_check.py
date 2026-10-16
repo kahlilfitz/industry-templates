@@ -43,7 +43,7 @@ import billing_rules  # noqa: E402  (shared rules, identical copies next to code
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = billing_rules.GUIDELINE_ENGINE
-ENGINE_VERSION = "guideline_check/1.0.12"
+ENGINE_VERSION = "guideline_check/1.0.13"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 # Narrative fields are data. The tripwire is shared by every engine (signal_policy.py, #11.1).
 embedded_instruction = signal_policy.embedded_instruction

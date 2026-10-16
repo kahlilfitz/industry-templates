@@ -346,9 +346,10 @@
             ]
           },
           {
-            "narrative": "Analyzed integration design memo for the Integration Design to identify implementation questions for client decision.",
-            "status": "needs_review",
+            "narrative": "Analyzed integration design memo to identify implementation questions for client decision.",
+            "status": "needs_review_insufficient_detail",
             "review_reasons": [
+              "11 words from cited metadata; left short rather than padded (client-billing-guidelines.md #1.1)",
               "covers B-DOC-001 only; this entry also links B-CAL-001, B-DOC-002 - use with the other rewrites or split the entry (client-billing-guidelines.md #2.1 / #2.2)"
             ],
             "linked_activity_ids": [
@@ -563,8 +564,8 @@
     "demo_scenario": "scenario-b-drama",
     "generated_at": "2026-09-23T00:00:00Z",
     "engines": [
-      "activity_pull/1.0.12",
-      "narrative_draft/1.0.12"
+      "activity_pull/1.0.13",
+      "narrative_draft/1.0.13"
     ],
     "sources_read": [
       "calendar",
@@ -661,7 +662,7 @@
         "packet signal_config"
       ],
       "rule": "most_restrictive_wins",
-      "engine": "signal_policy/1.0.12",
+      "engine": "signal_policy/1.0.13",
       "citations": [
         "client-billing-guidelines.md #10.1"
       ]

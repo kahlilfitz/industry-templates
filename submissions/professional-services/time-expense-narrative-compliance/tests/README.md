@@ -11,7 +11,7 @@ Demo data and the engine regression suite for **Time & Expense Narrative Complia
 |---|---|
 | `demo-data/scenario-a-happy/` | Raw engagement exports (`raw/`), the activity packet `activity.json`, engine goldens (`expected/`) and a README with the run order |
 | `demo-data/scenario-b-drama/` | Same layout; the skim-proof rejection case |
-| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 11 groups, 240 checks |
+| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 12 groups, 257 checks |
 | `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker |
 
 ## Running the tests
@@ -56,6 +56,33 @@ response to a Cowork finding; internal QA rounds do not add checks to this suite
 | `te111_r02_tests` | 3 | 1.0.11 | Cowork 1.0.10 R-02 / AP-02: named colleagues are passed without a confirmation to record the denied request, the reason cites the letter's lack of authorization, and every downstream engine preserves the denial and self-only rows when re-deriving from raw exports |
 | `te111_r04_tests` | 2 | 1.0.11 | Cowork 1.0.10 R-04 / GC-01: the entries table includes a date and Notes has explicit slots for flagged-entry and withheld-row notices |
 | `te112_r03_tests` | 15 | 1.0.12 | Cowork 1.0.10 R-03 / ND-01: raw-export reproductions for redundant research labels, repeated title/purpose clauses, noun-purpose articles and a single participant list; the grammar list covers every draft, the full chain still passes #1.2, invented and flagged purposes are not credited, and determiners, extra purpose meaning, non-participant "with" text, one-word subjects and research as an object or possessed noun are preserved |
+| `te113_tests` | 17 | 1.0.13 | Cowork 1.0.12 R-01 / ND-01, ND-03, GR-02: title groups and attendees share one "with" clause without duplicated names or doubled prepositions; R-02 / ND-01, ND-03: case/article-insensitive repeated deliverables and purposes are omitted in both clause orders, distinct meaning stays visible, omitted purposes require exact grounded wording, and the 11-word scenario-B suggestion stays unpadded; R-03 / GR-02: each downstream skill independently excludes personal and rate data |
+
+For 1.0.13, the original unchanged suite passed 240/240, with no pre-existing failures. On resuming
+after the owner's extended R-02 exception, the retained R-01/R-03 changes passed 248/248 before
+re-applying R-02. The new `te113_tests` group fails 15/17 checks on the unfixed 1.0.12 engines and
+instructions (including checks for each fix ID); two preservation controls already pass there.
+All 17 pass on 1.0.13, and the full suite passes 257/257.
+
+The owner's exception in `AGENTS.md` and `docs/release-process.md` authorizes exactly one existing
+assertion change: in `per-activity rewrites on a multi-link entry are needs_review and name what
+they leave out`, the status condition becomes `r["status"].startswith("needs_review")`. Its "only"
+reason and `covered_activity_ids` conditions are unchanged, and this check passes separately.
+AST comparison of all 59 pre-existing test/helper functions confirms that no other existing
+assertion changes. The other 239 existing checks pass unchanged.
+
+Both demo chains were regenerated from their raw inputs at `2026-09-23T00:00:00Z`. The edited
+files in each of `demo-data/scenario-a-happy/` and `demo-data/scenario-b-drama/` are `activity.json`,
+`expected/drafted.json`, `expected/coded.json`, `expected/governed.json` and
+`expected/exception-report.md`. Seven outputs differ only in engine version labels, verified byte
+for byte. The three scenario-B JSON expected outputs additionally contain only the owner's
+authorized TE-B-001/B-DOC-001 suggestion change: remove " for the Integration Design", set
+`needs_review_insufficient_detail` and add the 11-word #1.1 review reason. A full parsed-output
+comparison confirms every other value is unchanged. No raw export or other demo file is edited.
+
+All copied engines agree byte for byte, `steering_guard.py` is unchanged, `check:submissions`
+passes and all 54 `test:evaluation` checks pass. These are local ND-01/ND-03 engine reproductions
+and GR-02 standalone-instruction checks, not new Cowork built-in runs or a publish decision.
 
 For 1.0.12, the unchanged 1.0.11 suite passed 225/225 before editing. The owner's explicit exception
 in `AGENTS.md` and `docs/release-process.md` authorizes replacing only the literal-bound condition of

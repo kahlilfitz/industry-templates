@@ -111,7 +111,7 @@ POSITIONAL_LABEL_RE = re.compile(r"(?:calendar export|document activity log|time
                                  r"|engagement letter extract|mailbox summary|client billing guidelines extract"
                                  r"|code structure) row [1-9][0-9]*"
                                  r"|other (?:engagement|timekeeper) (?:signal|entry|name) [1-9][0-9]*")
-SIGNAL_POLICY_VERSION = "signal_policy/1.0.12"
+SIGNAL_POLICY_VERSION = "signal_policy/1.0.13"
 TEAM_VIEW_PREFIX = "engagement-manager:"
 TEAM_VIEW_TOKEN_RE = re.compile(r"engagement-manager:[A-Za-z0-9._-]+")
 WITHHELD_TEXT = contract_check.WITHHELD_MARKER  # "[withheld: flagged as embedded_instruction - client-billing-guidelines.md #11.2]"
@@ -2841,17 +2841,19 @@ def subject_without_participants(activity):
     return subject
 
 
-def purpose_repeats_subject(activity):
-    purpose = (activity.get("purpose") or "").strip()
-    if not purpose or purpose_prefix(purpose) != "regarding":
-        return False
-
+def phrase_repeats_subject(activity, phrase):
     def words(text):
         normalized = " ".join(re.findall(r"[a-z0-9]+", canon_text(text)))
         return re.sub(r"^(?:the|an?)\s+", "", normalized)
 
-    title, recorded = words(subject_without_participants(activity)), words(purpose)
-    return bool(title) and recorded in (title, "internal " + title)
+    title, recorded = words(subject_without_participants(activity)), words(phrase)
+    return bool(title and recorded) and f" {recorded} " in f" {title} "
+
+
+def purpose_repeats_subject(activity):
+    purpose = (activity.get("purpose") or "").strip()
+    return (phrase_repeats_subject(activity, purpose)
+            or phrase_repeats_subject(activity, re.sub(r"^(?:(?:the|an?)\s+)?internal\s+", "", purpose, flags=re.I)))
 
 
 def billable_class(activity_class):
@@ -2975,6 +2977,8 @@ def clause(entry, activity):
     else:
         verb = next((v for c, v in VERB_BY_CLASS if class_in(activity.get("activity_class"), (c,))), "Prepared")
     subject, others, purpose, deliverable, deliverable_first = clause_values(activity, person)
+    if phrase_repeats_subject(activity, deliverable):
+        deliverable, deliverable_first = "", False
     subject = subject_without_participants(activity)
     if verb == "Researched":
         tail = re.fullmatch(r"(.+)\s+research", subject, re.I)
@@ -2984,8 +2988,11 @@ def clause(entry, activity):
     if is_calendar(activity) and subject and not subject.split()[0].isupper():
         subject = subject[0].lower() + subject[1:]
     text = f"{verb} {subject}"
+    others = [name for name in others
+              if not re.search(r"(?<!\w)" + re.escape(name.strip()) + r"(?!\w)", subject, re.I)]
     if others:
-        text += f" with {join_names(others)}"
+        separator = (" and " if len(others) == 1 else ", ") if re.search(r"\bwith\s+", subject, re.I) else " with "
+        text += separator + join_names(others)
     if deliverable_first:
         text += f" for the {deliverable}"
     if purpose:
@@ -3262,8 +3269,8 @@ def validate_packet(packet, stage):
 # that every later stage re-runs on the activity packet, comparing the whole carried document with the result.
 REDERIVE_CITATION = "client-billing-guidelines.md #13.8"
 CONTRACT_VERSION = "ps.time-expense-narrative-compliance.v1"
-STAGE_VERSIONS = {"activity": "activity_pull/1.0.12", "drafted": "narrative_draft/1.0.12", "coded": "code_map/1.0.12",
-                  "governed": "guideline_check/1.0.12"}
+STAGE_VERSIONS = {"activity": "activity_pull/1.0.13", "drafted": "narrative_draft/1.0.13", "coded": "code_map/1.0.13",
+                  "governed": "guideline_check/1.0.13"}
 STAGE_ENGINES = {"drafted": "engine:narrative_draft", "coded": "engine:code_map", "governed": "engine:guideline_check"}
 # Carried fields no engine derives from its inputs, left out of the whole-document comparison (and only these). Each
 # is still validated by the contract walk and validate_packet and screened by the next stage's sweep_packet.

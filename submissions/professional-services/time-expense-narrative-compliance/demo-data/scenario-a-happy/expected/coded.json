@@ -323,9 +323,9 @@
     "demo_scenario": "scenario-a-happy",
     "generated_at": "2026-09-23T00:00:00Z",
     "engines": [
-      "activity_pull/1.0.12",
-      "narrative_draft/1.0.12",
-      "code_map/1.0.12"
+      "activity_pull/1.0.13",
+      "narrative_draft/1.0.13",
+      "code_map/1.0.13"
     ],
     "sources_read": [
       "calendar",
@@ -404,7 +404,7 @@
         "packet signal_config"
       ],
       "rule": "most_restrictive_wins",
-      "engine": "signal_policy/1.0.12",
+      "engine": "signal_policy/1.0.13",
       "citations": [
         "client-billing-guidelines.md #10.1"
       ]

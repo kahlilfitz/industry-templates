@@ -31,6 +31,7 @@ An unknown group or argument exits 2.
 9. te111_r02_tests (1.0.11, Cowork 1.0.10 R-02: truthful denied-colleague requests).
 10. te111_r04_tests (1.0.11, Cowork 1.0.10 R-04: entry dates and required notices).
 11. te112_r03_tests (1.0.12, Cowork 1.0.10 R-03: grammatical grounded narrative clauses).
+12. te113_tests (1.0.13, Cowork 1.0.12 R-01/R-02/R-03: participant grammar, repeated clauses and privacy).
 Exit code 0 = all passed.
 """
 import copy
@@ -1155,7 +1156,7 @@ def hardening_tests(tmp):
     check("mixed entry still maps UNMAPPED", entry(coded, "TE-A-001")["code_mapping"]["recommended_task_code"] == "UNMAPPED")
     d = entry(gov_b, "TE-B-001")["draft"]
     check("per-activity rewrites on a multi-link entry are needs_review and name what they leave out",
-          d["suggested_rewrites"] and all(r["status"] == "needs_review" and any("only" in x for x in r["review_reasons"])
+          d["suggested_rewrites"] and all(r["status"].startswith("needs_review") and any("only" in x for x in r["review_reasons"])
                                           for r in d["suggested_rewrites"])
           and sorted(d["covered_activity_ids"]) == sorted(entry(gov_b, "TE-B-001")["activity_ids"]))
 
@@ -1870,6 +1871,94 @@ def te112_r03_tests(tmp):
           all(subject in text for subject, text in zip(subjects, texts)), texts)
 
 
+def te113_tests(tmp):
+    """Cowork 1.0.12 R-01/R-02: ND-01/ND-03 raw-export chain; R-03: standalone GR-02 instructions."""
+    raw = raw_copy(tmp, "te113", scenario="scenario-a-happy")
+    edit_csv(raw, "calendar-export.csv", 1, "subject",
+             "Warehouse slotting workshop with Fabrikam operations team")
+    edit_csv(raw, "calendar-export.csv", 1, "attendees", "Alex Rivera; Morgan Lee; Priya Shah")
+    edit_csv(raw, "engagement-workplan.csv", 1, "purpose", "review warehouse slotting constraints")
+    edit_csv(raw, "engagement-workplan.csv", 1, "deliverable", "Warehouse Operations Plan")
+    edit_csv(raw, "document-activity-log.csv", 1, "file_name", "slotting-options-research.docx")
+    edit_csv(raw, "document-activity-log.csv", 1, "activity_type", "research")
+    edit_csv(raw, "engagement-workplan.csv", 2, "match_key", "slotting-options-research.docx")
+    edit_csv(raw, "engagement-workplan.csv", 2, "activity_class", "research")
+    edit_csv(raw, "engagement-workplan.csv", 2, "purpose", "slotting options")
+    edit_csv(raw, "document-activity-log.csv", 2, "file_name", "slotting-recommendations-memo.docx")
+    edit_csv(raw, "engagement-workplan.csv", 3, "match_key", "slotting-recommendations-memo.docx")
+    edit_csv(raw, "engagement-workplan.csv", 3, "purpose",
+             "document agreed recommendations for warehouse planning")
+    edit_csv(raw, "engagement-workplan.csv", 3, "deliverable", "the SLOTTING recommendations memo")
+    work = os.path.join(tmp, "te113-chain")
+    os.makedirs(work)
+    paths = chain(raw, list(SCENARIO_A_ARGS), work)
+    drafted, governed = read(paths["drafted"]), read(paths["governed"])
+    narratives = [e["draft"]["narrative"] for e in drafted["time_entries"]]
+    grammar = r"\b(?:with|for|to|regarding)\s+(?:with|for|to|regarding)\b"
+    check("1.0.13 R-01 ND-01/ND-03/GR-02: every draft has at most one with clause and no doubled preposition",
+          all(len(re.findall(r"\bwith\b", text, re.I)) <= 1 and not re.search(grammar, text, re.I)
+              for text in narratives), narratives)
+    meeting, research, memo = narratives
+    check("1.0.13 R-01 ND-01/ND-03: a title group and all exported attendees share one with clause",
+          "with Fabrikam operations team, Morgan Lee and Priya Shah" in meeting
+          and all(meeting.count(value) == 1 for value in
+                  ("Fabrikam operations team", "Morgan Lee", "Priya Shah"))
+          and "Alex Rivera" not in meeting, meeting)
+    check("1.0.13 R-02 ND-01/ND-03: a case/article-insensitive deliverable repeated by the subject is omitted",
+          memo.lower().count("slotting recommendations memo") == 1 and " for the " not in memo.lower(), memo)
+    check("1.0.13 R-02 ND-01/ND-03: a noun purpose contained in the research title is not repeated",
+          research.lower().count("slotting options") == 1 and "regarding" not in research.lower(), research)
+    check("1.0.13 R-01/R-02 ND-01/ND-03: raw re-derivation preserves required-element grounding",
+          all(all(e["compliance"]["required_elements"].values()) for e in governed["time_entries"]),
+          [e["compliance"]["required_elements"] for e in governed["time_entries"]])
+    policy = MODULES["narrative_draft"].signal_policy
+    rules = MODULES["guideline_check"].billing_rules
+    first, signal = drafted["time_entries"][0], drafted["activity_signals"][0]
+    mixed = dict(signal, subject="Warehouse workshop with Fabrikam operations team, Morgan Lee",
+                 attendees=["Alex Rivera", "Morgan Lee", "Priya Shah"])
+    text, _ = policy.clause(first, mixed)
+    check("1.0.13 R-01: a participant already in a mixed title list is not duplicated",
+          len(re.findall(r"\bwith\b", text, re.I)) == 1
+          and text.count("Morgan Lee") == 1 and text.count("Priya Shah") == 1, text)
+    doc = drafted["activity_signals"][2]
+    for purpose in ("document agreed warehouse recommendations", "document recommendations for warehouse planning"):
+        text, _ = policy.clause(first, dict(doc, purpose=purpose))
+        check(f"1.0.13 R-02: repeated deliverables are omitted in either clause order ({purpose})",
+              text.lower().count("slotting recommendations memo") == 1
+              and " for the " not in text.lower(), text)
+    contained = dict(doc, subject="Final slotting recommendations memo", deliverable="A slotting recommendations memo")
+    text, _ = policy.clause(first, contained)
+    check("1.0.13 R-02: a deliverable contained in a longer subject is omitted",
+          text.lower().count("slotting recommendations memo") == 1 and " for the " not in text.lower(), text)
+    distinct = dict(doc, subject="Slotting recommendation", deliverable="Slotting recommendations memo")
+    text, _ = policy.clause(first, distinct)
+    check("1.0.13 R-02: different deliverables and additional purpose meaning stay grounded and visible",
+          "for the Slotting recommendations memo" in text
+          and "to document agreed recommendations for warehouse planning" in text, text)
+    repeated = dict(signal, subject="Review warehouse slotting options", purpose="review warehouse slotting options")
+    text, _ = policy.clause(first, repeated)
+    check("1.0.13 R-02: a verb-led purpose already contained in the title is omitted",
+          text.lower().count("review warehouse slotting options") == 1
+          and "to review" not in text.lower(), text)
+    check("1.0.13 R-02: omitted verb purposes need the exact grounded clause, never an invented replacement",
+          rules.required_elements(first, text, [repeated])["purpose"]
+          and not rules.required_elements(first, text + " regarding invented objectives", [repeated])["purpose"]
+          and not rules.required_elements(first, text, [dict(repeated, embedded_instruction=True)])["purpose"], text)
+    drama = _golden("scenario-b-drama", "drafted.json")
+    activity = next(a for a in drama["activity_signals"] if a["activity_id"] == "B-DOC-001")
+    generated = policy.grounded_narrative(entry(drama, "TE-B-001"), [activity])
+    check("1.0.13 R-02: removing a repeated deliverable leaves the 11-word suggestion short for #1.1",
+          generated[1] == "needs_review_insufficient_detail" and len(generated[0].split()) == 11
+          and " for the Integration Design" not in generated[0]
+          and any("11 words" in reason and "#1.1" in reason for reason in generated[3]), generated)
+    privacy = ("Never gather, display or infer anyone's home addresses, personal contact details, compensation, "
+               "hourly or bill rates; say they are out of scope.")
+    for skill in ("narrative-draft", "code-map", "guideline-check", "exception-report"):
+        guardrails = md_section(skill_text(skill), "Guardrails")
+        check(f"1.0.13 R-03 GR-02: {skill} alone excludes personal and rate data for everyone",
+              privacy in guardrails, guardrails)
+
+
 def open_bytes(path):
     with open(path, "rb") as fh:
         return fh.read()
@@ -1888,6 +1977,7 @@ GROUPS = (
     (te111_r02_tests, False),
     (te111_r04_tests, False),
     (te112_r03_tests, False),
+    (te113_tests, False),
 )
 GROUP_NAMES = tuple(fn.__name__ for fn, _ in GROUPS)
 USAGE = "usage: python3 tests/run_tests.py [--plugin-root DIR] [--list-groups] [--group NAME ...]"

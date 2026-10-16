@@ -1,5 +1,46 @@
 # Changelog - time-expense-narrative-compliance
 
+## 1.0.13 - 2026-10-16
+
+Applies required **R-01, R-02 and R-03** from the Cowork evaluation of 1.0.12. Advisory items
+remain in `BACKLOG.md`.
+
+- **R-01, applied:** merge a title's existing "with" group and exported attendees into one
+  participant list, without repeating an attendee already in the title. Preserve the title's
+  non-participant text and the existing timekeeper exclusion.
+- **R-02, applied:** omit a deliverable or purpose clause when its complete wording already
+  occurs in the subject, ignoring case and leading articles. Keep distinct deliverables and
+  additional purpose meaning. Preserve the existing leading-"internal" purpose handling.
+  Guideline-check credits an omitted purpose only against an unflagged linked signal whose
+  complete grounded clause matches; invented replacement wording is not credited.
+- **R-03, applied:** narrative-draft, code-map, guideline-check and exception-report each carry
+  their own Guardrails exclusion for anyone's home addresses, personal contact details,
+  compensation, hourly or bill rates, with an explicit out-of-scope response.
+- **Owner-authorized check change:** only the status condition in
+  `per-activity rewrites on a multi-link entry are needs_review and name what they leave out`
+  changes to `r["status"].startswith("needs_review")`. Its "only" reason and coverage conditions
+  stay unchanged. AST comparison of all 59 pre-existing test/helper functions confirms this is
+  the only existing assertion change; the other 239 existing checks pass unchanged.
+- **Regression edits (not bundled):** add `te113_tests` to `tests/run_tests.py` with 17 checks
+  and document them in `tests/README.md`. Against unfixed 1.0.12, 15 checks fail across all three
+  fix IDs and two controls pass. All 17 pass after the fixes. The original baseline passed
+  240/240; on resuming, retained R-01/R-03 changes passed 248/248 before re-applying R-02.
+  The complete final suite passes 257/257, with no pre-existing failures.
+- Release declarations, listing metadata and all engine/stage/signal-policy labels are 1.0.13.
+  All five `signal_policy.py` and `activity_pull.py` copies and all three `billing_rules.py`
+  copies remain byte-identical. `steering_guard.py` and its `__version__` are unchanged.
+- **Demo edits (not bundled):** regenerate `activity.json`, `expected/drafted.json`,
+  `expected/coded.json`, `expected/governed.json` and `expected/exception-report.md` in both
+  `scenario-a-happy` and `scenario-b-drama` at `2026-09-23T00:00:00Z`. Seven outputs change only
+  version labels, verified byte for byte. Under the owner's R-02 exception, the three scenario-B
+  JSON expected outputs also change only TE-B-001's B-DOC-001 suggested rewrite: remove
+  " for the Integration Design", leave the resulting 11 words unpadded, set
+  `needs_review_insufficient_detail` and add the #1.1 review reason. Every other golden value
+  and every raw export is unchanged.
+- `check:submissions` and all 54 `test:evaluation` checks pass. ND-01/ND-03/GR-02 coverage is
+  local engine and standalone-instruction regression evidence, not a new Cowork built-in
+  evaluation or publish decision. Nothing is pushed or packaged.
+
 ## 1.0.12 - 2026-10-16
 
 Applies required **R-03 (narrative-draft, ND-01)** from the Cowork evaluation of 1.0.10 under the

@@ -30,7 +30,7 @@ import billing_rules  # noqa: E402  (shared rules, identical copies next to guid
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = billing_rules.CODE_MAP_ENGINE
-ENGINE_VERSION = "code_map/1.0.12"
+ENGINE_VERSION = "code_map/1.0.13"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 
 

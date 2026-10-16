@@ -332,13 +332,13 @@ def required_elements(entry, narrative, linked):
     if not purpose:
         for signal in linked:
             recorded = normalize(signal.get("purpose"))
-            if (signal_policy.signal_flagged(signal) or not recorded
-                    or signal_policy.purpose_prefix(recorded) != "regarding"):
+            if signal_policy.signal_flagged(signal) or not recorded:
                 continue
-            variants = {recorded, normalize(signal_policy.noun_purpose(signal["purpose"]))}
-            if any(re.search(r"\bregarding\s+" + re.escape(value) + r"\b", normalized) for value in variants):
-                purpose = True
-                break
+            if signal_policy.purpose_prefix(recorded) == "regarding":
+                variants = {recorded, normalize(signal_policy.noun_purpose(signal["purpose"]))}
+                if any(re.search(r"\bregarding\s+" + re.escape(value) + r"\b", normalized) for value in variants):
+                    purpose = True
+                    break
             if signal_policy.purpose_repeats_subject(signal):
                 # An omitted purpose is evidenced only by the complete grounded clause, never by an unrelated title.
                 clause, _ = signal_policy.clause(entry, signal)
