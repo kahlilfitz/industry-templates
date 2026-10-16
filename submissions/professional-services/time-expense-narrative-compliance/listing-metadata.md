@@ -7,12 +7,8 @@ Plugin version: **1.0.12**, matching `manifest.json` and `metadata.json`.
 
 ## Name
 
-- **name.short** (26/30): Time Entry Narrative Check
-- **name.full** (57/100): Time Entry Narrative Compliance for Professional Services
-
-Owner: the repository and catalog name is "Time & Expense Narrative Compliance", but the plugin
-handles time entries only (expense reports and receipts are out of scope), so the listing names say
-"Time Entry". Confirm or rename.
+- **name.short** (30/30): Time & Expense Narrative Check
+- **name.full** (61/100): Time & Expense Narrative Compliance for Professional Services
 
 ## Description
 

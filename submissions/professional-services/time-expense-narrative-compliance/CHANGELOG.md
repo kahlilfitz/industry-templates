@@ -29,6 +29,9 @@ owner's explicit 2026-10-16 test-expectation exception. Advisory items remain in
 - Release declarations, listing metadata and engine/stage/signal-policy labels move to 1.0.12.
   All five `activity_pull.py` copies stay byte-identical; `steering_guard.py` and its `__version__`
   are unchanged.
+- **Owner decision, listing name:** `name.short` becomes "Time & Expense Narrative Check" and
+  `name.full` becomes "Time & Expense Narrative Compliance for Professional Services", matching the
+  catalog name. The descriptions still say expense reports and receipts are out of scope.
 - **Demo edits (not bundled):** regenerate `activity.json`, `expected/drafted.json`,
   `expected/coded.json`, `expected/governed.json` and `expected/exception-report.md` in each demo
   scenario with `--generated-at 2026-09-23T00:00:00Z`. All ten outputs change only engine version
