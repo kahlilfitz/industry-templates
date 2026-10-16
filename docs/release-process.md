@@ -139,12 +139,12 @@ The fix step:
      the labels and reports the conflict;
    - runs the plugin's regression suite, if it has one (the commands in its `tests\README.md`),
      before and after the fixes: every check that passed before must still pass, and no existing
-     check may be relaxed, except for the exact replacement authorized in the one-time owner
-     exception below; any other conflicting fix is reverted, skipped and reported;
+     check may be relaxed, except for the exact changes authorized in the one-time owner
+     exceptions below; any other conflicting fix is reverted, skipped and reported;
    - runs `check:submissions` and `test:evaluation`;
    - adds at least one regression check per blocker or required fix, named for the fix ID, that
      fails before the fix and passes after (added only; existing checks are never changed except
-     for the exact replacement authorized in the one-time owner exception below);
+     for the exact changes authorized in the one-time owner exceptions below);
    - otherwise leaves `tests\` and `demo-data\` alone unless a fix requires an edit, and lists any
      such edit;
    - commits locally and stops.
@@ -186,8 +186,8 @@ A guardrail or safety failure is always a stop.
 
 ### One-time owner exception for T&E R-03
 
-**Owner approval: 2026-10-16.** This is the sole exception to the existing-check restrictions in
-this process and `AGENTS.md`:
+**Owner approval: 2026-10-16.** This and the [1.0.13 R-02 exception](#one-time-owner-exception-for-te-1013-r-02)
+are the only exceptions to the existing-check restrictions in this process and `AGENTS.md`:
 
 - **Plugin and release:** `time-expense-narrative-compliance`, implementation release **1.0.12**.
 - **Finding:** required **R-03 (ND-01)** from the archived **1.0.10** Cowork
@@ -211,6 +211,26 @@ unrelated test changes, weaker billing or safety rules, lower launch bars, packa
 without their existing gates. Version labels, copied-engine consistency, repository checks and
 the next Cowork evaluation remain required. Approval alone does not implement the replacement or
 engine fix; their implementation and evaluation status are recorded in the Wave 1 log.
+
+### One-time owner exception for T&E 1.0.13 R-02
+
+**Owner approval: 2026-10-16.**
+
+- **Plugin and release:** `time-expense-narrative-compliance`, implementation release **1.0.13**.
+- **Finding:** required **R-02** from the archived **1.0.12** Cowork `recommendations.html`: a
+  deliverable clause that repeats the subject (and the same repeat between subject and purpose).
+- **Exact scope:** regenerate `demo-data\scenario-b-drama\expected\drafted.json`, `coded.json` and
+  `governed.json`. The only permitted non-label difference is in the TE-B-001 suggested rewrite for
+  B-DOC-001. It drops " for the Integration Design" (11 words). Its status becomes
+  `needs_review_insufficient_detail`, with the engine's 12-word (#1.1) review reason, and these values
+  carry through to the downstream outputs. Every other golden, check and expectation stays unchanged.
+- **Evidence:** add R-02 regressions named for the fix ID that fail on the unfixed 1.0.12 engine
+  and pass after. Run the entire plugin suite before and after. Report the golden diff and show that
+  it contains nothing outside the scope above.
+
+This exception permits only these golden updates, as part of the R-02 fix. It does not permit
+padding a draft to reach 12 words, unrelated test changes, weaker billing or safety rules, or
+packaging or publishing without their existing gates.
 
 ## Step 5: human spot check
 

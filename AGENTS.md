@@ -12,8 +12,8 @@ Cowork's `recommendations.html` decides what changes between versions.
   `recommendations.html`, owner decisions, or regressions your own change caused. Advisory items
   go to the submission's `BACKLOG.md`, not into the plugin. Report any other defect you find; do
   not fix it.
-- Except for the one-time owner exception below, never relax, delete or change the expected result
-  of an existing test or check. If a fix makes an existing test fail outside that exception, stop,
+- Except for the one-time owner exceptions below, never relax, delete or change the expected result
+  of an existing test or check. If a fix makes an existing test fail outside those exceptions, stop,
   do not commit, and report the conflict.
 - Every change sent to Cowork is a new version: bump `metadata.json` and the manifest together and
   add a CHANGELOG entry. Engine version labels (`ENGINE_VERSION`-style constants, not
@@ -35,6 +35,18 @@ evaluation**.
 Preserve the original grammar and grounding protections, add R-03 regressions that fail before
 the engine fix and pass afterward, and leave every other existing check unchanged. Follow the
 [exception's evidence requirements](docs/release-process.md#one-time-owner-exception-for-te-r-03).
+This is not a general waiver, an evaluation verdict, or a publish decision.
+
+## One-time owner exception: T&E 1.0.13 R-02
+
+Owner-approved on 2026-10-16, for `time-expense-narrative-compliance` **1.0.13 only**: while
+applying required **R-02 from the 1.0.12 Cowork evaluation** (skip a deliverable clause that
+repeats the subject), regenerate `demo-data\scenario-b-drama\expected\drafted.json`, `coded.json`
+and `governed.json`. The only permitted non-label change is the TE-B-001 B-DOC-001 suggested
+rewrite losing " for the Integration Design", and the status and review reason that follow from
+the 12-word minimum (#1.1), as they flow through code-map and guideline-check. Every other golden,
+check and expectation stays unchanged. Follow the
+[exception's evidence requirements](docs/release-process.md#one-time-owner-exception-for-te-1013-r-02).
 This is not a general waiver, an evaluation verdict, or a publish decision.
 
 ## Tests and demo data
