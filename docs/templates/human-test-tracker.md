@@ -15,6 +15,7 @@ published. An automated Cowork `Ready` verdict is not a substitute for it. See
 | Sheets | One sheet per evaluated version, named exactly by version (for example `1.0.2`), plus a `How to use` sheet |
 | Sheet order | Newest version first, `How to use` last |
 | Repository | Never commit a tracker, or a copy of one, to this repository |
+| Demo data | `<plugin-slug>-demo-data-v<version>.zip` in the same folder ([release process, step 5](../release-process.md#step-5-human-spot-check)); the plugin ZIP holds no demo data or tests |
 
 A new evaluated version adds a new tab. Never overwrite or delete an earlier version's tab; it is
 the record of what was tested on that ZIP.
@@ -63,7 +64,7 @@ Row 11 is blank.
 | A | `#` | Sequence number, 1 to n |
 | B | `Test` | Short test name; prefix critical paths with `Critical path — ` |
 | C | `Prompt` | Exact prompt text the tester pastes into Cowork |
-| D | `Inputs` | Demo-data path or synthetic probe to attach or reference |
+| D | `Inputs` | Path inside the demo-data ZIP (`demo-data/...`, `tests/...`), a file in the installed plugin (`skills/<skill>/...`), or a synthetic probe to attach or reference |
 | E | `Expected result` | Observable pass condition |
 | F | `Skill owner / basis` | Category and owning skill, for example `Behavioral should-not-trigger — owner: <skill>` |
 | G | `T1 name` | Tester 1 |
@@ -161,7 +162,7 @@ critical-path prompts are the mandatory minimum the tracker must contain. Build 
 | Category | Typical count | Source |
 |---|---:|---|
 | Critical path | 4 | One end-to-end run of the drama scenario, a claimed-approval override attempt, a send/publish boundary request, and the plugin's signature trap |
-| Sample prompts | 10 to 22 | `tests/sample-test-prompts.csv` in the evaluated ZIP, one row per CSV line |
+| Sample prompts | 10 to 22 | `tests/sample-test-prompts.csv` in the plugin's demo-data ZIP, one row per CSV line |
 | Should-trigger | 8 to 10 | One or two per skill, from the behavioral report's should-trigger cases |
 | Should-not-trigger | 4 | A prompt that belongs to a sibling, per skill boundary |
 | Injection probe | 1 or more | An instruction embedded in source data that tries to clear a hold |
@@ -193,8 +194,10 @@ rules in column A with the text in column B:
    other's notes first. The critical-path prompts are the mandatory minimum the tracker must
    contain.
 3. Install the exact ZIP filed in `Evaluation/<version>/`. Do not rebuild it.
-4. The prompts come from `tests/sample-test-prompts.csv` plus any human spot-check prompts listed
-   in `recommendations.html`.
+4. The prompts come from `tests/sample-test-prompts.csv` plus the behavioral report's cases and
+   any human spot-check prompts listed in `recommendations.html`. Demo data and the prompt CSV are
+   in `<plugin-slug>-demo-data-v<version>.zip` in this folder, not in the plugin ZIP; Inputs paths
+   are relative to it.
 5. Record Pass, Fail or Blocked in the T1/T2 result columns. Agreed outcome is calculated.
 6. `review` means the two testers disagree. Resolve it before publishing; note the resolution.
 7. The publish gate is PASS only when both testers pass every prompt and all agreed outcomes are

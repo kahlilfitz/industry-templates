@@ -36,8 +36,8 @@ not round, re-score or summarise differently from the reports.
 
 # <Display name> — Plugin Details & Deployment Notes
 
-Evaluated package: `Evaluation/<version>/<plugin-slug>.zip` · Version <version> · Claude plugin
-format (Cowork)
+Evaluated package: `Evaluation/<version>/<plugin-slug>.zip` · Version <version> · MOS3 package
+(`manifest.json`, Cowork)
 
 > **Read this first if you are deciding whether to publish.** The Cowork automated verdict for
 > <version> is **<Ready | Blocked | No-ship>**, but this is not a publication decision. The
@@ -55,39 +55,33 @@ stating that this version must not be published and naming the next version bein
 
 <!-- guidance: Paste the folder tree of the evaluated ZIP (not the source folder). Annotate each
 top-level item and each skill with a short arrow comment. Note which files are vendored into every
-skill. The bundler always leaves out the top-level metadata.json, README.md and PACKAGE-NOTES.md,
-and leaves out tests/ unless metadata.json sets "bundleTests": true. Those are source-only, so they
-never appear in this tree. -->
+skill. A MOS3 package holds only manifest.json, the two icons and skills/; metadata.json, README.md,
+CHANGELOG.md, BACKLOG.md, demo-data/ and tests/ are source-only and never appear in this tree. -->
 
 ```text
-<plugin-slug>/
-├── .claude-plugin/plugin.json      ← identity, description, keywords
-├── CHANGELOG.md
-├── contracts/
-│   └── <contract-file>.json        ← shared contract
-├── references/
-│   └── <rule-file>.md              ← deterministic rules
-├── skills/
-│   ├── <skill-1>/                  ← step 1 of <n>
-│   └── <skill-n>/                  ← step <n> of <n> + <engine>
-│       each contains: SKILL.md, vendored contracts/ and references/
-├── demo-data/
-│   ├── scenario-a-happy/           ← <one-line synthetic scenario>
-│   └── scenario-b-drama/           ← <one-line synthetic scenario>
-└── tests/                          ← only when "bundleTests": true
-    ├── sample-test-prompts.csv     ← prompts for the human spot check
-    └── <run_tests.py | test_engines.py>
+<plugin-slug>.zip
+├── manifest.json                   ← identity, description, version
+├── color.png, outline.png          ← icons
+└── skills/
+    ├── <skill-1>/                  ← step 1 of <n>
+    └── <skill-n>/                  ← step <n> of <n> + <engine>
+        each contains: SKILL.md, scripts/, vendored contracts/ and references/
 ```
 
-Source-only (in the repository, never in the ZIP): `metadata.json`, the top-level `README.md`,
-`PACKAGE-NOTES.md` and, unless bundled, `tests/`.
+Source-only (in the repository, never in the ZIP): `metadata.json`, `README.md`, `CHANGELOG.md`,
+`BACKLOG.md`, `demo-data/` and `tests/`.
+
+**Demo data and sample prompts (not in the package).** `<plugin-slug>-demo-data-v<version>.zip`
+in this folder (SHA-256 `<SHA-256>`) holds `demo-data/` (`scenario-a-happy`: <one-line synthetic
+scenario>; `scenario-b-drama`: <one-line synthetic scenario>), `tests/sample-test-prompts.csv` and a
+`README.md`. Testers attach these files in Cowork; the tracker's Inputs paths are relative to it.
 
 | Field | Value |
 |---|---|
 | Package name | `<plugin-slug>` |
 | Display name | <Display name> |
 | Version | <version> |
-| Format | Claude plugin (`.claude-plugin/plugin.json`) |
+| Format | MOS3 package (`manifest.json`) |
 | Skills | <n> |
 | Connectors | **<0 — no MCP, no network calls, no external endpoint \| list each connector>** |
 | Engines | <n> deterministic Python engines: `<engine_1.py>`, `<engine_2.py>` |
@@ -96,8 +90,9 @@ Source-only (in the repository, never in the ZIP): `metadata.json`, the top-leve
 
 The evaluated bytes are filed under `Evaluation/<version>/<plugin-slug>.zip`. Do not create the
 plugin-folder-level distributable until the human gate clears. The intended distributable name is
-`<plugin-slug>-plugin-v<version>.zip`, and it must be copied byte-identical from the evaluated ZIP
-only after the tracker's publish gate reads PASS and the owner decision is `Publish`.
+`<plugin-slug>-plugin-v<version>.zip` (`<plugin-slug>-cowork.zip` in the Retail layout), and it
+must be copied byte-identical from the evaluated ZIP only after the tracker's publish gate reads
+PASS and the owner decision is `Publish`.
 
 ---
 
@@ -216,8 +211,8 @@ it to all <n> skills and run the shared-copy checker.
 
 #### Regenerate expected outputs after engine changes
 
-After any engine change, regenerate both demo scenarios' expected outputs and rerun the bundled
-tests before packaging.
+After any engine change, regenerate both demo scenarios' expected outputs and rerun the plugin's
+suite from the repository (`tests/`) before packaging.
 
 #### Re-evaluate the exact ZIP
 
@@ -273,9 +268,9 @@ re-evaluation.
 <!-- guidance: Steps a deployer follows after promotion. Keep them generic to Cowork. -->
 
 1. Download `<plugin-slug>-plugin-v<version>.zip` from the plugin folder and confirm its SHA-256.
-2. Import the ZIP into Cowork as a plugin. Confirm the importer treats the single top-level folder
-   as the plugin root and lists all <n> skills.
-3. Run scenario A end to end and confirm the output matches the expected files.
+2. Import the ZIP into Cowork as a plugin. Confirm it lists all <n> skills.
+3. Run scenario A end to end with the files from `<plugin-slug>-demo-data-v<version>.zip` and
+   confirm the output matches its `expected/` files.
 4. Run one draft-first prompt (for example "send this") and confirm nothing is sent.
 5. <Connector or configuration steps, or "No connectors to configure.">
 

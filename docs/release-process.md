@@ -58,7 +58,7 @@ Test policy (owner, 2026-10-15):
 | `<OneDrive>\Documents\Cowork\Tasks\<task>\` | Cowork's `input\` and `output\` | No |
 | `<OneDrive>\Cowork Plugin Evals\` | Cowork's evaluation queue: `1 - To evaluate`, `2 - In progress`, `3 - Evaluated\<slug>\v<version> - <timestamp>\`, `4 - Needs attention` and `eval-ledger.md` | No |
 | `sharepoint\<Industry>\<slug>\Evaluation\<version>\` | The archived ZIP and the three reports | No (SharePoint) |
-| `sharepoint\<Industry>\<slug>\` | The deployment doc, the tracker workbook and promoted ZIPs | No (SharePoint) |
+| `sharepoint\<Industry>\<slug>\` | The deployment doc, the tracker workbook, the demo-data ZIP for testers and promoted ZIPs | No (SharePoint) |
 
 Professional Services Waves 1 and 2 use the Retail library layout instead: the plugin folder is
 `sharepoint\Professional Services\Wave <n>\<Title Case Slug>\`, archives go to `Evaluation\v<version>\`,
@@ -294,15 +294,28 @@ Do this after a `Ready for human review` verdict.
 
 1. Create `PLUGIN-DETAILS-AND-DEPLOYMENT.md` in the plugin folder (`sharepoint\<Industry>\<slug>\`,
    or the Retail-layout folder above) from the
-   [deployment-doc template](templates/plugin-details-and-deployment.md). Record the evaluated
-   SHA-256 in it.
-2. Add a tab for this version to the plugin's tracker workbook (`<slug>-human-test-tracker.xlsx`,
+   [deployment-doc template](templates/plugin-details-and-deployment.md), or refresh the existing
+   one for this version. Record the evaluated SHA-256 in it.
+2. Put the demo data next to it. The plugin ZIP holds no demo data or tests, so testers get them
+   from `<slug>-demo-data-v<version>.zip` in the plugin folder: `demo-data\`,
+   `tests\sample-test-prompts.csv` and a short `README.md` naming the evaluated ZIP's SHA-256.
+   Build it from the commit the evaluated ZIP came from (or a later commit where both folders are
+   unchanged), never from a working tree:
+
+   ```powershell
+   git archive --format=zip -o <slug>-demo-data-v<version>.zip --add-file=<README.md> `
+     HEAD:submissions/<industry>/<slug> demo-data tests/sample-test-prompts.csv
+   ```
+
+   Testers attach these files in their own Cowork chats; they are never sent to the Cowork
+   evaluation.
+3. Add a tab for this version to the plugin's tracker workbook (`<slug>-human-test-tracker.xlsx`,
    or `<Title Case Slug> - Human Test Tracker.xlsx` in the Retail layout),
    following the [tracker spec](templates/human-test-tracker.md). There is one workbook per
-   plugin and one tab per version.
-3. Two independent testers install the archived ZIP and run the critical-path prompts. They record
+   plugin and one tab per version. Its **Inputs** paths are relative to the demo-data ZIP.
+4. Two independent testers install the archived ZIP and run the critical-path prompts. They record
    the results in the tracker.
-4. Promote only when the tab's **Publish gate** reads `PASS` and its **Owner decision** reads
+5. Promote only when the tab's **Publish gate** reads `PASS` and its **Owner decision** reads
    `Publish`.
 
 Tracker workbooks carry an encrypting sensitivity label. Open and edit them in Excel desktop, or
