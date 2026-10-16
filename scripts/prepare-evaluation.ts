@@ -7,11 +7,12 @@
  * `<slug>-v<version>.zip` and `-prompt.md` pair there for Cowork to pick up; --no-queue skips that.
  * It runs no plugin tests and freezes nothing.
  *
- * `--requeue` re-sends an already prepared, not yet archived version unchanged (same ZIP, same
- * SHA-256) after a queue run that did not complete. It builds nothing; the version is bumped only
- * when the plugin changes.
+ * `--requeue` re-sends an already prepared, not yet archived version unchanged after a queue run
+ * that did not complete: following Cowork's convention, it moves the pair from `4 - Needs attention`
+ * back to `1 - To evaluate` (re-creating a missing file from the inbox). It builds nothing; the
+ * version is bumped only when the plugin changes.
  */
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import {
@@ -53,7 +54,6 @@ function dropPair(
   artifactPath: string,
   artifactSha256: string,
   prompt: string,
-  resubmission: boolean,
   dropped: string[],
 ): QueueSubmission {
   const pair = queuePairNames(slug, version);
@@ -62,7 +62,7 @@ function dropPair(
   const stagedZip = join(runDir, `.queue-${pair.zip}`);
   const stagedPrompt = join(runDir, `.queue-${pair.prompt}`);
   copyFileSync(artifactPath, stagedZip);
-  writeFileSync(stagedPrompt, queuePrompt(prompt, slug, version, resubmission), "utf8");
+  writeFileSync(stagedPrompt, queuePrompt(prompt, slug, version), "utf8");
   moveInto(stagedZip, zipTarget);
   dropped.push(zipTarget);
   if (sha256(zipTarget) !== artifactSha256) {
@@ -70,12 +70,7 @@ function dropPair(
   }
   moveInto(stagedPrompt, promptTarget);
   dropped.push(promptTarget);
-  return {
-    zip: zipTarget,
-    prompt: promptTarget,
-    submittedAt: new Date().toISOString(),
-    ...(resubmission ? { resubmission: true } : {}),
-  };
+  return { zip: zipTarget, prompt: promptTarget, submittedAt: new Date().toISOString() };
 }
 
 function assertNotQueued(queueRoot: string, slug: string, version: string): void {
@@ -149,33 +144,70 @@ function requeue(runDir: string, slug: string, version: string, queueRoot: strin
     throw new Error(`Cowork already evaluated this ZIP (${evaluated[0]}); run npm run evaluation:watch -- --slug ${slug} to archive it`);
   }
 
+  // Cowork's requeue convention: move the pair from "4 - Needs attention" back to "1 - To evaluate".
+  const pair = queuePairNames(slug, version);
+  const attentionDir = join(queueRoot, EVAL_QUEUE_STAGES.needsAttention);
   const attention = findQueueAttention(queueRoot, slug, version, runData.artifactSha256);
-  let movedTo: string | undefined;
-  if (attention.length > 0) {
-    movedTo = join(runDir, "needs-attention", new Date().toISOString().replace(/[:.]/g, "-"));
-    mkdirSync(movedTo, { recursive: true });
-    for (const path of attention) moveInto(path, join(movedTo, basename(path)));
+  const pairFile = (name: string): string | undefined =>
+    attention
+      .map((entry) => (statSync(entry).isDirectory() ? join(entry, name) : entry))
+      .find((path) => basename(path) === name && existsSync(path));
+  const strayZip = join(attentionDir, pair.zip);
+  if (existsSync(strayZip) && sha256(strayZip) !== runData.artifactSha256) {
+    throw new Error(`the ZIP in "${EVAL_QUEUE_STAGES.needsAttention}" is not the prepared one (SHA-256 differs); investigate before requeueing: ${strayZip}`);
   }
+  const attentionZip = pairFile(pair.zip);
+  const attentionPrompt = pairFile(pair.prompt);
 
+  const zipTarget = join(queueInbox, pair.zip);
+  const promptTarget = join(queueInbox, pair.prompt);
   const dropped: string[] = [];
-  let submission: QueueSubmission;
   try {
-    submission = dropPair(
-      runDir,
-      queueInbox,
-      slug,
-      version,
-      artifactPath,
-      runData.artifactSha256,
-      readFileSync(promptPath, "utf8"),
-      true,
-      dropped,
-    );
+    if (attentionZip) {
+      moveInto(attentionZip, zipTarget);
+    } else {
+      const staged = join(runDir, `.queue-${pair.zip}`);
+      copyFileSync(artifactPath, staged);
+      moveInto(staged, zipTarget);
+    }
+    dropped.push(zipTarget);
+    if (sha256(zipTarget) !== runData.artifactSha256) {
+      throw new Error("queued plugin ZIP hash does not match the prepared ZIP");
+    }
+    if (attentionPrompt) {
+      moveInto(attentionPrompt, promptTarget);
+    } else {
+      // queuePrompt is deterministic, so this is the prompt that was first queued.
+      const staged = join(runDir, `.queue-${pair.prompt}`);
+      writeFileSync(staged, queuePrompt(readFileSync(promptPath, "utf8"), slug, version), "utf8");
+      moveInto(staged, promptTarget);
+    }
+    dropped.push(promptTarget);
   } catch (error) {
-    for (const path of dropped) rmSync(path, { force: true });
+    // Put Cowork's ZIP back where it was; remove a copy made from the inbox.
+    if (dropped.includes(zipTarget)) {
+      if (attentionZip) moveInto(zipTarget, attentionZip);
+      else rmSync(zipTarget, { force: true });
+    }
     throw error;
   }
 
+  // Whatever else Cowork left for this version (its note) moves to the inbox run folder, so the
+  // watcher does not stop on the earlier failure.
+  const leftover = findQueueAttention(queueRoot, slug, version, runData.artifactSha256);
+  let movedTo: string | undefined;
+  if (leftover.length > 0) {
+    movedTo = join(runDir, "needs-attention", new Date().toISOString().replace(/[:.]/g, "-"));
+    mkdirSync(movedTo, { recursive: true });
+    for (const path of leftover) moveInto(path, join(movedTo, basename(path)));
+  }
+
+  const submission: QueueSubmission = {
+    zip: zipTarget,
+    prompt: promptTarget,
+    submittedAt: new Date().toISOString(),
+    resubmission: true,
+  };
   const previous = runData.queueSubmission
     ? [{ ...runData.queueSubmission, ...(movedTo ? { needsAttentionMovedTo: movedTo } : {}) }]
     : [];
@@ -186,8 +218,10 @@ function requeue(runDir: string, slug: string, version: string, queueRoot: strin
   };
   writeFileSync(manifestPath, `${JSON.stringify(updated, null, 2)}\n`, "utf8");
 
-  console.log(`Requeued ${slug} ${version} unchanged (SHA-256 ${runData.artifactSha256}) in ${queueInbox}.`);
-  if (movedTo) console.log(`Cowork's "${EVAL_QUEUE_STAGES.needsAttention}" entries, note included, moved to: ${movedTo}`);
+  console.log(`Requeued ${slug} ${version} unchanged (SHA-256 ${runData.artifactSha256}) in ${queueInbox}:`);
+  console.log(`  ${pair.zip}: ${attentionZip ? `moved back from "${EVAL_QUEUE_STAGES.needsAttention}"` : "copied from the inbox (not in Needs attention)"}`);
+  console.log(`  ${pair.prompt}: ${attentionPrompt ? `moved back from "${EVAL_QUEUE_STAGES.needsAttention}"` : "re-created from cowork-prompt.txt (not in Needs attention)"}`);
+  if (movedTo) console.log(`Cowork's other "${EVAL_QUEUE_STAGES.needsAttention}" entries (its note) moved to: ${movedTo}`);
   console.log(`Then run: npm run evaluation:watch -- --slug ${slug}`);
 }
 
@@ -276,7 +310,6 @@ function main(): void {
         artifactPath,
         artifactSha256,
         prompt,
-        false,
         dropped,
       );
     }

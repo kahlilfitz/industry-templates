@@ -99,12 +99,15 @@ It runs no plugin tests and no external package validator; Cowork's evaluation i
 npm run evaluation:prepare -- --slug <slug> --requeue
 ```
 
-`--requeue` builds nothing. It re-sends the prepared inbox ZIP (refusing if its SHA-256 no longer
-matches the receipt) with a prompt header marking it as a resubmission. It moves this version's
-`4 - Needs attention` entries, Cowork's note included, to
-`evaluation-inbox\<slug>\<version>\needs-attention\<timestamp>\` and records the earlier
-submission in `queueHistory`. It refuses if the pair is still queued or in progress, if Cowork has
-already evaluated it (run the watcher instead), or if the version is already archived.
+`--requeue` builds nothing and follows Cowork's requeue convention: it moves this version's ZIP and
+prompt from `4 - Needs attention` back into `1 - To evaluate`, unchanged. A file that is not in
+`4 - Needs attention` is re-created from the inbox: the ZIP after its SHA-256 is checked against the
+receipt, and the prompt from `cowork-prompt.txt`, which gives the same prompt as the first drop.
+It refuses if the ZIP in `4 - Needs attention` has a different SHA-256. Cowork's note and any other
+entries for this version move to `evaluation-inbox\<slug>\<version>\needs-attention\<timestamp>\`,
+so the watcher does not stop on the earlier failure, and the earlier submission is recorded in
+`queueHistory`. It refuses if the pair is still queued or in progress, if Cowork has already
+evaluated it (run the watcher instead), or if the version is already archived.
 
 ## Step 3: evaluate in Cowork
 
