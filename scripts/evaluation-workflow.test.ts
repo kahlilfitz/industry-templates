@@ -206,11 +206,33 @@ test("Professional Services Wave 1 archives use the Retail library layout; other
   );
   assert.equal(
     evaluationArchiveDir(root, "Professional Services", "client-status-qbr", "1.0.0"),
-    join(root, "Professional Services", "client-status-qbr", "Evaluation", "1.0.0"),
+    join(root, "Professional Services", "Wave 2", "Client Status QBR", "Evaluation", "v1.0.0"),
   );
   assert.equal(
     evaluationArchiveDir(root, "Healthcare", "time-expense-narrative-compliance", "1.0.0"),
     join(root, "Healthcare", "time-expense-narrative-compliance", "Evaluation", "1.0.0"),
+  );
+});
+
+test("Professional Services Wave 2 plugins use the Retail layout under Wave 2; the unranked substitute does not", () => {
+  const root = join("C:", "library");
+  assert.equal(pluginFolderName("sow-drafting-scoping-notes"), "SOW Drafting Scoping Notes");
+  assert.equal(pluginFolderName("client-status-qbr"), "Client Status QBR");
+  for (const [slug, folder] of [
+    ["client-status-qbr", "Client Status QBR"],
+    ["sow-drafting-scoping-notes", "SOW Drafting Scoping Notes"],
+    ["credential-case-study-assembly", "Credential Case Study Assembly"],
+    ["engagement-financial-health-brief", "Engagement Financial Health Brief"],
+    ["conflicts-independence-precheck", "Conflicts Independence Precheck"],
+  ]) {
+    assert.equal(
+      sharepointPluginDir(root, "Professional Services", slug),
+      join(root, "Professional Services", "Wave 2", folder),
+    );
+  }
+  assert.equal(
+    evaluationArchiveDir(root, "Professional Services", "change-order-scope-control", "1.0.0"),
+    join(root, "Professional Services", "change-order-scope-control", "Evaluation", "1.0.0"),
   );
 });
 

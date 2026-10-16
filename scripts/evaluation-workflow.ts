@@ -160,13 +160,23 @@ export const SHAREPOINT_WAVES: Readonly<Record<string, Readonly<Record<string, n
     "engagement-mobilization-onboarding-pack": 1,
     "time-expense-narrative-compliance": 1,
     "deliverable-review-quality-gate": 1,
+    "client-status-qbr": 2,
+    "sow-drafting-scoping-notes": 2,
+    "credential-case-study-assembly": 2,
+    "engagement-financial-health-brief": 2,
+    "conflicts-independence-precheck": 2,
   },
 };
+
+// Slug words written in capitals in folder names, as Retail does ("Order Intake O2C Exception").
+const FOLDER_NAME_ACRONYMS = new Set(["qbr", "sow"]);
 
 export function pluginFolderName(slug: string): string {
   return slug
     .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word) =>
+      FOLDER_NAME_ACRONYMS.has(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1),
+    )
     .join(" ");
 }
 

@@ -9,7 +9,7 @@ published. An automated Cowork `Ready` verdict is not a substitute for it. See
 
 | Item | Rule |
 |---|---|
-| File name | `<plugin-slug>-human-test-tracker.xlsx`; in the Retail library layout (Professional Services Wave 1), `<Title Case Slug> - Human Test Tracker.xlsx` |
+| File name | `<plugin-slug>-human-test-tracker.xlsx`; in the Retail library layout (Professional Services Waves 1 and 2), `<Title Case Slug> - Human Test Tracker.xlsx` |
 | Location | SharePoint library, the plugin folder (`<Industry>/<plugin-slug>/`, or `<Industry>/Wave <n>/<Title Case Slug>/` in the Retail layout), next to `Evaluation/` and `PLUGIN-DETAILS-AND-DEPLOYMENT.md` |
 | Workbooks | One per plugin, for its whole life |
 | Sheets | One sheet per evaluated version, named exactly by version (for example `1.0.2`), plus a `How to use` sheet |

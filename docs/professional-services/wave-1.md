@@ -108,8 +108,12 @@ Rules:
   `sharepoint\Professional Services\Wave 1\<Title Case Slug>\...`. On 2026-10-16 the five Wave 1
   plugin folders moved from `Professional Services\<slug>\` to that Retail layout (`Evaluation\<version>\`
   became `Evaluation\v<version>\`; the tracker became `<Title Case Slug> - Human Test Tracker.xlsx`;
-  all 143 files were hash-verified unchanged). History rows below keep the paths in force when
-  they were written.
+  all 143 files were hash-verified unchanged). The same day the Wave 2 `client-status-qbr` folder
+  moved to `Professional Services\Wave 2\Client Status QBR\` the same way, and its promoted
+  `client-status-qbr-plugin-v1.4.0.zip` was renamed `client-status-qbr-cowork.zip` (byte-identical to
+  the evaluated 1.4.0 ZIP; all 12 files hash-verified unchanged). The other Wave 2 plugins have no
+  folder yet; their first archive creates one under `Wave 2\`. History rows below keep the paths in
+  force when they were written.
 
 Where things live:
 
@@ -179,8 +183,8 @@ Notes on the board:
 - C5: the industry `README.md` was updated on 2026-10-07 with the Mobilization 1.0.1 No-ship and
   DRQG 1.0.4 Blocked verdicts and the T&E 1.0.4 evaluation in progress. It does not change C5 for
   any plugin, because C5 means promoted and recorded.
-- No Wave 1 distributable has been promoted yet. Only the Wave 2 `client-status-qbr` folder holds a
-  promoted ZIP.
+- No Wave 1 distributable has been promoted yet. Only the Wave 2 `client-status-qbr` folder
+  (`Wave 2\Client Status QBR\`) holds a promoted ZIP, `client-status-qbr-cowork.zip` (1.4.0).
 - Since 2026-10-12 the C columns refer to the new MOS3 candidate version. The value in brackets is
   the superseded candidate's, kept for the record. The new versions have no SHA, verdict or freeze
   date yet; each gets a row in its version history when it is frozen, and its tracker gets a new tab
@@ -1155,7 +1159,9 @@ Each lesson below came from a specific Wave 1 finding. The resulting checks are 
 ## Wave 2 queue and substitute
 
 Wave 2 follows Wave 1 in the order set by the 2026-10-01 rerank. Scores are kept in the
-confidential scenario document and are not repeated here.
+confidential scenario document and are not repeated here. Wave 2 plugin folders use the Retail
+layout under `sharepoint\Professional Services\Wave 2\<Title Case Slug>\` (since 2026-10-16); the
+substitute, which is not in a wave, keeps `Professional Services\<slug>\`.
 
 | # | Plugin | Slug | Repo version | Evaluation state |
 |---|---|---|---|---|

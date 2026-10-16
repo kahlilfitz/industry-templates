@@ -57,8 +57,8 @@ Test policy (owner, 2026-10-15):
 | `sharepoint\<Industry>\<slug>\Evaluation\<version>\` | The archived ZIP and the three reports | No (SharePoint) |
 | `sharepoint\<Industry>\<slug>\` | The deployment doc, the tracker workbook and promoted ZIPs | No (SharePoint) |
 
-Professional Services Wave 1 uses the Retail library layout instead: the plugin folder is
-`sharepoint\Professional Services\Wave 1\<Title Case Slug>\`, archives go to `Evaluation\v<version>\`,
+Professional Services Waves 1 and 2 use the Retail library layout instead: the plugin folder is
+`sharepoint\Professional Services\Wave <n>\<Title Case Slug>\`, archives go to `Evaluation\v<version>\`,
 the tracker is `<Title Case Slug> - Human Test Tracker.xlsx`, and the promoted ZIP is
 `<slug>-cowork.zip`. `SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts` lists the plugins that use
 it; the archive script follows it automatically. After promotion, its `MOS Package\` folder holds the
@@ -242,11 +242,11 @@ Copy-Item "$dir\Evaluation\<version>\<slug>.zip" "$dir\<slug>-plugin-v<version>.
 Get-FileHash "$dir\Evaluation\<version>\<slug>.zip", "$dir\<slug>-plugin-v<version>.zip" -Algorithm SHA256
 ```
 
-For a plugin in the Retail layout (Professional Services Wave 1), the target is the latest
+For a plugin in the Retail layout (Professional Services Waves 1 and 2), the target is the latest
 distributable `<slug>-cowork.zip`:
 
 ```powershell
-$dir = "sharepoint\Professional Services\Wave 1\<Title Case Slug>"
+$dir = "sharepoint\Professional Services\Wave <n>\<Title Case Slug>"
 Copy-Item "$dir\Evaluation\v<version>\<slug>.zip" "$dir\<slug>-cowork.zip"
 Get-FileHash "$dir\Evaluation\v<version>\<slug>.zip", "$dir\<slug>-cowork.zip" -Algorithm SHA256
 ```

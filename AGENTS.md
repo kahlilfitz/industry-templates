@@ -59,7 +59,7 @@ This is not a general waiver, an evaluation verdict, or a publish decision.
 
 - `sharepoint\<Industry>\*-scenarios*.md` and `*-references*.md` — scenario lists, scoring and evidence.
 - `sharepoint\<Industry>\<plugin folder>\Evaluation\<version folder>\` — archived Cowork reports and
-  evaluated ZIPs. Professional Services Wave 1 mirrors Retail: `Wave 1\<Title Case Slug>\` and
+  evaluated ZIPs. Professional Services Waves 1 and 2 mirror Retail: `Wave <n>\<Title Case Slug>\` and
   `Evaluation\v<version>\` (`SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts`). Every other
   plugin uses `<slug>\` and `Evaluation\<version>\`.
 - `PLUGIN-DETAILS-AND-DEPLOYMENT.md` and the human-test tracker in each plugin folder

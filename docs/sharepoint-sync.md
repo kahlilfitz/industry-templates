@@ -74,7 +74,7 @@ A plain `sharepoint` folder (not a link) is refused unless passed explicitly wit
 - Evaluation archives land directly in the library as
   `sharepoint\<Industry>\<slug>\Evaluation\<version>\` and are visible to everyone once synced.
   Plugins listed in `SHAREPOINT_WAVES` (`scripts\evaluation-workflow.ts`, currently Professional
-  Services Wave 1) use the Retail layout instead:
+  Services Waves 1 and 2) use the Retail layout instead:
   `sharepoint\<Industry>\Wave <n>\<Title Case Slug>\Evaluation\v<version>\`.
 - After the owner promotes `<slug>-cowork.zip` in a Retail-layout plugin folder, `npm run mos:build`
   writes the derived manifest-1.28 package to its `MOS Package\` folder

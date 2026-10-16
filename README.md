@@ -143,8 +143,8 @@ npm run evaluation:watch -- --slug <plugin-slug>     # archive the Cowork report
    evaluation and saves `plugin-health.html`, `behavioral-test-report.html` and
    `recommendations.html` (suggested fixes with severities, and the verdict).
 3. The watcher archives the reports and the ZIP to
-   `sharepoint/<Industry>/<slug>/Evaluation/<version>/` (Professional Services Wave 1:
-   `sharepoint/Professional Services/Wave 1/<Title Case Slug>/Evaluation/v<version>/`, the Retail
+   `sharepoint/<Industry>/<slug>/Evaluation/<version>/` (Professional Services Waves 1 and 2:
+   `sharepoint/Professional Services/Wave <n>/<Title Case Slug>/Evaluation/v<version>/`, the Retail
    layout). `sharepoint` is a gitignored link to the OneDrive-synced Industry Templates library; see
    [SharePoint sync](docs/sharepoint-sync.md).
 4. The watcher then runs `evaluation:fix`:
