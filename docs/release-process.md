@@ -13,7 +13,7 @@ This process follows the *Industry Templates Plugin Testing and Validation Strat
 | Step | Who | Command |
 |---|---|---|
 | 1. Build the plugin | Contributor or agent | Follow [CONTRIBUTING.md](../CONTRIBUTING.md); `npm run check:submissions` |
-| 2. Package | Operator | `npm run evaluation:prepare -- --slug <slug>` |
+| 2. Package | Operator, or the fix step after clean fixes | `npm run evaluation:prepare -- --slug <slug>` |
 | 3. Evaluate in Cowork | Cowork (queue), or operator | Automatic from the queue folder; otherwise a new task with the ZIP and the prompt |
 | 4. Archive and fix | Watcher, then fix agent | `npm run evaluation:watch -- --slug <slug>` |
 | 5. Human spot check | Two testers | Tracker workbook in SharePoint |
@@ -150,7 +150,7 @@ Rules:
 ## Step 4: archive and fix
 
 ```powershell
-npm run evaluation:watch -- --slug <slug>       # add --no-fix to only archive, --model <id> for the agent
+npm run evaluation:watch -- --slug <slug>       # --no-fix: only archive; --no-prepare: fix but do not prepare; --model <id>: agent model
 ```
 
 The watcher:
@@ -186,16 +186,26 @@ The fix step:
      for the exact changes authorized in the one-time owner exceptions below);
    - otherwise leaves `tests\` and `demo-data\` alone unless a fix requires an edit, and lists any
      such edit;
-   - commits locally and stops.
+   - commits locally, writes `evaluation-inbox\<slug>\<version>\fix-result.json` (each fix
+     applied or skipped, conflicts, checks that already failed, the commit) and stops;
+5. checks the agent's work. If every blocker and required fix was applied, with no conflicts and
+   no pre-existing failing checks, the plugin is at the next version, and the commit titled
+   `<slug> <next version>: …` changed only plugin files and left none uncommitted, it **prepares
+   the next version** (Step 2) the same way as this one: queued if this run was queued, otherwise
+   manual. Otherwise it stops with the reasons (`fixStatus: needs-attention`) and prepares nothing.
+   `--no-prepare` (on the watcher or the fix step) turns the automatic prepare off.
 
 If there are no blocker or required items, the fix step does nothing and the plugin goes to step 5.
 
 **You then:**
 
 1. Review the agent's commit: `git --no-pager log -1 --stat`, then `git --no-pager show`. Amend or
-   revert it as needed.
-2. Go back to step 2 for the new version. Each fix-and-re-run cycle is a new version: a new queue
-   pair, or a new Cowork task when you are not using the queue.
+   revert it as needed. A queued next version is already with Cowork; if you change the commit,
+   tell the owner before re-sending, because the evaluated ZIP no longer matches.
+2. If the fix step stopped for attention, resolve the reasons, then go back to step 2 for the new
+   version. Otherwise run the watcher for the new version (a manual next version also needs its
+   Cowork task, Step 3). Each fix-and-re-run cycle is a new version: a new queue pair, or a new
+   Cowork task when you are not using the queue.
 
 **Running the steps by hand:**
 
@@ -371,5 +381,6 @@ Never copy report text or internal URLs into the repository, a commit message or
 | The watcher times out | Restart it. It never archives twice |
 | `no suggested-fixes table` | `recommendations.html` lacks the fixes table. Ask Cowork, in the same task, to add it, then run `npm run evaluation:fix -- --slug <slug> --report "<task>\output\recommendations.html"` |
 | The fix agent failed | Read `fix-brief.md`, fix by hand or rerun `npm run evaluation:fix -- --slug <slug>` |
+| `needs the owner's attention before it is prepared` | Read the listed reasons and `fix-result.json`. Resolve them (an existing-check conflict needs an owner decision), then `npm run evaluation:prepare -- --slug <slug>` |
 | A `.<version>-<pid>.tmp` folder is left under `Evaluation\` | An archive was interrupted before its rename. Make sure no watcher or archive is running, delete only that one folder, then archive again |
 | `evaluation archive already exists` but the receipt says `prepared` | The rename finished but the receipt was not updated. Check that the folder holds the ZIP (with the matching hash) and the three reports, then tell the owner |

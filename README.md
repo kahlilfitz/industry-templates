@@ -154,7 +154,9 @@ npm run evaluation:watch -- --slug <plugin-slug>     # archive the Cowork report
 4. The watcher then runs `evaluation:fix`:
    - advisory items go to the submission's `BACKLOG.md`;
    - blocker and required items go to a Copilot CLI agent, which fixes them, bumps the version
-     and commits locally for review.
+     and commits locally for review;
+   - if every fix was applied with no conflicts, the next version is prepared automatically (queued
+     like the run before it); otherwise the step stops with the reasons. `--no-prepare` turns this off.
 
 `Ready for human review` is never a publish signal. Publication still needs two independent
 human testers, the tracker's Publish gate and an owner decision of Publish.

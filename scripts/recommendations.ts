@@ -100,6 +100,112 @@ function fixLines(fix: Recommendation): string[] {
   ];
 }
 
+export const FIX_RESULT_FILE = "fix-result.json";
+
+/** What the fix agent writes to FIX_RESULT_FILE after its commit. */
+export type FixResult = {
+  version: string;
+  commit: string;
+  fixes: Array<{ id: string; status: "applied" | "skipped"; reason?: string }>;
+  conflicts: string[];
+  preexistingFailures: string[];
+};
+
+function resultFileLines(resultPath: string, nextVersion: string): string[] {
+  const example: FixResult = {
+    version: nextVersion,
+    commit: "<full hash of your commit, or empty if you made none>",
+    fixes: [{ id: "<fix ID>", status: "applied", reason: "<why, when skipped>" }],
+    conflicts: ["<each conflict you reported; empty if none>"],
+    preexistingFailures: ["<each check that already failed before your changes; empty if none>"],
+  };
+  return [
+    "## Result file",
+    "",
+    `After committing, write \`${resultPath}\` as JSON in this shape, and do not commit it:`,
+    "",
+    "```json",
+    JSON.stringify(example, null, 2),
+    "```",
+    "",
+    "List every fix below exactly once, with `applied` or `skipped`. The next version is prepared",
+    "automatically only when every fix is applied and there are no conflicts or pre-existing failures,",
+    "so report them honestly; the owner reviews anything else.",
+    "",
+  ];
+}
+
+export type FixCommit = { hash: string; subject: string; files: string[] };
+
+export type FixOutcome = {
+  slug: string;
+  nextVersion: string;
+  actionableIds: string[];
+  /** Parsed FIX_RESULT_FILE, or undefined if it is missing or not JSON. */
+  result: unknown;
+  /** The plugin's version in submissions after the agent ran. */
+  submissionVersion: string;
+  /** Repository-relative plugin folder. */
+  submissionDir: string;
+  /** Commits made since the agent started, newest first. */
+  commits: FixCommit[];
+  /** `git status --porcelain` lines for the plugin folder. */
+  uncommitted: string[];
+};
+
+const toPosix = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "");
+
+/**
+ * The reasons the owner must look at the fix agent's work before the next version is prepared.
+ * Empty means every blocker and required fix was applied cleanly and committed as the next version.
+ */
+export function fixAttention(outcome: FixOutcome): string[] {
+  const reasons: string[] = [];
+  const result = outcome.result as Partial<FixResult> | undefined;
+  if (!result || typeof result !== "object" || !Array.isArray(result.fixes)) {
+    reasons.push(`the agent did not write a valid ${FIX_RESULT_FILE}`);
+  } else {
+    if (result.version !== outcome.nextVersion) {
+      reasons.push(`${FIX_RESULT_FILE} reports version ${result.version}, not ${outcome.nextVersion}`);
+    }
+    for (const id of outcome.actionableIds) {
+      const entries = result.fixes.filter((fix) => fix?.id === id);
+      if (entries.length !== 1 || entries[0].status !== "applied") {
+        const reason = entries.length === 1 && entries[0].reason ? `: ${entries[0].reason}` : "";
+        reasons.push(`fix ${id} was not applied${reason}`);
+      }
+    }
+    for (const conflict of Array.isArray(result.conflicts) ? result.conflicts : ["conflicts not reported"]) {
+      reasons.push(`conflict: ${conflict}`);
+    }
+    for (const failure of Array.isArray(result.preexistingFailures)
+      ? result.preexistingFailures
+      : ["pre-existing failures not reported"]) {
+      reasons.push(`pre-existing failing check: ${failure}`);
+    }
+  }
+
+  if (outcome.submissionVersion !== outcome.nextVersion) {
+    reasons.push(`the plugin is at ${outcome.submissionVersion}, not ${outcome.nextVersion}`);
+  }
+  const prefix = `${outcome.slug} ${outcome.nextVersion}:`;
+  const fixCommits = outcome.commits.filter((commit) => commit.subject.startsWith(prefix));
+  if (fixCommits.length === 0) {
+    reasons.push(`no new commit titled "${prefix} ..."`);
+  } else {
+    const reported = typeof result?.commit === "string" ? result.commit.trim() : "";
+    if (!reported || !fixCommits.some((commit) => commit.hash.startsWith(reported))) {
+      reasons.push(`${FIX_RESULT_FILE} does not name the fix commit`);
+    }
+    const dir = `${toPosix(outcome.submissionDir)}/`;
+    for (const file of fixCommits.flatMap((commit) => commit.files)) {
+      if (!toPosix(file).startsWith(dir)) reasons.push(`the fix commit changed a file outside the plugin: ${file}`);
+    }
+  }
+  for (const line of outcome.uncommitted) reasons.push(`uncommitted change in the plugin: ${line.trim()}`);
+  return reasons;
+}
+
 export type BriefInput = {
   slug: string;
   displayName: string;
@@ -111,6 +217,8 @@ export type BriefInput = {
   fixes: Recommendation[];
   backlogPath: string;
   advisoryCount: number;
+  /** Where the agent writes its machine-readable outcome (FIX_RESULT_FILE in the run folder). */
+  resultPath?: string;
 };
 
 export function renderFixBrief(input: BriefInput): string {
@@ -138,10 +246,12 @@ export function renderFixBrief(input: BriefInput): string {
     "- Run `npm run check:submissions` and `npm run test:evaluation`; both must pass.",
     `- Commit only the files you changed, path-limited: \`git commit -m "${input.slug} ${input.nextVersion}: apply Cowork recommendations" -- <paths>\`,`,
     "  with the trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`.",
-    "- Do not push, do not run `npm run evaluation:prepare`, and do not write to `sharepoint\\` or `evaluation-inbox\\`.",
+    "- Do not push, do not run `npm run evaluation:prepare`, and do not write to `sharepoint\\` or `evaluation-inbox\\`" +
+      (input.resultPath ? " except the result file below." : "."),
     "- If a fix is unclear or cannot be applied safely, skip it and say why.",
     "- Finish with a short summary: each fix ID with applied or skipped, and the commit hash.",
     "",
+    ...(input.resultPath ? resultFileLines(input.resultPath, input.nextVersion) : []),
     `## Fixes to apply (${actionable.length})`,
     "",
     ...actionable.flatMap(fixLines),

@@ -22,6 +22,8 @@ Cowork's `recommendations.html` decides what changes between versions.
 - Commit path-limited (`git commit -m ... -- <paths>`) and stop for owner review. Push only when
   the owner explicitly asks in the current session, only to the current branch's tracked remote,
   never force-push, and never push to `main`. The unattended `evaluation:fix` agent never pushes.
+  Owner decision (2026-10-16): the fix step itself prepares the next version when its checks find
+  nothing that needs the owner's attention; the agent still never runs `evaluation:prepare`.
 - Never infer an owner sign-off or a publish decision.
 
 ## One-time owner exception: T&E R-03

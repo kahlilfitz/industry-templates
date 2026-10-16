@@ -1,11 +1,9 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   DEFAULT_INBOX_ROOT,
   EVAL_QUEUE_STAGES,
   REQUIRED_REPORTS,
-  ROOT,
   EvaluationRun,
   VERDICT_REPORT,
   assertNonEmptyFile,
@@ -21,6 +19,7 @@ import {
   requiredArg,
   resolveInputPath,
   resolveSharepointRoot,
+  runScript,
   sha256,
 } from "./evaluation-workflow.js";
 
@@ -86,14 +85,6 @@ function reportsMatchRun(
   );
 }
 
-function runScript(script: string, args: string[]): void {
-  const tsxCli = join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
-  execFileSync(process.execPath, [tsxCli, join(ROOT, "scripts", script), ...args], {
-    cwd: ROOT,
-    stdio: "inherit",
-  });
-}
-
 function archive(
   slug: string,
   version: string,
@@ -116,7 +107,7 @@ function archive(
 }
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2), new Set(["no-fix"]));
+  const args = parseArgs(process.argv.slice(2), new Set(["no-fix", "no-prepare"]));
   const slug = requiredArg(args, "slug");
   const submission = findSubmission(slug);
   const version = args.get("version")?.trim() || submission.version;
@@ -233,6 +224,8 @@ async function main(): Promise<void> {
             "--inbox-root",
             inboxRoot,
             ...(args.has("model") ? ["--model", requiredArg(args, "model")] : []),
+            ...(args.has("no-prepare") ? ["--no-prepare"] : []),
+            ...(args.has("queue-root") ? ["--queue-root", requiredArg(args, "queue-root")] : []),
           ]);
         }
         return;

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  FIX_RESULT_FILE,
+  FixOutcome,
   copilotArgs,
+  fixAttention,
   isActionable,
   nextPatchVersion,
   normalizeSeverity,
@@ -132,4 +135,120 @@ test("copilotArgs runs non-interactively and denies git push", () => {
   assert.ok(args.includes("--deny-tool=shell(git push)"));
   assert.deepEqual(args.slice(-2), ["--model", "claude-opus-5.5"]);
   assert.ok(!copilotArgs("x").includes("--model"));
+});
+
+test("renderFixBrief asks for a result file only when given its path", () => {
+  const input = {
+    slug: "demo-plugin",
+    displayName: "Demo",
+    version: "1.0.6",
+    nextVersion: "1.0.7",
+    submissionDir: "submissions\\demo\\demo-plugin",
+    verdict: "No-ship",
+    reportPath: "C:\\reports\\recommendations.html",
+    fixes: parseRecommendations(REPORT),
+    backlogPath: "submissions\\demo\\demo-plugin\\BACKLOG.md",
+    advisoryCount: 1,
+  };
+  const withResult = renderFixBrief({ ...input, resultPath: "C:\\inbox\\fix-result.json" });
+  assert.match(withResult, /## Result file/);
+  assert.match(withResult, /write `C:\\inbox\\fix-result\.json` as JSON/);
+  assert.match(withResult, /"version": "1\.0\.7"/);
+  assert.match(withResult, /`evaluation-inbox\\` except the result file below\./);
+  assert.match(withResult, /do not run `npm run evaluation:prepare`/);
+  const without = renderFixBrief(input);
+  assert.doesNotMatch(without, /## Result file/);
+  assert.match(without, /`evaluation-inbox\\`\./);
+});
+
+const CLEAN: FixOutcome = {
+  slug: "demo-plugin",
+  nextVersion: "1.0.7",
+  actionableIds: ["R1", "R2"],
+  result: {
+    version: "1.0.7",
+    commit: "abc1234",
+    fixes: [
+      { id: "R1", status: "applied" },
+      { id: "R2", status: "applied" },
+    ],
+    conflicts: [],
+    preexistingFailures: [],
+  },
+  submissionVersion: "1.0.7",
+  submissionDir: "submissions\\demo\\demo-plugin",
+  commits: [
+    {
+      hash: "abc1234def",
+      subject: "demo-plugin 1.0.7: apply Cowork recommendations",
+      files: ["submissions/demo/demo-plugin/skills/draft/SKILL.md", "submissions/demo/demo-plugin/BACKLOG.md"],
+    },
+    { hash: "999", subject: "other agent: unrelated", files: ["docs/other.md"] },
+  ],
+  uncommitted: [],
+};
+
+test("fixAttention is empty for a clean fix run, ignoring unrelated commits", () => {
+  assert.deepEqual(fixAttention(CLEAN), []);
+});
+
+test("fixAttention flags skipped fixes, conflicts and pre-existing failures", () => {
+  const reasons = fixAttention({
+    ...CLEAN,
+    result: {
+      version: "1.0.7",
+      commit: "abc1234",
+      fixes: [
+        { id: "R1", status: "applied" },
+        { id: "R2", status: "skipped", reason: "conflicts with an existing check" },
+      ],
+      conflicts: ["R2 breaks check X"],
+      preexistingFailures: ["check Y"],
+    },
+  });
+  assert.deepEqual(reasons, [
+    "fix R2 was not applied: conflicts with an existing check",
+    "conflict: R2 breaks check X",
+    "pre-existing failing check: check Y",
+  ]);
+  assert.deepEqual(
+    fixAttention({ ...CLEAN, result: { ...(CLEAN.result as object), fixes: [{ id: "R1", status: "applied" }] } }),
+    ["fix R2 was not applied"],
+  );
+});
+
+test("fixAttention flags a missing result file and missing conflict lists", () => {
+  assert.deepEqual(fixAttention({ ...CLEAN, result: undefined }), [
+    `the agent did not write a valid ${FIX_RESULT_FILE}`,
+    `${FIX_RESULT_FILE} does not name the fix commit`,
+  ]);
+  const { conflicts: _c, preexistingFailures: _p, ...partial } = CLEAN.result as Record<string, unknown>;
+  assert.deepEqual(fixAttention({ ...CLEAN, result: partial }), [
+    "conflict: conflicts not reported",
+    "pre-existing failing check: pre-existing failures not reported",
+  ]);
+});
+
+test("fixAttention checks the version, the commit and the plugin folder", () => {
+  assert.deepEqual(fixAttention({ ...CLEAN, submissionVersion: "1.0.6" }), ["the plugin is at 1.0.6, not 1.0.7"]);
+  assert.deepEqual(fixAttention({ ...CLEAN, commits: [CLEAN.commits[1]] }), [
+    'no new commit titled "demo-plugin 1.0.7: ..."',
+  ]);
+  assert.deepEqual(fixAttention({ ...CLEAN, result: { ...(CLEAN.result as object), commit: "fff" } }), [
+    `${FIX_RESULT_FILE} does not name the fix commit`,
+  ]);
+  assert.deepEqual(
+    fixAttention({
+      ...CLEAN,
+      commits: [{ ...CLEAN.commits[0], files: [...CLEAN.commits[0].files, "AGENTS.md"] }],
+    }),
+    ["the fix commit changed a file outside the plugin: AGENTS.md"],
+  );
+  assert.deepEqual(
+    fixAttention({ ...CLEAN, submissionDir: "submissions\\demo\\demo", uncommitted: [] }).length,
+    2,
+  );
+  assert.deepEqual(fixAttention({ ...CLEAN, uncommitted: [" M submissions/demo/demo-plugin/README.md"] }), [
+    "uncommitted change in the plugin: M submissions/demo/demo-plugin/README.md",
+  ]);
 });

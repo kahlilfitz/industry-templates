@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
@@ -51,6 +52,8 @@ export type EvaluationRun = {
   fixBrief?: string;
   fixVersion?: string;
   fixUpdatedAt?: string;
+  /** Why the fix step did not prepare the next version automatically. */
+  fixAttention?: string[];
   /** Set when prepare dropped the pair into the Cowork evaluation queue folder. */
   queueSubmission?: QueueSubmission;
   /** Earlier queue submissions of this same ZIP, replaced by `prepare --requeue`. */
@@ -66,7 +69,13 @@ export type QueueSubmission = {
   needsAttentionMovedTo?: string;
 };
 
-export type FixStatus = "nothing-to-fix" | "brief-written" | "agent-finished" | "agent-failed";
+export type FixStatus =
+  | "nothing-to-fix"
+  | "brief-written"
+  | "agent-finished"
+  | "agent-failed"
+  | "needs-attention"
+  | "next-prepared";
 
 export type Submission = {
   slug: string;
@@ -506,4 +515,13 @@ export function readRun(inboxRoot: string, slug: string, version: string): { pat
     throw new Error("evaluation-run.json does not match the requested plugin and version");
   }
   return { path, run };
+}
+
+/** Runs another script in this folder with the repository's tsx, inheriting stdio; throws on failure. */
+export function runScript(script: string, args: string[]): void {
+  const tsxCli = join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
+  execFileSync(process.execPath, [tsxCli, join(ROOT, "scripts", script), ...args], {
+    cwd: ROOT,
+    stdio: "inherit",
+  });
 }
