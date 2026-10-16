@@ -44,8 +44,11 @@ applying required **R-02 from the 1.0.12 Cowork evaluation** (skip a deliverable
 repeats the subject), regenerate `demo-data\scenario-b-drama\expected\drafted.json`, `coded.json`
 and `governed.json`. The only permitted non-label change is the TE-B-001 B-DOC-001 suggested
 rewrite losing " for the Integration Design", and the status and review reason that follow from
-the 12-word minimum (#1.1), as they flow through code-map and guideline-check. Every other golden,
-check and expectation stays unchanged. Follow the
+the 12-word minimum (#1.1), as they flow through code-map and guideline-check. In
+`tests\run_tests.py`, the check `per-activity rewrites on a multi-link entry are needs_review and
+name what they leave out` changes its status condition from `r["status"] == "needs_review"` to
+`r["status"].startswith("needs_review")`; its "only" reason and coverage conditions stay unchanged.
+Every other golden, check and expectation stays unchanged. Follow the
 [exception's evidence requirements](docs/release-process.md#one-time-owner-exception-for-te-1013-r-02).
 This is not a general waiver, an evaluation verdict, or a publish decision.
 

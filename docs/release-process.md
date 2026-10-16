@@ -223,12 +223,17 @@ engine fix; their implementation and evaluation status are recorded in the Wave 
   `governed.json`. The only permitted non-label difference is in the TE-B-001 suggested rewrite for
   B-DOC-001. It drops " for the Integration Design" (11 words). Its status becomes
   `needs_review_insufficient_detail`, with the engine's 12-word (#1.1) review reason, and these values
-  carry through to the downstream outputs. Every other golden, check and expectation stays unchanged.
+  carry through to the downstream outputs.
+- **Check change:** in `tests\run_tests.py`, the check `per-activity rewrites on a multi-link entry
+  are needs_review and name what they leave out` changes its status condition from
+  `r["status"] == "needs_review"` to `r["status"].startswith("needs_review")`. Its "only" reason
+  and `covered_activity_ids` conditions stay unchanged. Report this check separately from the
+  unchanged checks. Every other golden, check and expectation stays unchanged.
 - **Evidence:** add R-02 regressions named for the fix ID that fail on the unfixed 1.0.12 engine
   and pass after. Run the entire plugin suite before and after. Report the golden diff and show that
   it contains nothing outside the scope above.
 
-This exception permits only these golden updates, as part of the R-02 fix. It does not permit
+This exception permits only these golden updates and this check change, as part of the R-02 fix. It does not permit
 padding a draft to reach 12 words, unrelated test changes, weaker billing or safety rules, or
 packaging or publishing without their existing gates.
 
