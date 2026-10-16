@@ -88,7 +88,7 @@ Update this file whenever one of these happens:
 | A Cowork verdict is archived | Fill in the result, headline figures, key findings and archive path for that row. Update the status board. |
 | A human reviewer signs off | Update the status board's done-conditions columns and the plugin's next action. Record only gate status (not started, in progress, passed, failed); reviewer names, per-prompt results and the owner's reasoning stay in the tracker. |
 | The owner records a decision | Update the plugin's state and next action only: promoted, back to a new version, or stopped (not published). The decision record itself (who decided, when and why) stays in the tracker. |
-| A distributable is promoted | Record the promoted file name and confirm its SHA-256 matches the evaluated ZIP. |
+| A distributable is promoted | Record the promoted file name and confirm its SHA-256 matches the evaluated ZIP. Then run `npm run mos:build -- --slug <slug> --version <version>` and record the derived MOS package's SHA-256. |
 | A version is abandoned or superseded | Keep its row and say why (see T&E 1.0.2). |
 
 Rules:
@@ -122,6 +122,7 @@ Where things live:
 | Archived evidence | `<plugin folder>\Evaluation\v<version>\` |
 | Deployment doc and tracker | `<plugin folder>\PLUGIN-DETAILS-AND-DEPLOYMENT.md` and `<Title Case Slug> - Human Test Tracker.xlsx` |
 | Promoted distributable | `<plugin folder>\<slug>-cowork.zip` (only after C2) |
+| Derived MOS package (manifest 1.28) | `<plugin folder>\MOS Package\` (`<slug>-mos3-v<version>.zip`, `README.md`, `skills\`), built by `npm run mos:build` only after C4 ([decision](#owner-decision-derived-manifest-128-mos-package-2026-10-16)) |
 | Industry status page | `sharepoint\Professional Services\README.md` |
 | Scenario specification | `sharepoint\Professional Services\professional-services-scenarios.md` |
 
@@ -147,7 +148,7 @@ A plugin is done when all five conditions hold. Wave 1 is done when all five plu
 | C1 | The automated Cowork verdict is **Ready for human review** (recorded as **Ready** before 2026-10-12), and the three hash-matched reports plus the evaluated ZIP (and, for a MOS3 candidate, its test-data ZIP) are archived under `Evaluation\v<version>\`. Evidence that only the two-reviewer human review can supply (installed-runtime critical-path runs, grader-calibration labels, spot checks) does not block C1; the report lists it under "Pending human-review evidence" and C2 supplies it. |
 | C2 | Two independent human testers have each run every prompt in `<Title Case Slug> - Human Test Tracker.xlsx`, on a tab for that version (the critical-path prompts are the mandatory minimum the tracker must contain), the tab's publish gate reads `PASS`, and the accountable owner's decision on that tab is `Publish`. |
 | C3 | `PLUGIN-DETAILS-AND-DEPLOYMENT.md` exists and records the evaluated SHA-256. |
-| C4 | Only after C2: the distributable `<slug>-cowork.zip` (Retail name; formerly `<slug>-plugin-v<version>.zip`) is promoted to the plugin folder and is byte-identical to the evaluated ZIP. |
+| C4 | Only after C2: the distributable `<slug>-cowork.zip` (Retail name; formerly `<slug>-plugin-v<version>.zip`) is promoted to the plugin folder and is byte-identical to the evaluated ZIP. The derived manifest-1.28 package in `MOS Package\` is built from that same evaluated ZIP afterwards; it is not the C4 artefact ([decision](#owner-decision-derived-manifest-128-mos-package-2026-10-16)). |
 | C5 | The Professional Services `README.md` status table shows the plugin as published. |
 
 An automated Ready for human review is not a publication decision. C2 is the publication gate, and C4 and C5 only
@@ -185,6 +186,31 @@ Notes on the board:
   date yet; each gets a row in its version history when it is frozen, and its tracker gets a new tab
   keyed to the new SHA. The superseded candidates' tracker tabs are not completed.
 
+### Owner decision: derived manifest-1.28 MOS package (2026-10-16)
+
+The owner chose to keep the devPreview evaluation process and add a manifest-1.28 build for the
+product team, matching the Retail folder's `MOS Package\` (owner: "a good way to keep current
+processes and make a build that satisfies the product team and is just a schema not code";
+"go ahead").
+
+- Cowork keeps evaluating the devPreview package, and `scripts\mos3-package.ts` and its tests are
+  unchanged. C4 still promotes the evaluated ZIP byte for byte as `<slug>-cowork.zip`.
+- After C4, `npm run mos:build -- --slug <slug> --version <version>` derives
+  `<plugin folder>\MOS Package\<slug>-mos3-v<version>.zip` from the archived evaluated ZIP. Only
+  `manifest.json` changes: `$schema` becomes the v1.28 URL, `manifestVersion` becomes `1.28` and
+  `packageName` is removed (the 1.28 schema has `additionalProperties: false`). Every other entry is
+  copied byte for byte.
+- The script refuses unless `<slug>-cowork.zip` exists and is byte-identical to the evaluated ZIP.
+  Before writing, it proves the entry list and every non-manifest SHA-256 match the source, that the
+  manifest differs in only those three fields, and that it validates against the v1.28 schema
+  bundled in `@microsoft/app-manifest`. It records all of this in `MOS Package\README.md` with the
+  listing from `listing-metadata.md`, and extracts `skills\` for reviewers. It never deletes or
+  overwrites a different file; `--out-dir` builds outside the SharePoint library for a dry run.
+- Cowork has not evaluated the 1.28 package, as with Retail's MOS packages. It keeps the evaluated
+  package's app id, so the two are never installed in the same tenant.
+- Dry run on 2026-10-16 against the archived evaluated ZIPs (Closeout 1.0.5, Staffing 1.1.7,
+  Mobilization 1.0.6, T&E 1.0.10, DRQG 1.0.8): all five derived and passed the 1.28 schema, with only
+  `manifest.json` differing. Nothing was written to SharePoint, because no Wave 1 plugin has passed C2.
 ### Owner decision: MOS3 packaging, per-version test data and verdict rename (2026-10-12)
 
 On 2026-10-12 the owner decided three changes for Wave 1. Wave 2 and the published

@@ -174,6 +174,10 @@ function sharepointWave(industry: string, slug: string): number | undefined {
   return SHAREPOINT_WAVES[industry]?.[slug];
 }
 
+export function usesRetailLayout(industry: string, slug: string): boolean {
+  return sharepointWave(industry, slug) !== undefined;
+}
+
 export function sharepointPluginDir(sharepointRoot: string, industry: string, slug: string): string {
   const wave = sharepointWave(industry, slug);
   return wave === undefined

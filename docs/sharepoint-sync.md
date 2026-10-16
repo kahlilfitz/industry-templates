@@ -59,7 +59,7 @@ Windows only. The link is a directory junction, which needs no administrator rig
 
 ## How scripts find the library
 
-`evaluation:archive` and `evaluation:watch` resolve the archive root in this order:
+`evaluation:archive`, `evaluation:watch` and `mos:build` resolve the archive root in this order:
 
 1. `--sharepoint-root <path>`
 2. `INDUSTRY_TEMPLATES_SHAREPOINT_ROOT`
@@ -76,6 +76,9 @@ A plain `sharepoint` folder (not a link) is refused unless passed explicitly wit
   Plugins listed in `SHAREPOINT_WAVES` (`scripts\evaluation-workflow.ts`, currently Professional
   Services Wave 1) use the Retail layout instead:
   `sharepoint\<Industry>\Wave <n>\<Title Case Slug>\Evaluation\v<version>\`.
+- After the owner promotes `<slug>-cowork.zip` in a Retail-layout plugin folder, `npm run mos:build`
+  writes the derived manifest-1.28 package to its `MOS Package\` folder
+  ([release process, Step 6](release-process.md#step-6-publish-and-file-the-evidence)).
 - Close Excel or Word trackers when done. If two people edit offline at once, OneDrive keeps both as
   `<name>-<COMPUTERNAME>.<ext>`. `sharepoint:doctor` lists these; merge and delete the copy.
 - Check the OneDrive tray icon is not paused before archiving evidence.

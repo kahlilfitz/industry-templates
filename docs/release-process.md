@@ -61,7 +61,8 @@ Professional Services Wave 1 uses the Retail library layout instead: the plugin 
 `sharepoint\Professional Services\Wave 1\<Title Case Slug>\`, archives go to `Evaluation\v<version>\`,
 the tracker is `<Title Case Slug> - Human Test Tracker.xlsx`, and the promoted ZIP is
 `<slug>-cowork.zip`. `SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts` lists the plugins that use
-it; the archive script follows it automatically.
+it; the archive script follows it automatically. After promotion, its `MOS Package\` folder holds the
+derived manifest-1.28 package (Step 6).
 
 ## Step 1: build the plugin
 
@@ -250,7 +251,21 @@ Copy-Item "$dir\Evaluation\v<version>\<slug>.zip" "$dir\<slug>-cowork.zip"
 Get-FileHash "$dir\Evaluation\v<version>\<slug>.zip", "$dir\<slug>-cowork.zip" -Algorithm SHA256
 ```
 
-Both hashes must equal `artifactSha256` in the receipt. Then update the status in
+Both hashes must equal `artifactSha256` in the receipt. For a MOS3 plugin in the Retail layout, then
+build the manifest-1.28 MOS package from the same evaluated ZIP:
+
+```powershell
+npm run mos:build -- --slug <slug> --version <version>
+```
+
+It writes `<plugin folder>\MOS Package\<slug>-mos3-v<version>.zip`, a `README.md` that proves only
+`manifest.json` changed (`$schema`, `manifestVersion` 1.28, `packageName` removed) and that the
+manifest passes the v1.28 schema, and an extracted `skills\`. It refuses unless `<slug>-cowork.zip`
+is byte-identical to the evaluated ZIP, and it never deletes or overwrites a different file. Use
+`--out-dir <folder>` for a dry run outside SharePoint. Cowork evaluates the devPreview package only
+([owner decision](professional-services/wave-1.md#owner-decision-derived-manifest-128-mos-package-2026-10-16)).
+
+Then update the status in
 `sharepoint\<Industry>\README.md` and in the wave log (for example
 `docs\professional-services\wave-1.md`). Keep failed runs: every archived version stays in
 `Evaluation\`.
@@ -270,7 +285,7 @@ Never copy report text or internal URLs into the repository, a commit message or
 
 **SharePoint write rules**
 
-- Write only evaluation archives (through the scripts) and documents the owner asks for.
+- Write only evaluation archives and MOS packages (through the scripts) and documents the owner asks for.
 - Never delete, rename or overwrite other people's files.
 - Never delete recursively through the link.
 
