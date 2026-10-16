@@ -6,7 +6,7 @@ import {
   statSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -51,6 +51,8 @@ export type EvaluationRun = {
   fixBrief?: string;
   fixVersion?: string;
   fixUpdatedAt?: string;
+  /** Set when prepare dropped the pair into the Cowork evaluation queue folder. */
+  queueSubmission?: { zip: string; prompt: string; submittedAt: string };
 };
 
 export type FixStatus = "nothing-to-fix" | "brief-written" | "agent-finished" | "agent-failed";
@@ -203,6 +205,107 @@ export function evaluationArchiveDir(
 ): string {
   const folder = sharepointWave(industry, slug) === undefined ? version : `v${version}`;
   return join(sharepointPluginDir(sharepointRoot, industry, slug), "Evaluation", folder);
+}
+
+/**
+ * The OneDrive folder Cowork watches (eval-ledger.md in it describes the contract): a
+ * `<slug>-v<version>.zip` and `<slug>-v<version>-prompt.md` pair dropped in `1 - To evaluate` is
+ * evaluated, and the pair plus reports land in `3 - Evaluated\<slug>\v<version> - <timestamp>\`.
+ */
+export const EVAL_QUEUE_DIR = "Cowork Plugin Evals";
+export const EVAL_QUEUE_STAGES = {
+  toEvaluate: "1 - To evaluate",
+  inProgress: "2 - In progress",
+  evaluated: "3 - Evaluated",
+  needsAttention: "4 - Needs attention",
+} as const;
+
+export function defaultQueueRoot(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const oneDrive = env.OneDriveCommercial || env.OneDrive;
+  return oneDrive ? join(oneDrive, EVAL_QUEUE_DIR) : undefined;
+}
+
+export function queuePairNames(slug: string, version: string): { zip: string; prompt: string } {
+  const base = `${slug}-v${version}`;
+  return { zip: `${base}.zip`, prompt: `${base}-prompt.md` };
+}
+
+/** The rendered Cowork prompt with a header naming the queued ZIP, which the template calls `<slug>.zip`. */
+export function queuePrompt(prompt: string, slug: string, version: string): string {
+  const { zip } = queuePairNames(slug, version);
+  return [
+    "Queue submission (Cowork Plugin Evals).",
+    "",
+    `The plugin ZIP for this prompt is \`${zip}\`, the other file of this pair.`,
+    `Wherever the prompt below says \`${slug}.zip\` or "the attached plugin", it means \`${zip}\`.`,
+    "Its SHA-256 must be the one stated below. Keep the three report filenames exactly as named below.",
+    "",
+    "---",
+    "",
+    prompt,
+  ].join("\n");
+}
+
+function entries(dir: string): string[] {
+  return existsSync(dir) && statSync(dir).isDirectory() ? readdirSync(dir) : [];
+}
+
+/**
+ * Each required report in a folder: the exact name, else the one newest `.html` file whose name
+ * contains the report's stem (Cowork may timestamp report names). Undefined if any is missing or empty.
+ */
+export function findReports(dir: string): Map<string, string> | undefined {
+  const files = entries(dir)
+    .map((name) => join(dir, name))
+    .filter((path) => statSync(path).isFile() && statSync(path).size > 0);
+  const found = new Map<string, string>();
+  for (const report of REQUIRED_REPORTS) {
+    const exact = files.find((path) => basename(path).toLowerCase() === report);
+    const stem = report.replace(/\.html$/, "");
+    const named = files
+      .filter((path) => {
+        const name = basename(path).toLowerCase();
+        return name.endsWith(".html") && name.includes(stem);
+      })
+      .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
+    const path = exact ?? named[0];
+    if (!path) return undefined;
+    found.set(report, path);
+  }
+  return found;
+}
+
+/** `3 - Evaluated\<slug>\v<version> - *` folders whose queued ZIP has the digest, newest first. */
+export function findEvaluatedQueueRuns(queueRoot: string, slug: string, version: string, digest: string): string[] {
+  const pluginDir = join(queueRoot, EVAL_QUEUE_STAGES.evaluated, slug);
+  const { zip } = queuePairNames(slug, version);
+  return entries(pluginDir)
+    .filter((name) => name === `v${version}` || name.startsWith(`v${version} `))
+    .map((name) => join(pluginDir, name))
+    .filter((dir) => statSync(dir).isDirectory())
+    .filter((dir) => {
+      const candidate = join(dir, zip);
+      return existsSync(candidate) && sha256(candidate) === digest;
+    })
+    .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
+}
+
+/**
+ * Entries in `4 - Needs attention` for this slug and version (the pair, a note or a folder). An entry
+ * holding a ZIP with a different digest belongs to another candidate and is ignored.
+ */
+export function findQueueAttention(queueRoot: string, slug: string, version: string, digest: string): string[] {
+  const dir = join(queueRoot, EVAL_QUEUE_STAGES.needsAttention);
+  const { zip } = queuePairNames(slug, version);
+  const base = `${slug}-v${version}`;
+  return entries(dir)
+    .filter((name) => name.toLowerCase().startsWith(base.toLowerCase()))
+    .map((name) => join(dir, name))
+    .filter((path) => {
+      const candidate = statSync(path).isDirectory() ? join(path, zip) : path;
+      if (!candidate.toLowerCase().endsWith(".zip") || !existsSync(candidate)) return true;
+      return sha256(candidate) === digest;
+    });
 }
 
 export function sha256(path: string): string {

@@ -14,7 +14,7 @@ This process follows the *Industry Templates Plugin Testing and Validation Strat
 |---|---|---|
 | 1. Build the plugin | Contributor or agent | Follow [CONTRIBUTING.md](../CONTRIBUTING.md); `npm run check:submissions` |
 | 2. Package | Operator | `npm run evaluation:prepare -- --slug <slug>` |
-| 3. Evaluate in Cowork | Operator, in Cowork | New task, attach the ZIP, paste the prompt |
+| 3. Evaluate in Cowork | Cowork (queue), or operator | Automatic from the queue folder; otherwise a new task with the ZIP and the prompt |
 | 4. Archive and fix | Watcher, then fix agent | `npm run evaluation:watch -- --slug <slug>` |
 | 5. Human spot check | Two testers | Tracker workbook in SharePoint |
 | 6. Publish | Owner | Promote the evaluated ZIP byte for byte |
@@ -43,7 +43,9 @@ Test policy (owner, 2026-10-15):
    `npm run sharepoint:link`. Then run `npm run sharepoint:doctor`, which must end with
    "SharePoint sync: ready.". See [SharePoint sync](sharepoint-sync.md).
 3. Keep Cowork's task folder synced at `<OneDrive>\Documents\Cowork\Tasks`. If it is somewhere
-   else, pass `--tasks-root`.
+   else, pass `--tasks-root`. For automatic evaluation, keep Cowork's queue folder synced at
+   `<OneDrive>\Cowork Plugin Evals\` (its `eval-ledger.md` describes the queue); otherwise pass
+   `--queue-root`. OneDrive must be running for either folder to sync.
 4. Install the GitHub Copilot CLI (`copilot`) and sign in. The fix step runs it.
 
 ## Where things live
@@ -54,6 +56,7 @@ Test policy (owner, 2026-10-15):
 | `submissions\<industry>\<slug>\tests\`, `demo-data\` | The plugin's own tests and demo data, never bundled | Yes |
 | `evaluation-inbox\<slug>\<version>\` | The plugin ZIP, the `evaluation-run.json` receipt, `cowork-prompt.txt` and `fix-brief.md` | No (local) |
 | `<OneDrive>\Documents\Cowork\Tasks\<task>\` | Cowork's `input\` and `output\` | No |
+| `<OneDrive>\Cowork Plugin Evals\` | Cowork's evaluation queue: `1 - To evaluate`, `2 - In progress`, `3 - Evaluated\<slug>\v<version> - <timestamp>\`, `4 - Needs attention` and `eval-ledger.md` | No |
 | `sharepoint\<Industry>\<slug>\Evaluation\<version>\` | The archived ZIP and the three reports | No (SharePoint) |
 | `sharepoint\<Industry>\<slug>\` | The deployment doc, the tracker workbook and promoted ZIPs | No (SharePoint) |
 
@@ -83,11 +86,24 @@ This command:
 1. validates every submission and builds the bundles;
 2. copies `public\bundles\<slug>.zip` to `evaluation-inbox\<slug>\<version>\`;
 3. records its SHA-256 in `evaluation-run.json`;
-4. writes `cowork-prompt.txt`, built from `docs\evaluation\cowork-evaluation-prompt[-mos3].txt`.
+4. writes `cowork-prompt.txt`, built from `docs\evaluation\cowork-evaluation-prompt[-mos3].txt`;
+5. if the queue folder `<OneDrive>\Cowork Plugin Evals\1 - To evaluate` exists, drops the pair
+   `<slug>-v<version>.zip` and `<slug>-v<version>-prompt.md` there and records it as
+   `queueSubmission` in `evaluation-run.json`. The prompt is `cowork-prompt.txt` with a header that
+   names the queued ZIP. Pass `--no-queue` to skip the queue, or `--queue-root` to use another folder.
 
 It runs no plugin tests and no external package validator; Cowork's evaluation is the package check. A version can be prepared only once; for a new run, bump the version.
 
 ## Step 3: evaluate in Cowork
+
+**Queued (default when the queue folder exists).** Cowork picks up the pair from `1 - To evaluate`,
+moves it to `2 - In progress`, and files the pair and its reports in
+`3 - Evaluated\<slug>\v<version> - <timestamp>\`. If it cannot complete the run (missing pair,
+SHA-256 mismatch or a failed run), it moves the pair to `4 - Needs attention` with a note.
+`eval-ledger.md` records every submission; a ZIP whose SHA-256 is already there is skipped.
+Nothing else to do; run the watcher (Step 4).
+
+**Manual (no queue, or `--no-queue`):**
 
 1. Create a new Cowork task named exactly as `coworkTaskName` in `evaluation-run.json`
    (`evaluate-<slug>-v<version>-<date>`).
@@ -118,7 +134,10 @@ npm run evaluation:watch -- --slug <slug>       # add --no-fix to only archive, 
 
 The watcher:
 
-1. finds the Cowork task whose `input\<slug>.zip` has the recorded SHA-256;
+1. finds the Cowork run whose ZIP has the recorded SHA-256: a task's `input\<slug>.zip`, or a
+   queue folder `3 - Evaluated\<slug>\v<version> - *\<slug>-v<version>.zip`. It stops with the
+   paths if Cowork moved the pair to `4 - Needs attention`. Timestamped report names are accepted
+   and copied under their exact names to `evaluation-inbox\<slug>\<version>\cowork-reports\`;
 2. waits until the three reports are present and stable;
 3. **archives** them with the ZIP to `sharepoint\<Industry>\<slug>\Evaluation\<version>\` (Retail
    layout: `<Industry>\Wave <n>\<Title Case Slug>\Evaluation\v<version>\`)
@@ -322,6 +341,9 @@ Never copy report text or internal URLs into the repository, a commit message or
 | `an evaluation candidate already exists` | Bump the version; never delete the inbox folder to retry |
 | `version mismatch: metadata …, manifest …` | Make `metadata.json` and the manifest agree |
 | The watcher never logs `Matched Cowork task` | Check `<task>\input\`: the wrong ZIP was attached, or the task has not synced. Start a new task with the inbox ZIP |
+| Queued pair stays in `1 - To evaluate` | Check that OneDrive is running and Cowork's queue watcher is on; read `eval-ledger.md`. A ZIP with an already-logged SHA-256 is skipped as a duplicate |
+| `Cowork moved … to "4 - Needs attention"` | Read the note next to the pair and `eval-ledger.md`. Fix the cause, then bump the version and prepare again |
+| `already queued for Cowork` | The pair is still in `1 - To evaluate` or `2 - In progress`. Wait for Cowork, or remove the stale pair after checking the ledger |
 | `do not affirm the matching version/hash` | Stale reports, or the report lacks `SHA-256 check: MATCH`. Ask Cowork, in the same task, to add the missing lines |
 | `SHA-256 check: MISMATCH` | Stop. Cowork evaluated a different file |
 | The watcher times out | Restart it. It never archives twice |

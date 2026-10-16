@@ -1,17 +1,24 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
   containsDigest,
   confirmsArtifactMatch,
+  defaultQueueRoot,
+  EVAL_QUEUE_STAGES,
   evaluationArchiveDir,
   extractVerdict,
+  findEvaluatedQueueRuns,
+  findQueueAttention,
+  findReports,
   findSubmission,
   htmlToText,
   parseArgs,
   pluginFolderName,
+  queuePairNames,
+  queuePrompt,
   REQUIRED_REPORTS,
   resolveSharepointRoot,
   sha256,
@@ -279,4 +286,90 @@ test("both Cowork prompt templates request the two Cowork reports plus recommend
   assert.deepEqual(placeholders(mos3), expected);
   assert.match(mos3, /MOS3 Microsoft 365 app package \(manifest schema\s+devPreview, with packageName\)/);
   assert.match(claude, /\.claude-plugin\/plugin\.json/);
+});
+
+test("the Cowork queue uses the ledger's pair names under the OneDrive queue folder", () => {
+  assert.deepEqual(queuePairNames("demo-plugin", "1.2.3"), {
+    zip: "demo-plugin-v1.2.3.zip",
+    prompt: "demo-plugin-v1.2.3-prompt.md",
+  });
+  assert.equal(defaultQueueRoot({ OneDriveCommercial: join("C:", "od") }), join("C:", "od", "Cowork Plugin Evals"));
+  assert.equal(defaultQueueRoot({ OneDrive: join("C:", "personal") }), join("C:", "personal", "Cowork Plugin Evals"));
+  assert.equal(defaultQueueRoot({}), undefined);
+  assert.deepEqual(Object.values(EVAL_QUEUE_STAGES), [
+    "1 - To evaluate",
+    "2 - In progress",
+    "3 - Evaluated",
+    "4 - Needs attention",
+  ]);
+});
+
+test("queuePrompt names the queued ZIP and keeps the rendered prompt unchanged below it", () => {
+  const prompt = "Evaluate the attached plugin.\n1. Compute the SHA-256 of demo-plugin.zip.\n";
+  const queued = queuePrompt(prompt, "demo-plugin", "1.2.3");
+  assert.ok(queued.endsWith(prompt));
+  assert.match(queued, /`demo-plugin-v1\.2\.3\.zip`/);
+  assert.match(queued, /says `demo-plugin\.zip` or "the attached plugin", it means `demo-plugin-v1\.2\.3\.zip`/);
+  assert.match(queued, /Keep the three report filenames exactly as named below/);
+});
+
+test("findReports prefers exact names, accepts timestamped names and needs all three non-empty", () => {
+  const dir = mkdtempSync(join(tmpdir(), "queue-reports-"));
+  try {
+    assert.equal(findReports(join(dir, "missing")), undefined);
+    writeFileSync(join(dir, "plugin-health.html"), "a");
+    writeFileSync(join(dir, "behavioral-test-report-2026-10-16-1230.html"), "b");
+    assert.equal(findReports(dir), undefined);
+    writeFileSync(join(dir, "recommendations-2026-10-16-1230.html"), "");
+    assert.equal(findReports(dir), undefined, "an empty report does not count");
+    writeFileSync(join(dir, "recommendations-2026-10-16-1230.html"), "c");
+    writeFileSync(join(dir, "recommendations-2026-10-16-1100.html"), "old");
+    utimesSync(join(dir, "recommendations-2026-10-16-1100.html"), new Date(2026, 0, 1), new Date(2026, 0, 1));
+    const found = findReports(dir);
+    assert.deepEqual([...(found?.keys() ?? [])], [...REQUIRED_REPORTS]);
+    assert.equal(found?.get("plugin-health.html"), join(dir, "plugin-health.html"));
+    assert.equal(found?.get("behavioral-test-report.html"), join(dir, "behavioral-test-report-2026-10-16-1230.html"));
+    assert.equal(found?.get("recommendations.html"), join(dir, "recommendations-2026-10-16-1230.html"));
+    writeFileSync(join(dir, "recommendations.html"), "exact");
+    utimesSync(join(dir, "recommendations.html"), new Date(2026, 0, 1), new Date(2026, 0, 1));
+    assert.equal(findReports(dir)?.get("recommendations.html"), join(dir, "recommendations.html"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("queue runs and needs-attention entries match by version and the prepared ZIP's digest", () => {
+  const root = mkdtempSync(join(tmpdir(), "queue-root-"));
+  try {
+    const { zip, prompt } = queuePairNames("demo-plugin", "1.2.3");
+    const evaluated = join(root, EVAL_QUEUE_STAGES.evaluated, "demo-plugin");
+    const match = join(evaluated, "v1.2.3 - 2026-10-16-1230");
+    const otherZip = join(evaluated, "v1.2.3 - 2026-10-16-0900");
+    const otherVersion = join(evaluated, "v1.2.30 - 2026-10-16-1230");
+    for (const dir of [match, otherZip, otherVersion]) mkdirSync(dir, { recursive: true });
+    writeFileSync(join(match, zip), "candidate");
+    writeFileSync(join(otherZip, zip), "earlier candidate");
+    writeFileSync(join(otherVersion, "demo-plugin-v1.2.30.zip"), "candidate");
+    const digest = sha256(join(match, zip));
+
+    assert.deepEqual(findEvaluatedQueueRuns(root, "demo-plugin", "1.2.3", digest), [match]);
+    assert.deepEqual(findEvaluatedQueueRuns(join(root, "nope"), "demo-plugin", "1.2.3", digest), []);
+
+    const attention = join(root, EVAL_QUEUE_STAGES.needsAttention);
+    mkdirSync(attention);
+    assert.deepEqual(findQueueAttention(root, "demo-plugin", "1.2.3", digest), []);
+    writeFileSync(join(attention, zip), "earlier candidate");
+    assert.deepEqual(findQueueAttention(root, "demo-plugin", "1.2.3", digest), [], "another candidate's ZIP is ignored");
+    writeFileSync(join(attention, zip), "candidate");
+    writeFileSync(join(attention, prompt), "prompt");
+    writeFileSync(join(attention, "demo-plugin-v1.2.3-note.md"), "SHA-256 mismatch");
+    writeFileSync(join(attention, "other-plugin-v1.2.3.zip"), "candidate");
+    assert.deepEqual(findQueueAttention(root, "demo-plugin", "1.2.3", digest).sort(), [
+      join(attention, "demo-plugin-v1.2.3-note.md"),
+      join(attention, prompt),
+      join(attention, zip),
+    ].sort());
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

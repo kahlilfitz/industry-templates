@@ -1,17 +1,23 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
 import {
   DEFAULT_INBOX_ROOT,
+  EVAL_QUEUE_STAGES,
   REQUIRED_REPORTS,
   ROOT,
   EvaluationRun,
   VERDICT_REPORT,
   assertNonEmptyFile,
   confirmsArtifactMatch,
+  defaultQueueRoot,
+  findEvaluatedQueueRuns,
+  findQueueAttention,
+  findReports,
   findSubmission,
   htmlToText,
   parseArgs,
+  queuePairNames,
   requiredArg,
   resolveInputPath,
   resolveSharepointRoot,
@@ -54,32 +60,39 @@ function findMatchingTasks(tasksRoot: string, slug: string, digest: string): str
   });
 }
 
-function reportsPresentAndNonEmpty(source: string): boolean {
-  return REQUIRED_REPORTS.every((report) => {
-    const path = join(source, report);
-    return existsSync(path) && statSync(path).isFile() && statSync(path).size > 0;
-  });
+function reportSizes(reports: Map<string, string>): Map<string, number> {
+  return new Map([...reports].map(([report, path]) => [report, statSync(path).size]));
 }
 
-function reportSizes(source: string): Map<string, number> {
-  return new Map(
-    REQUIRED_REPORTS.map((report) => [report, statSync(join(source, report)).size]),
+function sameReports(left: Map<string, string>, right: Map<string, string> | undefined): boolean {
+  return (
+    right !== undefined &&
+    REQUIRED_REPORTS.every((report) => left.get(report) === right.get(report))
   );
 }
 
 function reportsMatchRun(
-  source: string,
+  verdictPath: string,
   slug: string,
   version: string,
   digest: string,
 ): boolean {
-  const verdictReport = readFileSync(join(source, VERDICT_REPORT), "utf8");
+  const verdictReport = readFileSync(verdictPath, "utf8");
   const text = htmlToText(verdictReport).toLowerCase();
   return (
     text.includes(slug.toLowerCase()) &&
     text.includes(version.toLowerCase()) &&
     confirmsArtifactMatch(verdictReport, digest)
   );
+}
+
+/** The archive step reads exact report names; timestamped names are copied to a local folder first. */
+function archiveSource(dir: string, reports: Map<string, string>, runDir: string): string {
+  if (REQUIRED_REPORTS.every((report) => basename(reports.get(report) ?? "") === report)) return dir;
+  const staged = join(runDir, "cowork-reports");
+  mkdirSync(staged, { recursive: true });
+  for (const report of REQUIRED_REPORTS) copyFileSync(reports.get(report) as string, join(staged, report));
+  return staged;
 }
 
 function runScript(script: string, args: string[]): void {
@@ -151,51 +164,75 @@ async function main(): Promise<void> {
   }
 
   const deadline = Date.now() + timeoutMinutes * 60_000;
+  const queueRoot = args.has("queue-root")
+    ? resolveInputPath(requiredArg(args, "queue-root"))
+    : defaultQueueRoot();
+  const useQueue = Boolean(queueRoot && existsSync(queueRoot));
+  const runDir = join(inboxRoot, slug, version);
+  const pair = queuePairNames(slug, version);
   console.log(`Watching ${tasksRoot} for ${slug} ${version}.`);
+  if (useQueue) console.log(`Watching the Cowork queue ${queueRoot} for ${pair.zip}.`);
   console.log(`Expected ZIP SHA-256: ${runData.artifactSha256}`);
   console.log(`Archive root (${sharepointSource}): ${sharepointRoot}`);
   console.log(fix ? "After archiving, the fix step starts a Copilot CLI agent (--no-fix to skip)." : "Fix step disabled (--no-fix).");
 
-  const reportedTasks = new Set<string>();
-  const reportedStaleOutput = new Set<string>();
+  const reported = new Set<string>();
+  const once = (key: string, message: string) => {
+    if (!reported.has(key)) {
+      console.log(message);
+      reported.add(key);
+    }
+  };
   while (Date.now() < deadline) {
-    const tasks = findMatchingTasks(tasksRoot, slug, runData.artifactSha256);
-    for (const task of tasks) {
-      if (!reportedTasks.has(task)) {
-        console.log(`Matched Cowork task: ${task}`);
-        reportedTasks.add(task);
+    const sources: string[] = [];
+    for (const task of findMatchingTasks(tasksRoot, slug, runData.artifactSha256)) {
+      once(`task:${task}`, `Matched Cowork task: ${task}`);
+      sources.push(join(task, "output"));
+    }
+    if (useQueue && queueRoot) {
+      const attention = findQueueAttention(queueRoot, slug, version, runData.artifactSha256);
+      if (attention.length > 0) {
+        throw new Error(
+          `Cowork moved ${pair.zip} to "${EVAL_QUEUE_STAGES.needsAttention}" (missing pair, SHA-256 mismatch or a ` +
+            `failed run); read its note and eval-ledger.md:\n  ${attention.join("\n  ")}`,
+        );
+      }
+      if (existsSync(join(queueRoot, EVAL_QUEUE_STAGES.inProgress, pair.zip))) {
+        once("queue:in-progress", `Cowork started the queued run (${EVAL_QUEUE_STAGES.inProgress}).`);
+      }
+      for (const dir of findEvaluatedQueueRuns(queueRoot, slug, version, runData.artifactSha256)) {
+        once(`queue:${dir}`, `Matched Cowork queue run: ${dir}`);
+        sources.push(dir);
       }
     }
 
-    const stableCandidates = tasks
-      .map((task) => ({ task, source: join(task, "output") }))
-      .filter(({ source }) => reportsPresentAndNonEmpty(source))
-      .map(({ task, source }) => ({ task, source, sizes: reportSizes(source) }));
+    const candidates = sources.flatMap((dir) => {
+      const reports = findReports(dir);
+      return reports ? [{ dir, reports, sizes: reportSizes(reports) }] : [];
+    });
 
-    if (stableCandidates.length > 0) {
+    if (candidates.length > 0) {
       await sleep(stableSeconds * 1000);
-      for (const candidate of stableCandidates) {
+      for (const candidate of candidates) {
+        const now = findReports(candidate.dir);
         if (
-          !reportsPresentAndNonEmpty(candidate.source) ||
+          !now ||
+          !sameReports(candidate.reports, now) ||
           !REQUIRED_REPORTS.every(
-            (report) =>
-              statSync(join(candidate.source, report)).size ===
-              candidate.sizes.get(report),
+            (report) => statSync(now.get(report) as string).size === candidate.sizes.get(report),
           )
         ) {
           continue;
         }
-        if (!reportsMatchRun(candidate.source, slug, version, runData.artifactSha256)) {
-          if (!reportedStaleOutput.has(candidate.task)) {
-            console.log(
-              `Reports in ${candidate.task} do not affirm the matching version/hash; continuing to search.`,
-            );
-            reportedStaleOutput.add(candidate.task);
-          }
+        if (!reportsMatchRun(now.get(VERDICT_REPORT) as string, slug, version, runData.artifactSha256)) {
+          once(
+            `stale:${candidate.dir}`,
+            `Reports in ${candidate.dir} do not affirm the matching version/hash; continuing to search.`,
+          );
           continue;
         }
-        console.log("All three reports are present and stable.");
-        archive(slug, version, candidate.source, inboxRoot, sharepointRoot);
+        console.log(`All three reports are present and stable: ${candidate.dir}`);
+        archive(slug, version, archiveSource(candidate.dir, now, runDir), inboxRoot, sharepointRoot);
         if (fix) {
           runScript("fix-evaluation.ts", [
             "--slug",
