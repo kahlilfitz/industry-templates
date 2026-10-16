@@ -194,7 +194,8 @@ async function main(): Promise<void> {
       if (attention.length > 0) {
         throw new Error(
           `Cowork moved ${pair.zip} to "${EVAL_QUEUE_STAGES.needsAttention}" (missing pair, SHA-256 mismatch or a ` +
-            `failed run); read its note and eval-ledger.md:\n  ${attention.join("\n  ")}`,
+            `failed run); read its note and eval-ledger.md. If the plugin is unchanged, re-send it with ` +
+            `npm run evaluation:prepare -- --slug ${slug} --requeue:\n  ${attention.join("\n  ")}`,
         );
       }
       if (existsSync(join(queueRoot, EVAL_QUEUE_STAGES.inProgress, pair.zip))) {

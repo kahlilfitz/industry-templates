@@ -373,3 +373,32 @@ test("queue runs and needs-attention entries match by version and the prepared Z
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("queuePrompt marks a requeue as a resubmission of the same ZIP", () => {
+  const prompt = "Evaluate the attached plugin.\n";
+  const queued = queuePrompt(prompt, "demo-plugin", "1.2.3", true);
+  assert.ok(queued.startsWith("Queue resubmission (Cowork Plugin Evals)."));
+  assert.ok(queued.endsWith(prompt));
+  assert.match(queued, /resubmission of the same unchanged ZIP \(same SHA-256\)/);
+  assert.match(queued, /do not skip it as a duplicate/);
+  assert.doesNotMatch(queuePrompt(prompt, "demo-plugin", "1.2.3"), /resubmission/i);
+});
+
+test("needs-attention entries for a longer version are not matched", () => {
+  const root = mkdtempSync(join(tmpdir(), "queue-attention-"));
+  try {
+    const attention = join(root, EVAL_QUEUE_STAGES.needsAttention);
+    mkdirSync(attention, { recursive: true });
+    writeFileSync(join(attention, "demo-plugin-v1.0.13-note.md"), "note");
+    writeFileSync(join(attention, "demo-plugin-v1.0.1.2-note.md"), "note");
+    assert.deepEqual(findQueueAttention(root, "demo-plugin", "1.0.1", "ANY"), []);
+    writeFileSync(join(attention, "demo-plugin-v1.0.1-note.md"), "note");
+    writeFileSync(join(attention, "demo-plugin-v1.0.1 - 2026-10-16-1230"), "note");
+    assert.deepEqual(findQueueAttention(root, "demo-plugin", "1.0.1", "ANY").sort(), [
+      join(attention, "demo-plugin-v1.0.1 - 2026-10-16-1230"),
+      join(attention, "demo-plugin-v1.0.1-note.md"),
+    ].sort());
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -16,7 +16,8 @@ Cowork's `recommendations.html` decides what changes between versions.
   of an existing test or check. If a fix makes an existing test fail outside those exceptions, stop,
   do not commit, and report the conflict.
 - Every change sent to Cowork is a new version: bump `metadata.json` and the manifest together and
-  add a CHANGELOG entry. Engine version labels (`ENGINE_VERSION`-style constants, not
+  add a CHANGELOG entry. Bump only after fixes; an unchanged version whose queue run did not
+  complete is re-sent with `npm run evaluation:prepare -- --slug <slug> --requeue`. Engine version labels (`ENGINE_VERSION`-style constants, not
   `steering_guard.py` `__version__`) match the plugin version in every release.
 - Commit path-limited (`git commit -m ... -- <paths>`) and stop for owner review. Push only when
   the owner explicitly asks in the current session, only to the current branch's tracked remote,

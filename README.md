@@ -142,7 +142,9 @@ npm run evaluation:watch -- --slug <plugin-slug>     # archive the Cowork report
 2. If the Cowork queue folder `<OneDrive>/Cowork Plugin Evals/1 - To evaluate` exists, `prepare`
    also drops `<slug>-v<version>.zip` and `<slug>-v<version>-prompt.md` there and Cowork starts
    the evaluation itself. Otherwise (or with `--no-queue`), attach only that ZIP to a new Cowork
-   task and paste the prompt. Cowork runs its built-in evaluation and saves `plugin-health.html`, `behavioral-test-report.html` and
+   task and paste the prompt. If a queue run lands in `4 - Needs attention` and the plugin needs no
+   change, `npm run evaluation:prepare -- --slug <slug> --requeue` re-sends the same version; the
+   version is bumped only after fixes. Cowork runs its built-in evaluation and saves `plugin-health.html`, `behavioral-test-report.html` and
    `recommendations.html` (suggested fixes with severities, and the verdict).
 3. The watcher archives the reports and the ZIP to
    `sharepoint/<Industry>/<slug>/Evaluation/<version>/` (Professional Services Waves 1 and 2:

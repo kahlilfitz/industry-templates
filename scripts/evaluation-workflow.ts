@@ -52,7 +52,18 @@ export type EvaluationRun = {
   fixVersion?: string;
   fixUpdatedAt?: string;
   /** Set when prepare dropped the pair into the Cowork evaluation queue folder. */
-  queueSubmission?: { zip: string; prompt: string; submittedAt: string };
+  queueSubmission?: QueueSubmission;
+  /** Earlier queue submissions of this same ZIP, replaced by `prepare --requeue`. */
+  queueHistory?: QueueSubmission[];
+};
+
+export type QueueSubmission = {
+  zip: string;
+  prompt: string;
+  submittedAt: string;
+  resubmission?: boolean;
+  /** Where `--requeue` moved this submission's `4 - Needs attention` entries (Cowork's note included). */
+  needsAttentionMovedTo?: string;
 };
 
 export type FixStatus = "nothing-to-fix" | "brief-written" | "agent-finished" | "agent-failed";
@@ -230,15 +241,25 @@ export function queuePairNames(slug: string, version: string): { zip: string; pr
   return { zip: `${base}.zip`, prompt: `${base}-prompt.md` };
 }
 
-/** The rendered Cowork prompt with a header naming the queued ZIP, which the template calls `<slug>.zip`. */
-export function queuePrompt(prompt: string, slug: string, version: string): string {
+/**
+ * The rendered Cowork prompt with a header naming the queued ZIP, which the template calls `<slug>.zip`.
+ * A resubmission (`prepare --requeue`) re-sends the same ZIP after a run that did not complete.
+ */
+export function queuePrompt(prompt: string, slug: string, version: string, resubmission = false): string {
   const { zip } = queuePairNames(slug, version);
   return [
-    "Queue submission (Cowork Plugin Evals).",
+    resubmission ? "Queue resubmission (Cowork Plugin Evals)." : "Queue submission (Cowork Plugin Evals).",
     "",
     `The plugin ZIP for this prompt is \`${zip}\`, the other file of this pair.`,
     `Wherever the prompt below says \`${slug}.zip\` or "the attached plugin", it means \`${zip}\`.`,
     "Its SHA-256 must be the one stated below. Keep the three report filenames exactly as named below.",
+    ...(resubmission
+      ? [
+          "",
+          "This is a resubmission of the same unchanged ZIP (same SHA-256). An earlier run of it did not",
+          'complete and went to "4 - Needs attention". Evaluate it again; do not skip it as a duplicate.',
+        ]
+      : []),
     "",
     "---",
     "",
@@ -297,9 +318,13 @@ export function findEvaluatedQueueRuns(queueRoot: string, slug: string, version:
 export function findQueueAttention(queueRoot: string, slug: string, version: string, digest: string): string[] {
   const dir = join(queueRoot, EVAL_QUEUE_STAGES.needsAttention);
   const { zip } = queuePairNames(slug, version);
-  const base = `${slug}-v${version}`;
+  const base = `${slug}-v${version}`.toLowerCase();
   return entries(dir)
-    .filter((name) => name.toLowerCase().startsWith(base.toLowerCase()))
+    .filter((name) => {
+      const lower = name.toLowerCase();
+      // `-v1.0.1` must not match `-v1.0.13…`.
+      return lower.startsWith(base) && !/^(\d|\.\d)/.test(lower.slice(base.length));
+    })
     .map((name) => join(dir, name))
     .filter((path) => {
       const candidate = statSync(path).isDirectory() ? join(path, zip) : path;

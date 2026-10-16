@@ -71,7 +71,8 @@ derived manifest-1.28 package (Step 6).
 
 Build or change the plugin as [CONTRIBUTING.md](../CONTRIBUTING.md) describes, then run
 `npm run check:submissions`. Bump the version in `metadata.json` and in the plugin manifest for
-every change you send to Cowork. Engine version labels (the `ENGINE_VERSION`-style constants the
+every change you send to Cowork, and only then: a re-run of an unchanged plugin keeps its version
+(Step 2, `--requeue`). Engine version labels (the `ENGINE_VERSION`-style constants the
 scripts stamp into their outputs, not the shared steering detector's `__version__`) match the plugin
 version in every release; regenerate the `demo-data` expected outputs that record them.
 
@@ -92,14 +93,27 @@ This command:
    `queueSubmission` in `evaluation-run.json`. The prompt is `cowork-prompt.txt` with a header that
    names the queued ZIP. Pass `--no-queue` to skip the queue, or `--queue-root` to use another folder.
 
-It runs no plugin tests and no external package validator; Cowork's evaluation is the package check. A version can be prepared only once; for a new run, bump the version.
+It runs no plugin tests and no external package validator; Cowork's evaluation is the package check. A version can be prepared only once. The version is bumped only after fixes (Step 4); to re-send an unchanged version whose queue run did not complete, use `--requeue`:
+
+```powershell
+npm run evaluation:prepare -- --slug <slug> --requeue
+```
+
+`--requeue` builds nothing. It re-sends the prepared inbox ZIP (refusing if its SHA-256 no longer
+matches the receipt) with a prompt header marking it as a resubmission. It moves this version's
+`4 - Needs attention` entries, Cowork's note included, to
+`evaluation-inbox\<slug>\<version>\needs-attention\<timestamp>\` and records the earlier
+submission in `queueHistory`. It refuses if the pair is still queued or in progress, if Cowork has
+already evaluated it (run the watcher instead), or if the version is already archived.
 
 ## Step 3: evaluate in Cowork
 
 **Queued (default when the queue folder exists).** Cowork picks up the pair from `1 - To evaluate`,
 moves it to `2 - In progress`, and files the pair and its reports in
 `3 - Evaluated\<slug>\v<version> - <timestamp>\`. If it cannot complete the run (missing pair,
-SHA-256 mismatch or a failed run), it moves the pair to `4 - Needs attention` with a note.
+SHA-256 mismatch or a failed run), it moves the pair to `4 - Needs attention` with a note. Read
+the note: if the plugin needs no change, re-send it with `--requeue` (Step 2); only a plugin fix
+means a new version.
 `eval-ledger.md` records every submission; a ZIP whose SHA-256 is already there is skipped.
 Nothing else to do; run the watcher (Step 4).
 
@@ -189,7 +203,7 @@ If there are no blocker or required items, the fix step does nothing and the plu
 |---|---|---|
 | Ready for human review | Every bar in the strategy is met | Step 5. This is not a publish signal |
 | No-ship | There is at least one blocker or required fix | The fix step runs; then step 2 for the new version |
-| Blocked | The evaluation could not complete, or the ZIP identity is unclear | Find out why, then re-run as a new version |
+| Blocked | The evaluation could not complete, or the ZIP identity is unclear | Find out why. If the plugin must change, fix it and re-run as a new version. If not, the version stays; re-running an already archived version is not supported, so tell the owner |
 
 The strategy's bar, which the prompt states:
 
@@ -338,11 +352,11 @@ Never copy report text or internal URLs into the repository, a commit message or
 | Symptom | Fix |
 |---|---|
 | `no SharePoint root configured`, `plain local folder` or `broken link` | `npm run sharepoint:doctor`, then `npm run sharepoint:link` |
-| `an evaluation candidate already exists` | Bump the version; never delete the inbox folder to retry |
+| `an evaluation candidate already exists` | If the plugin changed (fixes), bump the version. If not, re-send it with `--requeue`. Never delete the inbox folder to retry |
 | `version mismatch: metadata …, manifest …` | Make `metadata.json` and the manifest agree |
 | The watcher never logs `Matched Cowork task` | Check `<task>\input\`: the wrong ZIP was attached, or the task has not synced. Start a new task with the inbox ZIP |
 | Queued pair stays in `1 - To evaluate` | Check that OneDrive is running and Cowork's queue watcher is on; read `eval-ledger.md`. A ZIP with an already-logged SHA-256 is skipped as a duplicate |
-| `Cowork moved … to "4 - Needs attention"` | Read the note next to the pair and `eval-ledger.md`. Fix the cause, then bump the version and prepare again |
+| `Cowork moved … to "4 - Needs attention"` | Read the note next to the pair and `eval-ledger.md`. A SHA-256 mismatch means the handoff broke: stop and investigate. Sync gaps and failed runs: `npm run evaluation:prepare -- --slug <slug> --requeue`, same version. A plugin defect: fix it, bump the version and prepare again |
 | `already queued for Cowork` | The pair is still in `1 - To evaluate` or `2 - In progress`. Wait for Cowork, or remove the stale pair after checking the ledger |
 | `do not affirm the matching version/hash` | Stale reports, or the report lacks `SHA-256 check: MATCH`. Ask Cowork, in the same task, to add the missing lines |
 | `SHA-256 check: MISMATCH` | Stop. Cowork evaluated a different file |
