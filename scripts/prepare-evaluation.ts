@@ -235,6 +235,9 @@ function main(): void {
   const mos3 = submission.packageFormat === "mos3";
 
   const runDir = join(inboxRoot, slug, submission.version);
+  if (args.has("no-queue") && args.has("queue-root")) {
+    throw new Error("--no-queue and --queue-root cannot be combined");
+  }
   const queueRoot = args.has("no-queue")
     ? undefined
     : args.has("queue-root")

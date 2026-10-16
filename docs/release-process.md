@@ -91,7 +91,8 @@ This command:
 5. if the queue folder `<OneDrive>\Cowork Plugin Evals\1 - To evaluate` exists, drops the pair
    `<slug>-v<version>.zip` and `<slug>-v<version>-prompt.md` there and records it as
    `queueSubmission` in `evaluation-run.json`. The prompt is `cowork-prompt.txt` with a header that
-   names the queued ZIP. Pass `--no-queue` to skip the queue, or `--queue-root` to use another folder.
+   names the queued ZIP. Pass `--no-queue` to skip the queue and evaluate manually (Step 3), or
+   `--queue-root` to use another folder; the two cannot be combined.
 
 It runs no plugin tests and no external package validator; Cowork's evaluation is the package check. A version can be prepared only once. The version is bumped only after fixes (Step 4); to re-send an unchanged version whose queue run did not complete, use `--requeue`:
 
@@ -107,7 +108,9 @@ It refuses if the ZIP in `4 - Needs attention` has a different SHA-256. Cowork's
 entries for this version move to `evaluation-inbox\<slug>\<version>\needs-attention\<timestamp>\`,
 so the watcher does not stop on the earlier failure, and the earlier submission is recorded in
 `queueHistory`. It refuses if the pair is still queued or in progress, if Cowork has already
-evaluated it (run the watcher instead), or if the version is already archived.
+evaluated it (run the watcher instead), or if the version is already archived. `--requeue` is for
+the queue only; on the manual path, re-send an unchanged version by starting a new Cowork task with
+the same inbox ZIP and `cowork-prompt.txt` (Step 3).
 
 ## Step 3: evaluate in Cowork
 
@@ -136,8 +139,9 @@ Cowork computes the ZIP's SHA-256, runs its built-in evaluation and saves three 
 
 Rules:
 
-- **One new task per version.** A reused task can save the ZIP as `<slug> (1).zip` and mix old
-  and new reports.
+- **One new task per run.** A reused task can save the ZIP as `<slug> (1).zip` and mix old
+  and new reports. If a run fails and the plugin needs no change, start a new task with the same
+  inbox ZIP and prompt; the version stays the same.
 - **Runs take 1–3 hours; leave them alone.** If a run stalls, type
   `continue and produce the 3 reports` in the same task. The task list can show "failed" while the
   run is still working; check the task page and the output folder.
