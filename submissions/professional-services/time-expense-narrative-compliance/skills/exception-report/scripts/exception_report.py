@@ -45,7 +45,7 @@ import billing_rules  # noqa: E402  (shared rules, identical copies next to code
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:exception_report"
-ENGINE_VERSION = "exception_report/1.0.10"
+ENGINE_VERSION = "exception_report/1.0.11"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 HEADER_KEYS = ("client_name", "matter_name", "engagement_id")
 

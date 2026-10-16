@@ -111,7 +111,7 @@ POSITIONAL_LABEL_RE = re.compile(r"(?:calendar export|document activity log|time
                                  r"|engagement letter extract|mailbox summary|client billing guidelines extract"
                                  r"|code structure) row [1-9][0-9]*"
                                  r"|other (?:engagement|timekeeper) (?:signal|entry|name) [1-9][0-9]*")
-SIGNAL_POLICY_VERSION = "signal_policy/1.0.10"
+SIGNAL_POLICY_VERSION = "signal_policy/1.0.11"
 TEAM_VIEW_PREFIX = "engagement-manager:"
 TEAM_VIEW_TOKEN_RE = re.compile(r"engagement-manager:[A-Za-z0-9._-]+")
 WITHHELD_TEXT = contract_check.WITHHELD_MARKER  # "[withheld: flagged as embedded_instruction - client-billing-guidelines.md #11.2]"
@@ -3223,8 +3223,8 @@ def validate_packet(packet, stage):
 # that every later stage re-runs on the activity packet, comparing the whole carried document with the result.
 REDERIVE_CITATION = "client-billing-guidelines.md #13.8"
 CONTRACT_VERSION = "ps.time-expense-narrative-compliance.v1"
-STAGE_VERSIONS = {"activity": "activity_pull/1.0.10", "drafted": "narrative_draft/1.0.10", "coded": "code_map/1.0.10",
-                  "governed": "guideline_check/1.0.10"}
+STAGE_VERSIONS = {"activity": "activity_pull/1.0.11", "drafted": "narrative_draft/1.0.11", "coded": "code_map/1.0.11",
+                  "governed": "guideline_check/1.0.11"}
 STAGE_ENGINES = {"drafted": "engine:narrative_draft", "coded": "engine:code_map", "governed": "engine:guideline_check"}
 # Carried fields no engine derives from its inputs, left out of the whole-document comparison (and only these). Each
 # is still validated by the contract walk and validate_packet and screened by the next stage's sweep_packet.

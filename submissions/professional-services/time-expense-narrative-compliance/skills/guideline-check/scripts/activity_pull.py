@@ -56,7 +56,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:activity_pull"
-ENGINE_VERSION = signal_policy.STAGE_VERSIONS["activity"]  # "activity_pull/1.0.10"; later stages require it (#13.8)
+ENGINE_VERSION = signal_policy.STAGE_VERSIONS["activity"]  # "activity_pull/1.0.11"; later stages require it (#13.8)
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 POLICY_CITATION = signal_policy.POLICY_CITATION
 MATCHED_CONFIDENCE = signal_policy.MATCHED_CONFIDENCE  # shared: later stages re-derive it (#13.5)
@@ -240,12 +240,16 @@ def resolve_scope(args, engagement):
             "citations": [signal_policy.SCOPE_CITATION],
         }})
         return (None if people is None else {signal_policy.person_key(p) for p in people}), scope
-    if not token:
-        reason = NO_CONFIRMATION
-    elif not manager:
-        reason = "raw/engagement-letter-extract.md records no engagement_manager, so no team view can be granted"
+    if not manager or not signal_policy.same_person(requester, manager):
+        reason = ("team view requested but not authorized" if args.all_timekeepers
+                  else "colleagues named but not authorized") + " by the engagement letter (#12.1)"
+        reason += ("; raw/engagement-letter-extract.md records no engagement_manager, so no team view can be granted"
+                   if not manager else "; the requester is not the engagement manager recorded in "
+                   "raw/engagement-letter-extract.md")
+        if not token:
+            reason += f"; {NO_CONFIRMATION}"
     else:
-        reason = "the requester is not the engagement manager recorded in raw/engagement-letter-extract.md"
+        reason = NO_CONFIRMATION
     scope["withheld"] = {
         # #13.10: colleagues whose rows are withheld are other parties; they are recorded by position in sorted order
         # (other-timekeeper-name-1), never by the names given, so no name reaches any output. Re-deriving with the
@@ -283,6 +287,8 @@ def build_parser():
     ap = signal_policy.ArgumentParser(description="Build a cited activity packet from engagement-scoped raw exports.")
     ap.add_argument("--raw-dir", required=True, help="Folder holding the raw exports")
     ap.add_argument("--out", required=True, help="Output activity packet JSON")
+    ap.add_argument("--view-out", help="Optional user-facing JSON summary; flagged records expose only ID, date and hours. "
+                    "Never use this view as a contract packet")
     ap.add_argument("--signal-config", help="Additional signal policy JSON; it can only narrow the plugin's config/signal-sources.json, which is always applied (most restrictive wins)")
     ap.add_argument("--requester", required=True, help="The requesting timekeeper; only their rows are returned by default")
     who = ap.add_mutually_exclusive_group()
@@ -682,14 +688,54 @@ def rederive(packet, raw_dir, script_dir=None):
     return json.loads(signal_policy.dump_json(derived))
 
 
+def activity_view(packet):
+    """A presentation-only projection; flagged records never expose any of their free text (#11.2)."""
+    def row(record, id_key, fields, flagged):
+        if flagged:
+            return {id_key: record[id_key], "date": record["date"],
+                    "duration_hours": record["duration_hours"],
+                    "notice": "[withheld: flagged as embedded_instruction]"}
+        return {key: record[key] for key in fields if key in record}
+
+    provenance = packet["provenance"]
+    return {
+        "view": "activity summary (not a contract packet)",
+        "period": packet["period"],
+        "timekeeper_scope": provenance["timekeeper_scope"],
+        "period_check": provenance["period_check"],
+        "activity_signals": [
+            row(signal, "activity_id",
+                ("activity_id", "date", "person", "activity_class", "duration_hours", "subject", "purpose",
+                 "deliverable", "needs_review", "review_reason", "citations"),
+                signal_policy.signal_flagged(signal))
+            for signal in packet["activity_signals"]],
+        "time_entries": [
+            row(entry, "entry_id",
+                ("entry_id", "date", "person", "duration_hours", "submitted_task_code", "activity_ids", "citations"),
+                entry.get("embedded_instruction") is True
+                or signal_policy.embedded_instruction(signal_policy.entry_texts(entry, [])))
+            for entry in packet["time_entries"]],
+        "excluded_signals": provenance["excluded_signals"],
+        "skipped_sources": provenance["skipped_sources"],
+        "out_of_scope_rows": provenance["out_of_scope_rows"],
+    }
+
+
 def main():
     args = build_parser().parse_args()
     try:
+        if args.view_out and (
+                os.path.normcase(os.path.realpath(args.out)) == os.path.normcase(os.path.realpath(args.view_out))
+                or (os.path.exists(args.out) and os.path.exists(args.view_out)
+                    and os.path.samefile(args.out, args.view_out))):
+            raise InputError("--view-out must differ from --out; the user-facing view cannot replace the contract packet")
         packet, signal_count, entry_count = pull(args)
     except (InputError, signal_policy.PolicyError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         # PolicyError covers SchemaError and a missing contract (no traceback).
         sys.exit(f"activity_pull: {signal_policy.error_text(exc)}")
     try:
+        if args.view_out:
+            signal_policy.write_output(args.view_out, signal_policy.dump_json(activity_view(packet)))
         signal_policy.write_output(args.out, signal_policy.dump_json(packet))
     except (OSError, ValueError) as exc:  # ValueError covers NaN in dump_json and UnicodeEncodeError
         sys.exit(f"activity_pull: cannot write output: {signal_policy.error_text(exc)}")

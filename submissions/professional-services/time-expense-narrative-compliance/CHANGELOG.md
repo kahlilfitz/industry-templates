@@ -1,5 +1,17 @@
 # Changelog - time-expense-narrative-compliance
 
+## 1.0.11 - 2026-10-16
+
+Applies three required fixes from the Cowork evaluation of 1.0.10; R-03 is skipped for a protected-check conflict. Advisory items remain in `BACKLOG.md`.
+
+- **R-01 (activity-pull, AP-01), applied:** save and hand on the original `activity.json`, never paste or attach it in chat. Even an explicit JSON request uses the new `--view-out` presentation summary. Flagged signals and time entries expose only their ID, date, hours and withheld notice in that view, while the original evidence stays in the internal contract for later validation. The view cannot overwrite the contract output. All five `activity_pull.py` copies remain byte-identical.
+- **R-02 (activity-pull, AP-02), applied:** instructions pass named colleagues with `--person` without a team-view confirmation to record an unauthorized request, never grant access. The engine and CLI warning distinguish colleagues named but not authorized by the engagement letter from the default self request, and check the letter's manager before discussing a missing confirmation. Downstream raw re-derivation preserves the denial and self-only rows. The suggested `withheld.requested` rename is not applied: protected hardening and 1.0.9 checks assert that key. Its positional labels remain compatible; the reason now states what actually happened.
+- **R-03 (narrative-draft, ND-01), skipped:** the protected `te110_tests` noun-purpose check requires the exact substring ` regarding internal staffing check-in` on a fixture titled `Staffing check-in`. Both suppressing the repeated purpose and adding the required article would fail that unchanged expectation. No narrative logic or existing check was changed; owner resolution is needed before this fix can be applied safely.
+- **R-04 (guideline-check, GC-01), applied:** add the entry date to the entries table and an explicit Notes section for flagged-entry and withheld-row notices. Required notices no longer conflict with an exact-format instruction.
+- Release declarations, listing metadata and every engine/stage/signal-policy label move to 1.0.11. All five shared script copies remain byte-identical; `steering_guard.py` and its `__version__` are unchanged.
+- **Demo edits (not bundled):** regenerate `activity.json`, `expected/drafted.json`, `expected/coded.json`, `expected/governed.json` and `expected/exception-report.md` in each of `demo-data/scenario-a-happy/` and `demo-data/scenario-b-drama/` with the fixed timestamp. All ten outputs were compared byte for byte against the old outputs with only engine version labels replaced; there are no behavioral changes. No raw export or other demo file changed.
+- **Regression edits (not bundled):** add three groups to `tests/run_tests.py`, with eight checks named for R-01, R-02 and R-04, and document them in `tests/README.md`. All eight failed before their fixes and pass afterwards. All 217 pre-existing checks pass unchanged, with no baseline failures; the suite now passes 225/225. `check:submissions` and all 39 `test:evaluation` checks pass. These are local AP-01/AP-02/GC-01 reproductions, not a new Cowork built-in evaluation; no packaging, publishing or new verdict is claimed.
+
 ## 1.0.10 - 2026-10-15
 
 Applies the three required fixes from the Cowork evaluation of 1.0.9. Advisory items remain in `BACKLOG.md`.

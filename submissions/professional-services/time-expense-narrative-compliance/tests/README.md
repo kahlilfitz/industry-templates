@@ -11,7 +11,7 @@ Demo data and the engine regression suite for **Time & Expense Narrative Complia
 |---|---|
 | `demo-data/scenario-a-happy/` | Raw engagement exports (`raw/`), the activity packet `activity.json`, engine goldens (`expected/`) and a README with the run order |
 | `demo-data/scenario-b-drama/` | Same layout; the skim-proof rejection case |
-| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 7 groups, 210 checks |
+| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 10 groups, 225 checks |
 | `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker |
 
 ## Running the tests
@@ -52,6 +52,28 @@ response to a Cowork finding; internal QA rounds do not add checks to this suite
 | `te108_tests` | 13 | 1.0.8 | Cowork 1.0.7 required fixes in guideline-check: F-01 (pasted-narrative intake: Step 0 asks for engagement, period, timekeeper, entry ID and every raw export, keeps the narrative in its timesheet row, builds activity → drafted → coded, names missing inputs and offers the earlier stage) and F-02 (missing time starts from raw exports through activity-pull, narrative-draft and code-map; both packets mandatory). The end-to-end checks run the stages in the order Step 0 names |
 | `te109_tests` | 20 | 1.0.9 | Cowork 1.0.8 required fixes: F-01 (GC-03: every grounded draft on the same fixture passes #1.2 with walk-through, go-over and discuss purposes; bare verbs and look-alikes are not credited; all three rules copies agree), F-02 (GR-01: no refusal-routing exclusions, quoted approval/submission/write-off triggers and an action-only guardrail), F-03 (GR-05: explicit personal/contact/compensation/rate exclusions and letter-first manager check; AP-01: self-mode withheld colleagues are distinct and anonymous, preserved by every downstream engine with raw re-derivation, including colleagues found only in calendar, document activity or timesheets) |
 | `te110_tests` | 15 | 1.0.10 | Cowork 1.0.9 required fixes: R-01 (ND-01: noun purposes use "regarding", calendar title initials are lower-case mid-sentence, every generated narrative passes #1.2 on the same fixture, all shared purpose verbs retain "to", unsupported purposes are not credited, and all five policy copies agree), R-02 (ER-01: an other-engagement exclusion built from raw exports cites #10.1 and #13.3 in the summary and privacy section, and the signal-policy summary line cites #10.1), R-03 (ER-01: each entry has full rows once, under its own verdict, and rejected entries are cross-referenced with their hold and needs-review flags) |
+| `te111_r01_tests` | 3 | 1.0.11 | Cowork 1.0.10 R-01 / AP-01: an explicit "show me activity.json" request uses the presentation view; flagged signals and entries expose only ID, date, hours and a withheld notice; the unchanged internal contract still passes downstream raw re-derivation |
+| `te111_r02_tests` | 3 | 1.0.11 | Cowork 1.0.10 R-02 / AP-02: named colleagues are passed without a confirmation to record the denied request, the reason cites the letter's lack of authorization, and every downstream engine preserves the denial and self-only rows when re-deriving from raw exports |
+| `te111_r04_tests` | 2 | 1.0.11 | Cowork 1.0.10 R-04 / GC-01: the entries table includes a date and Notes has explicit slots for flagged-entry and withheld-row notices |
+
+For 1.0.11, all 217 baseline checks passed before the fixes. All eight added checks failed on
+the unfixed engines/instructions and pass afterwards; the full suite passes 225/225. No existing
+check or expected result changed, and there were no pre-existing failures.
+
+R-03 is skipped: the protected `te110_tests` check named
+`1.0.10 R-01 ND-01: noun purposes use regarding, never an ungrammatical to clause` requires the
+exact substring ` regarding internal staffing check-in`. On its fixture the title is
+`Staffing check-in`; either suppressing the repeated purpose or adding the required article
+removes that substring. The brief does not authorize changing that expectation. Narrative
+behavior remains unchanged pending owner resolution, and no R-03 check was added for an
+unapplied fix. The legacy `withheld.requested` key also remains because existing hardening and
+`te109_tests` checks assert it; R-02 fixes the denial reason and the instructions instead.
+
+Both demo chains were regenerated with `--generated-at 2026-09-23T00:00:00Z`. In each of
+`demo-data/scenario-a-happy/` and `demo-data/scenario-b-drama/`, only engine version labels changed
+in `activity.json`, `expected/drafted.json`, `expected/coded.json`, `expected/governed.json` and
+`expected/exception-report.md`. Raw exports and all other demo files are unchanged. AP-01,
+AP-02 and GC-01 checks are local reproductions of the findings, not new Cowork built-in runs.
 
 For 1.0.10, the new group reproduced R-01, R-02 and R-03 failures before the fixes.
 The 202 pre-existing checks and their expectations are unchanged. Version-label regeneration was
