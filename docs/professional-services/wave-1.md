@@ -59,7 +59,8 @@ Round 3 ([results](#round-3-results-2026-10-15)): Closeout 1.0.5, Staffing 1.1.7
 and DRQG 1.0.8 came back **Ready for human review** with no blocker or required fixes. T&E 1.0.8 came
 back **No-ship** on three required fixes; its fix agent committed 1.0.9 (`a3ca975`). T&E 1.0.9 came
 back **No-ship** on R-01 to R-03; 1.0.10 (`c9b2f37`) applies all three under owner option A. T&E 1.0.10
-came back **No-ship** on R-01 to R-04; 1.0.11 (`54aa71e`) applies R-01, R-02 and R-04 and skips R-03 (owner decision pending).
+came back **No-ship** on R-01 to R-04; 1.0.11 (`54aa71e`) applies R-01, R-02 and R-04 and skips R-03.
+The owner approved a one-time test-expectation exception for the R-03 fix in 1.0.12; implementation is pending.
 ## Contents
 
 - [Keeping this file current](#keeping-this-file-current)
@@ -157,7 +158,7 @@ human testers).
 | 01 | `engagement-closeout-knowledge-harvest` | 1.0.5 (evaluated Ready for human review) | 1.0.5 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 12 advisories. 1.0.4 **Ready for human review** (evaluated 2026-10-15): 0 blocker or required fixes, 11 advisories. The owner applied R-01 (held-asset title redaction) and R-04 (engine labels) as 1.0.5; R-11 no action. Earlier history: [version history](#01-engagement-closeout--knowledge-harvest) | No (1.0.2: Yes) | No | No (1.0.2: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
 | 02 | `engagement-staffing-bench-match` | 1.1.7 (evaluated Ready for human review) | 1.1.7 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 9 advisories. 1.1.6 **No-ship** (evaluated 2026-10-15): F-01 and F-02 (PII guardrail missing in `fit-score` and `slate-draft`) and F-03 (`source` and `generated_at` contract). 1.1.7 applies all three. Engine labels set to 1.1.7 and the label check now reads `metadata.json` (`b655af1`, [decision](#owner-decisions-round-2-results-2026-10-15)). Earlier history: [version history](#02-engagement-staffing--bench-match) | No (1.1.4: Yes) | No | No (1.1.4: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
 | 03 | `engagement-mobilization-onboarding-pack` | 1.0.6 (evaluated Ready for human review) | 1.0.6 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 14 advisories. 1.0.5 **No-ship** (evaluated 2026-10-15): security scan found the override phrase again, now in a `steering_guard.py` docstring (R-01). 1.0.6 rewords it and sets the engine labels to 1.0.6. Earlier history: [version history](#03-engagement-mobilization--onboarding-pack) | No | No | No (1.0.2: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
-| 04 | `time-expense-narrative-compliance` | 1.0.11 (fix commit `54aa71e`, R-03 open); 1.0.10 evaluated No-ship | 1.0.10 **No-ship** (evaluated 2026-10-16): R-01 to R-04 required; 1.0.11 applies R-01, R-02 and R-04 with 8 regression checks; R-03 skipped (conflicts with a 1.0.10 check, owner decision pending). 1.0.9 **No-ship** (evaluated 2026-10-16): R-01 (ND-01 narrative grammar), R-02 and R-03 (ER-01 privacy citations and one listing per entry), all required; 1.0.10 applies all three with 15 regression checks under owner option A. 1.0.8 **No-ship** (evaluated 2026-10-15, round 3): F-01, F-02 and F-03 (required); 1.0.9 applies all three with 20 regression checks. 1.0.7 **No-ship** (evaluated 2026-10-15): F-01 and F-02 (required), `guideline-check` direct requests with pasted narratives or missing time. 1.0.8 applies both and sets the engine labels to 1.0.8. Earlier history: [version history](#04-time--expense-narrative-compliance) | No | No | No (1.0.4: Yes) | No | No | Owner: create the Cowork task; the watcher archives the reports | operator |
+| 04 | `time-expense-narrative-compliance` | 1.0.11 (fix commit `54aa71e`, R-03 open); 1.0.10 evaluated No-ship | 1.0.10 **No-ship** (evaluated 2026-10-16): R-01 to R-04 required; 1.0.11 applies R-01, R-02 and R-04 with 8 regression checks; R-03 skipped (conflicts with a 1.0.10 check; owner approved a one-time expectation exception for 1.0.12, implementation pending). 1.0.9 **No-ship** (evaluated 2026-10-16): R-01 (ND-01 narrative grammar), R-02 and R-03 (ER-01 privacy citations and one listing per entry), all required; 1.0.10 applies all three with 15 regression checks under owner option A. 1.0.8 **No-ship** (evaluated 2026-10-15, round 3): F-01, F-02 and F-03 (required); 1.0.9 applies all three with 20 regression checks. 1.0.7 **No-ship** (evaluated 2026-10-15): F-01 and F-02 (required), `guideline-check` direct requests with pasted narratives or missing time. 1.0.8 applies both and sets the engine labels to 1.0.8. Earlier history: [version history](#04-time--expense-narrative-compliance) | No | No | No (1.0.4: Yes) | No | No | Apply owner-authorized R-03 as 1.0.12, then re-evaluate | operator |
 | 05 | `deliverable-review-quality-gate` | 1.0.8 (evaluated Ready for human review) | 1.0.8 **Ready for human review** (evaluated 2026-10-15, round 3): 0 blocker or required fixes, 13 advisories. 1.0.7 **Ready for human review** (evaluated 2026-10-15): 0 blocker or required fixes, 9 advisories; security scan and trust and safety (5/5 at 10/10) passed. The owner applied R-01 (engine labels, R-04 rule) as 1.0.8. Earlier history: [version history](#05-deliverable-review--quality-gate) | No | No | No (1.0.4: Yes) | No | No | Owner: two-tester human spot check on this exact ZIP, then the Publish gate | operator |
 
 Notes on the board:
@@ -259,9 +260,17 @@ and appended the advisories to each `BACKLOG.md`.
     read it.
   - R-03 (ND-01, grammar: repeated verb nouns, double "with", purpose repeating the title without
     an article): **skipped**. The 1.0.10 R-01 check requires the literal
-    " regarding internal staffing check-in", which R-03 must change. Owner decision pending: replace
-    that literal with rule-based checks and apply R-03 as 1.0.12, or send 1.0.11 as is.
+    " regarding internal staffing check-in", which R-03 must change. The owner subsequently approved
+    the narrowly scoped replacement below; R-03 remains unapplied.
   - R-04 (GC-01): applied; guideline-check's table has a Date column and a Notes section.
+- **Owner decision (2026-10-16):** explicitly authorize a one-time policy exception to replace only
+  the `te110_tests` check `1.0.10 R-01 ND-01: noun purposes use regarding, never an ungrammatical to
+  clause` with rule-based grammar and grounding checks while applying Cowork 1.0.10 R-03 as
+  **1.0.12**. Preserve its original protections, add R-03 regressions that fail before the fix and
+  pass afterward, and leave every other check unchanged. The binding scope and evidence
+  requirements are recorded in `AGENTS.md` and
+  [the release process](../release-process.md#one-time-owner-exception-for-te-r-03).
+  This decision changes policy only; the plugin is still 1.0.11, with no new evaluation or publish approval.
 
 ### Owner decisions: round-2 results (2026-10-15)
 

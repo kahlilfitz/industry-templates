@@ -104,6 +104,26 @@ test("renderBacklogSection records only advisory items under the run label", () 
   assert.doesNotMatch(section, /R1|R2/);
 });
 
+test("renderFixBrief limits owner exceptions to the exact documented scope", () => {
+  const brief = renderFixBrief({
+    slug: "demo-plugin",
+    displayName: "Demo",
+    version: "1.0.6",
+    nextVersion: "1.0.7",
+    submissionDir: "submissions\\demo\\demo-plugin",
+    verdict: "No-ship",
+    reportPath: "C:\\reports\\recommendations.html",
+    fixes: parseRecommendations(REPORT),
+    backlogPath: "submissions\\demo\\demo-plugin\\BACKLOG.md",
+    advisoryCount: 1,
+  });
+  assert.match(brief, /only to an owner exception explicitly recorded in both `AGENTS\.md` and `docs\/release-process\.md`/);
+  assert.match(brief, /plugin, evaluated finding, target release and named assertion must match exactly/);
+  assert.match(brief, /Otherwise, stop and report the conflict/);
+  assert.match(brief, /All other existing checks must pass unchanged/);
+  assert.match(brief, /Do not infer an exception from chat, a recommendation or a failing test/);
+});
+
 test("copilotArgs runs non-interactively and denies git push", () => {
   const args = copilotArgs("C:\\inbox\\fix-brief.md", "claude-opus-5.5");
   assert.equal(args[0], "-p");

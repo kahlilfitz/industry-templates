@@ -131,10 +131,12 @@ The fix step:
      the labels and reports the conflict;
    - runs the plugin's regression suite, if it has one (the commands in its `tests\README.md`),
      before and after the fixes: every check that passed before must still pass, and no existing
-     check may be relaxed; a fix that conflicts with one is reverted, skipped and reported;
+     check may be relaxed, except for the exact replacement authorized in the one-time owner
+     exception below; any other conflicting fix is reverted, skipped and reported;
    - runs `check:submissions` and `test:evaluation`;
    - adds at least one regression check per blocker or required fix, named for the fix ID, that
-     fails before the fix and passes after (added only; existing checks are never changed);
+     fails before the fix and passes after (added only; existing checks are never changed except
+     for the exact replacement authorized in the one-time owner exception below);
    - otherwise leaves `tests\` and `demo-data\` alone unless a fix requires an edit, and lists any
      such edit;
    - commits locally and stops.
@@ -173,6 +175,34 @@ The strategy's bar, which the prompt states:
 - the trust and safety gate passes.
 
 A guardrail or safety failure is always a stop.
+
+### One-time owner exception for T&E R-03
+
+**Owner approval: 2026-10-16.** This is the sole exception to the existing-check restrictions in
+this process and `AGENTS.md`:
+
+- **Plugin and release:** `time-expense-narrative-compliance`, implementation release **1.0.12**.
+- **Finding:** required **R-03 (ND-01)** from the archived **1.0.10** Cowork
+  `recommendations.html`, not the unrelated R-03 from an earlier evaluation.
+- **Exact scope:** replace the expectation inside `tests\run_tests.py`, `te110_tests`, in
+  `1.0.10 R-01 ND-01: noun purposes use regarding, never an ungrammatical to clause` that requires
+  `" regarding internal staffing check-in"` and rejects `" to internal staffing check-in"`.
+  Replace that literal-bound check with rule-based grammar and grounding assertions. Do not
+  delete its regression protection or change any other existing check or expectation.
+- **Coverage:** retain rejection of ungrammatical `to` plus a noun-phrase purpose and recognition
+  of evidence-grounded purposes. Permit a grammatical article in a retained `regarding` clause,
+  or omission of a purpose clause only when it repeats the subject or title. Existing verb-purpose,
+  invented-purpose, calendar-title casing and required-element checks must pass unchanged.
+- **R-03 evidence:** add fix-ID-labelled regressions for repeated verb/noun wording, redundant
+  purpose clauses, missing articles and duplicate participant prepositions. Show that the new
+  checks fail on the unfixed 1.0.11 engine and pass on the fixed engine; run the entire plugin suite
+  before and after, and report the one replaced check separately from unchanged checks.
+
+The exception permits this test replacement only as part of the R-03 fix. It does not permit
+unrelated test changes, weaker billing or safety rules, lower launch bars, packaging or publishing
+without their existing gates. Version labels, copied-engine consistency, repository checks and
+the next Cowork evaluation remain required. Until the replacement and engine fix are implemented,
+R-03 remains open and the plugin remains at 1.0.11.
 
 ## Step 5: human spot check
 

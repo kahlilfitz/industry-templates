@@ -12,13 +12,28 @@ Cowork's `recommendations.html` decides what changes between versions.
   `recommendations.html`, owner decisions, or regressions your own change caused. Advisory items
   go to the submission's `BACKLOG.md`, not into the plugin. Report any other defect you find; do
   not fix it.
-- Never relax, delete or change the expected result of an existing test or check. If a fix makes
-  an existing test fail, stop, do not commit, and report the conflict.
+- Except for the one-time owner exception below, never relax, delete or change the expected result
+  of an existing test or check. If a fix makes an existing test fail outside that exception, stop,
+  do not commit, and report the conflict.
 - Every change sent to Cowork is a new version: bump `metadata.json` and the manifest together and
   add a CHANGELOG entry. Engine version labels (`ENGINE_VERSION`-style constants, not
   `steering_guard.py` `__version__`) match the plugin version in every release.
 - Commit path-limited (`git commit -m ... -- <paths>`), never push, and stop for owner review.
 - Never infer an owner sign-off or a publish decision.
+
+## One-time owner exception: T&E R-03
+
+Owner-approved on 2026-10-16, for `time-expense-narrative-compliance` **1.0.12 only**:
+replace the exact-literal expectation in `tests\run_tests.py`, `te110_tests`, in the check named
+`1.0.10 R-01 ND-01: noun purposes use regarding, never an ungrammatical to clause`. This permits
+rule-based grammar and grounding checks instead of requiring
+`" regarding internal staffing check-in"` while applying required **R-03 from the 1.0.10 Cowork
+evaluation**.
+
+Preserve the original grammar and grounding protections, add R-03 regressions that fail before
+the engine fix and pass afterward, and leave every other existing check unchanged. Follow the
+[exception's evidence requirements](docs/release-process.md#one-time-owner-exception-for-te-r-03).
+This is not a general waiver, an evaluation verdict, or a publish decision.
 
 ## Tests and demo data
 
