@@ -24,8 +24,8 @@ Contact us: https://support.microsoft.com/home/contact
 
 ## Category and industry
 
-- **Category:** TODO (owner): choose from the guide's category/industry list
-- **Industry:** TODO (owner): choose from the guide's category/industry list (current repository industry: Professional Services)
+- **Category:** Project management; Workflow & Process Management; Productivity
+- **Industry:** Professional Services
 
 ## Top 3 prompts
 
