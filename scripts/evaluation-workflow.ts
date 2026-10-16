@@ -241,25 +241,15 @@ export function queuePairNames(slug: string, version: string): { zip: string; pr
   return { zip: `${base}.zip`, prompt: `${base}-prompt.md` };
 }
 
-/**
- * The rendered Cowork prompt with a header naming the queued ZIP, which the template calls `<slug>.zip`.
- * A resubmission (`prepare --requeue`) re-sends the same ZIP after a run that did not complete.
- */
-export function queuePrompt(prompt: string, slug: string, version: string, resubmission = false): string {
+/** The rendered Cowork prompt with a header naming the queued ZIP, which the template calls `<slug>.zip`. */
+export function queuePrompt(prompt: string, slug: string, version: string): string {
   const { zip } = queuePairNames(slug, version);
   return [
-    resubmission ? "Queue resubmission (Cowork Plugin Evals)." : "Queue submission (Cowork Plugin Evals).",
+    "Queue submission (Cowork Plugin Evals).",
     "",
     `The plugin ZIP for this prompt is \`${zip}\`, the other file of this pair.`,
     `Wherever the prompt below says \`${slug}.zip\` or "the attached plugin", it means \`${zip}\`.`,
     "Its SHA-256 must be the one stated below. Keep the three report filenames exactly as named below.",
-    ...(resubmission
-      ? [
-          "",
-          "This is a resubmission of the same unchanged ZIP (same SHA-256). An earlier run of it did not",
-          'complete and went to "4 - Needs attention". Evaluate it again; do not skip it as a duplicate.',
-        ]
-      : []),
     "",
     "---",
     "",

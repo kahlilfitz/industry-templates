@@ -374,16 +374,6 @@ test("queue runs and needs-attention entries match by version and the prepared Z
   }
 });
 
-test("queuePrompt marks a requeue as a resubmission of the same ZIP", () => {
-  const prompt = "Evaluate the attached plugin.\n";
-  const queued = queuePrompt(prompt, "demo-plugin", "1.2.3", true);
-  assert.ok(queued.startsWith("Queue resubmission (Cowork Plugin Evals)."));
-  assert.ok(queued.endsWith(prompt));
-  assert.match(queued, /resubmission of the same unchanged ZIP \(same SHA-256\)/);
-  assert.match(queued, /do not skip it as a duplicate/);
-  assert.doesNotMatch(queuePrompt(prompt, "demo-plugin", "1.2.3"), /resubmission/i);
-});
-
 test("needs-attention entries for a longer version are not matched", () => {
   const root = mkdtempSync(join(tmpdir(), "queue-attention-"));
   try {
