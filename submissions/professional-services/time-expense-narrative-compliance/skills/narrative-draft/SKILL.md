@@ -4,7 +4,7 @@ description: 'Drafts grounded time-entry narratives for entries that have none a
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/narrative_draft.py on activity.json from activity-pull (plus the raw exports for a team view); reads the config/signal-sources.json, contracts/ and references/ in this skill folder and writes drafted.json locally. No connectors, network access or outbound actions.'
 metadata:
-  version: "1.0.11"
+  version: "1.0.12"
   icon: ic_fluent_compose_24_regular
   author: Microsoft Professional Services Skills
   category: writing
@@ -41,7 +41,7 @@ Only tool needed: python3 running the bundled engine (stdlib only).
 python3 scripts/narrative_draft.py --activity activity.json --out drafted.json
 ```
 ## Grounding requirements
-Narratives follow "<verb> <subject> [with <attendees>] <purpose clause> [for the <deliverable>]." Use "to <purpose>" only when the recorded purpose starts with a verb from the shared `PURPOSE_VERBS` list; otherwise use "regarding <purpose>", without inventing a verb or purpose. When the purpose already contains "for", the deliverable comes before the purpose clause. Calendar activity is "Attended" (or "Led" when the timekeeper organised it); lower-case the title's initial mid-sentence, preserving acronyms. An entry that links several activities gets one clause per activity joined with "; and", and is marked needs_review for block billing (client-billing-guidelines.md #2.1 / #2.2). Every element comes from a cited signal: calendar title and attendees, document file name, workplan purpose and deliverable. No invented work, attendees, deliverables, roles or client purpose.
+Narratives follow "<verb> <subject> [with <attendees>] <purpose clause> [for the <deliverable>]." Use "to <purpose>" only when the recorded purpose starts with a verb from the shared `PURPOSE_VERBS` list; otherwise use "regarding <noun-phrase purpose>", adding "the" only when an article or possessive is absent. Omit a noun-purpose clause only when it repeats the title (allowing a leading "internal"); never invent a verb or purpose. Remove a trailing subject noun that merely repeats the action ("Researched ... research"), and combine participants already named in the title with exported attendees into one "with" clause; do not remove a title's non-participant "with" text. When the purpose already contains "for", the deliverable comes before the purpose clause. Calendar activity is "Attended" (or "Led" when the timekeeper organised it); lower-case the title's initial mid-sentence, preserving acronyms. An entry that links several activities gets one clause per activity joined with "; and", and is marked needs_review for block billing (client-billing-guidelines.md #2.1 / #2.2). Every factual element comes from a cited signal: calendar title and attendees, document file name, workplan purpose and deliverable. No invented work, attendees, deliverables, roles or client purpose.
 ## Constraints
 - The model drafts prose only; it never decides compliance, code mapping or missing time (client-billing-guidelines.md #1.3).
 - Existing user-entered narratives are preserved so the Govern step evaluates what would reach pre-bill; suggested rewrites are separate and never replace the original automatically.

@@ -4,7 +4,7 @@ description: 'Builds a cited DRAFT pre-bill exception packet from guideline-chec
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/exception_report.py on governed.json from guideline-check and activity.json from activity-pull; reads the config/signal-sources.json, contracts/ and references/ in this skill folder and writes a local Markdown draft (exception-report.md). No connectors, network access or send capability.'
 metadata:
-  version: "1.0.11"
+  version: "1.0.12"
   icon: ic_fluent_clipboard_error_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

@@ -30,6 +30,7 @@ An unknown group or argument exits 2.
 8. te111_r01_tests (1.0.11, Cowork 1.0.10 R-01: safe activity presentation).
 9. te111_r02_tests (1.0.11, Cowork 1.0.10 R-02: truthful denied-colleague requests).
 10. te111_r04_tests (1.0.11, Cowork 1.0.10 R-04: entry dates and required notices).
+11. te112_r03_tests (1.0.12, Cowork 1.0.10 R-03: grammatical grounded narrative clauses).
 Exit code 0 = all passed.
 """
 import copy
@@ -1604,8 +1605,9 @@ def te110_tests(tmp):
     drafted, governed = read(paths["drafted"]), read(paths["governed"])
     narrative = drafted["time_entries"][0]["draft"]["narrative"]
     check("1.0.10 R-01 ND-01: noun purposes use regarding, never an ungrammatical to clause",
-          " regarding internal staffing check-in" in narrative
-          and " to internal staffing check-in" not in narrative, narrative)
+          noun_purpose_shape(narrative, drafted["activity_signals"][0])
+          and MODULES["guideline_check"].billing_rules.required_elements(
+              drafted["time_entries"][0], narrative, [drafted["activity_signals"][0]])["purpose"], narrative)
     check("1.0.10 R-01 ND-01: calendar titles start lower-case mid-sentence",
           narrative.startswith("Led staffing check-in with "), narrative)
     for e in drafted["time_entries"]:
@@ -1770,6 +1772,104 @@ def te111_r04_tests(tmp):
           and "without repeating" in notes.lower() and "reason" in notes.lower(), notes)
 
 
+def noun_purpose_shape(narrative, activity):
+    """R-03 owner exception: a grounded noun purpose has an article, or an already stated title is not repeated."""
+    normalize = MODULES["guideline_check"].billing_rules.normalize
+    text, purpose, title = (normalize(value) for value in
+                            (narrative, activity.get("purpose"), activity.get("subject")))
+    purpose = re.sub(r"^(?:the|an?)\s+", "", purpose)
+    title = re.sub(r"^(?:the|an?)\s+", "", title)
+    if not purpose or re.search(r"\bto\s+(?:(?:the|an?)\s+)?" + re.escape(purpose) + r"\b", text):
+        return False
+    if re.search(r"\bregarding\s+(?:the|an?)\s+" + re.escape(purpose) + r"\b", text):
+        return True
+    return (bool(title) and purpose in (title, "internal " + title)
+            and len(re.findall(r"\b" + re.escape(title) + r"\b", text)) == 1
+            and "regarding" not in text.split())
+
+
+def te112_r03_tests(tmp):
+    """Cowork 1.0.10 R-03 / ND-01: reproduce all three weak prose shapes from raw exports."""
+    raw = raw_copy(tmp, "te112-r03", scenario="scenario-a-happy")
+    edit_csv(raw, "calendar-export.csv", 1, "subject", "Staffing check-in with Orion product lead")
+    edit_csv(raw, "calendar-export.csv", 1, "organizer", "Alex Rivera")
+    edit_csv(raw, "calendar-export.csv", 1, "attendees", "Orion product lead; Alex Rivera; Taylor Quinn")
+    edit_csv(raw, "engagement-workplan.csv", 1, "purpose", "internal staffing check-in")
+    edit_csv(raw, "document-activity-log.csv", 1, "file_name", "slotting-options-research.docx")
+    edit_csv(raw, "document-activity-log.csv", 1, "activity_type", "research")
+    edit_csv(raw, "engagement-workplan.csv", 2, "match_key", "slotting-options-research.docx")
+    edit_csv(raw, "engagement-workplan.csv", 2, "activity_class", "research")
+    edit_csv(raw, "engagement-workplan.csv", 2, "purpose", "operational slotting options")
+    work = os.path.join(tmp, "te112-r03-chain")
+    os.makedirs(work)
+    paths = chain(raw, list(SCENARIO_A_ARGS), work)
+    drafted, governed = read(paths["drafted"]), read(paths["governed"])
+    narratives = [e["draft"]["narrative"] for e in drafted["time_entries"]]
+    grammar_rules = (
+        r"\b(\w+)\s+\1\b",
+        r"\b(?:with|for|to|regarding)\s+(?:with|for|to|regarding)\b",
+        r"\bwith\b[^;.]*\bwith\b",
+        r"\bresearched\s+slotting options research\b",
+        r"\bregarding\s+(?:internal staffing check.in|operational slotting options)\b",
+    )
+    issues = [text for text in narratives if any(re.search(rule, text, re.I) for rule in grammar_rules)]
+    check("1.0.12 R-03 ND-01: every drafted narrative clears the repeated-word and preposition grammar list",
+          not issues, issues)
+    meeting, research = narratives[:2]
+    check("1.0.12 R-03 ND-01: a trailing research label does not repeat Researched",
+          "Researched slotting options regarding " in research
+          and "slotting options research" not in research, research)
+    check("1.0.12 R-03 ND-01: a purpose that repeats the meeting title is omitted, not repeated",
+          "staffing check-in" in meeting and "regarding" not in meeting
+          and meeting.count("staffing check-in") == 1, meeting)
+    check("1.0.12 R-03 ND-01: a distinct noun-phrase purpose has an article",
+          "regarding the operational slotting options" in research, research)
+    check("1.0.12 R-03 ND-01: title participants and exported attendees share one with clause",
+          len(re.findall(r"\bwith\b", meeting)) == 1
+          and meeting.count("Orion product lead") == 1
+          and meeting.count("Taylor Quinn") == 1, meeting)
+    check("1.0.12 R-03 ND-01: grammatical drafts still satisfy every required element after raw re-derivation",
+          all(all(e["compliance"]["required_elements"].values()) for e in governed["time_entries"]),
+          [e["compliance"]["required_elements"] for e in governed["time_entries"]])
+    policy = MODULES["narrative_draft"].signal_policy
+    rules = MODULES["guideline_check"].billing_rules
+    first, signal = drafted["time_entries"][0], drafted["activity_signals"][0]
+    for kind, text in (("unrelated", "Led staffing check-in regarding invented business objectives"),
+                       ("appended", meeting.rstrip(".") + " regarding invented business objectives.")):
+        check(f"1.0.12 R-03 ND-01: a redundant source purpose never credits an {kind} invented replacement",
+              not rules.required_elements(first, text, [signal])["purpose"], text)
+    research_signal = drafted["activity_signals"][1]
+    check("1.0.12 R-03 ND-01: an article does not credit a purpose absent from linked evidence",
+          not rules.required_elements(first, "Researched slotting options regarding the invented business objectives",
+                                      [research_signal])["purpose"])
+    flagged = dict(research_signal, embedded_instruction=True)
+    check("1.0.12 R-03 ND-01: article-bearing purpose text from a flagged signal credits nothing",
+          not rules.required_elements(first, research, [flagged])["purpose"])
+    distinct = dict(signal, purpose="internal staffing check-in risks")
+    text, _ = policy.clause(first, distinct)
+    check("1.0.12 R-03 ND-01: a purpose with additional meaning is retained with its article",
+          "regarding the internal staffing check-in risks" in text, text)
+    articles = [policy.clause(first, dict(signal, subject="Billing workshop", purpose=purpose))[0]
+                for purpose in ("the internal staffing check-in", "an internal staffing check-in",
+                                "our internal staffing check-in", "Orion's internal staffing check-in")]
+    check("1.0.12 R-03 ND-01: existing articles and possessives are not given another article",
+          not any("regarding the " + prefix in text for text in articles
+                  for prefix in ("the ", "an ", "our ", "Orion's ")), articles)
+    domain = dict(signal, subject="Integration with billing workflow requirements")
+    text, _ = policy.clause(first, domain)
+    check("1.0.12 R-03 ND-01: with inside a title is not removed unless it names exported participants",
+          "integration with billing workflow requirements" in text, text)
+    lone = dict(research_signal, subject="Research", purpose="operational slotting options")
+    text, _ = policy.clause(first, lone)
+    check("1.0.12 R-03 ND-01: a one-word subject is never erased to hide a repeated noun",
+          text.startswith("Researched Research "), text)
+    subjects = ("Changes in research", "Research on research", "Options for research",
+                "Market and research", "Orion's research")
+    texts = [policy.clause(first, dict(research_signal, subject=subject))[0] for subject in subjects]
+    check("1.0.12 R-03 ND-01: research as a preposition object, conjunct or possessed noun is retained",
+          all(subject in text for subject, text in zip(subjects, texts)), texts)
+
+
 def open_bytes(path):
     with open(path, "rb") as fh:
         return fh.read()
@@ -1787,6 +1887,7 @@ GROUPS = (
     (te111_r01_tests, False),
     (te111_r02_tests, False),
     (te111_r04_tests, False),
+    (te112_r03_tests, False),
 )
 GROUP_NAMES = tuple(fn.__name__ for fn, _ in GROUPS)
 USAGE = "usage: python3 tests/run_tests.py [--plugin-root DIR] [--list-groups] [--group NAME ...]"

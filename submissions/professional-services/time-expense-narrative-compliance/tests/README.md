@@ -11,7 +11,7 @@ Demo data and the engine regression suite for **Time & Expense Narrative Complia
 |---|---|
 | `demo-data/scenario-a-happy/` | Raw engagement exports (`raw/`), the activity packet `activity.json`, engine goldens (`expected/`) and a README with the run order |
 | `demo-data/scenario-b-drama/` | Same layout; the skim-proof rejection case |
-| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 10 groups, 225 checks |
+| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 11 groups, 240 checks |
 | `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker |
 
 ## Running the tests
@@ -55,18 +55,34 @@ response to a Cowork finding; internal QA rounds do not add checks to this suite
 | `te111_r01_tests` | 3 | 1.0.11 | Cowork 1.0.10 R-01 / AP-01: an explicit "show me activity.json" request uses the presentation view; flagged signals and entries expose only ID, date, hours and a withheld notice; the unchanged internal contract still passes downstream raw re-derivation |
 | `te111_r02_tests` | 3 | 1.0.11 | Cowork 1.0.10 R-02 / AP-02: named colleagues are passed without a confirmation to record the denied request, the reason cites the letter's lack of authorization, and every downstream engine preserves the denial and self-only rows when re-deriving from raw exports |
 | `te111_r04_tests` | 2 | 1.0.11 | Cowork 1.0.10 R-04 / GC-01: the entries table includes a date and Notes has explicit slots for flagged-entry and withheld-row notices |
+| `te112_r03_tests` | 15 | 1.0.12 | Cowork 1.0.10 R-03 / ND-01: raw-export reproductions for redundant research labels, repeated title/purpose clauses, noun-purpose articles and a single participant list; the grammar list covers every draft, the full chain still passes #1.2, invented and flagged purposes are not credited, and determiners, extra purpose meaning, non-participant "with" text, one-word subjects and research as an object or possessed noun are preserved |
+
+For 1.0.12, the unchanged 1.0.11 suite passed 225/225 before editing. The owner's explicit exception
+in `AGENTS.md` and `docs/release-process.md` authorizes replacing only the literal-bound condition of
+`1.0.10 R-01 ND-01: noun purposes use regarding, never an ungrammatical to clause` in `te110_tests`.
+The check keeps its name but now asserts grounded grammatical noun-purpose wording or omission of
+a purpose already stated by the title, rejects `to` plus the noun phrase, and requires #1.2 purpose
+recognition. All 224 other existing checks and their expectations are unchanged; an AST comparison
+of the 57 pre-existing test functions confirms the single authorized condition is the only change.
+
+The new `te112_r03_tests` group runs the entire raw-export chain, not hand-edited packets. Against
+the original 1.0.11 engines, seven new checks and the authorized replacement fail; the eight
+additional controls pass. All 15 new checks and the replaced check pass on 1.0.12, and the entire
+suite passes 240/240. `check:submissions` and all 40 `test:evaluation` checks pass. This is a local
+ND-01 reproduction, not a new Cowork built-in evaluation. Both demo chains were regenerated and
+all ten outputs differ only in version labels; raw exports and behavioral goldens are unchanged.
 
 For 1.0.11, all 217 baseline checks passed before the fixes. All eight added checks failed on
 the unfixed engines/instructions and pass afterwards; the full suite passes 225/225. No existing
 check or expected result changed, and there were no pre-existing failures.
 
-R-03 is skipped: the protected `te110_tests` check named
+In 1.0.11, R-03 was skipped: the protected `te110_tests` check named
 `1.0.10 R-01 ND-01: noun purposes use regarding, never an ungrammatical to clause` requires the
 exact substring ` regarding internal staffing check-in`. On its fixture the title is
 `Staffing check-in`; either suppressing the repeated purpose or adding the required article
-removes that substring. The brief does not authorize changing that expectation. Narrative
-behavior remains unchanged pending owner resolution, and no R-03 check was added for an
-unapplied fix. The legacy `withheld.requested` key also remains because existing hardening and
+removes that substring. The 1.0.11 brief did not authorize changing that expectation. Narrative
+behavior was left unchanged until the one-time exception used for 1.0.12 above, and no R-03 check
+was added for the unapplied 1.0.11 fix. The legacy `withheld.requested` key also remains because existing hardening and
 `te109_tests` checks assert it; R-02 fixes the denial reason and the instructions instead.
 
 Both demo chains were regenerated with `--generated-at 2026-09-23T00:00:00Z`. In each of

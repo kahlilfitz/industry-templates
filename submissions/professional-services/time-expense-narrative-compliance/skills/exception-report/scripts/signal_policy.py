@@ -111,7 +111,7 @@ POSITIONAL_LABEL_RE = re.compile(r"(?:calendar export|document activity log|time
                                  r"|engagement letter extract|mailbox summary|client billing guidelines extract"
                                  r"|code structure) row [1-9][0-9]*"
                                  r"|other (?:engagement|timekeeper) (?:signal|entry|name) [1-9][0-9]*")
-SIGNAL_POLICY_VERSION = "signal_policy/1.0.11"
+SIGNAL_POLICY_VERSION = "signal_policy/1.0.12"
 TEAM_VIEW_PREFIX = "engagement-manager:"
 TEAM_VIEW_TOKEN_RE = re.compile(r"engagement-manager:[A-Za-z0-9._-]+")
 WITHHELD_TEXT = contract_check.WITHHELD_MARKER  # "[withheld: flagged as embedded_instruction - client-billing-guidelines.md #11.2]"
@@ -2823,6 +2823,37 @@ def purpose_prefix(purpose):
     return "to" if PURPOSE_VERB_RE.match(purpose.strip()) else "regarding"
 
 
+def noun_purpose(purpose):
+    if re.match(r"(?:a|an|the|this|that|these|those|my|our|your|their|his|her|its|some|any|each|every)\b"
+                r"|\S+['\u2019]s\b", purpose, re.I):
+        return purpose
+    return "the " + purpose
+
+
+def subject_without_participants(activity):
+    subject = (activity.get("subject") or "").strip()
+    names = [re.escape(name.strip()) for name in activity.get("attendees") or []
+             if isinstance(name, str) and name.strip()]
+    if names:
+        name = "(?:" + "|".join(sorted(names, key=len, reverse=True)) + ")"
+        separator = r"(?:\s*,\s*(?:and\s+)?|\s*;\s*|\s+and\s+)"
+        subject = re.sub(r"\s+with\s+" + name + "(?:" + separator + name + ")*$", "", subject, flags=re.I)
+    return subject
+
+
+def purpose_repeats_subject(activity):
+    purpose = (activity.get("purpose") or "").strip()
+    if not purpose or purpose_prefix(purpose) != "regarding":
+        return False
+
+    def words(text):
+        normalized = " ".join(re.findall(r"[a-z0-9]+", canon_text(text)))
+        return re.sub(r"^(?:the|an?)\s+", "", normalized)
+
+    title, recorded = words(subject_without_participants(activity)), words(purpose)
+    return bool(title) and recorded in (title, "internal " + title)
+
+
 def billable_class(activity_class):
     """billable_signal as activity-pull derives it from the activity class (#5.1)."""
     return not class_in(activity_class, NON_BILLABLE_CLASSES)
@@ -2944,6 +2975,12 @@ def clause(entry, activity):
     else:
         verb = next((v for c, v in VERB_BY_CLASS if class_in(activity.get("activity_class"), (c,))), "Prepared")
     subject, others, purpose, deliverable, deliverable_first = clause_values(activity, person)
+    subject = subject_without_participants(activity)
+    if verb == "Researched":
+        tail = re.fullmatch(r"(.+)\s+research", subject, re.I)
+        if tail and not re.search(r"\b(?:of|on|about|for|in|at|by|from|to|into|regarding|with|without|and|or)$"
+                                  r"|['\u2019]s$", tail[1], re.I):
+            subject = tail[1]
     if is_calendar(activity) and subject and not subject.split()[0].isupper():
         subject = subject[0].lower() + subject[1:]
     text = f"{verb} {subject}"
@@ -2952,7 +2989,9 @@ def clause(entry, activity):
     if deliverable_first:
         text += f" for the {deliverable}"
     if purpose:
-        text += f" {purpose_prefix(purpose)} {purpose}"
+        if not purpose_repeats_subject(activity):
+            prefix = purpose_prefix(purpose)
+            text += f" {prefix} {purpose if prefix == 'to' else noun_purpose(purpose)}"
     else:
         reasons.append(f"{activity.get('activity_id')} has no recorded purpose; purpose not invented")
     if deliverable and not deliverable_first:
@@ -3223,8 +3262,8 @@ def validate_packet(packet, stage):
 # that every later stage re-runs on the activity packet, comparing the whole carried document with the result.
 REDERIVE_CITATION = "client-billing-guidelines.md #13.8"
 CONTRACT_VERSION = "ps.time-expense-narrative-compliance.v1"
-STAGE_VERSIONS = {"activity": "activity_pull/1.0.11", "drafted": "narrative_draft/1.0.11", "coded": "code_map/1.0.11",
-                  "governed": "guideline_check/1.0.11"}
+STAGE_VERSIONS = {"activity": "activity_pull/1.0.12", "drafted": "narrative_draft/1.0.12", "coded": "code_map/1.0.12",
+                  "governed": "guideline_check/1.0.12"}
 STAGE_ENGINES = {"drafted": "engine:narrative_draft", "coded": "engine:code_map", "governed": "engine:guideline_check"}
 # Carried fields no engine derives from its inputs, left out of the whole-document comparison (and only these). Each
 # is still validated by the contract walk and validate_packet and screened by the next stage's sweep_packet.

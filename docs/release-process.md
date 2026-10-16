@@ -201,8 +201,8 @@ this process and `AGENTS.md`:
 The exception permits this test replacement only as part of the R-03 fix. It does not permit
 unrelated test changes, weaker billing or safety rules, lower launch bars, packaging or publishing
 without their existing gates. Version labels, copied-engine consistency, repository checks and
-the next Cowork evaluation remain required. Until the replacement and engine fix are implemented,
-R-03 remains open and the plugin remains at 1.0.11.
+the next Cowork evaluation remain required. Approval alone does not implement the replacement or
+engine fix; their implementation and evaluation status are recorded in the Wave 1 log.
 
 ## Step 5: human spot check
 

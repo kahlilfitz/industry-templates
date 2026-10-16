@@ -3,7 +3,7 @@
 Draft for the shared "Skills and Plugin Metadata Template" workbook. Not packaged. Values marked
 "exactly as in the manifest" must stay in sync with `manifest.json`.
 
-Plugin version: **1.0.11**, matching `manifest.json` and `metadata.json`.
+Plugin version: **1.0.12**, matching `manifest.json` and `metadata.json`.
 
 ## Name
 

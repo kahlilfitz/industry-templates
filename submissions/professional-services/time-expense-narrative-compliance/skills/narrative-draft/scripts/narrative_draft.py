@@ -19,9 +19,12 @@ v1.0.6 rules:
   embedded-instruction tripwire first (#11.1). Flagged text is never copied into a narrative, a suggested rewrite or the draft's
   citations (#11.2): the draft is withheld and marked needs_review_embedded_instruction.
 - Calendar activity is "Attended" unless the calendar organizer is the timekeeper ("Led").
-- Each activity becomes "<verb> <subject> [with <attendees>] to <purpose> [for the <deliverable>]."
+- Each activity becomes "<verb> <subject> [with <attendees>] <purpose clause> [for the <deliverable>]."
+  Verb-led purposes use "to"; noun purposes use "regarding" with an article unless they already have a determiner.
+  A noun purpose repeating the title is not stated twice. A redundant trailing research label is removed, and
+  participants already in a title are combined with the exported attendees in one "with" clause.
   When the purpose already contains "for", the deliverable moves before it ("... for the
-  <deliverable> to <purpose>."). Every word comes from cited metadata. No filler is added: a draft
+  <deliverable> to <purpose>."). Every fact comes from cited metadata. No filler is added: a draft
   under 12 words stays short and is marked needs_review_insufficient_detail (#1.1).
 - An entry linking several activities gets one clause per activity, so every linked activity is
   described (covered_activity_ids); it is marked needs_review for block-billing review (#2.1/#2.2).
@@ -43,7 +46,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = signal_policy.DRAFT_ENGINE  # "engine:narrative_draft"
-ENGINE_VERSION = signal_policy.STAGE_VERSIONS["drafted"]  # "narrative_draft/1.0.11", shared with later re-derivations
+ENGINE_VERSION = signal_policy.STAGE_VERSIONS["drafted"]  # "narrative_draft/1.0.12", shared with later re-derivations
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 
 

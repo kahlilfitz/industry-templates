@@ -1,5 +1,41 @@
 # Changelog - time-expense-narrative-compliance
 
+## 1.0.12 - 2026-10-16
+
+Applies required **R-03 (narrative-draft, ND-01)** from the Cowork evaluation of 1.0.10 under the
+owner's explicit 2026-10-16 test-expectation exception. Advisory items remain in `BACKLOG.md`.
+
+- **R-03, applied:** remove a redundant trailing research label from a research subject without
+  erasing a one-word subject or the object of a preposition. A noun-phrase purpose gets "the" only
+  when it has no article, determiner or possessive. Omit a purpose clause that merely repeats the
+  title (allowing a leading "internal"). Recognize exported participant names already at the end
+  of a title and print them with the other exported attendees in one "with" clause; a title's
+  non-participant "with" text is preserved.
+- Keep #1.2 recognition consistent with the generated wording in all three `billing_rules.py`
+  copies. Article-bearing noun purposes still require an unflagged linked source. An omitted
+  redundant purpose is credited only when the complete clause matches the engine's grounded
+  rendering of that same signal; a title alone or an invented replacement purpose is not enough.
+  The five `signal_policy.py` copies remain byte-identical.
+- **Owner-authorized expectation replacement:** only the condition of
+  `1.0.10 R-01 ND-01: noun purposes use regarding, never an ungrammatical to clause` in
+  `te110_tests` changes. Its rule-based assertions require a grounded grammatical noun-purpose
+  clause or a single occurrence of the already stated title, reject `to` plus the noun phrase,
+  and require purpose recognition. The check's name and all 224 other existing checks are unchanged;
+  AST comparison confirms no other pre-existing test function or assertion changed.
+- **Regression edits (not bundled):** add `te112_r03_tests` with 15 checks in `tests/run_tests.py`
+  and document the group in `tests/README.md`. The unchanged 1.0.11 suite passed 225/225. Seven new
+  checks and the authorized replacement fail against the original 1.0.11 engines; eight additional
+  controls already pass there. All 240 checks pass after the fix. There were no baseline failures.
+- Release declarations, listing metadata and engine/stage/signal-policy labels move to 1.0.12.
+  All five `activity_pull.py` copies stay byte-identical; `steering_guard.py` and its `__version__`
+  are unchanged.
+- **Demo edits (not bundled):** regenerate `activity.json`, `expected/drafted.json`,
+  `expected/coded.json`, `expected/governed.json` and `expected/exception-report.md` in each demo
+  scenario with `--generated-at 2026-09-23T00:00:00Z`. All ten outputs change only engine version
+  labels; no raw export, narrative golden or verdict expectation changes.
+- `check:submissions` and all 40 `test:evaluation` checks pass. These are local ND-01 reproductions,
+  not a new Cowork built-in evaluation. No packaging, publishing or new verdict is claimed.
+
 ## 1.0.11 - 2026-10-16
 
 Applies three required fixes from the Cowork evaluation of 1.0.10; R-03 is skipped for a protected-check conflict. Advisory items remain in `BACKLOG.md`.
