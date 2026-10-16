@@ -50,7 +50,7 @@ Contact us: https://support.microsoft.com/home/contact
 4. Microsoft Teams: the engagement team and channels named in the workspace inventory (read-only; the plugin never adds members).
 5. Outlook: SOW or engagement-letter extracts and pursuit notes when they arrive by e-mail (read-only; the plugin never sends).
 
-No connector is required: every skill also works on user-supplied files. Owner: verify each against the Top 200 connector list.
+No connector is required: every skill also works on user-supplied files.
 
 ## Icons
 

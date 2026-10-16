@@ -53,8 +53,6 @@ exports come from:
 4. The firm's HR system: skills, certifications, seniority, location, languages, approved leave
 5. The firm's conflicts and independence register
 
-Owner: verify each against the Top 200 connector list.
-
 ## Fluent icons
 
 | Item | Fluent icon ID |

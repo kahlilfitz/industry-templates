@@ -61,8 +61,6 @@ knowledge-record).
 4. Microsoft Teams (retrospective meeting transcripts and notes)
 5. The firm's project or PSA system of record (deliverable register and status history; read only)
 
-Owner: verify each against the Top 200 connector list.
-
 ## Fluent icons
 
 | Item | Fluent icon ID |

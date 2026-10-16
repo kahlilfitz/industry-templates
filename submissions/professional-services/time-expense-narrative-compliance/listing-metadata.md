@@ -72,8 +72,6 @@ exception-report).
 Mailbox content and mailbox metadata are off by default (`config/signal-sources.json` in each skill)
 and need firm policy approval, matter scoping and user notice before they are enabled.
 
-Owner: verify each against the Top 200 connector list.
-
 ## Fluent icons
 
 | Item | Fluent icon ID |

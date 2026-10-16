@@ -49,8 +49,6 @@ Contact us: https://support.microsoft.com/home/contact
 3. Outlook: the distribution list and prior review notes when they arrive by e-mail (read-only; the plugin never sends).
 4. The firm's QRM review tracker: prior review findings and closure status.
 
-Owner: verify each against the Top 200 connector list.
-
 ## Icons
 
 | Item | Fluent icon ID |
