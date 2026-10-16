@@ -45,7 +45,7 @@ import billing_rules  # noqa: E402  (shared rules, identical copies next to code
 import signal_policy  # noqa: E402  (shared copy shipped next to each engine)
 
 ENGINE = "engine:exception_report"
-ENGINE_VERSION = "exception_report/1.0.9"
+ENGINE_VERSION = "exception_report/1.0.10"
 CONTRACT = "ps.time-expense-narrative-compliance.v1"
 HEADER_KEYS = ("client_name", "matter_name", "engagement_id")
 
@@ -379,7 +379,7 @@ def main():
     other_ids = {signal_policy._id_key(x) for x in signal_policy.other_engagement_ids(data)}
     other_entries = len(data.get("provenance", {}).get("excluded_entries", []))
     other_note = (f"{len(other_ids)} activity signal(s) and {other_entries} time entr(ies) scoped to another engagement "
-                  f"were excluded and are not shown ({signal_policy.ENGAGEMENT_CITATION})"
+                  f"were excluded and are not shown ({signal_policy.POLICY_CITATION}; {signal_policy.ENGAGEMENT_CITATION})"
                   if other_ids or other_entries else "")
     data_dates = sorted({d for d in [e.get("date") for e in data["time_entries"]]
                          + [s.get("date") for s in data.get("activity_signals", [])] if isinstance(d, str) and d})
@@ -443,6 +443,7 @@ def main():
         lines.append("- **No data:** the governed data holds no time entries and no activity signals in scope. An empty "
                      "packet is not evidence that no work was done; confirm the period, the timekeeper and the exports, "
                      "then re-run the chain before relying on it.")
+    policy_excluded = cells([x for x in billing_rules.excluded_ids(data) if signal_policy._id_key(x) not in other_ids])
     lines += [
         f"- Generated: {stamp} by {ENGINE_VERSION} from guideline_check output (flags quoted verbatim)",
         "",
@@ -452,7 +453,8 @@ def main():
         "- Verdicts: " + (", ".join(f"{cell(k)} {cell(v)}" for k, v in sorted(figures["verdict_counts"].items()))
                           or "none (no time entries)"),
         f"- Missing time: {figures['missing_time_hours']} h across {len(data['missing_time_report'])} activity signal(s)",
-        f"- Excluded by signal policy: {cells([x for x in billing_rules.excluded_ids(data) if signal_policy._id_key(x) not in other_ids]) or 'none'}",
+        f"- Excluded by signal policy: {policy_excluded} [{signal_policy.POLICY_CITATION}]" if policy_excluded
+        else "- Excluded by signal policy: none",
     ]
     if other_note:
         lines.append(f"- Other engagements: {other_note}")
@@ -471,17 +473,32 @@ def main():
             lines.append(f"| {cell(e.get('entry_id'))} | {cell(e.get('person'))} | {cell(e.get('date'))} | {cell(e.get('duration_hours'))} | "
                          f"{flag_lines(e['compliance']['flags'])} |")
         lines.append("")
+    listed_under = {id(e): "Rejects" for e in reject_rows}
     for severity, title in sections:
-        rows = by_flag_severity.get(severity, [])
+        own = by_verdict.get(severity, [])
+        # An entry listed under a more severe status is cross-referenced here, not repeated (its row holds every flag).
+        refs = {}
+        for e, flag in by_flag_severity.get(severity, []):
+            if id(e) in listed_under:
+                refs.setdefault(id(e), (e, []))[1].append(flag)
         lines += [f"## {title}", ""]
-        if not rows:
+        if not own and not refs:
             lines += ["None.", ""]
             continue
-        lines += ["| Entry | Person | Date | Hours | Flag (verbatim) |", "|---|---|---|---|---|"]
-        for e, flag in rows:
-            lines.append(f"| {cell(e.get('entry_id'))} | {cell(e.get('person'))} | {cell(e.get('date'))} | {cell(e.get('duration_hours'))} | "
-                         f"{flag_lines([flag])} |")
-        lines.append("")
+        if own:
+            lines += ["| Entry | Person | Date | Hours | Engine flags (verbatim) |", "|---|---|---|---|---|"]
+            for e in own:
+                lines.append(f"| {cell(e.get('entry_id'))} | {cell(e.get('person'))} | {cell(e.get('date'))} | {cell(e.get('duration_hours'))} | "
+                             f"{flag_lines(e.get('compliance', {}).get('flags', [])) or 'no engine flag; not compliant'} |")
+            lines.append("")
+        for e, flags in refs.values():
+            names = ", ".join(f"`{cell(f.get('flag'))}`" for f in flags)
+            lines.append(f"- {cell(e.get('entry_id'))} (listed under {listed_under[id(e)]}): also {cell(severity)} - {names}; "
+                         f"see that row for the verbatim flags and citations.")
+        if refs:
+            lines.append("")
+        for e in own:
+            listed_under[id(e)] = title
     lines += ["## Missing time", ""]
     if data["missing_time_report"]:
         lines += ["| Activity | Person | Date | Hours | Subject | Citations |", "|---|---|---|---|---|---|"]

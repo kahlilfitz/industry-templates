@@ -255,12 +255,7 @@ ACTION_VERBS = {
     "reviewed", "scoped", "summarized", "tested", "updated", "validated", "wrote",
 }
 # #1.2 "client-facing purpose": an explicit purpose clause.
-PURPOSE_VERBS = (
-    "address", "advise", "agree", "align", "analyse", "analyze", "answer", "assess", "brief", "capture", "clarify",
-    "confirm", "coordinate", "decide", "define", "design", "determine", "discuss", "document", "draft", "evaluate",
-    "finalize", "go over", "identify", "inform", "map", "plan", "prepare", "present", "prioritize", "resolve", "respond",
-    "review", "scope", "summarize", "support", "test", "update", "validate", "walk through",
-)
+PURPOSE_VERBS = signal_policy.PURPOSE_VERBS
 PURPOSE_RE = re.compile(r"\b(?:to|so that we can|in order to)\s+(?:" + "|".join(PURPOSE_VERBS) + r")\b")
 EMBEDDED_DEFAULT = ("narrative or linked activity text addresses the reviewer/engine, steers the verdict, "
                     "suppresses or overrides the review, claims an approval or waiver, asks for forwarding, mixes "
@@ -332,7 +327,16 @@ def required_elements(entry, narrative, linked):
             wanted = content_tokens(text)
             if wanted and len(wanted & narrative_tokens) / len(wanted) >= SUBJECT_COVERAGE:
                 subject = True
-    purpose = bool(PURPOSE_RE.search(normalize(narrative)))
+    normalized = normalize(narrative)
+    purpose = bool(PURPOSE_RE.search(normalized))
+    if not purpose:
+        for signal in linked:
+            recorded = normalize(signal.get("purpose"))
+            if (not signal_policy.signal_flagged(signal) and recorded
+                    and signal_policy.purpose_prefix(recorded) == "regarding"
+                    and re.search(r"\bregarding\s+" + re.escape(recorded) + r"\b", normalized)):
+                purpose = True
+                break
     return {"actor": actor, "subject": subject, "purpose": purpose}
 
 

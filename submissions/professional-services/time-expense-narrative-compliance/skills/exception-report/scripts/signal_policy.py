@@ -111,7 +111,7 @@ POSITIONAL_LABEL_RE = re.compile(r"(?:calendar export|document activity log|time
                                  r"|engagement letter extract|mailbox summary|client billing guidelines extract"
                                  r"|code structure) row [1-9][0-9]*"
                                  r"|other (?:engagement|timekeeper) (?:signal|entry|name) [1-9][0-9]*")
-SIGNAL_POLICY_VERSION = "signal_policy/1.0.9"
+SIGNAL_POLICY_VERSION = "signal_policy/1.0.10"
 TEAM_VIEW_PREFIX = "engagement-manager:"
 TEAM_VIEW_TOKEN_RE = re.compile(r"engagement-manager:[A-Za-z0-9._-]+")
 WITHHELD_TEXT = contract_check.WITHHELD_MARKER  # "[withheld: flagged as embedded_instruction - client-billing-guidelines.md #11.2]"
@@ -2809,7 +2809,18 @@ VERB_BY_CLASS = (
     ("internal_admin", "Coordinated"),
     ("billing_hygiene", "Reviewed"),
 )
+PURPOSE_VERBS = (
+    "address", "advise", "agree", "align", "analyse", "analyze", "answer", "assess", "brief", "capture", "clarify",
+    "confirm", "coordinate", "decide", "define", "design", "determine", "discuss", "document", "draft", "evaluate",
+    "finalize", "go over", "identify", "inform", "map", "plan", "prepare", "present", "prioritize", "resolve", "respond",
+    "review", "scope", "summarize", "support", "test", "update", "validate", "walk through",
+)
+PURPOSE_VERB_RE = re.compile(r"(?:" + "|".join(v.replace(" ", r"\s+") for v in PURPOSE_VERBS) + r")\b", re.I)
 DRAFT_ONLY_SECTIONS = ("prebill_summary", "missing_time_report", "exception_list")  # written after drafting
+
+
+def purpose_prefix(purpose):
+    return "to" if PURPOSE_VERB_RE.match(purpose.strip()) else "regarding"
 
 
 def billable_class(activity_class):
@@ -2933,13 +2944,15 @@ def clause(entry, activity):
     else:
         verb = next((v for c, v in VERB_BY_CLASS if class_in(activity.get("activity_class"), (c,))), "Prepared")
     subject, others, purpose, deliverable, deliverable_first = clause_values(activity, person)
+    if is_calendar(activity) and subject and not subject.split()[0].isupper():
+        subject = subject[0].lower() + subject[1:]
     text = f"{verb} {subject}"
     if others:
         text += f" with {join_names(others)}"
     if deliverable_first:
         text += f" for the {deliverable}"
     if purpose:
-        text += f" to {purpose}"
+        text += f" {purpose_prefix(purpose)} {purpose}"
     else:
         reasons.append(f"{activity.get('activity_id')} has no recorded purpose; purpose not invented")
     if deliverable and not deliverable_first:
@@ -3210,8 +3223,8 @@ def validate_packet(packet, stage):
 # that every later stage re-runs on the activity packet, comparing the whole carried document with the result.
 REDERIVE_CITATION = "client-billing-guidelines.md #13.8"
 CONTRACT_VERSION = "ps.time-expense-narrative-compliance.v1"
-STAGE_VERSIONS = {"activity": "activity_pull/1.0.9", "drafted": "narrative_draft/1.0.9", "coded": "code_map/1.0.9",
-                  "governed": "guideline_check/1.0.9"}
+STAGE_VERSIONS = {"activity": "activity_pull/1.0.10", "drafted": "narrative_draft/1.0.10", "coded": "code_map/1.0.10",
+                  "governed": "guideline_check/1.0.10"}
 STAGE_ENGINES = {"drafted": "engine:narrative_draft", "coded": "engine:code_map", "governed": "engine:guideline_check"}
 # Carried fields no engine derives from its inputs, left out of the whole-document comparison (and only these). Each
 # is still validated by the contract walk and validate_packet and screened by the next stage's sweep_packet.

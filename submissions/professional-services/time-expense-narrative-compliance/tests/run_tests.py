@@ -26,6 +26,7 @@ An unknown group or argument exits 2.
    missing time).
 6. te109_tests (1.0.9, Cowork 1.0.8 required fixes F-01, F-02 and F-03: purpose agreement, refusal routing,
    personal-data exclusions and self-scope withholding).
+7. te110_tests (1.0.10, Cowork 1.0.9 required fix R-01: grammatical grounded purposes).
 Exit code 0 = all passed.
 """
 import copy
@@ -1585,6 +1586,102 @@ def te109_tests(tmp):
               and "Casey Lane" not in json.dumps(withheld), msg or withheld)
 
 
+def te110_tests(tmp):
+    """Cowork 1.0.9 R-01 ND-01 regressions, derived from raw exports rather than edited packets."""
+    raw = raw_copy(tmp, "te110-nd01", scenario="scenario-a-happy")
+    edit_csv(raw, "calendar-export.csv", 1, "subject", "Staffing check-in")
+    edit_csv(raw, "calendar-export.csv", 1, "organizer", "Alex Rivera")
+    purposes = ("internal staffing check-in", "review billing workflow requirements",
+                "discuss approved billing workflow assumptions")
+    for row, purpose in enumerate(purposes, start=1):
+        edit_csv(raw, "engagement-workplan.csv", row, "purpose", purpose)
+    work = os.path.join(tmp, "te110-nd01-chain")
+    os.makedirs(work)
+    paths = chain(raw, list(SCENARIO_A_ARGS), work)
+    drafted, governed = read(paths["drafted"]), read(paths["governed"])
+    narrative = drafted["time_entries"][0]["draft"]["narrative"]
+    check("1.0.10 R-01 ND-01: noun purposes use regarding, never an ungrammatical to clause",
+          " regarding internal staffing check-in" in narrative
+          and " to internal staffing check-in" not in narrative, narrative)
+    check("1.0.10 R-01 ND-01: calendar titles start lower-case mid-sentence",
+          narrative.startswith("Led staffing check-in with "), narrative)
+    for e in drafted["time_entries"]:
+        compliance = entry(governed, e["entry_id"])["compliance"]
+        check(f"1.0.10 R-01 ND-01: every generated narrative passes #1.2 on the same fixture ({e['entry_id']})",
+              all(compliance["required_elements"].values())
+              and "required_elements_missing" not in flags(governed, e["entry_id"]), compliance)
+    br = MODULES["guideline_check"].billing_rules
+    policy = MODULES["narrative_draft"].signal_policy
+    activity = drafted["activity_signals"][0]
+    e = drafted["time_entries"][0]
+    verb_clauses = []
+    for verb in br.PURPOSE_VERBS:
+        signal = dict(activity, purpose=f"{verb} billing workflow requirements")
+        text, _ = policy.clause(e, signal)
+        verb_clauses.append(f" to {signal['purpose']}" in text
+                            and br.required_elements(e, text, [signal])["purpose"])
+    check("1.0.10 R-01: every shared PURPOSE_VERBS phrase keeps a grammatical to clause",
+          all(verb_clauses))
+    check("1.0.10 R-01: regarding does not credit a purpose absent from the linked evidence",
+          not br.required_elements(e, "Led staffing check-in regarding invented business objectives",
+                                   [activity])["purpose"])
+    policies = [open_bytes(os.path.join(PLUGIN_ROOT, "skills", skill, "scripts", "signal_policy.py"))
+                for skill in ("activity-pull", "narrative-draft", "code-map", "guideline-check", "exception-report")]
+    check("1.0.10 R-01: all five vendored signal_policy.py copies agree", len(set(policies)) == 1)
+
+    # R-02 ER-01: an other-engagement exclusion is a privacy exclusion, so it cites #10.1 as well as #13.3.
+    raw = raw_copy(tmp, "te110-er01", scenario="scenario-a-happy")
+    path = os.path.join(raw, "calendar-export.csv")
+    with open(path, encoding="utf-8", newline="") as fh:
+        rows = list(csv.reader(fh))
+    other = dict(zip(rows[0], rows[1]), activity_id="A-CAL-077", event_id="MTG-OTHER-077",
+                 subject="other engagement steering call", engagement_id="ENG-2026-077")
+    rows.append([other[c] for c in rows[0]])
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        csv.writer(fh, lineterminator="\n").writerows(rows)
+    work = os.path.join(tmp, "te110-er01-chain")
+    os.makedirs(work)
+    report = read_text(chain(raw, list(SCENARIO_A_ARGS), work)["report"])
+    summary_other = [l for l in report.splitlines() if l.startswith("- Other engagements:")]
+    privacy = md_section(report, "Privacy exclusions")
+    check("1.0.10 R-02 ER-01: the summary other-engagement exclusion cites #10.1 and #13.3",
+          len(summary_other) == 1 and "client-billing-guidelines.md #10.1" in summary_other[0]
+          and "client-billing-guidelines.md #13.3" in summary_other[0], summary_other)
+    check("1.0.10 R-02 ER-01: the privacy-exclusion section cites #10.1 and #13.3 for another engagement",
+          "scoped to another engagement" in privacy and "client-billing-guidelines.md #10.1" in privacy
+          and "client-billing-guidelines.md #13.3" in privacy and "A-CAL-077" not in report, privacy)
+
+    work = os.path.join(tmp, "te110-r03-chain")
+    os.makedirs(work)
+    b_raw = os.path.join(DATA_ROOT, "demo-data", "scenario-b-drama", "raw")
+    paths = chain(b_raw, list(SCENARIOS["scenario-b-drama"]), work)
+    report, governed = read_text(paths["report"]), read(paths["governed"])
+    policy_line = [l for l in report.splitlines() if l.startswith("- Excluded by signal policy:")]
+    check("1.0.10 R-02: the summary signal-policy exclusion line cites #10.1",
+          len(policy_line) == 1 and policy_line[0].endswith("[client-billing-guidelines.md #10.1]"), policy_line)
+
+    # R-03 GR-01: each entry is listed once, under its most severe status, and other sections cross-reference it.
+    titles = ("Rejects - rewrite or remove before pre-bill", "Held for review", "Needs review")
+    verdict_for = {titles[0]: "reject", titles[1]: "hold_for_review", titles[2]: "needs_review"}
+    table_ids = {}
+    for title in titles:
+        rows = [l for l in md_section(report, title).splitlines() if l.startswith("| ") and not l.startswith("| Entry")]
+        table_ids[title] = [r.split("|")[1].strip() for r in rows]
+    listed = [i for ids in table_ids.values() for i in ids]
+    check("1.0.10 R-03 GR-01: no entry has full rows in more than one section, or twice in one section",
+          len(listed) == len(set(listed)), table_ids)
+    check("1.0.10 R-03 GR-01: each section's full rows are only entries whose verdict is that status",
+          all(entry(governed, i)["compliance"]["verdict"] == verdict_for[t] for t, ids in table_ids.items() for i in ids),
+          table_ids)
+    held, needs = md_section(report, titles[1]), md_section(report, titles[2])
+    check("1.0.10 R-03 GR-01: Held cross-references the rejected TE-B-001 with its hold flags",
+          "- TE-B-001 (listed under Rejects): also hold_for_review - `disabled_source_signal`, `unmapped_code`, "
+          "`confidence_floor`;" in held and "| TE-B-001 |" not in held, held)
+    check("1.0.10 R-03 GR-01: Needs review cross-references rejected entries instead of repeating their rows",
+          "- TE-B-001 (listed under Rejects): also needs_review - `date_mismatch`, `evidence_overrun`;" in needs
+          and "| TE-B-00" not in needs, needs)
+
+
 def open_bytes(path):
     with open(path, "rb") as fh:
         return fh.read()
@@ -1598,6 +1695,7 @@ GROUPS = (
     (te107_tests, False),
     (te108_tests, False),
     (te109_tests, False),
+    (te110_tests, False),
 )
 GROUP_NAMES = tuple(fn.__name__ for fn, _ in GROUPS)
 USAGE = "usage: python3 tests/run_tests.py [--plugin-root DIR] [--list-groups] [--group NAME ...]"

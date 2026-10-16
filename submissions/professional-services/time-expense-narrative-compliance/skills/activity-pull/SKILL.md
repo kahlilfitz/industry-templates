@@ -4,7 +4,7 @@ description: 'Gathers engagement-scoped calendar metadata, document activity and
 license: Proprietary
 compatibility: 'Requires Python 3 (standard library only) to run scripts/activity_pull.py on user-supplied raw exports for one engagement (calendar, document activity, workplan and timesheet CSVs plus the engagement-letter extract); reads the config/signal-sources.json, contracts/ and references/ in this skill folder and writes activity.json locally. No connectors, network access or outbound actions; mailbox sources are off by default.'
 metadata:
-  version: "1.0.9"
+  version: "1.0.10"
   icon: ic_fluent_calendar_arrow_down_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

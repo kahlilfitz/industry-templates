@@ -1,5 +1,17 @@
 # Changelog - time-expense-narrative-compliance
 
+## 1.0.10 - 2026-10-15
+
+Applies the three required fixes from the Cowork evaluation of 1.0.9. Advisory items remain in `BACKLOG.md`.
+
+- **R-01 (narrative-draft, ND-01):** the five identical `signal_policy.py` copies use "to" only for a recorded purpose starting with a shared `PURPOSE_VERBS` phrase, and "regarding" otherwise. Calendar title initials are lower-case mid-sentence, with acronyms preserved. The three identical `billing_rules.py` copies use that shared verb list and credit a noun-phrase purpose only when the narrative's "regarding" clause matches an unflagged linked signal's recorded purpose. No purpose or action is invented. Narrative-draft and guideline-check instructions describe the same rules.
+- **R-02 (exception-report ER-01, privacy citations):** an exclusion for another engagement cites client-billing-guidelines.md #10.1 and #13.3 in the summary and the privacy-exclusion section, and the summary "Excluded by signal policy" line cites #10.1 when it names signals. SKILL.md Grounding states the same rule.
+- **R-03 (exception-report ER-01, one listing per entry):** each entry gets full rows once, with all its flags, under its most severe status. Held for review and Needs review list full rows only for entries with that verdict, and name a more severe entry with its flags in a cross-reference line instead. The Held and Needs review tables now read "Engine flags (verbatim)". SKILL.md Steps and Output format describe the layout.
+- **Owner decision (option A):** the owner approved regenerating `expected/exception-report.md` for R-02 and R-03. Scenario B's golden changes (summary citation and cross-references); scenario A's does not. The 1.0.1 subordinate-flag checks pass unchanged because each cross-reference names the entry ID and verbatim flag names.
+- Release declarations and every engine/stage/signal-policy label move to 1.0.10. Vendored scripts stay byte-identical; `steering_guard.py` and its `__version__` are unchanged. Both demo chains were regenerated and verified to change only labels before applying behavioral fixes.
+- **Demo edits (not bundled):** both scenarios' `activity.json`, `expected/drafted.json`, `expected/coded.json`, `expected/governed.json` and `expected/exception-report.md` change engine labels; scenario B's `expected/exception-report.md` also carries the R-02 and R-03 output (owner option A). No raw export or other demo file changed.
+- **Regression edits (not bundled):** add `te110_tests` to `tests/run_tests.py` (15 checks: 8 R-01, 3 R-02, 4 R-03; suite now 217) and update `tests/README.md`. Each new check failed before its fix and passes afterwards. All 202 pre-existing checks pass unchanged, except the scenario B golden that the owner approved regenerating; there were no baseline failures. ND-01 is reproduced locally through the engines, not rerun in Cowork; no new built-in verdict is claimed.
+
 ## 1.0.9 - 2026-10-15
 
 Applies only the three required fixes from the Cowork evaluation of 1.0.8. Advisory items remain in `BACKLOG.md`.

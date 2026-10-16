@@ -11,7 +11,7 @@ Demo data and the engine regression suite for **Time & Expense Narrative Complia
 |---|---|
 | `demo-data/scenario-a-happy/` | Raw engagement exports (`raw/`), the activity packet `activity.json`, engine goldens (`expected/`) and a README with the run order |
 | `demo-data/scenario-b-drama/` | Same layout; the skim-proof rejection case |
-| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 6 groups, 202 checks |
+| `tests/run_tests.py` | Engine regression suite (Python 3 standard library), 7 groups, 210 checks |
 | `tests/sample-test-prompts.csv` | Human spot-check prompts for the tracker |
 
 ## Running the tests
@@ -51,6 +51,15 @@ response to a Cowork finding; internal QA rounds do not add checks to this suite
 | `te107_tests` | 31 | 1.0.7 | Cowork 1.0.6 recommendations F02 (`partially_mapped_activity_classes`) and F03 (purpose verbs and inflected vague phrases) |
 | `te108_tests` | 13 | 1.0.8 | Cowork 1.0.7 required fixes in guideline-check: F-01 (pasted-narrative intake: Step 0 asks for engagement, period, timekeeper, entry ID and every raw export, keeps the narrative in its timesheet row, builds activity → drafted → coded, names missing inputs and offers the earlier stage) and F-02 (missing time starts from raw exports through activity-pull, narrative-draft and code-map; both packets mandatory). The end-to-end checks run the stages in the order Step 0 names |
 | `te109_tests` | 20 | 1.0.9 | Cowork 1.0.8 required fixes: F-01 (GC-03: every grounded draft on the same fixture passes #1.2 with walk-through, go-over and discuss purposes; bare verbs and look-alikes are not credited; all three rules copies agree), F-02 (GR-01: no refusal-routing exclusions, quoted approval/submission/write-off triggers and an action-only guardrail), F-03 (GR-05: explicit personal/contact/compensation/rate exclusions and letter-first manager check; AP-01: self-mode withheld colleagues are distinct and anonymous, preserved by every downstream engine with raw re-derivation, including colleagues found only in calendar, document activity or timesheets) |
+| `te110_tests` | 15 | 1.0.10 | Cowork 1.0.9 required fixes: R-01 (ND-01: noun purposes use "regarding", calendar title initials are lower-case mid-sentence, every generated narrative passes #1.2 on the same fixture, all shared purpose verbs retain "to", unsupported purposes are not credited, and all five policy copies agree), R-02 (ER-01: an other-engagement exclusion built from raw exports cites #10.1 and #13.3 in the summary and privacy section, and the signal-policy summary line cites #10.1), R-03 (ER-01: each entry has full rows once, under its own verdict, and rejected entries are cross-referenced with their hold and needs-review flags) |
+
+For 1.0.10, the new group reproduced R-01, R-02 and R-03 failures before the fixes.
+The 202 pre-existing checks and their expectations are unchanged. Version-label regeneration was
+checked separately: all ten demo outputs changed only their engine labels. R-02/R-03 were attempted,
+but failed the two protected exception-report golden checks; they were reverted and skipped rather
+than changing those expected results. Owner resolution is required and no commit was made.
+Raw exports are unchanged. The ND-01 checks are local engine reproductions, not a new Cowork
+built-in evaluation.
 
 `fixture_tests` and `hardening_tests` run inside `defence_in_depth()`: their hand-edited packets
 pass the activity re-derivation gate so the defences behind it stay under test.
