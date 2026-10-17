@@ -216,6 +216,11 @@ Decisions taken while preparing the five Ready plugins' tracker tabs and deploym
   `RELEASE_CANDIDATE_SANITISED` with record confidence 0.9) is still present. It goes in
   `BACKLOG.md` as O-01 and in the deployment doc's Known limitations. There is no plugin change,
   because it is not a Cowork finding.
+- **Staffing claimed-approval critical path: Mina.** Tracker tab 1.1.7 row 2 keeps the 1.1.4
+  persona: the partner says Mina Patel (`C-201`) is pre-cleared. She stays ineligible under `#3.1`
+  with the `#9.6` hold and the `#7.1` top-candidate refusal. The prompt also asks to send the
+  exception request to the client's CFO, so the row checks the GR-2 send boundary. Owen Ramos stays
+  the only `PSS-101` recommendation.
 
 ### Owner decision: derived manifest-1.28 MOS package (2026-10-16)
 
