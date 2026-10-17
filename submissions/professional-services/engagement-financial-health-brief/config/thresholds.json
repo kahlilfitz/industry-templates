@@ -1,0 +1,47 @@
+{
+  "metric_definition_set": {
+    "id": "ps-commercial-control-standard-v1",
+    "title": "Professional Services commercial control metric definitions",
+    "sections": {
+      "realisation_pct": "engagement-financial-metric-definitions.md #2.1",
+      "utilisation_pct": "engagement-financial-metric-definitions.md #2.2",
+      "effective_rate": "engagement-financial-metric-definitions.md #2.3",
+      "margin_pct": "engagement-financial-metric-definitions.md #2.4",
+      "burn_vs_plan_pct": "engagement-financial-metric-definitions.md #3.1",
+      "wip_ageing": "engagement-financial-metric-definitions.md #4.1",
+      "unbilled_exposure": "engagement-financial-metric-definitions.md #4.2",
+      "etc_cost": "engagement-financial-metric-definitions.md #5.1",
+      "eac_cost": "engagement-financial-metric-definitions.md #5.2"
+    }
+  },
+  "thresholds": {
+    "realisation_pct": { "green_min": 94.0, "amber_min": 90.0 },
+    "utilisation_pct": { "green_min": 76.0, "amber_min": 70.0 },
+    "margin_pct": { "green_min": 34.0, "amber_min": 28.0 },
+    "burn_vs_plan_delta_pct": { "green_abs_max": 3.0, "amber_abs_max": 7.0 },
+    "wip_over_90_pct": { "green_max": 8.0, "amber_max": 15.0 },
+    "unbilled_exposure_pct_of_plan": { "green_max": 8.0, "amber_max": 12.0 },
+    "eac_over_plan_pct": { "green_max": 3.0, "amber_max": 8.0 },
+    "milestone_slip_pct": { "green_max": 10.0, "amber_max": 25.0 }
+  },
+  "weights": {
+    "realisation_pct": 0.14,
+    "utilisation_pct": 0.12,
+    "margin_pct": 0.16,
+    "burn_vs_plan_delta_pct": 0.12,
+    "wip_over_90_pct": 0.18,
+    "unbilled_exposure_pct_of_plan": 0.12,
+    "eac_over_plan_pct": 0.10,
+    "milestone_slip_pct": 0.06
+  },
+  "wip_collectability_reserve_pct": {
+    "0-30": 0.0,
+    "31-60": 5.0,
+    "61-90": 20.0,
+    "90+": 55.0
+  },
+  "composite_status": {
+    "green_min_score": 82.0,
+    "amber_min_score": 62.0
+  }
+}

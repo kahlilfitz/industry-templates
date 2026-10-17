@@ -1,0 +1,18 @@
+{
+  "name": "change-order-scope-control",
+  "version": "1.0.0",
+  "description": "Professional Services Cowork plugin for delivery and commercial control. Retrieves the SOW, MSA and prior change orders; normalizes request logs, mail threads and delivered artifacts; deterministically matches requests to scope clauses, classifies each item as in-scope, out-of-scope or ambiguous, calculates the effort/cost delta and cumulative drift, and drafts a change order for human review. Draft-first; SOW-grounded; no acceptance, repricing, client issuance or system write-back.",
+  "author": {
+    "name": "Microsoft Professional Services Skills"
+  },
+  "keywords": [
+    "professional-services",
+    "delivery",
+    "commercial-control",
+    "change-order",
+    "scope-control",
+    "SOW",
+    "margin",
+    "Cowork"
+  ]
+}

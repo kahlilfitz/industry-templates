@@ -1,0 +1,4 @@
+entry_id,date,person,hours,narrative,activity_ids,phase_code,task_code
+TE-A-001,2026-09-14,Alex Rivera,1.2,,A-CAL-001,,
+TE-A-002,2026-09-15,Alex Rivera,1.4,,A-DOC-001,,
+TE-A-003,2026-09-16,Alex Rivera,0.8,,A-DOC-002,,

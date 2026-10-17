@@ -1,0 +1,168 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ps.sow-drafting-scoping-notes.v1",
+  "title": "SOW Drafting from Scoping Notes contract v1",
+  "description": "Versioned contract chaining notes-ingest -> scope-extract -> clause-select -> deviation-flag -> sow-draft. Carries data, confidence, provenance and citations across every hop so thin inputs and clause deviations are mechanical.",
+  "type": "object",
+  "required": ["contract_version", "engagement"],
+  "properties": {
+    "contract_version": { "const": "ps.sow-drafting-scoping-notes.v1" },
+    "engagement": {
+      "type": "object",
+      "required": ["pursuit_id", "client_name", "project_name", "source", "citation", "confidence"],
+      "properties": {
+        "pursuit_id": { "type": "string" },
+        "client_name": { "type": "string" },
+        "project_name": { "type": "string" },
+        "lifecycle_stage": { "type": "string" },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "citation": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "value", "source", "citation", "confidence"],
+        "properties": {
+          "key": { "type": "string" },
+          "value": {},
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "summary": { "type": "string" },
+        "deliverables": { "type": "array", "items": { "$ref": "#/definitions/grounded_item" } },
+        "milestones": { "type": "array", "items": { "$ref": "#/definitions/milestone" } },
+        "acceptance_criteria": { "type": "array", "items": { "$ref": "#/definitions/grounded_item" } },
+        "assumptions": { "type": "array", "items": { "$ref": "#/definitions/grounded_item" } },
+        "exclusions": { "type": "array", "items": { "$ref": "#/definitions/grounded_item" } },
+        "thin_input_report": { "type": "array", "items": { "$ref": "#/definitions/thin_input" } }
+      }
+    },
+    "clause_library": {
+      "type": "object",
+      "properties": {
+        "library_id": { "type": "string" },
+        "version": { "type": "string" },
+        "approval_status": { "type": "string" },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "citation": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "selected_clauses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["family", "library_id", "library_version", "deviation_state", "source", "citation", "confidence"],
+        "properties": {
+          "family": { "type": "string" },
+          "library_id": { "type": "string" },
+          "library_version": { "type": "string" },
+          "title": { "type": "string" },
+          "risk_tier": { "enum": ["low", "medium", "high"] },
+          "approved_clause": { "type": "string" },
+          "draft_allowed": { "type": "boolean" },
+          "deviation_state": { "enum": ["approved_language_selected", "no_deviation", "thin_input_blocked", "unapproved_deviation", "not_evaluated"] },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "prior_sow_terms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["family", "summary", "source", "citation", "confidence"],
+        "properties": {
+          "family": { "type": "string" },
+          "summary": { "type": "string" },
+          "one_off_approval": { "type": "boolean" },
+          "client_specific": { "type": "boolean" },
+          "material_difference": { "type": "string" },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "deviations": { "type": "array", "items": { "$ref": "#/definitions/deviation" } },
+    "deviation_summary": { "type": "object" },
+    "sow_draft": { "type": "object" },
+    "escalations": { "type": "array", "items": { "type": "string" } },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "engines": { "type": "array", "items": { "type": "string" } },
+        "generated_at": { "type": "string" },
+        "demo_scenario": { "type": "string" }
+      }
+    }
+  },
+  "definitions": {
+    "grounded_item": {
+      "type": "object",
+      "required": ["id", "text", "status", "source", "citation", "confidence"],
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "status": { "type": "string" },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "citation": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "milestone": {
+      "type": "object",
+      "required": ["id", "name", "timing", "commitment_status", "source", "citation", "confidence"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "timing": { "type": "string" },
+        "commitment_status": { "enum": ["draftable", "planning_target_only", "blocked_thin_input"] },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "citation": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "thin_input": {
+      "type": "object",
+      "required": ["commitment", "missing_fact", "effect", "source", "citation", "confidence"],
+      "properties": {
+        "commitment": { "type": "string" },
+        "missing_fact": { "type": "string" },
+        "effect": { "type": "string" },
+        "rule": { "type": "string" },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "citation": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "deviation": {
+      "type": "object",
+      "required": ["family", "severity", "route", "deviation_state", "library_id", "library_version", "approved_clause", "inherited_clause", "source", "citation", "confidence"],
+      "properties": {
+        "family": { "type": "string" },
+        "severity": { "enum": ["minor", "major", "critical"] },
+        "route": { "type": "string" },
+        "deviation_state": { "enum": ["unapproved_deviation", "thin_input_blocked"] },
+        "library_id": { "type": "string" },
+        "library_version": { "type": "string" },
+        "approved_clause": { "type": "string" },
+        "inherited_clause": { "type": "string" },
+        "rationale": { "type": "string" },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "citation": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

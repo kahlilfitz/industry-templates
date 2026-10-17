@@ -1,0 +1,16 @@
+{
+  "contract_version": "ps.engagement-financial-health-brief.v1",
+  "generated_at": "2026-09-23T00:00:00Z",
+  "demo_scenario": "scenario-b-drama",
+  "engagement": {
+    "engagement_id": "PS-EFH-2002",
+    "client_name": "Clearwater Methods Group",
+    "engagement_name": "Operating Model Transition",
+    "practice": "Transformation Advisory",
+    "review_period": "2026-09",
+    "metric_definition_set_id": "ps-commercial-control-standard-v1",
+    "source": "connector:engagement-record",
+    "citation": "engagement record PS-EFH-2002, review period 2026-09",
+    "confidence": 0.99
+  }
+}

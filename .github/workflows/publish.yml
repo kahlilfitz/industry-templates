@@ -1,0 +1,63 @@
+name: Publish catalog and bundles
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build -- --catalog-output "$RUNNER_TEMP/catalog"
+
+      - name: Publish catalog branch
+        env:
+          FEED_BRANCH: catalog
+          FEED_DIR: ${{ runner.temp }}/catalog
+        run: |
+          set -euo pipefail
+          publish_dir="$RUNNER_TEMP/catalog-publish"
+
+          if git ls-remote --exit-code --heads origin "$FEED_BRANCH" >/dev/null; then
+            git fetch origin "refs/heads/$FEED_BRANCH:refs/remotes/origin/$FEED_BRANCH"
+            git worktree add --detach "$publish_dir" "origin/$FEED_BRANCH"
+          else
+            git worktree add --detach "$publish_dir" HEAD
+            git -C "$publish_dir" switch --orphan "$FEED_BRANCH"
+          fi
+
+          # --delete so a skill removed from a template disappears from the feed.
+          rsync -a --delete --exclude=".git" "$FEED_DIR/" "$publish_dir/"
+          git -C "$publish_dir" add -A
+
+          if git -C "$publish_dir" diff --cached --quiet; then
+            echo "Catalog branch is already current."
+            exit 0
+          fi
+
+          git -C "$publish_dir" config user.name "github-actions[bot]"
+          git -C "$publish_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$publish_dir" commit -m "chore: refresh catalog feed"
+          git -C "$publish_dir" push origin "HEAD:refs/heads/$FEED_BRANCH"
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: industry-template-bundles
+          path: public/bundles

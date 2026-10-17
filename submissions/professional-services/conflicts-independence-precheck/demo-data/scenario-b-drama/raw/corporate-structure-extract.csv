@@ -1,0 +1,7 @@
+entity_id,legal_name,aliases,trade_names,family_id,parent_id,ownership_pct,relationship,citation
+ENT-AST-010,Aster Diagnostics LLC,"Aster Health Labs; Aster Diagnostics",Aster Health Labs,FAM-VEGA,ENT-VEGA-001,1.0,controlled subsidiary / trading brand,corporate structure extract row 14
+ENT-VEGA-001,VegaNova Holdings PLC,"VegaNova; Vega Nova Holdings",,FAM-VEGA,,1.0,ultimate parent,corporate structure extract row 10
+ENT-NORD-022,Nordstar Bio Services Ltd,Nordstar Bio,,FAM-VEGA,ENT-VEGA-001,0.72,controlled sibling,corporate structure extract row 16
+ENT-KELVAR-077,Kelvar Bio Systems Ltd,Kelvar Bio Systems,,FAM-KELVAR,,1.0,current client standalone entity,corporate structure extract row 31
+ENT-BOF-008,Blue Orchard Financing Trust,Blue Orchard Financing,,FAM-BOF,,1.0,standalone financing vehicle,corporate structure extract row 42
+ENT-LAT-050,Lattice Energy Cooperative,Lattice Energy,,FAM-LAT,,1.0,unrelated current client,corporate structure extract row 50

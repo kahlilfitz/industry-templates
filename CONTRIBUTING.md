@@ -1,17 +1,18 @@
 # Contributing a template
 
-Thanks for helping grow the **Industry Templates** gallery. A *template* is a reusable package
+Thanks for helping grow the **Industry Templates** repository. A *template* is a reusable package
 that teaches an AI agent to do a specific job in a specific industry — targeting one or more of
 **Cowork**, **Copilot Studio** and **Scout**.
 
 You contribute by adding **one submission under [`submissions/<industry>/`](submissions/)** and
-opening a pull request. You never edit `src/content/` or `public/bundles/` directly — CI
-validates your metadata and generates the published page and the download package for you.
+opening a pull request. You never edit `public/bundles/` directly — CI validates the metadata
+and generates the download packages.
 
 ## The submission shape
 
 Every submission is a `submissions/<industry>/<slug>/` folder: a `metadata.json` sidecar, an optional
-`README.md`, optional `tests/`, and the **unpacked package** itself.
+`README.md`, optional `tests/`, and the **unpacked package** itself. Unless it opts into the
+[MOS3 app package](#mos3-app-package-opt-in), the package uses the Claude plugin layout:
 
 ```
 submissions/<industry>/<slug>/
@@ -34,9 +35,40 @@ submissions/<industry>/<slug>/
 Copy [`submissions/_template/`](submissions/_template) to get started. The `<slug>` is the
 leaf folder name — lowercase and hyphenated, e.g. `quality-inspection` → `/templates/quality-inspection`. The industry folder above it must match `metadata.json`'s `industry` (`Retail & CPG` → `retail-and-cpg`); the importer fails the build if they disagree.
 
+### MOS3 app package (opt-in)
+
+A submission can instead build as a **MOS3 Microsoft 365 app package** (manifest schema
+devPreview with a `packageName`, as Cowork's package validation requires), the
+format in the "Building a Cowork Plugin — Partner Team Guide". Opt in with
+`"packageFormat": "mos3"` in `metadata.json`; without it the layout above applies. The five
+Professional Services Wave 1 plugins use it; every other submission is unchanged.
+
+```
+submissions/<industry>/<slug>/
+├── metadata.json            # sidecar, never bundled ("packageFormat": "mos3", no bundleTests)
+├── README.md, CHANGELOG.md  # never bundled
+├── BACKLOG.md               # advisory items from Cowork evaluations, never bundled
+├── listing-metadata.md      # store listing draft for the shared metadata template, never bundled
+├── demo-data/               # synthetic demo data, never bundled
+├── tests/                   # the plugin's own tests, never bundled
+└── the package (the only files in the ZIP, at its root, no wrapper folder):
+    ├── manifest.json        # devPreview manifest: packageName com.microsoft.cowork.<slug>,
+    │                        # GUID id, "Microsoft Corporation" developer,
+    │                        # description.full ending with the four required links
+    ├── color.png            # 192×192
+    ├── outline.png          # 32×32, white on transparent
+    └── skills/<name>/       # SKILL.md with metadata.icon; self-contained scripts/, references/…
+```
+
+`.claude-plugin/` must be removed and `bundleTests` must not be set. Each skill must stand alone:
+nothing outside `skills/<name>/` reaches the package, so a skill may not refer to root
+`contracts/`, `references/`, demo data or tests. Skill descriptions stay within 1,024 characters
+(target 800) with at least five quoted triggers and one "Do NOT use for" line, and bodies stay
+under 2,000 words. Demo data and tests stay in the submission folder, outside the package.
+
 > **A submission holds two kinds of file.** Everything **agent-facing** is bundled into the
 > download verbatim — the bundle *is* the package the agent loads. The **human-facing** files
-> (`metadata.json`, `README.md`, `tests/`, `PACKAGE-NOTES.md`) are never bundled, so they cost
+> (`metadata.json`, `README.md`, `tests/`, `PACKAGE-NOTES.md`, `BACKLOG.md`) are never bundled, so they cost
 > the agent nothing. Don't leave other notes next to the payload; put them in the pull request
 > description.
 
@@ -44,33 +76,29 @@ leaf folder name — lowercase and hyphenated, e.g. `quality-inspection` → `/t
 
 | Field         | Required | Notes |
 |---------------|----------|-------|
-| `name`        | yes      | Display name shown in the gallery. |
-| `description` | yes      | The catalog summary on the card and at the top of the page. One human-friendly sentence. |
-| `industry`    | yes      | One of `Manufacturing`, `Retail & CPG`, `Financial Services`, `Healthcare`, `Energy`, `Public Sector`, `Cross-industry`. This is the gallery's primary facet. |
+| `name`        | yes      | Human-readable package name. |
+| `description` | yes      | One human-friendly sentence describing the package. |
+| `industry`    | yes      | One of `Manufacturing`, `Retail & CPG`, `Financial Services`, `Healthcare`, `Energy`, `Public Sector`, `Professional Services`, `Cross-industry`. |
 | `platforms`   | yes      | One or more of `Cowork`, `Copilot Studio`, `Scout`. |
 | `tags`        | yes      | Lowercase tags for search and filtering. Don't repeat the industry here — it has its own filter. |
 | `author`      | yes      | Person or team who wrote the template. |
 
 Optional: `authorUrl`, `authorGithub`, `version`, `createdAt`, `updatedAt`, `coverColor`,
-`featured`, `agentDescription`. Most are inferred: `version` and `agentDescription` fall back to
-the package manifest, and `authorGithub` is derived from an `authorUrl` that points at a GitHub
-profile.
+`featured`, `agentDescription`, `bundleTests` and `packageFormat`. `authorGithub` is derived from an
+`authorUrl` that points at a GitHub profile when it is not supplied explicitly. `bundleTests: true`
+ships `tests/` in a Claude-layout bundle; it is not allowed with `packageFormat: "mos3"`, which
+requires `version`.
 
-**Adding a new industry?** Add it to `INDUSTRIES` and `INDUSTRY_COLORS` in
-[`src/lib/templates.ts`](src/lib/templates.ts). The filter row renders only industries that have
-at least one template, so it grows as the gallery does.
+**Adding a new industry?** Add it to `INDUSTRIES` in
+[`scripts/import-submissions.ts`](scripts/import-submissions.ts).
 
-## What visitors see
+## Human documentation
 
-Two things you write for them:
+Two files explain the package to reviewers:
 
-- The **catalog description** (`metadata.json`'s `description`) — the one-liner on your card.
-- Your **`README.md`** — this becomes the main content on the detail page, in your own voice.
-  The "Skills in this package" list and the install steps are appended automatically from the
-  real payload, so don't hand-write those; they can never drift that way.
-
-A good README covers: who it's for, how the skill chain works, one concrete case that shows why
-the template earns its place, what the user has to bring, and where the boundaries are.
+- `metadata.json` provides the package name, description, industry, platforms, tags and author.
+- `README.md` explains who the package is for, how the skill chain works, one concrete case,
+  required inputs and boundaries.
 
 ## What makes a good template
 
@@ -88,7 +116,7 @@ the template earns its place, what the user has to bring, and where the boundari
 
 ## Your skills also land in the catalog feed
 
-Each `skills/<name>/` folder in your package is a canonical Agent Skill, so CI
+Each `skills/<name>/` folder in your package is a canonical Agent Skill, so the publish workflow
 also copies it — unpacked, one folder per skill — onto the generated `catalog`
 branch, which any agent platform that adds skills from a public GitHub folder can
 read from a single URL. Two consequences worth knowing:
@@ -106,21 +134,47 @@ read from a single URL. Two consequences worth knowing:
 ```bash
 npm install
 npm run check:submissions   # validate metadata only, writes nothing
-npm run import:submissions  # generate the page(s) + bundle(s)
-npm run dev                 # preview at http://localhost:4321/industry-templates
-npm run build               # runs the same content validation as CI
+npm run test:evaluation     # repository script unit tests
+npm run build               # recreate public/bundles/
+```
+
+While several submissions are changing at once, check or build just yours (other bundles are left
+in place):
+
+```bash
+npx tsx scripts/import-submissions.ts --check --only <slug>
+npx tsx scripts/import-submissions.ts --only <slug>
 ```
 
 ## What CI does
 
 On a pull request, [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 
-1. Imports your submission, failing with an itemised message if any required metadata is
-   missing or invalid.
-2. Generates `src/content/templates/<slug>.md`, `src/content/guides/<slug>.md` and
-   `public/bundles/<slug>.zip`.
-3. Builds the site.
+1. Validates every submission and fails with an itemised message if metadata or package layout
+   is invalid, then runs the repository script tests (`test:evaluation`).
+2. Recreates `public/bundles/<slug>.zip` for every submission.
+3. Exercises the flattened catalog export and uploads the bundles as a workflow artifact.
 
-Merges to `main` deploy to GitHub Pages.
+Merges to `main` also refresh the generated `catalog` branch.
+
+## SharePoint library
+
+Planning documents, scenario references, evaluation evidence and human-test trackers live in the
+Industry Templates SharePoint library, not in git. Sync it with OneDrive and link it into the
+repository as `sharepoint\` with `npm run sharepoint:link` — see
+[SharePoint sync](docs/sharepoint-sync.md). Never commit anything from it.
+
+## Evaluate a release candidate
+
+Before treating a plugin as publishable, follow the [release process](docs/release-process.md):
+
+1. package the exact ZIP with `npm run evaluation:prepare`;
+2. run Cowork's built-in evaluation on it, which produces the two strategy reports plus
+   `recommendations.html`;
+3. let the watcher archive the reports and start the fix agent on blocker and required fixes;
+4. repeat with the next version until the verdict is `Ready for human review`;
+5. run the two-tester human spot check.
+
+`Ready for human review` is never a publish signal.
 
 By contributing you agree your template is shared under the repository's [MIT license](LICENSE).

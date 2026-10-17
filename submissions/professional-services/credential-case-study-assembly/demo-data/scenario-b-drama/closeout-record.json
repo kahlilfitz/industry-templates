@@ -1,0 +1,68 @@
+{
+  "contract_version": "ps.credential-case-study-assembly.v1",
+  "engagement": {
+    "engagement_id": "PS-CRD-2026-099",
+    "name": "Core Platform Migration Mobilisation",
+    "closeout_date": "2026-06-30",
+    "fees_usd": 4200000,
+    "duration_weeks": 34,
+    "board_visible": true,
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.93,
+    "citations": ["closeout knowledge record CKR-099 #engagement"]
+  },
+  "client": {
+    "name": "Vantage Mutual Assurance",
+    "sector": "financial-services",
+    "geography": "Europe",
+    "size_descriptor": "top-five European insurer",
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.94,
+    "citations": ["closeout knowledge record CKR-099 #client"]
+  },
+  "deliverables": [
+    {
+      "title": "Core platform migration mobilisation",
+      "summary": "Mobilised a core insurance platform migration, mapped claims and policy workflows, and established delivery controls for the first release train.",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.91,
+      "citations": ["closeout knowledge record CKR-099 #deliverables", "final deliverable FD-099 section 3"]
+    },
+    {
+      "title": "Reference architecture and migration backlog",
+      "summary": "Defined target integration patterns, dependency map and sequenced migration backlog for claims operations.",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.9,
+      "citations": ["final deliverable FD-099 section 4"]
+    }
+  ],
+  "outcomes": [
+    {
+      "metric": "claims workflows migrated to release backlog",
+      "value": 14,
+      "unit": "workflows",
+      "evidence_type": "verified_deliverable",
+      "clearance_scope": "public_marketing",
+      "governing_clause": "Engagement terms VM-19 clause 18.5",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.91,
+      "citations": ["final deliverable FD-099 appendix B"]
+    },
+    {
+      "metric": "processing time reduction",
+      "value": 60,
+      "unit": "percent",
+      "evidence_type": "client_internal_estimate",
+      "clearance_scope": "uncleared",
+      "governing_clause": "Engagement terms VM-19 clause 18.8",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.67,
+      "citations": ["client workshop note CW-099-7", "BD request email BD-2026-404"]
+    }
+  ],
+  "provenance": {
+    "engines": [],
+    "generated_at": "2026-09-23",
+    "demo_scenario": "scenario-b-drama"
+  }
+}

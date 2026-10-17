@@ -1,0 +1,3 @@
+activity_id,date,person,file_name,activity_type,duration_hours,engagement_id
+A-DOC-001,2026-09-15,Alex Rivera,service-catalog-draft.docx,analyze,1.4,ENG-SYN-042
+A-DOC-002,2026-09-16,Alex Rivera,implementation-decision-log.docx,draft,0.8,ENG-SYN-042

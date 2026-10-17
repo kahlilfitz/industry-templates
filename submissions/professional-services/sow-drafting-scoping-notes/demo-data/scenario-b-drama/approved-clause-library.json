@@ -1,0 +1,72 @@
+{
+  "library_id": "PS-CLAUSE-LIB",
+  "version": "2026.09",
+  "approval_status": "approved",
+  "citation": "raw/approved-clause-library-extract.md",
+  "clauses": [
+    {
+      "family": "limitation_of_liability",
+      "library_id": "PS-LOL-001",
+      "title": "Limitation of liability",
+      "risk_tier": "high",
+      "approved_clause": "Mutual aggregate liability is capped at fees paid or payable under this SOW; indirect, consequential and special damages are excluded except where the MSA expressly says otherwise.",
+      "citation": "approved-clause-library.md #2.1"
+    },
+    {
+      "family": "acceptance",
+      "library_id": "PS-ACC-001",
+      "title": "Acceptance",
+      "risk_tier": "medium",
+      "approved_clause": "Deliverables are accepted against written acceptance criteria; the client has five business days to reject with specific defects; silence after the review period is deemed acceptance only where objective criteria are defined.",
+      "citation": "approved-clause-library.md #2.2"
+    },
+    {
+      "family": "ip_ownership",
+      "library_id": "PS-IP-001",
+      "title": "IP ownership",
+      "risk_tier": "medium",
+      "approved_clause": "Pre-existing materials, accelerators and know-how remain provider property; after payment, the client receives a license to use deliverables for internal business purposes.",
+      "citation": "approved-clause-library.md #2.3"
+    },
+    {
+      "family": "payment_terms",
+      "library_id": "PS-PAY-001",
+      "title": "Payment terms",
+      "risk_tier": "medium",
+      "approved_clause": "Fees are billed by milestone or monthly in arrears as stated in this SOW; undisputed invoices are due net 30; taxes and reimbursable expenses are excluded unless listed.",
+      "citation": "approved-clause-library.md #2.4"
+    },
+    {
+      "family": "termination",
+      "library_id": "PS-TERM-001",
+      "title": "Termination",
+      "risk_tier": "medium",
+      "approved_clause": "Either party may terminate for uncured material breach after notice and cure period; client pays for services performed and approved non-cancellable commitments through the effective date.",
+      "citation": "approved-clause-library.md #2.5"
+    },
+    {
+      "family": "warranty_disclaimer",
+      "library_id": "PS-WAR-001",
+      "title": "Warranty and disclaimer",
+      "risk_tier": "medium",
+      "approved_clause": "Services will be performed in a professional and workmanlike manner; except for express SOW warranties, all other warranties are disclaimed to the extent permitted.",
+      "citation": "approved-clause-library.md #2.6"
+    },
+    {
+      "family": "change_control",
+      "library_id": "PS-CC-001",
+      "title": "Change control",
+      "risk_tier": "low",
+      "approved_clause": "Changes to scope, timing, dependencies, assumptions or fees require a written change order signed by authorized representatives before work proceeds.",
+      "citation": "approved-clause-library.md #2.7"
+    },
+    {
+      "family": "data_protection",
+      "library_id": "PS-DP-001",
+      "title": "Data protection",
+      "risk_tier": "high",
+      "approved_clause": "Each party follows the data protection addendum and agreed security schedule; data-related remedies and indemnities remain subject to the MSA/SOW liability framework unless QRM approves otherwise.",
+      "citation": "approved-clause-library.md #2.8"
+    }
+  ]
+}

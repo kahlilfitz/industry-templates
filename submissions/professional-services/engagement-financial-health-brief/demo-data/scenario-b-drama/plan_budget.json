@@ -1,0 +1,27 @@
+{
+  "contract_version": "ps.engagement-financial-health-brief.v1",
+  "plan": {
+    "plan_revision": "baseline-v1",
+    "planned_revenue_to_date": 760000,
+    "planned_delivery_cost_to_date": 480000,
+    "planned_total_delivery_cost": 760000,
+    "planned_remaining_delivery_cost": 280000,
+    "planned_margin_pct": 36.8,
+    "system_etc_cost": 280000,
+    "senior_review_plan_to_date": { "Partner": 24, "Director": 64 },
+    "milestones": [
+      { "milestone_id": "B-M1", "name": "Current-state interviews", "due_by_review": true, "status": "complete", "remediation_hours": {} },
+      { "milestone_id": "B-M2", "name": "Decision-rights map", "due_by_review": true, "status": "slipped", "remediation_hours": { "Manager": 16, "Consultant": 30 } },
+      { "milestone_id": "B-M3", "name": "Process inventory", "due_by_review": true, "status": "complete", "remediation_hours": {} },
+      { "milestone_id": "B-M4", "name": "Control workshop", "due_by_review": true, "status": "slipped", "remediation_hours": { "Manager": 12, "Consultant": 30 } },
+      { "milestone_id": "B-M5", "name": "Transition backlog", "due_by_review": true, "status": "complete", "remediation_hours": {} },
+      { "milestone_id": "B-M6", "name": "Leadership playback", "due_by_review": true, "status": "complete", "remediation_hours": {} },
+      { "milestone_id": "B-M7", "name": "Pilot readiness", "due_by_review": true, "status": "slipped", "remediation_hours": { "Manager": 12, "Consultant": 30 } },
+      { "milestone_id": "B-M8", "name": "Adoption plan", "due_by_review": true, "status": "complete", "remediation_hours": {} },
+      { "milestone_id": "B-M9", "name": "Closeout pack", "due_by_review": true, "status": "on_track", "remediation_hours": {} }
+    ],
+    "source": "connector:engagement-plan",
+    "citation": "raw/plan-budget-and-milestones.csv rows 2-15",
+    "confidence": 0.98
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "My Industry Template",
-  "description": "The catalog summary shown to people browsing the gallery \u2014 one human-friendly sentence on the card and at the top of the detail page.",
+  "description": "One human-friendly sentence describing the package.",
   "industry": "Manufacturing",
   "platforms": [
     "Cowork"

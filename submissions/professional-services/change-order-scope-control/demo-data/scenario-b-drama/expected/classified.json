@@ -1,0 +1,869 @@
+{
+  "contract_version": "ps.change-order-scope-control.v1",
+  "engagement": {
+    "engagement_id": "PS-CO-2002",
+    "client_name": "Meridian Harbor Group",
+    "project_name": "Invoice Exception Workflow Pilot",
+    "contract_value": 600000,
+    "source": "connector:contract-repository",
+    "citation": "SOW MHG-INV-PILOT-2026 rev 4",
+    "confidence": 0.99
+  },
+  "sow": {
+    "document_id": "SOW-MHG-INV-PILOT-2026",
+    "revision": "4",
+    "clauses": [
+      {
+        "id": "2.1",
+        "title": "Closed deliverable list",
+        "type": "deliverable",
+        "quote": "Supplier deliverables are limited to current-state assessment, future-state process design, pilot workflow prototype, training kit and go-live readiness report.",
+        "tags": [
+          "closed_deliverables",
+          "prototype",
+          "training_kit",
+          "readiness_report"
+        ],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "2.2",
+        "title": "Included workshops and interviews",
+        "type": "deliverable",
+        "quote": "The plan includes two design workshops with Finance Operations leads and AP supervisors and up to eight stakeholder interviews named in Appendix B.",
+        "tags": [
+          "workshop",
+          "stakeholder_interview",
+          "ap_supervisor"
+        ],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.2",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "2.3",
+        "title": "Readiness report executive dashboard",
+        "type": "deliverable",
+        "quote": "The go-live readiness report includes an executive summary dashboard showing adoption risks, open decisions and launch readiness.",
+        "tags": [
+          "executive_dashboard",
+          "readiness_report",
+          "adoption_risk"
+        ],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.3",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "2.4",
+        "title": "Prototype approver roles",
+        "type": "deliverable",
+        "quote": "The pilot workflow prototype will represent approval roles for AP, Procurement and Legal for invoice exception routing.",
+        "tags": [
+          "legal_approver",
+          "prototype",
+          "workflow_exception"
+        ],
+        "conflict_group": "legal-workflow",
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.4",
+        "source": "connector:contract-repository",
+        "confidence": 0.97
+      },
+      {
+        "id": "3.1",
+        "title": "Client data assumption",
+        "type": "assumption",
+        "quote": "Client will provide one clean export from ERP-X and TicketFlow by 2026-08-14; re-extracts, reconciliation and schema changes remain Client responsibility.",
+        "tags": [
+          "data_refresh",
+          "data_reconciliation",
+          "failed_assumption",
+          "erp_export",
+          "schema_change"
+        ],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 3.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "4.1",
+        "title": "Data and integration exclusions",
+        "type": "exclusion",
+        "quote": "Data cleansing, duplicate-vendor reconciliation, additional refreshes, schema remediation and new integrations are excluded.",
+        "tags": [
+          "data_refresh",
+          "data_reconciliation",
+          "duplicate_vendor",
+          "schema_change",
+          "integration"
+        ],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "4.2",
+        "title": "Workshop, interview and training exclusions",
+        "type": "exclusion",
+        "quote": "Workshops beyond the two included sessions, stakeholder groups not listed in Appendix B and training sessions beyond the training kit are excluded.",
+        "tags": [
+          "extra_workshop",
+          "stakeholder_interview",
+          "training_office_hours"
+        ],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.2",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "4.3",
+        "title": "Legal workflow redesign exclusion",
+        "type": "exclusion",
+        "quote": "Legal or compliance workflow redesign, policy interpretation and approval-authority redesign are excluded from this SOW.",
+        "tags": [
+          "legal_approver",
+          "workflow_exception",
+          "policy_interpretation"
+        ],
+        "conflict_group": "legal-workflow",
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.3",
+        "source": "connector:contract-repository",
+        "confidence": 0.97
+      },
+      {
+        "id": "6.1",
+        "title": "Change-control route",
+        "type": "change_control",
+        "quote": "Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+        "tags": [
+          "change_control",
+          "failed_assumption",
+          "extra_workshop",
+          "data_refresh",
+          "data_reconciliation",
+          "stakeholder_interview",
+          "training_office_hours"
+        ],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      }
+    ]
+  },
+  "requests": [
+    {
+      "request_id": "REQ-B-001",
+      "summary": "Run a third data refresh after the ERP-X export changed",
+      "request_text": "Could you run one more refresh? ERP-X changed the export after the finance controller corrected the mapping.",
+      "requested_by": "Drew Lin, Finance Operations",
+      "received_at": "2026-09-03",
+      "tags": [
+        "data_refresh",
+        "failed_assumption",
+        "erp_export",
+        "change_control"
+      ],
+      "material_similarity": 0.28,
+      "failed_assumption": true,
+      "estimate_hours": {
+        "consultant": 10,
+        "engagement_manager": 2
+      },
+      "estimate_basis": "delivery lead estimate from request triage log row 18",
+      "source": "skill:request-intake",
+      "citation": "mail thread MHG scope drift 2026-09-03 message 2",
+      "confidence": 0.94
+    },
+    {
+      "request_id": "REQ-B-002",
+      "summary": "Add West Region AP workshop",
+      "request_text": "West Region AP missed the design workshop. Can we do a quick additional walkthrough so they feel heard?",
+      "requested_by": "Drew Lin, Finance Operations",
+      "received_at": "2026-09-04",
+      "tags": [
+        "extra_workshop",
+        "workshop",
+        "ap_supervisor",
+        "change_control"
+      ],
+      "material_similarity": 0.66,
+      "failed_assumption": false,
+      "estimate_hours": {
+        "engagement_manager": 4,
+        "solution_architect": 4
+      },
+      "estimate_basis": "workshop prep/facilitation estimate in request log row 19",
+      "source": "skill:request-intake",
+      "citation": "mail thread MHG scope drift 2026-09-04 message 1",
+      "confidence": 0.93
+    },
+    {
+      "request_id": "REQ-B-003",
+      "summary": "Interview Tax and Treasury stakeholders",
+      "request_text": "Please add Tax and Treasury interviews. They were not on the original stakeholder list, but the CFO wants their perspective.",
+      "requested_by": "Drew Lin, Finance Operations",
+      "received_at": "2026-09-05",
+      "tags": [
+        "stakeholder_interview",
+        "change_control"
+      ],
+      "material_similarity": 0.57,
+      "failed_assumption": false,
+      "estimate_hours": {
+        "consultant": 8,
+        "engagement_manager": 1
+      },
+      "estimate_basis": "two interview blocks plus synthesis estimate in request log row 20",
+      "source": "skill:request-intake",
+      "citation": "mail thread MHG scope drift 2026-09-05 message 4",
+      "confidence": 0.92
+    },
+    {
+      "request_id": "REQ-B-004",
+      "summary": "Reconcile duplicate vendors in the ERP-X extract",
+      "request_text": "The duplicate vendors make the exception sample messy. Could your team clean those up for the pilot extract?",
+      "requested_by": "Nora Vale, AP Lead",
+      "received_at": "2026-09-06",
+      "tags": [
+        "data_reconciliation",
+        "duplicate_vendor",
+        "failed_assumption",
+        "erp_export",
+        "change_control"
+      ],
+      "material_similarity": 0.22,
+      "failed_assumption": true,
+      "estimate_hours": {
+        "consultant": 16,
+        "solution_architect": 2
+      },
+      "estimate_basis": "data remediation estimate in request log row 22",
+      "source": "skill:request-intake",
+      "citation": "Teams recap MHG AP pilot 2026-09-06 item 5",
+      "confidence": 0.94
+    },
+    {
+      "request_id": "REQ-B-005",
+      "summary": "Build daily CSV aging report for standup",
+      "request_text": "Can you add a daily CSV aging report from the refreshed exception file for our standup? It does not need to be pretty.",
+      "requested_by": "Nora Vale, AP Lead",
+      "received_at": "2026-09-07",
+      "tags": [
+        "data_refresh",
+        "data_reconciliation",
+        "schema_change",
+        "change_control"
+      ],
+      "material_similarity": 0.49,
+      "failed_assumption": true,
+      "estimate_hours": {
+        "consultant": 10,
+        "solution_architect": 2
+      },
+      "estimate_basis": "report extraction estimate in request log row 24",
+      "source": "skill:request-intake",
+      "citation": "mail thread MHG scope drift 2026-09-07 message 1",
+      "confidence": 0.91
+    },
+    {
+      "request_id": "REQ-B-006",
+      "summary": "Run a second training office-hours session",
+      "request_text": "The training kit is good, but can you run one office-hours session after go-live for late adopters?",
+      "requested_by": "Ari Benton, Change Lead",
+      "received_at": "2026-09-08",
+      "tags": [
+        "training_office_hours",
+        "training_kit",
+        "change_control"
+      ],
+      "material_similarity": 0.61,
+      "failed_assumption": false,
+      "estimate_hours": {
+        "engagement_manager": 3,
+        "consultant": 5
+      },
+      "estimate_basis": "office-hours prep and delivery estimate in request log row 25",
+      "source": "skill:request-intake",
+      "citation": "mail thread MHG training 2026-09-08 message 6",
+      "confidence": 0.93
+    },
+    {
+      "request_id": "REQ-B-007",
+      "summary": "Add executive dashboard slide to readiness report",
+      "request_text": "Can the readiness report include a single executive dashboard slide with adoption risks and open decisions?",
+      "requested_by": "Drew Lin, Finance Operations",
+      "received_at": "2026-09-09",
+      "tags": [
+        "executive_dashboard",
+        "readiness_report",
+        "adoption_risk"
+      ],
+      "material_similarity": 0.89,
+      "failed_assumption": false,
+      "estimate_hours": {
+        "engagement_manager": 1,
+        "consultant": 3
+      },
+      "estimate_basis": "covered readiness-report formatting estimate in request log row 27",
+      "source": "skill:request-intake",
+      "citation": "mail thread MHG readiness report 2026-09-09 message 2",
+      "confidence": 0.95
+    },
+    {
+      "request_id": "REQ-B-008",
+      "summary": "Add Legal approver exception path",
+      "request_text": "Please add a Legal approver exception path for invoice disputes involving policy interpretation.",
+      "requested_by": "Cam Torres, Legal Operations",
+      "received_at": "2026-09-10",
+      "tags": [
+        "legal_approver",
+        "workflow_exception",
+        "policy_interpretation",
+        "prototype"
+      ],
+      "material_similarity": 0.84,
+      "failed_assumption": false,
+      "estimate_hours": {
+        "partner": 2,
+        "solution_architect": 6,
+        "consultant": 6
+      },
+      "estimate_basis": "solution estimate pending commercial determination in request log row 30",
+      "source": "skill:request-intake",
+      "citation": "mail thread MHG legal exception 2026-09-10 message 3",
+      "confidence": 0.9
+    }
+  ],
+  "matches": [
+    {
+      "request_id": "REQ-B-001",
+      "summary": "Run a third data refresh after the ERP-X export changed",
+      "request_text": "Could you run one more refresh? ERP-X changed the export after the finance controller corrected the mapping.",
+      "estimate_hours": {
+        "consultant": 10,
+        "engagement_manager": 2
+      },
+      "estimate_basis": "delivery lead estimate from request triage log row 18",
+      "material_similarity": 0.28,
+      "failed_assumption": true,
+      "matched_clauses": [
+        {
+          "clause_id": "3.1",
+          "clause_type": "assumption",
+          "quote": "Client will provide one clean export from ERP-X and TicketFlow by 2026-08-14; re-extracts, reconciliation and schema changes remain Client responsibility.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 3.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: data_refresh, erp_export, failed_assumption",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "6.1",
+          "clause_type": "change_control",
+          "quote": "Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: change_control, data_refresh, failed_assumption",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "4.1",
+          "clause_type": "exclusion",
+          "quote": "Data cleansing, duplicate-vendor reconciliation, additional refreshes, schema remediation and new integrations are excluded.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: data_refresh",
+          "confidence": 0.79,
+          "source": "engine:scope_match"
+        }
+      ],
+      "confidence": 0.79,
+      "source": "engine:scope_match",
+      "citation": "mail thread MHG scope drift 2026-09-03 message 2"
+    },
+    {
+      "request_id": "REQ-B-002",
+      "summary": "Add West Region AP workshop",
+      "request_text": "West Region AP missed the design workshop. Can we do a quick additional walkthrough so they feel heard?",
+      "estimate_hours": {
+        "engagement_manager": 4,
+        "solution_architect": 4
+      },
+      "estimate_basis": "workshop prep/facilitation estimate in request log row 19",
+      "material_similarity": 0.66,
+      "failed_assumption": false,
+      "matched_clauses": [
+        {
+          "clause_id": "6.1",
+          "clause_type": "change_control",
+          "quote": "Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: change_control, extra_workshop",
+          "confidence": 0.84,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "2.2",
+          "clause_type": "deliverable",
+          "quote": "The plan includes two design workshops with Finance Operations leads and AP supervisors and up to eight stakeholder interviews named in Appendix B.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.2",
+          "conflict_group": "",
+          "match_reason": "shared tags: ap_supervisor, workshop",
+          "confidence": 0.84,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "4.2",
+          "clause_type": "exclusion",
+          "quote": "Workshops beyond the two included sessions, stakeholder groups not listed in Appendix B and training sessions beyond the training kit are excluded.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.2",
+          "conflict_group": "",
+          "match_reason": "shared tags: extra_workshop",
+          "confidence": 0.79,
+          "source": "engine:scope_match"
+        }
+      ],
+      "confidence": 0.79,
+      "source": "engine:scope_match",
+      "citation": "mail thread MHG scope drift 2026-09-04 message 1"
+    },
+    {
+      "request_id": "REQ-B-003",
+      "summary": "Interview Tax and Treasury stakeholders",
+      "request_text": "Please add Tax and Treasury interviews. They were not on the original stakeholder list, but the CFO wants their perspective.",
+      "estimate_hours": {
+        "consultant": 8,
+        "engagement_manager": 1
+      },
+      "estimate_basis": "two interview blocks plus synthesis estimate in request log row 20",
+      "material_similarity": 0.57,
+      "failed_assumption": false,
+      "matched_clauses": [
+        {
+          "clause_id": "6.1",
+          "clause_type": "change_control",
+          "quote": "Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: change_control, stakeholder_interview",
+          "confidence": 0.84,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "2.2",
+          "clause_type": "deliverable",
+          "quote": "The plan includes two design workshops with Finance Operations leads and AP supervisors and up to eight stakeholder interviews named in Appendix B.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.2",
+          "conflict_group": "",
+          "match_reason": "shared tags: stakeholder_interview",
+          "confidence": 0.79,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "4.2",
+          "clause_type": "exclusion",
+          "quote": "Workshops beyond the two included sessions, stakeholder groups not listed in Appendix B and training sessions beyond the training kit are excluded.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.2",
+          "conflict_group": "",
+          "match_reason": "shared tags: stakeholder_interview",
+          "confidence": 0.79,
+          "source": "engine:scope_match"
+        }
+      ],
+      "confidence": 0.79,
+      "source": "engine:scope_match",
+      "citation": "mail thread MHG scope drift 2026-09-05 message 4"
+    },
+    {
+      "request_id": "REQ-B-004",
+      "summary": "Reconcile duplicate vendors in the ERP-X extract",
+      "request_text": "The duplicate vendors make the exception sample messy. Could your team clean those up for the pilot extract?",
+      "estimate_hours": {
+        "consultant": 16,
+        "solution_architect": 2
+      },
+      "estimate_basis": "data remediation estimate in request log row 22",
+      "material_similarity": 0.22,
+      "failed_assumption": true,
+      "matched_clauses": [
+        {
+          "clause_id": "3.1",
+          "clause_type": "assumption",
+          "quote": "Client will provide one clean export from ERP-X and TicketFlow by 2026-08-14; re-extracts, reconciliation and schema changes remain Client responsibility.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 3.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: data_reconciliation, erp_export, failed_assumption",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "6.1",
+          "clause_type": "change_control",
+          "quote": "Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: change_control, data_reconciliation, failed_assumption",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "4.1",
+          "clause_type": "exclusion",
+          "quote": "Data cleansing, duplicate-vendor reconciliation, additional refreshes, schema remediation and new integrations are excluded.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: data_reconciliation, duplicate_vendor",
+          "confidence": 0.84,
+          "source": "engine:scope_match"
+        }
+      ],
+      "confidence": 0.84,
+      "source": "engine:scope_match",
+      "citation": "Teams recap MHG AP pilot 2026-09-06 item 5"
+    },
+    {
+      "request_id": "REQ-B-005",
+      "summary": "Build daily CSV aging report for standup",
+      "request_text": "Can you add a daily CSV aging report from the refreshed exception file for our standup? It does not need to be pretty.",
+      "estimate_hours": {
+        "consultant": 10,
+        "solution_architect": 2
+      },
+      "estimate_basis": "report extraction estimate in request log row 24",
+      "material_similarity": 0.49,
+      "failed_assumption": true,
+      "matched_clauses": [
+        {
+          "clause_id": "3.1",
+          "clause_type": "assumption",
+          "quote": "Client will provide one clean export from ERP-X and TicketFlow by 2026-08-14; re-extracts, reconciliation and schema changes remain Client responsibility.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 3.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: data_reconciliation, data_refresh, schema_change",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "6.1",
+          "clause_type": "change_control",
+          "quote": "Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: change_control, data_reconciliation, data_refresh",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "4.1",
+          "clause_type": "exclusion",
+          "quote": "Data cleansing, duplicate-vendor reconciliation, additional refreshes, schema remediation and new integrations are excluded.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: data_reconciliation, data_refresh, schema_change",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        }
+      ],
+      "confidence": 0.89,
+      "source": "engine:scope_match",
+      "citation": "mail thread MHG scope drift 2026-09-07 message 1"
+    },
+    {
+      "request_id": "REQ-B-006",
+      "summary": "Run a second training office-hours session",
+      "request_text": "The training kit is good, but can you run one office-hours session after go-live for late adopters?",
+      "estimate_hours": {
+        "engagement_manager": 3,
+        "consultant": 5
+      },
+      "estimate_basis": "office-hours prep and delivery estimate in request log row 25",
+      "material_similarity": 0.61,
+      "failed_assumption": false,
+      "matched_clauses": [
+        {
+          "clause_id": "6.1",
+          "clause_type": "change_control",
+          "quote": "Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: change_control, training_office_hours",
+          "confidence": 0.84,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "2.1",
+          "clause_type": "deliverable",
+          "quote": "Supplier deliverables are limited to current-state assessment, future-state process design, pilot workflow prototype, training kit and go-live readiness report.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: training_kit",
+          "confidence": 0.79,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "4.2",
+          "clause_type": "exclusion",
+          "quote": "Workshops beyond the two included sessions, stakeholder groups not listed in Appendix B and training sessions beyond the training kit are excluded.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.2",
+          "conflict_group": "",
+          "match_reason": "shared tags: training_office_hours",
+          "confidence": 0.79,
+          "source": "engine:scope_match"
+        }
+      ],
+      "confidence": 0.79,
+      "source": "engine:scope_match",
+      "citation": "mail thread MHG training 2026-09-08 message 6"
+    },
+    {
+      "request_id": "REQ-B-007",
+      "summary": "Add executive dashboard slide to readiness report",
+      "request_text": "Can the readiness report include a single executive dashboard slide with adoption risks and open decisions?",
+      "estimate_hours": {
+        "engagement_manager": 1,
+        "consultant": 3
+      },
+      "estimate_basis": "covered readiness-report formatting estimate in request log row 27",
+      "material_similarity": 0.89,
+      "failed_assumption": false,
+      "matched_clauses": [
+        {
+          "clause_id": "2.1",
+          "clause_type": "deliverable",
+          "quote": "Supplier deliverables are limited to current-state assessment, future-state process design, pilot workflow prototype, training kit and go-live readiness report.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: readiness_report",
+          "confidence": 0.79,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "2.3",
+          "clause_type": "deliverable",
+          "quote": "The go-live readiness report includes an executive summary dashboard showing adoption risks, open decisions and launch readiness.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.3",
+          "conflict_group": "",
+          "match_reason": "shared tags: adoption_risk, executive_dashboard, readiness_report",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        }
+      ],
+      "confidence": 0.79,
+      "source": "engine:scope_match",
+      "citation": "mail thread MHG readiness report 2026-09-09 message 2"
+    },
+    {
+      "request_id": "REQ-B-008",
+      "summary": "Add Legal approver exception path",
+      "request_text": "Please add a Legal approver exception path for invoice disputes involving policy interpretation.",
+      "estimate_hours": {
+        "partner": 2,
+        "solution_architect": 6,
+        "consultant": 6
+      },
+      "estimate_basis": "solution estimate pending commercial determination in request log row 30",
+      "material_similarity": 0.84,
+      "failed_assumption": false,
+      "matched_clauses": [
+        {
+          "clause_id": "2.1",
+          "clause_type": "deliverable",
+          "quote": "Supplier deliverables are limited to current-state assessment, future-state process design, pilot workflow prototype, training kit and go-live readiness report.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.1",
+          "conflict_group": "",
+          "match_reason": "shared tags: prototype",
+          "confidence": 0.79,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "2.4",
+          "clause_type": "deliverable",
+          "quote": "The pilot workflow prototype will represent approval roles for AP, Procurement and Legal for invoice exception routing.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.4",
+          "conflict_group": "legal-workflow",
+          "match_reason": "shared tags: legal_approver, prototype, workflow_exception",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        },
+        {
+          "clause_id": "4.3",
+          "clause_type": "exclusion",
+          "quote": "Legal or compliance workflow redesign, policy interpretation and approval-authority redesign are excluded from this SOW.",
+          "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.3",
+          "conflict_group": "legal-workflow",
+          "match_reason": "shared tags: legal_approver, policy_interpretation, workflow_exception",
+          "confidence": 0.89,
+          "source": "engine:scope_match"
+        }
+      ],
+      "confidence": 0.79,
+      "source": "engine:scope_match",
+      "citation": "mail thread MHG legal exception 2026-09-10 message 3"
+    }
+  ],
+  "prior_change_orders": [
+    {
+      "change_id": "ACCOM-001",
+      "summary": "Absorbed extra AP supervisor review cycle",
+      "commercial_disposition": "no_charge_accommodation",
+      "internal_cost": 2950,
+      "source": "connector:contract-repository",
+      "citation": "commercial decision log CDL-2026-08 row 14",
+      "confidence": 0.95
+    },
+    {
+      "change_id": "ACCOM-002",
+      "summary": "Absorbed one additional data mapping review",
+      "commercial_disposition": "no_charge_accommodation",
+      "internal_cost": 2700,
+      "source": "connector:contract-repository",
+      "citation": "commercial decision log CDL-2026-08 row 21",
+      "confidence": 0.95
+    }
+  ],
+  "delivered_artifacts": [
+    {
+      "artifact_id": "ART-B-001",
+      "name": "Design workshop 1 notes",
+      "delivered_at": "2026-08-20",
+      "sow_clause": "2.2",
+      "source": "connector:engagement-workspace",
+      "citation": "workspace artifact register row 31",
+      "confidence": 0.97
+    },
+    {
+      "artifact_id": "ART-B-002",
+      "name": "Design workshop 2 notes",
+      "delivered_at": "2026-08-27",
+      "sow_clause": "2.2",
+      "source": "connector:engagement-workspace",
+      "citation": "workspace artifact register row 38",
+      "confidence": 0.97
+    },
+    {
+      "artifact_id": "ART-B-003",
+      "name": "Prototype v0.3 with AP, Procurement and Legal role placeholders",
+      "delivered_at": "2026-09-02",
+      "sow_clause": "2.4",
+      "source": "connector:engagement-workspace",
+      "citation": "workspace artifact register row 42",
+      "confidence": 0.96
+    }
+  ],
+  "escalations": [
+    "REQ-B-008: AMBIGUOUS - the SOW deliverable list and exclusion list directly contradict each other for this request; human commercial review required (scope-classification-rules.md #4.2)"
+  ],
+  "provenance": {
+    "engines": [
+      "scope_match/1.0",
+      "scope_classify/1.0"
+    ],
+    "generated_at": "2026-09-23T00:00:00+00:00",
+    "demo_scenario": "scenario-b-drama"
+  },
+  "classifications": [
+    {
+      "request_id": "REQ-B-001",
+      "summary": "Run a third data refresh after the ERP-X export changed",
+      "classification": "OUT_OF_SCOPE",
+      "rule": "scope-classification-rules.md #2.2",
+      "rationale": "request is caused by a failed SOW assumption; change-control route applies",
+      "governing_clause_quote": "3.1: Client will provide one clean export from ERP-X and TicketFlow by 2026-08-14; re-extracts, reconciliation and schema changes remain Client responsibility. | 6.1: Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+      "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 3.1; SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+      "confidence": 0.79,
+      "source": "engine:scope_classify"
+    },
+    {
+      "request_id": "REQ-B-002",
+      "summary": "Add West Region AP workshop",
+      "classification": "OUT_OF_SCOPE",
+      "rule": "scope-classification-rules.md #2.1",
+      "rationale": "request matches an explicit SOW exclusion; explicit exclusion beats implied inclusion",
+      "governing_clause_quote": "4.2: Workshops beyond the two included sessions, stakeholder groups not listed in Appendix B and training sessions beyond the training kit are excluded.",
+      "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.2",
+      "confidence": 0.79,
+      "source": "engine:scope_classify"
+    },
+    {
+      "request_id": "REQ-B-003",
+      "summary": "Interview Tax and Treasury stakeholders",
+      "classification": "OUT_OF_SCOPE",
+      "rule": "scope-classification-rules.md #2.1",
+      "rationale": "request matches an explicit SOW exclusion; explicit exclusion beats implied inclusion",
+      "governing_clause_quote": "4.2: Workshops beyond the two included sessions, stakeholder groups not listed in Appendix B and training sessions beyond the training kit are excluded.",
+      "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.2",
+      "confidence": 0.79,
+      "source": "engine:scope_classify"
+    },
+    {
+      "request_id": "REQ-B-004",
+      "summary": "Reconcile duplicate vendors in the ERP-X extract",
+      "classification": "OUT_OF_SCOPE",
+      "rule": "scope-classification-rules.md #2.2",
+      "rationale": "request is caused by a failed SOW assumption; change-control route applies",
+      "governing_clause_quote": "3.1: Client will provide one clean export from ERP-X and TicketFlow by 2026-08-14; re-extracts, reconciliation and schema changes remain Client responsibility. | 6.1: Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+      "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 3.1; SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+      "confidence": 0.84,
+      "source": "engine:scope_classify"
+    },
+    {
+      "request_id": "REQ-B-005",
+      "summary": "Build daily CSV aging report for standup",
+      "classification": "OUT_OF_SCOPE",
+      "rule": "scope-classification-rules.md #2.2",
+      "rationale": "request is caused by a failed SOW assumption; change-control route applies",
+      "governing_clause_quote": "3.1: Client will provide one clean export from ERP-X and TicketFlow by 2026-08-14; re-extracts, reconciliation and schema changes remain Client responsibility. | 6.1: Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+      "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 3.1; SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+      "confidence": 0.89,
+      "source": "engine:scope_classify"
+    },
+    {
+      "request_id": "REQ-B-006",
+      "summary": "Run a second training office-hours session",
+      "classification": "OUT_OF_SCOPE",
+      "rule": "scope-classification-rules.md #2.1",
+      "rationale": "request matches an explicit SOW exclusion; explicit exclusion beats implied inclusion",
+      "governing_clause_quote": "4.2: Workshops beyond the two included sessions, stakeholder groups not listed in Appendix B and training sessions beyond the training kit are excluded.",
+      "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.2",
+      "confidence": 0.79,
+      "source": "engine:scope_classify"
+    },
+    {
+      "request_id": "REQ-B-007",
+      "summary": "Add executive dashboard slide to readiness report",
+      "classification": "IN_SCOPE",
+      "rule": "scope-classification-rules.md #3.1,#3.2",
+      "rationale": "request is materially similar to a listed deliverable (0.89 >= 0.82) and no explicit exclusion applies",
+      "governing_clause_quote": "2.1: Supplier deliverables are limited to current-state assessment, future-state process design, pilot workflow prototype, training kit and go-live readiness report.",
+      "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.1",
+      "confidence": 0.79,
+      "source": "engine:scope_classify"
+    },
+    {
+      "request_id": "REQ-B-008",
+      "summary": "Add Legal approver exception path",
+      "classification": "AMBIGUOUS",
+      "rule": "scope-classification-rules.md #4.2",
+      "rationale": "the SOW deliverable list and exclusion list directly contradict each other for this request; human commercial review required",
+      "governing_clause_quote": "2.1: Supplier deliverables are limited to current-state assessment, future-state process design, pilot workflow prototype, training kit and go-live readiness report. | 2.4: The pilot workflow prototype will represent approval roles for AP, Procurement and Legal for invoice exception routing. | 4.3: Legal or compliance workflow redesign, policy interpretation and approval-authority redesign are excluded from this SOW.",
+      "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.1; SOW MHG-INV-PILOT-2026 rev 4 section 2.4; SOW MHG-INV-PILOT-2026 rev 4 section 4.3",
+      "confidence": 0.74,
+      "source": "engine:scope_classify"
+    }
+  ],
+  "ambiguity_list": [
+    {
+      "request_id": "REQ-B-008",
+      "summary": "Add Legal approver exception path",
+      "reason": "the SOW deliverable list and exclusion list directly contradict each other for this request; human commercial review required",
+      "citations": "SOW MHG-INV-PILOT-2026 rev 4 section 2.1; SOW MHG-INV-PILOT-2026 rev 4 section 2.4; SOW MHG-INV-PILOT-2026 rev 4 section 4.3",
+      "required_human_role": "engagement partner or contract manager",
+      "source": "engine:scope_classify",
+      "confidence": 0.74
+    }
+  ]
+}

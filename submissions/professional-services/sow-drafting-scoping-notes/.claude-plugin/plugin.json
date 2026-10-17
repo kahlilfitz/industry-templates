@@ -1,0 +1,18 @@
+{
+  "name": "sow-drafting-scoping-notes",
+  "version": "1.0.0",
+  "description": "Professional Services Cowork plugin for pursuit contracting. Retrieves discovery notes, the CRM pursuit record, prior similar SOWs, the approved clause library and the SOW template; extracts scope and thin-input risks with deterministic scope_extract logic; selects approved clauses with deterministic clause_select logic; flags inherited or requested deviations with deterministic deviation_flag rules; and drafts a review-ready SOW plus QRM deviation summary. Draft-first; clause-library grounded; no deviation approval, pricing, delivery-date commitment, issuance or system write-back.",
+  "author": {
+    "name": "Microsoft Professional Services Skills"
+  },
+  "keywords": [
+    "professional-services",
+    "pursuit",
+    "contracting",
+    "SOW",
+    "scoping",
+    "clause-library",
+    "QRM",
+    "Cowork"
+  ]
+}

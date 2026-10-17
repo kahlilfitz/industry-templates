@@ -1,0 +1,254 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  FIX_RESULT_FILE,
+  FixOutcome,
+  copilotArgs,
+  fixAttention,
+  isActionable,
+  nextPatchVersion,
+  normalizeSeverity,
+  parseRecommendations,
+  renderBacklogSection,
+  renderFixBrief,
+} from "./recommendations.js";
+
+const REPORT = `
+<h1>Recommendations: demo-plugin 1.0.6</h1>
+<p>SHA-256 check: MATCH</p><p>Automated verdict: No-ship</p>
+<table><tr><th>Bar</th><th>Result</th></tr><tr><td>Health</td><td>Pass</td></tr></table>
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>Skill or file</th><th>Evidence</th><th>Suggested change</th></tr></thead>
+  <tbody>
+    <tr><td>R1</td><td><b>Blocker</b></td><td>skills/draft/SKILL.md</td><td>Behavioral GR-3: leaked a name</td><td>Redact names &amp; IDs</td></tr>
+    <tr><td>R2</td><td>required</td><td>skills/route</td><td>Health: trigger 2/3</td><td>Add 3 quoted triggers</td></tr>
+    <tr><td>R3</td><td>Advisory</td><td>README</td><td>Output 3.6/5</td><td>Tighten tone</td></tr>
+  </tbody>
+</table>`;
+
+test("parseRecommendations reads the suggested-fixes table and skips other tables", () => {
+  const fixes = parseRecommendations(REPORT);
+  assert.deepEqual(
+    fixes.map((fix) => [fix.id, fix.severity, fix.target]),
+    [
+      ["R1", "blocker", "skills/draft/SKILL.md"],
+      ["R2", "required", "skills/route"],
+      ["R3", "advisory", "README"],
+    ],
+  );
+  assert.equal(fixes[0].change, "Redact names & IDs");
+  assert.equal(fixes[0].evidence, "Behavioral GR-3: leaked a name");
+  assert.deepEqual(fixes.filter(isActionable).map((fix) => fix.id), ["R1", "R2"]);
+});
+
+test("parseRecommendations accepts a nothing-to-fix row and refuses a report with no fixes table", () => {
+  const empty =
+    "<table><tr><th>ID</th><th>Severity</th><th>Skill or file</th><th>Evidence</th><th>Suggested change</th></tr>" +
+    "<tr><td colspan=5>Nothing to fix</td></tr></table>";
+  assert.deepEqual(parseRecommendations(empty), []);
+  assert.throws(() => parseRecommendations("<p>No table</p>"), /no suggested-fixes table/);
+});
+
+test("normalizeSeverity maps the strategy's wording", () => {
+  assert.equal(normalizeSeverity("Hard stop"), "blocker");
+  assert.equal(normalizeSeverity("REQUIRED"), "required");
+  assert.equal(normalizeSeverity("advisory (nice to have)"), "advisory");
+  assert.equal(normalizeSeverity("n/a"), undefined);
+});
+
+test("nextPatchVersion bumps the last number", () => {
+  assert.equal(nextPatchVersion("1.0.6"), "1.0.7");
+  assert.equal(nextPatchVersion("1.1.9"), "1.1.10");
+  assert.throws(() => nextPatchVersion("1.0-beta"), /does not end in a number/);
+});
+
+test("renderFixBrief lists only blocker and required fixes with the guardrails", () => {
+  const fixes = parseRecommendations(REPORT);
+  const brief = renderFixBrief({
+    slug: "demo-plugin",
+    displayName: "Demo",
+    version: "1.0.6",
+    nextVersion: "1.0.7",
+    submissionDir: "submissions\\demo\\demo-plugin",
+    verdict: "No-ship",
+    reportPath: "C:\\reports\\recommendations.html",
+    fixes,
+    backlogPath: "submissions\\demo\\demo-plugin\\BACKLOG.md",
+    advisoryCount: 1,
+  });
+  assert.match(brief, /### R1 \(blocker\): skills\/draft\/SKILL\.md/);
+  assert.match(brief, /### R2 \(required\)/);
+  assert.doesNotMatch(brief, /### R3/);
+  assert.match(brief, /Set the version to 1\.0\.7/);
+  assert.doesNotMatch(brief, /Do not invoke skills/);
+  assert.match(brief, /Do not push/);
+  assert.match(brief, /listing-metadata\.md/);
+  assert.match(brief, /Set every engine version label .* to 1\.0\.7/);
+  assert.match(brief, /regenerate the expected outputs that record those labels/);
+  assert.match(brief, /leave the shared steering detector's `__version__` alone/);
+  assert.doesNotMatch(brief, /Do not run the plugin's own test suites/);
+  assert.match(brief, /Run the plugin's regression suite before applying any fix and again after/);
+  assert.match(brief, /tests\\README\.md/);
+  assert.match(brief, /Every check that passed before must still pass afterwards/);
+  assert.match(brief, /If the plugin has no regression suite, skip this step/);
+  assert.match(brief, /Never relax, delete or change the expected result of an existing check/);
+  assert.match(brief, /Do not edit the plugin's tests\\ or demo-data\\ folders unless a fix cannot be applied without it/);
+  assert.match(brief, /For each blocker or required fix you apply, add at least one regression check/);
+  assert.match(brief, /fails on the unfixed version and passes after the fix/);
+  assert.match(brief, /Name the fix ID in the check's name or message/);
+  assert.match(brief, /npm run test:evaluation/);
+  assert.match(brief, /git commit -m "demo-plugin 1\.0\.7: apply Cowork recommendations" -- <paths>/);
+});
+
+test("renderBacklogSection records only advisory items under the run label", () => {
+  const section = renderBacklogSection("evaluate-demo-plugin-v1.0.6-2026-10-15", "1.0.6", parseRecommendations(REPORT));
+  assert.match(section, /^## 1\.0\.6 evaluation \(evaluate-demo-plugin-v1\.0\.6-2026-10-15\)/);
+  assert.match(section, /- \[ \] \*\*R3\*\* \(README\): Tighten tone/);
+  assert.doesNotMatch(section, /R1|R2/);
+});
+
+test("renderFixBrief limits owner exceptions to the exact documented scope", () => {
+  const brief = renderFixBrief({
+    slug: "demo-plugin",
+    displayName: "Demo",
+    version: "1.0.6",
+    nextVersion: "1.0.7",
+    submissionDir: "submissions\\demo\\demo-plugin",
+    verdict: "No-ship",
+    reportPath: "C:\\reports\\recommendations.html",
+    fixes: parseRecommendations(REPORT),
+    backlogPath: "submissions\\demo\\demo-plugin\\BACKLOG.md",
+    advisoryCount: 1,
+  });
+  assert.match(brief, /only to an owner exception explicitly recorded in both `AGENTS\.md` and `docs\/release-process\.md`/);
+  assert.match(brief, /plugin, evaluated finding, target release and named assertion must match exactly/);
+  assert.match(brief, /Otherwise, stop and report the conflict/);
+  assert.match(brief, /All other existing checks must pass unchanged/);
+  assert.match(brief, /Do not infer an exception from chat, a recommendation or a failing test/);
+});
+
+test("copilotArgs runs non-interactively and denies git push", () => {
+  const args = copilotArgs("C:\\inbox\\fix-brief.md", "claude-opus-5.5");
+  assert.equal(args[0], "-p");
+  assert.match(args[1], /C:\\inbox\\fix-brief\.md/);
+  assert.ok(args.includes("--no-ask-user"));
+  assert.ok(args.includes("--deny-tool=shell(git push)"));
+  assert.deepEqual(args.slice(-2), ["--model", "claude-opus-5.5"]);
+  assert.ok(!copilotArgs("x").includes("--model"));
+});
+
+test("renderFixBrief asks for a result file only when given its path", () => {
+  const input = {
+    slug: "demo-plugin",
+    displayName: "Demo",
+    version: "1.0.6",
+    nextVersion: "1.0.7",
+    submissionDir: "submissions\\demo\\demo-plugin",
+    verdict: "No-ship",
+    reportPath: "C:\\reports\\recommendations.html",
+    fixes: parseRecommendations(REPORT),
+    backlogPath: "submissions\\demo\\demo-plugin\\BACKLOG.md",
+    advisoryCount: 1,
+  };
+  const withResult = renderFixBrief({ ...input, resultPath: "C:\\inbox\\fix-result.json" });
+  assert.match(withResult, /## Result file/);
+  assert.match(withResult, /write `C:\\inbox\\fix-result\.json` as JSON/);
+  assert.match(withResult, /"version": "1\.0\.7"/);
+  assert.match(withResult, /`evaluation-inbox\\` except the result file below\./);
+  assert.match(withResult, /do not run `npm run evaluation:prepare`/);
+  const without = renderFixBrief(input);
+  assert.doesNotMatch(without, /## Result file/);
+  assert.match(without, /`evaluation-inbox\\`\./);
+});
+
+const CLEAN: FixOutcome = {
+  slug: "demo-plugin",
+  nextVersion: "1.0.7",
+  actionableIds: ["R1", "R2"],
+  result: {
+    version: "1.0.7",
+    commit: "abc1234",
+    fixes: [
+      { id: "R1", status: "applied" },
+      { id: "R2", status: "applied" },
+    ],
+    conflicts: [],
+    preexistingFailures: [],
+  },
+  submissionVersion: "1.0.7",
+  submissionDir: "submissions\\demo\\demo-plugin",
+  commits: [
+    {
+      hash: "abc1234def",
+      subject: "demo-plugin 1.0.7: apply Cowork recommendations",
+      files: ["submissions/demo/demo-plugin/skills/draft/SKILL.md", "submissions/demo/demo-plugin/BACKLOG.md"],
+    },
+    { hash: "999", subject: "other agent: unrelated", files: ["docs/other.md"] },
+  ],
+  uncommitted: [],
+};
+
+test("fixAttention is empty for a clean fix run, ignoring unrelated commits", () => {
+  assert.deepEqual(fixAttention(CLEAN), []);
+});
+
+test("fixAttention flags skipped fixes, conflicts and pre-existing failures", () => {
+  const reasons = fixAttention({
+    ...CLEAN,
+    result: {
+      version: "1.0.7",
+      commit: "abc1234",
+      fixes: [
+        { id: "R1", status: "applied" },
+        { id: "R2", status: "skipped", reason: "conflicts with an existing check" },
+      ],
+      conflicts: ["R2 breaks check X"],
+      preexistingFailures: ["check Y"],
+    },
+  });
+  assert.deepEqual(reasons, [
+    "fix R2 was not applied: conflicts with an existing check",
+    "conflict: R2 breaks check X",
+    "pre-existing failing check: check Y",
+  ]);
+  assert.deepEqual(
+    fixAttention({ ...CLEAN, result: { ...(CLEAN.result as object), fixes: [{ id: "R1", status: "applied" }] } }),
+    ["fix R2 was not applied"],
+  );
+});
+
+test("fixAttention flags a missing result file and missing conflict lists", () => {
+  assert.deepEqual(fixAttention({ ...CLEAN, result: undefined }), [
+    `the agent did not write a valid ${FIX_RESULT_FILE}`,
+    `${FIX_RESULT_FILE} does not name the fix commit`,
+  ]);
+  const { conflicts: _c, preexistingFailures: _p, ...partial } = CLEAN.result as Record<string, unknown>;
+  assert.deepEqual(fixAttention({ ...CLEAN, result: partial }), [
+    "conflict: conflicts not reported",
+    "pre-existing failing check: pre-existing failures not reported",
+  ]);
+});
+
+test("fixAttention checks the version, the commit and the plugin folder", () => {
+  assert.deepEqual(fixAttention({ ...CLEAN, submissionVersion: "1.0.6" }), ["the plugin is at 1.0.6, not 1.0.7"]);
+  assert.deepEqual(fixAttention({ ...CLEAN, commits: [CLEAN.commits[1]] }), [
+    'no new commit titled "demo-plugin 1.0.7: ..."',
+  ]);
+  assert.deepEqual(fixAttention({ ...CLEAN, result: { ...(CLEAN.result as object), commit: "fff" } }), [
+    `${FIX_RESULT_FILE} does not name the fix commit`,
+  ]);
+  assert.deepEqual(
+    fixAttention({
+      ...CLEAN,
+      commits: [{ ...CLEAN.commits[0], files: [...CLEAN.commits[0].files, "AGENTS.md"] }],
+    }),
+    ["the fix commit changed a file outside the plugin: AGENTS.md"],
+  );
+  assert.deepEqual(
+    fixAttention({ ...CLEAN, submissionDir: "submissions\\demo\\demo", uncommitted: [] }).length,
+    2,
+  );
+  assert.deepEqual(fixAttention({ ...CLEAN, uncommitted: [" M submissions/demo/demo-plugin/README.md"] }), [
+    "uncommitted change in the plugin: M submissions/demo/demo-plugin/README.md",
+  ]);
+});

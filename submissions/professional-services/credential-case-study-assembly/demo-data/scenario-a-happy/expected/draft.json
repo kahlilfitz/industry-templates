@@ -1,0 +1,181 @@
+{
+  "contract_version": "ps.credential-case-study-assembly.v1",
+  "engagement": {
+    "engagement_id": "PS-CRD-2026-014",
+    "name": "Claims Workflow Modernisation Closeout",
+    "closeout_date": "2026-08-28",
+    "fees_usd": 640000,
+    "duration_weeks": 18,
+    "board_visible": false,
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.94,
+    "citations": [
+      "closeout knowledge record CKR-014 #engagement"
+    ]
+  },
+  "client": {
+    "name": "Northstar Harbor Cooperative",
+    "sector": "financial-services",
+    "geography": "North America",
+    "size_descriptor": "regional member-owned insurer",
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.95,
+    "citations": [
+      "closeout knowledge record CKR-014 #client"
+    ]
+  },
+  "deliverables": [
+    {
+      "title": "Claims intake workflow redesign",
+      "summary": "Mapped claims intake, redesigned handoffs and implemented a workflow automation pilot across three operating teams.",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.92,
+      "citations": [
+        "closeout knowledge record CKR-014 #deliverables",
+        "final deliverable FD-014 section 2"
+      ]
+    },
+    {
+      "title": "Adoption and measurement pack",
+      "summary": "Created supervisor dashboards and measurement cadence for cycle-time tracking.",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.9,
+      "citations": [
+        "final deliverable FD-014 section 5"
+      ]
+    }
+  ],
+  "outcomes": [
+    {
+      "metric": "manual reconciliation cycle time reduction",
+      "value": 38,
+      "unit": "percent",
+      "evidence_type": "verified_deliverable",
+      "clearance_scope": "public_marketing",
+      "governing_clause": "Engagement terms NT-14 clause 12.2",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.93,
+      "citations": [
+        "final deliverable FD-014 appendix E-2",
+        "closeout knowledge record CKR-014 #outcomes"
+      ]
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "credential_draft/1.0"
+    ],
+    "generated_at": "2026-09-23",
+    "demo_scenario": "scenario-a-happy"
+  },
+  "taxonomy_match": {
+    "sector": {
+      "value": "financial-services",
+      "confidence": 0.82,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #1",
+      "ambiguous": false,
+      "scores": {
+        "financial-services": 3,
+        "public-sector": 0,
+        "healthcare": 0,
+        "industrial": 0,
+        "technology-media-telecom": 0,
+        "cross-industry": 0
+      }
+    },
+    "service_line": {
+      "value": "data-ai-analytics",
+      "confidence": 0.73,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #2",
+      "ambiguous": false,
+      "scores": {
+        "strategy-advisory": 0,
+        "technology-transformation": 0,
+        "data-ai-analytics": 2,
+        "risk-regulatory": 0,
+        "managed-services": 0
+      }
+    },
+    "capability": {
+      "value": "ai-automation",
+      "confidence": 0.73,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #3",
+      "ambiguous": false,
+      "scores": {
+        "process-redesign": 1,
+        "platform-migration": 0,
+        "ai-automation": 2,
+        "data-modernisation": 0,
+        "change-enablement": 1
+      }
+    },
+    "engagement_size_band": {
+      "value": "medium",
+      "confidence": 0.96,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #4.2",
+      "fees_usd": 640000.0,
+      "duration_weeks": 18
+    },
+    "outcome_type": {
+      "value": "cycle-time",
+      "confidence": 0.73,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #5",
+      "ambiguous": false,
+      "scores": {
+        "cost-reduction": 0,
+        "cycle-time": 2,
+        "risk-reduction": 0,
+        "revenue-growth": 0,
+        "experience-improvement": 0,
+        "resilience-quality": 0
+      }
+    },
+    "source": "engine:credential_draft",
+    "citations": [
+      "credential-taxonomy.md #1-#6"
+    ],
+    "confidence": 0.73,
+    "escalations": []
+  },
+  "draft_assets": {
+    "credential_entry": {
+      "title_seed": "Claims Workflow Modernisation Closeout",
+      "client_name_seed": "Northstar Harbor Cooperative",
+      "taxonomy": {
+        "sector": "financial-services",
+        "service_line": "data-ai-analytics",
+        "capability": "ai-automation",
+        "engagement_size_band": "medium",
+        "outcome_type": "cycle-time"
+      },
+      "source": "engine:credential_draft",
+      "confidence": 0.73,
+      "citations": [
+        "credential-taxonomy.md #1-#6"
+      ]
+    },
+    "case_study": {
+      "forms_required": [
+        "short",
+        "medium",
+        "long"
+      ],
+      "copy_instruction": "Model drafts copy only after permission_check separates cleared and uncleared figures.",
+      "source": "engine:credential_draft",
+      "confidence": 0.73,
+      "citations": [
+        "credential-taxonomy.md #6.1"
+      ]
+    },
+    "source": "engine:credential_draft",
+    "confidence": 0.73,
+    "citations": [
+      "credential-taxonomy.md #1-#6"
+    ]
+  }
+}

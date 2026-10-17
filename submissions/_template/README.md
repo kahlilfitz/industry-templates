@@ -1,7 +1,7 @@
 # My Industry Template
 
-**Replace all of this.** This README becomes the main content on your template's gallery page,
-so write it for the person deciding whether to install it — not for the agent.
+**Replace all of this.** This README is the package's human-facing documentation, so write it
+for the person deciding whether to install it — not for the agent.
 
 Open with one paragraph: who this is for, and what it hands them.
 
@@ -32,8 +32,3 @@ What this does *not* do. Draft-first, no write-back, nothing auto-sent — and w
 hands off to something else.
 
 Grounded in <standards> — see `references/`.
-
----
-
-Don't write "Skills in this package", "Demo data", "Install" or "Test evidence" sections. Those
-are appended automatically from your actual payload.

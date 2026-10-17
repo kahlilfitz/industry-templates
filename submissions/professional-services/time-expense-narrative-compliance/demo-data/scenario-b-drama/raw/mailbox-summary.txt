@@ -1,0 +1,3 @@
+Mailbox content and mailbox metadata are OFF in config/signal-sources.json (client-billing-guidelines.md #10.1).
+This placeholder stands in for a mailbox export. The engines never open it while the mailbox sources are disabled.
+Timesheet row TE-B-001 still links B-MAIL-001 (a mailbox item) so the demo can show that link being excluded and disclosed.

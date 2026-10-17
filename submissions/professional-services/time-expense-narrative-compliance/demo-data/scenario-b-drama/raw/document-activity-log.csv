@@ -1,0 +1,5 @@
+activity_id,date,person,file_name,activity_type,duration_hours,engagement_id
+B-DOC-001,2026-09-14,Morgan Lee,integration-design-memo.docx,analyze,1.7,ENG-SYN-042
+B-DOC-002,2026-09-15,Morgan Lee,security-exceptions-matrix.xlsx,research,1.1,ENG-SYN-042
+B-DOC-003,2026-09-16,Morgan Lee,api-mapping-appendix.docx,draft,2.0,ENG-SYN-042
+B-DOC-004,2026-09-17,Morgan Lee,migration-worksheet.xlsx,analyze,1.0,ENG-SYN-042

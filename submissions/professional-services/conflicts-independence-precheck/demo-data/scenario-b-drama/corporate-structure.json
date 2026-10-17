@@ -1,0 +1,78 @@
+{
+  "citation": "raw/corporate-structure-extract.csv",
+  "date_range": { "as_of": "2026-09-23" },
+  "entities": [
+    {
+      "entity_id": "ENT-AST-010",
+      "legal_name": "Aster Diagnostics LLC",
+      "aliases": ["Aster Health Labs", "Aster Diagnostics"],
+      "trade_names": ["Aster Health Labs"],
+      "transliterations": [],
+      "family_id": "FAM-VEGA",
+      "parent_id": "ENT-VEGA-001",
+      "ownership_pct": 1.0,
+      "relationship": "controlled subsidiary / trading brand",
+      "citation": "corporate structure extract row 14"
+    },
+    {
+      "entity_id": "ENT-VEGA-001",
+      "legal_name": "VegaNova Holdings PLC",
+      "aliases": ["VegaNova", "Vega Nova Holdings"],
+      "trade_names": [],
+      "transliterations": [],
+      "family_id": "FAM-VEGA",
+      "parent_id": null,
+      "ownership_pct": 1.0,
+      "relationship": "ultimate parent",
+      "citation": "corporate structure extract row 10"
+    },
+    {
+      "entity_id": "ENT-NORD-022",
+      "legal_name": "Nordstar Bio Services Ltd",
+      "aliases": ["Nordstar Bio"],
+      "trade_names": [],
+      "transliterations": [],
+      "family_id": "FAM-VEGA",
+      "parent_id": "ENT-VEGA-001",
+      "ownership_pct": 0.72,
+      "relationship": "controlled sibling",
+      "citation": "corporate structure extract row 16"
+    },
+    {
+      "entity_id": "ENT-KELVAR-077",
+      "legal_name": "Kelvar Bio Systems Ltd",
+      "aliases": ["Kelvar Bio Systems"],
+      "trade_names": [],
+      "transliterations": [],
+      "family_id": "FAM-KELVAR",
+      "parent_id": null,
+      "ownership_pct": 1.0,
+      "relationship": "current client standalone entity",
+      "citation": "corporate structure extract row 31"
+    },
+    {
+      "entity_id": "ENT-BOF-008",
+      "legal_name": "Blue Orchard Financing Trust",
+      "aliases": ["Blue Orchard Financing"],
+      "trade_names": [],
+      "transliterations": [],
+      "family_id": "FAM-BOF",
+      "parent_id": null,
+      "ownership_pct": 1.0,
+      "relationship": "standalone financing vehicle",
+      "citation": "corporate structure extract row 42"
+    },
+    {
+      "entity_id": "ENT-LAT-050",
+      "legal_name": "Lattice Energy Cooperative",
+      "aliases": ["Lattice Energy"],
+      "trade_names": [],
+      "transliterations": [],
+      "family_id": "FAM-LAT",
+      "parent_id": null,
+      "ownership_pct": 1.0,
+      "relationship": "unrelated current client",
+      "citation": "corporate structure extract row 50"
+    }
+  ]
+}

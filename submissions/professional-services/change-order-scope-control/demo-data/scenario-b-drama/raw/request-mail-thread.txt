@@ -1,0 +1,29 @@
+From: Drew Lin (Meridian Harbor)  Sent: 2026-09-03 07:40
+To: Engagement Manager
+Subject: A few quick adds for invoice pilot
+
+Could you run one more refresh? ERP-X changed the export after the finance controller corrected the mapping. West Region AP also missed the workshop; can we do a quick additional walkthrough so they feel heard?
+
+From: Drew Lin  Sent: 2026-09-05 16:12
+
+Please add Tax and Treasury interviews. They were not on the original stakeholder list, but the CFO wants their perspective.
+
+From: Nora Vale (AP Lead)  Sent: 2026-09-06 09:03
+
+The duplicate vendors make the exception sample messy. Could your team clean those up for the pilot extract?
+
+From: Nora Vale  Sent: 2026-09-07 14:28
+
+Can you add a daily CSV aging report from the refreshed exception file for our standup? It does not need to be pretty.
+
+From: Ari Benton (Change Lead)  Sent: 2026-09-08 10:11
+
+The training kit is good, but can you run one office-hours session after go-live for late adopters?
+
+From: Drew Lin  Sent: 2026-09-09 13:51
+
+Can the readiness report include a single executive dashboard slide with adoption risks and open decisions?
+
+From: Cam Torres (Legal Operations)  Sent: 2026-09-10 08:44
+
+Please add a Legal approver exception path for invoice disputes involving policy interpretation. The prototype already has Legal in the role list, so this should be covered.

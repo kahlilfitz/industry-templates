@@ -1,0 +1,139 @@
+{
+  "contract_version": "ps.conflicts-independence-precheck.v1",
+  "pursuit_id": "PS-CIP-2026-0142",
+  "analysis_as_of": "2026-09-23",
+  "prospective_client": {
+    "party_id": "P001",
+    "given_name": "Northbridge Advisory LLC",
+    "role": "prospective_client",
+    "source": "skill:party-intake",
+    "citation": "raw/intake-email.txt",
+    "confidence": 0.96
+  },
+  "matter": {
+    "matter_name": "Northbridge market-entry strategy pre-check",
+    "matter_type": "strategy_advisory",
+    "services": [
+      "market_entry_strategy",
+      "operating_model_design"
+    ],
+    "jurisdictions": [
+      "US"
+    ],
+    "description": "Strategy support for a synthetic professional services market-entry assessment.",
+    "source": "skill:party-intake",
+    "citation": "raw/intake-email.txt",
+    "confidence": 0.94
+  },
+  "parties": [
+    {
+      "party_id": "P002",
+      "given_name": "Harbor Finch Capital",
+      "role": "potential_lender",
+      "source": "skill:party-intake",
+      "citation": "raw/intake-email.txt",
+      "confidence": 0.9
+    }
+  ],
+  "escalations": [],
+  "provenance": {
+    "demo_scenario": "scenario-a-happy",
+    "engines": [
+      "entity_resolve/1.0"
+    ],
+    "generated_at": "2026-09-23"
+  },
+  "resolved_entities": [
+    {
+      "party_id": "P001",
+      "given_name": "Northbridge Advisory LLC",
+      "role": "prospective_client",
+      "match_status": "controlled_match",
+      "resolved_entity_id": "ENT-NBA-001",
+      "resolved_legal_name": "Northbridge Advisory LLC",
+      "candidate_entity_id": "ENT-NBA-001",
+      "candidate_legal_name": "Northbridge Advisory LLC",
+      "family_id": "FAM-NBA",
+      "ultimate_parent_id": "ENT-NBA-001",
+      "ultimate_parent_name": "Northbridge Advisory LLC",
+      "entity_variants_tried": [
+        "Northbridge Advisory",
+        "Northbridge Advisory LLC",
+        "northbridge advisory"
+      ],
+      "corporate_family": [
+        {
+          "entity_id": "ENT-NBA-001",
+          "legal_name": "Northbridge Advisory LLC",
+          "relationship": "ultimate parent / standalone controlled entity",
+          "ownership_pct": 1.0,
+          "source": "connector:corporate-structure",
+          "citation": "corporate structure extract row 1",
+          "rule": "entity-resolution-rules.md #5.1"
+        }
+      ],
+      "confidence": 1.0,
+      "source": "engine:entity_resolve",
+      "citation": "corporate structure extract row 1 matched 'Northbridge Advisory LLC'",
+      "rule": "entity-resolution-rules.md #3.1,#4.1,#5.1"
+    },
+    {
+      "party_id": "P002",
+      "given_name": "Harbor Finch Capital",
+      "role": "potential_lender",
+      "match_status": "controlled_match",
+      "resolved_entity_id": "ENT-HFC-001",
+      "resolved_legal_name": "Harbor Finch Capital LLC",
+      "candidate_entity_id": "ENT-HFC-001",
+      "candidate_legal_name": "Harbor Finch Capital LLC",
+      "family_id": "FAM-HFC",
+      "ultimate_parent_id": "ENT-HFC-001",
+      "ultimate_parent_name": "Harbor Finch Capital LLC",
+      "entity_variants_tried": [
+        "Harbor Finch Capital",
+        "Harbor Finch Capital LLC",
+        "harbor finch capital"
+      ],
+      "corporate_family": [
+        {
+          "entity_id": "ENT-HFC-001",
+          "legal_name": "Harbor Finch Capital LLC",
+          "relationship": "ultimate parent / standalone controlled entity",
+          "ownership_pct": 1.0,
+          "source": "connector:corporate-structure",
+          "citation": "corporate structure extract row 2",
+          "rule": "entity-resolution-rules.md #5.1"
+        }
+      ],
+      "confidence": 1.0,
+      "source": "engine:entity_resolve",
+      "citation": "corporate structure extract row 2 matched 'Harbor Finch Capital LLC'",
+      "rule": "entity-resolution-rules.md #3.1,#4.1,#5.1"
+    }
+  ],
+  "search_scope": {
+    "registers_searched": [],
+    "date_range": {
+      "as_of": "2026-09-23"
+    },
+    "entity_variants_by_party": {
+      "P001": [
+        "Northbridge Advisory",
+        "Northbridge Advisory LLC",
+        "northbridge advisory"
+      ],
+      "P002": [
+        "Harbor Finch Capital",
+        "Harbor Finch Capital LLC",
+        "harbor finch capital"
+      ]
+    },
+    "corporate_family_entity_ids": [
+      "ENT-HFC-001",
+      "ENT-NBA-001"
+    ],
+    "unresolved_parties": [],
+    "source": "engine:entity_resolve",
+    "citation": "raw/corporate-structure-extract.csv"
+  }
+}

@@ -1,0 +1,13 @@
+Discovery transcript - Riverbend Field Services / Scheduling Modernization
+Date: 2026-09-18
+
+Pursuit lead: We can move fast if we reuse the Nimbus SOW. They loved the liability and data terms.
+Client sponsor: We need dispatch scheduling cleaned up before year end. The go-live should be
+December 15 if everyone leans in.
+Engagement manager: What does acceptance look like?
+Client sponsor: We'll know it when the supervisors say the schedule looks usable. Don't make it
+too legal; we need momentum.
+Engagement manager: Who supplies test data?
+Client sponsor: Operations has it somewhere. Maybe planning, maybe IT. We can sort that out later.
+Pursuit lead: Let's not slow down the SOW. The scope is process discovery, scheduling design,
+pilot backlog and enablement plan. Copy Nimbus for the terms and keep the date.

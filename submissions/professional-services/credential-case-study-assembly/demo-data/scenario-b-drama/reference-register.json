@@ -1,0 +1,16 @@
+{
+  "permissions": [
+    {
+      "permission_id": "RR-099-EVENT",
+      "permission_type": "name",
+      "consent_type": "express_written",
+      "scope": "event_only",
+      "event": "Insurance Operations Forum 2026",
+      "expires_on": "2026-05-31",
+      "citation": "reference register RR-099 row 8"
+    }
+  ],
+  "source": "connector:reference-register",
+  "confidence": 0.98,
+  "citations": ["reference register extract 2026-09-23 row 8"]
+}

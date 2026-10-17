@@ -1,0 +1,998 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ps.client-status-qbr.v1",
+  "title": "Client Status & QBR contract v1",
+  "description": "Versioned contract chaining plan-retrieve -> burn-pull -> variance-calc -> risk-summarize -> status-draft. Carries data + confidence + provenance + citations on every hop so escalation is mechanical. Hop ownership: plan-retrieve writes engagement, reporting_period, sources, plan, prior_status, risks, decisions and actions; burn-pull writes budget; variance-calc writes variance_summary; risk-summarize writes aged_items; status-draft consumes the payload and writes no contract fields. Only the hop-1 fields are globally required so that each intermediate payload validates.",
+  "revision": 2,
+  "type": "object",
+  "required": [
+    "contract_version",
+    "engagement",
+    "reporting_period",
+    "plan"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "ps.client-status-qbr.v1"
+    },
+    "contract_revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Revision of this contract that produced the payload. contract_version stays ps.client-status-qbr.v1 while the schema only gains optional fields, so a consumer cannot otherwise tell a 1.5.x payload from a 1.6.x one. validate_payload rejects a payload declaring a revision newer than the contract it is checked against, which is how a stale plugin copy is caught."
+    },
+    "engagement": {
+      "type": "object",
+      "required": [
+        "engagement_id",
+        "name",
+        "client_name",
+        "source",
+        "confidence",
+        "citation"
+      ],
+      "properties": {
+        "engagement_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "client_name": {
+          "type": "string"
+        },
+        "manager": {
+          "type": "string",
+          "x_internal": true,
+          "description": "Engagement manager, by name. INTERNAL ONLY - this field exists to route the draft for review and must never appear in a client pack. Refer to this person as 'the engagement manager' in anything client-facing (status-reporting-rules.md #7.2)."
+        },
+        "partner": {
+          "type": "string",
+          "x_internal": true,
+          "description": "Engagement partner, by name. INTERNAL ONLY - same handling as manager: routing and internal review only, never reproduced in a client pack (#7.2)."
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        },
+        "project_code": {
+          "type": "string",
+          "description": "Client-side or finance-system project code, used to tie the finance export back to the engagement. Optional."
+        }
+      }
+    },
+    "reporting_period": {
+      "type": "object",
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date"
+        },
+        "end": {
+          "type": "string",
+          "format": "date"
+        },
+        "previous_start": {
+          "type": "string",
+          "format": "date"
+        },
+        "previous_end": {
+          "type": "string",
+          "format": "date"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/source_record"
+      }
+    },
+    "plan": {
+      "type": "object",
+      "required": [
+        "milestones",
+        "source",
+        "confidence",
+        "citation"
+      ],
+      "properties": {
+        "milestones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/milestone"
+          }
+        },
+        "scope_changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/scope_change"
+          }
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
+      }
+    },
+    "prior_status": {
+      "type": "object",
+      "properties": {
+        "milestones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/prior_milestone"
+          }
+        },
+        "budget": {
+          "$ref": "#/definitions/prior_budget"
+        },
+        "reported_rag": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "currency",
+        "baseline_budget",
+        "planned_burn_to_date",
+        "actual_billed_to_date",
+        "unbilled_wip",
+        "forecast_to_complete",
+        "source",
+        "confidence",
+        "citation"
+      ],
+      "properties": {
+        "currency": {
+          "type": "string"
+        },
+        "commercial_model": {
+          "enum": [
+            "time_and_materials",
+            "capped_time_and_materials",
+            "fixed_fee",
+            "milestone_based",
+            "retainer",
+            "unknown"
+          ],
+          "description": "How the engagement is sold. Burn against plan means different things under each: on time_and_materials an overrun is a client conversation, on fixed_fee it is internal margin and is not a client-facing budget problem. Use 'unknown' only when no contract document states it, and expect an escalation - reporting a budget RAG without knowing the commercial model is a guess."
+        },
+        "amounts_basis": {
+          "enum": [
+            "fee",
+            "cost"
+          ],
+          "description": "Whether the amounts in this block are what the client is charged ('fee') or what delivery costs internally ('cost'). Cost figures carry margin and must never drive a client-facing burn percentage; the engines escalate when they see 'cost'. Absent is treated as 'fee' with an escalation, because a silent mix of the two is the single easiest way to publish a wrong number."
+        },
+        "baseline_budget": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Approved baseline budget for the whole engagement, in the engagement currency."
+        },
+        "planned_burn_to_date": {
+          "type": "number",
+          "minimum": 0
+        },
+        "actual_billed_to_date": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unbilled_wip": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Unbilled work in progress / accrual in the engagement currency. Use null only when the finance export genuinely has no WIP line, and raise an escalation; never omit the field and never substitute 0 for unknown."
+        },
+        "forecast_to_complete": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimate at completion (EAC): total forecast cost for the whole engagement including burn already incurred, in the engagement currency. This is NOT the remaining cost to complete. variance-calc compares it directly to baseline_budget under status-reporting-rules.md #3.2."
+        },
+        "previous_forecast_to_complete": {
+          "type": "number",
+          "minimum": 0
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        },
+        "field_citations": {
+          "type": "object",
+          "description": "Per-field provenance for the budget block. Each key is a budget field name and each value is the exact source row or cell it came from, e.g. {\"actual_billed_to_date\":\"fin-export.csv row 12\"}. Lets a reviewer audit one number without re-opening every source.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/item"
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/item"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/item"
+      }
+    },
+    "settings": {
+      "type": "object",
+      "description": "Optional run-time settings the user stated in conversation. Absent means every published default in status-reporting-rules.md applies. Only the listed thresholds can be changed; the confidence floor (#1.3), WIP inclusion (#3.3), the rebaseline check (#2.3), client-blocker reclassification (#5.5) and the draft-only boundary (#7) are fixed and cannot be set here (#8.2). Every non-default value is disclosed as an escalation at the top of the pack (#8.1).",
+      "required": [
+        "thresholds",
+        "source",
+        "citation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schedule_amber_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 29,
+              "description": "Amber when forecast is more than this many calendar days past the original baseline. Published default 5 (status-reporting-rules.md #2.1). Bounds 1-29 (#8.1)."
+            },
+            "schedule_red_days": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 30,
+              "description": "Red when forecast is more than this many calendar days past the original baseline. Must exceed schedule_amber_days. Published default 10 (status-reporting-rules.md #2.2). Bounds 2-30 (#8.1)."
+            },
+            "budget_amber_pct": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 24,
+              "description": "Amber when burn or forecast variance is at least this percentage, either direction. Published default 5 (status-reporting-rules.md #3.1). Bounds 1-24 (#8.1)."
+            },
+            "budget_red_pct": {
+              "type": "number",
+              "minimum": 2,
+              "maximum": 25,
+              "description": "Red when burn or forecast variance is at least this percentage, either direction. Must exceed budget_amber_pct. Published default 10 (status-reporting-rules.md #3.2). Bounds 2-25 (#8.1)."
+            },
+            "scope_amber_open_items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "description": "Amber at this many open unapproved scope changes. Published default 1 (status-reporting-rules.md #4.1). Bounds 1-4 (#8.1)."
+            },
+            "scope_red_open_items": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 5,
+              "description": "Red at this many open unapproved scope changes (any client-facing change is always red). Must exceed scope_amber_open_items. Published default 3 (status-reporting-rules.md #4.2). Bounds 2-5 (#8.1)."
+            },
+            "risk_stale_days": {
+              "type": "integer",
+              "minimum": 7,
+              "maximum": 179,
+              "description": "An open risk this many days old is stale and needs a re-rate. Published default 45 (status-reporting-rules.md #5.1). Bounds 7-179 (#8.1)."
+            },
+            "risk_critical_days": {
+              "type": "integer",
+              "minimum": 14,
+              "maximum": 180,
+              "description": "An open risk this many days old is escalated as critical. Must exceed risk_stale_days. Published default 90 (status-reporting-rules.md #5.2). Bounds 14-180 (#8.1)."
+            },
+            "decision_overdue_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "description": "A decision this many days past due is overdue. Published default 7 (status-reporting-rules.md #5.3). Bounds 1-30 (#8.1)."
+            },
+            "action_overdue_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "description": "An action this many days past due is overdue. Published default 7 (status-reporting-rules.md #5.4). Bounds 1-30 (#8.1)."
+            }
+          }
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^user:",
+          "description": "Always 'user:conversation' - a threshold is only ever set because the user asked for it."
+        },
+        "citation": {
+          "type": "string",
+          "description": "The user's words, quoted, that set these values."
+        }
+      }
+    },
+    "variance_summary": {
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "$ref": "#/definitions/domain_status"
+        },
+        "budget": {
+          "$ref": "#/definitions/domain_status"
+        },
+        "scope": {
+          "$ref": "#/definitions/domain_status"
+        },
+        "overall_rag": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        },
+        "thresholds_applied": {
+          "type": "object",
+          "description": "The threshold values the engine actually used for this run (#8.1).",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "thresholds_source": {
+          "type": "string",
+          "enum": [
+            "default",
+            "user"
+          ],
+          "description": "'default' when every published threshold applied; 'user' when at least one came from settings.thresholds (#8.1)."
+        }
+      }
+    },
+    "aged_items": {
+      "type": "object",
+      "properties": {
+        "risks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/aged_item"
+          }
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/aged_item"
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/aged_item"
+          }
+        },
+        "pending_client_actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/aged_item"
+          }
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        },
+        "thresholds_applied": {
+          "type": "object",
+          "description": "The threshold values the engine actually used for this run (#8.1).",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "thresholds_source": {
+          "type": "string",
+          "enum": [
+            "default",
+            "user"
+          ],
+          "description": "'default' when every published threshold applied; 'user' when at least one came from settings.thresholds (#8.1)."
+        }
+      }
+    },
+    "escalations": {
+      "type": "array",
+      "description": "Items a human must resolve before the pack is sent. Either a plain sentence or a structured object; both forms are valid so existing consumers keep working.",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "rule"
+            ],
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "rule": {
+                "type": "string",
+                "description": "The status-reporting-rules.md rule number that triggered this escalation, e.g. '#3.3'."
+              },
+              "item_id": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "pattern": "^(engine|skill|connector):"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "escalation_records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/escalation_record"
+      },
+      "description": "Structured form of escalations[], added at revision 2. escalations[] remains the active message list so existing readers keep working; this array adds the type, severity, rule, owner and resolution fields, and is what status-draft groups by."
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "engines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "demo_scenario": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "source_record": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "source",
+        "confidence",
+        "citation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
+      }
+    },
+    "milestone": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "current_forecast_date",
+        "source",
+        "confidence",
+        "citation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "original_baseline_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "The milestone's first committed baseline. Absent or null when no supplied source gives it - never copy current_baseline_date into it. variance_calc then reports original_variance_days as null, records variance_vs_current_baseline_days as a lower bound, rates the milestone at least amber and worse when that lower bound crosses the #2.1/#2.2 thresholds, and escalates under status-reporting-rules.md #2.3, because masked slippage cannot be tested."
+        },
+        "current_baseline_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "current_forecast_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Milestone lifecycle status as written in the plan, e.g. 'In progress', 'Complete'. Matched against the engine's status vocabulary after trimming and case folding. A milestone that reads as closed is treated as delivered, so it stops driving the current schedule RAG; its historic slip is reported separately under status-reporting-rules.md #2.5. Omit when the plan does not record one - do not guess."
+        },
+        "actual_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "The date the milestone was actually delivered. Populate whenever the plan records it. Delivery is what closes a milestone: without it a milestone delivered late keeps slipping against its baseline every period and reads red forever. Slip measured from actual_date is historic and is reported separately from the current schedule RAG (status-reporting-rules.md #2.5)."
+        },
+        "reported_rag": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "rebaselined_last_period": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
+      }
+    },
+    "prior_milestone": {
+      "type": "object",
+      "required": [
+        "id",
+        "forecast_date",
+        "source",
+        "confidence",
+        "citation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "forecast_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "reported_rag": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        },
+        "baseline_date": {
+          "type": "string",
+          "format": "date",
+          "description": "The baseline date as reported in the prior pack. Used to detect a baseline that moved between periods."
+        }
+      }
+    },
+    "scope_change": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "status",
+        "client_facing_impact",
+        "source",
+        "confidence",
+        "citation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "client_facing_impact": {
+          "type": "boolean"
+        },
+        "impact_days": {
+          "type": "number"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
+      }
+    },
+    "prior_budget": {
+      "type": "object",
+      "properties": {
+        "forecast_to_complete": {
+          "type": "number"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "status",
+        "owner_type",
+        "source",
+        "confidence",
+        "citation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "opened_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "Date the item was opened. Absent or null means the register did not record one; item_age escalates the gap (status-reporting-rules.md #1.1; ageing #5.1-#5.4). Never guess a date to satisfy this field."
+        },
+        "due_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "Due date where the register records one. Absent or null means unknown, not 'not overdue'."
+        },
+        "owner_type": {
+          "enum": [
+            "client",
+            "internal",
+            "joint"
+          ]
+        },
+        "blocked_by_decision_id": {
+          "type": "string"
+        },
+        "blocker_type": {
+          "enum": [
+            "client_decision",
+            "internal_dependency",
+            "none"
+          ]
+        },
+        "risk_rating": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
+      }
+    },
+    "domain_status": {
+      "type": "object",
+      "properties": {
+        "rag": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
+      }
+    },
+    "aged_item": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "risk",
+            "decision",
+            "action",
+            "item"
+          ],
+          "description": "Which RAID register the item came from. Emitted by item_age."
+        },
+        "title": {
+          "type": "string"
+        },
+        "age_days": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Null when opened_date is unknown. Null means unmeasurable and is always accompanied by an escalation; it must never be rendered as 0."
+        },
+        "days_past_due": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Null when due_date is unknown. Null means unmeasurable and is always accompanied by an escalation; it must never be rendered as 0 or as 'on track'."
+        },
+        "due_date_known": {
+          "type": "boolean",
+          "description": "False when the item carries no due date, so days_past_due is null by definition."
+        },
+        "bucket": {
+          "type": "string"
+        },
+        "owner_type": {
+          "enum": [
+            "client",
+            "internal",
+            "joint"
+          ]
+        },
+        "client_action": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(engine|skill|connector):"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "citation": {
+          "type": "string"
+        }
+      }
+    },
+    "escalation_record": {
+      "type": "object",
+      "required": [
+        "id",
+        "message",
+        "type",
+        "severity",
+        "source"
+      ],
+      "description": "One escalation with a lifecycle. Engines regenerate the records they own on every run (matched on source) and keep everybody else's, so re-running a hop no longer carries a stale finding forward. A record with resolved_at set stays here as the audit trail but drops out of the active escalations list.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable identifier: the item the escalation is about plus a digest of the message, so the same finding keeps the same id across runs."
+        },
+        "message": {
+          "type": "string",
+          "description": "The human-readable escalation, identical to its entry in escalations[]."
+        },
+        "type": {
+          "enum": [
+            "blocking",
+            "note"
+          ],
+          "description": "blocking stops the pack going out until it is resolved or explicitly waived. note is disclosure that travels with the pack, such as historic slip on a delivered milestone."
+        },
+        "severity": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "rule": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The status-reporting-rules.md clause this escalation comes from, e.g. '#2.5'. Lets the draft group escalations by rule instead of listing them flat."
+        },
+        "subject": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The id of the risk, decision, action, milestone or change request the escalation is about, when it has one."
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Who has to act, read out of the message rather than guessed - e.g. 'delivery lead', 'engagement financial analyst'."
+        },
+        "source": {
+          "type": "string",
+          "description": "What raised it: engine:variance_calc, engine:item_age, a skill, or 'unknown' for a message carried in from a payload older than revision 2."
+        },
+        "resolved_by": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Who cleared it. Setting this, resolved_at and resolution is the only sanctioned way to take an escalation off the active list."
+        },
+        "resolved_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "resolution": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "What was done or agreed. Required reading before a blocking escalation is treated as cleared."
+        }
+      }
+    },
+    "personal_data_boundary": {
+      "type": "object",
+      "description": "Not a payload field - documentation of the #7.2 boundary that validate_payload.py enforces. Never place in any field: an individual's salary, pay, day rate or cost rate; bank, card or payment details; personal contact details (email, phone, home address); performance or conduct commentary about a named person; or any other personal identifier. Report at engagement, team or role level instead. Fields marked x_internal are not sensitive in themselves but are internal-only and must not be reproduced in a client-facing document."
+    }
+  }
+}

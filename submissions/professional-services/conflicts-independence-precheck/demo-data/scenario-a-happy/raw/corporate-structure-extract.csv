@@ -1,0 +1,4 @@
+entity_id,legal_name,alias,family_id,parent_id,ownership_pct,relationship,citation
+ENT-NBA-001,Northbridge Advisory LLC,Northbridge Advisory,FAM-NBA,,1.0,ultimate parent / standalone controlled entity,corporate structure extract row 1
+ENT-HFC-001,Harbor Finch Capital LLC,Harbor Finch Capital,FAM-HFC,,1.0,ultimate parent / standalone controlled entity,corporate structure extract row 2
+ENT-ORC-001,Orchid River Analytics Inc,Orchid River,FAM-ORC,,1.0,unrelated register entity,corporate structure extract row 3

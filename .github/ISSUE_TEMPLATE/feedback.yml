@@ -1,5 +1,5 @@
 name: Issue or feedback
-description: Report a problem with a template or the gallery, or share feedback.
+description: Report a problem with a template or repository tooling, or share feedback.
 title: "[feedback] "
 labels: ["feedback"]
 body:
@@ -13,7 +13,7 @@ body:
     id: template
     attributes:
       label: Which template?
-      description: The slug from the URL, e.g. `quality-inspection`. Leave blank for the gallery itself.
+      description: The submission folder slug, e.g. `quality-inspection`. Leave blank for repository tooling.
       placeholder: quality-inspection
   - type: dropdown
     id: kind

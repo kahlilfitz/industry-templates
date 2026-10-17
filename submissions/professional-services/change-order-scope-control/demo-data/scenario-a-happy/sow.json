@@ -1,0 +1,52 @@
+{
+  "contract_version": "ps.change-order-scope-control.v1",
+  "engagement": {
+    "engagement_id": "PS-CO-1001",
+    "client_name": "Northstar Labs",
+    "project_name": "Finance Operating Model Mobilization",
+    "contract_value": 420000,
+    "source": "connector:contract-repository",
+    "citation": "SOW NSL-FIN-OM-2026 rev 2",
+    "confidence": 0.99
+  },
+  "sow": {
+    "document_id": "SOW-NSL-FIN-OM-2026",
+    "revision": "2",
+    "clauses": [
+      {
+        "id": "2.1",
+        "title": "Closed deliverable list",
+        "type": "deliverable",
+        "quote": "Supplier will deliver the assessment, target operating model, two working workshops, readiness report and transition plan listed in Exhibit A.",
+        "tags": ["workshop", "readiness_report", "operating_model"],
+        "citation": "SOW NSL-FIN-OM-2026 rev 2 section 2.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "4.2",
+        "title": "Excluded executive and board presentations",
+        "type": "exclusion",
+        "quote": "Executive board, investor, fundraising or steering-committee presentations beyond the two working workshops are excluded and require change control.",
+        "tags": ["executive_workshop", "board_presentation", "extra_workshop"],
+        "citation": "SOW NSL-FIN-OM-2026 rev 2 section 4.2",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "6.1",
+        "title": "Change-control route",
+        "type": "change_control",
+        "quote": "Work outside Exhibit A or caused by changed assumptions will be documented in a written change order before performance.",
+        "tags": ["change_control", "extra_workshop", "board_presentation"],
+        "citation": "SOW NSL-FIN-OM-2026 rev 2 section 6.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      }
+    ]
+  },
+  "provenance": {
+    "generated_at": "2026-09-23T00:00:00+00:00",
+    "demo_scenario": "scenario-a-happy"
+  }
+}

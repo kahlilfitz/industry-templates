@@ -1,0 +1,15 @@
+{
+  "permissions": [
+    {
+      "permission_id": "RR-014-NAME",
+      "permission_type": "name",
+      "consent_type": "express_written",
+      "scope": "public_marketing",
+      "expires_on": "2027-12-31",
+      "citation": "reference register RR-014 row 3"
+    }
+  ],
+  "source": "connector:reference-register",
+  "confidence": 0.98,
+  "citations": ["reference register extract 2026-09-23 row 3"]
+}

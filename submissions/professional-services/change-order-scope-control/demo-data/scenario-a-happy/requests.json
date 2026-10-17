@@ -1,0 +1,24 @@
+{
+  "contract_version": "ps.change-order-scope-control.v1",
+  "requests": [
+    {
+      "request_id": "REQ-A-001",
+      "summary": "Add onsite board-readiness workshop",
+      "request_text": "Can the team add one onsite workshop next Friday to prep our board-readiness narrative and walk the CFO through the investor deck?",
+      "requested_by": "Mira Patel, CFO sponsor",
+      "received_at": "2026-09-09",
+      "tags": ["executive_workshop", "board_presentation", "extra_workshop", "change_control"],
+      "material_similarity": 0.41,
+      "failed_assumption": false,
+      "estimate_hours": {
+        "partner": 2,
+        "engagement_manager": 6,
+        "consultant": 10
+      },
+      "estimate_basis": "delivery lead estimate for prep, onsite facilitation and follow-up notes",
+      "source": "skill:request-intake",
+      "citation": "mail thread NSL scope asks 2026-09-09 message 3",
+      "confidence": 0.96
+    }
+  ]
+}

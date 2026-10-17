@@ -1,0 +1,563 @@
+{
+  "contract_version": "ps.engagement-financial-health-brief.v1",
+  "engagement": {
+    "engagement_id": "PS-EFH-2002",
+    "client_name": "Clearwater Methods Group",
+    "engagement_name": "Operating Model Transition",
+    "practice": "Transformation Advisory",
+    "review_period": "2026-09",
+    "metric_definition_set_id": "ps-commercial-control-standard-v1",
+    "source": "connector:engagement-record",
+    "citation": "engagement record PS-EFH-2002, review period 2026-09",
+    "confidence": 0.99
+  },
+  "plan": {
+    "plan_revision": "baseline-v1",
+    "planned_revenue_to_date": 760000,
+    "planned_delivery_cost_to_date": 480000,
+    "planned_total_delivery_cost": 760000,
+    "planned_remaining_delivery_cost": 280000,
+    "planned_margin_pct": 36.8,
+    "system_etc_cost": 280000,
+    "senior_review_plan_to_date": {
+      "Partner": 24,
+      "Director": 64
+    },
+    "milestones": [
+      {
+        "milestone_id": "B-M1",
+        "name": "Current-state interviews",
+        "due_by_review": true,
+        "status": "complete",
+        "remediation_hours": {}
+      },
+      {
+        "milestone_id": "B-M2",
+        "name": "Decision-rights map",
+        "due_by_review": true,
+        "status": "slipped",
+        "remediation_hours": {
+          "Manager": 16,
+          "Consultant": 30
+        }
+      },
+      {
+        "milestone_id": "B-M3",
+        "name": "Process inventory",
+        "due_by_review": true,
+        "status": "complete",
+        "remediation_hours": {}
+      },
+      {
+        "milestone_id": "B-M4",
+        "name": "Control workshop",
+        "due_by_review": true,
+        "status": "slipped",
+        "remediation_hours": {
+          "Manager": 12,
+          "Consultant": 30
+        }
+      },
+      {
+        "milestone_id": "B-M5",
+        "name": "Transition backlog",
+        "due_by_review": true,
+        "status": "complete",
+        "remediation_hours": {}
+      },
+      {
+        "milestone_id": "B-M6",
+        "name": "Leadership playback",
+        "due_by_review": true,
+        "status": "complete",
+        "remediation_hours": {}
+      },
+      {
+        "milestone_id": "B-M7",
+        "name": "Pilot readiness",
+        "due_by_review": true,
+        "status": "slipped",
+        "remediation_hours": {
+          "Manager": 12,
+          "Consultant": 30
+        }
+      },
+      {
+        "milestone_id": "B-M8",
+        "name": "Adoption plan",
+        "due_by_review": true,
+        "status": "complete",
+        "remediation_hours": {}
+      },
+      {
+        "milestone_id": "B-M9",
+        "name": "Closeout pack",
+        "due_by_review": true,
+        "status": "on_track",
+        "remediation_hours": {}
+      }
+    ],
+    "source": "connector:engagement-plan",
+    "citation": "raw/plan-budget-and-milestones.csv rows 2-15",
+    "confidence": 0.98
+  },
+  "indicators": [
+    {
+      "name": "realisation_pct",
+      "value": 95.0,
+      "unit": "%",
+      "status": "green",
+      "plan_value": null,
+      "threshold": {
+        "green_min": 94.0,
+        "amber_min": 90.0
+      },
+      "definition_section": "engagement-financial-metric-definitions.md #2.1",
+      "metric_definition_set_id": "ps-commercial-control-standard-v1",
+      "confidence": 0.98,
+      "source": "engine:health_calc",
+      "citation": "raw/finance-system-export.csv rows 2-8; raw/timesheet-extract.csv rows 2-5; raw/plan-budget-and-milestones.csv rows 2-15"
+    },
+    {
+      "name": "utilisation_pct",
+      "value": 75.54,
+      "unit": "%",
+      "status": "amber",
+      "plan_value": null,
+      "threshold": {
+        "green_min": 76.0,
+        "amber_min": 70.0
+      },
+      "definition_section": "engagement-financial-metric-definitions.md #2.2",
+      "metric_definition_set_id": "ps-commercial-control-standard-v1",
+      "confidence": 0.98,
+      "source": "engine:health_calc",
+      "citation": "raw/timesheet-extract.csv rows 2-5"
+    },
+    {
+      "name": "effective_rate",
+      "value": 702.65,
+      "unit": "currency/hour",
+      "status": "green",
+      "plan_value": null,
+      "threshold": {},
+      "definition_section": "engagement-financial-metric-definitions.md #2.3",
+      "metric_definition_set_id": "ps-commercial-control-standard-v1",
+      "confidence": 0.98,
+      "source": "engine:health_calc",
+      "citation": "raw/finance-system-export.csv rows 2-8; raw/timesheet-extract.csv rows 2-5; raw/plan-budget-and-milestones.csv rows 2-15"
+    },
+    {
+      "name": "margin_pct",
+      "value": 36.58,
+      "unit": "%",
+      "status": "green",
+      "plan_value": 36.8,
+      "threshold": {
+        "green_min": 34.0,
+        "amber_min": 28.0
+      },
+      "definition_section": "engagement-financial-metric-definitions.md #2.4",
+      "metric_definition_set_id": "ps-commercial-control-standard-v1",
+      "confidence": 0.98,
+      "source": "engine:health_calc",
+      "citation": "raw/finance-system-export.csv rows 2-8; raw/timesheet-extract.csv rows 2-5; raw/plan-budget-and-milestones.csv rows 2-15"
+    },
+    {
+      "name": "burn_vs_plan_delta_pct",
+      "value": 0.42,
+      "unit": "%",
+      "status": "green",
+      "plan_value": 0.0,
+      "threshold": {
+        "green_abs_max": 3.0,
+        "amber_abs_max": 7.0
+      },
+      "definition_section": "engagement-financial-metric-definitions.md #3.1",
+      "metric_definition_set_id": "ps-commercial-control-standard-v1",
+      "confidence": 0.98,
+      "source": "engine:health_calc",
+      "citation": "raw/finance-system-export.csv rows 2-8; raw/timesheet-extract.csv rows 2-5; raw/plan-budget-and-milestones.csv rows 2-15"
+    },
+    {
+      "name": "wip_over_90_pct",
+      "value": 32.26,
+      "unit": "%",
+      "status": "red",
+      "plan_value": null,
+      "threshold": {
+        "green_max": 8.0,
+        "amber_max": 15.0
+      },
+      "definition_section": "engagement-financial-metric-definitions.md #4.1",
+      "metric_definition_set_id": "ps-commercial-control-standard-v1",
+      "confidence": 0.98,
+      "source": "engine:health_calc",
+      "citation": "raw/wip-ageing-report.csv rows 2-6"
+    },
+    {
+      "name": "unbilled_exposure_pct_of_plan",
+      "value": 25.66,
+      "unit": "%",
+      "status": "red",
+      "plan_value": null,
+      "threshold": {
+        "green_max": 8.0,
+        "amber_max": 12.0
+      },
+      "definition_section": "engagement-financial-metric-definitions.md #4.2",
+      "metric_definition_set_id": "ps-commercial-control-standard-v1",
+      "confidence": 0.98,
+      "source": "engine:health_calc",
+      "citation": "raw/wip-ageing-report.csv rows 2-6"
+    },
+    {
+      "name": "eac_over_plan_pct",
+      "value": 4.12,
+      "unit": "%",
+      "status": "amber",
+      "plan_value": 0.0,
+      "threshold": {
+        "green_max": 3.0,
+        "amber_max": 8.0
+      },
+      "definition_section": "engagement-financial-metric-definitions.md #5.2",
+      "metric_definition_set_id": "ps-commercial-control-standard-v1",
+      "confidence": 0.98,
+      "source": "engine:health_calc",
+      "citation": "raw/finance-system-export.csv rows 2-8; raw/timesheet-extract.csv rows 2-5; raw/plan-budget-and-milestones.csv rows 2-15"
+    },
+    {
+      "name": "milestone_slip_pct",
+      "value": 33.33,
+      "unit": "%",
+      "status": "red",
+      "plan_value": null,
+      "threshold": {
+        "green_max": 10.0,
+        "amber_max": 25.0
+      },
+      "definition_section": "engagement-financial-metric-definitions.md #5.3",
+      "metric_definition_set_id": "ps-commercial-control-standard-v1",
+      "confidence": 0.98,
+      "source": "engine:health_calc",
+      "citation": "raw/plan-budget-and-milestones.csv rows 2-15"
+    }
+  ],
+  "wip_ageing": {
+    "buckets": [
+      {
+        "bucket": "0-30",
+        "amount": 65000.0,
+        "positive_amount_for_threshold": 65000.0,
+        "record_ids": [
+          "WIP-B-001"
+        ]
+      },
+      {
+        "bucket": "31-60",
+        "amount": 30000.0,
+        "positive_amount_for_threshold": 30000.0,
+        "record_ids": [
+          "WIP-B-002"
+        ]
+      },
+      {
+        "bucket": "61-90",
+        "amount": 10000.0,
+        "positive_amount_for_threshold": 10000.0,
+        "record_ids": [
+          "WIP-B-003"
+        ]
+      },
+      {
+        "bucket": "90+",
+        "amount": 50000.0,
+        "positive_amount_for_threshold": 50000.0,
+        "record_ids": [
+          "WIP-B-004",
+          "WIP-B-005"
+        ]
+      }
+    ],
+    "total_wip": 155000.0,
+    "over_90_amount": 50000.0,
+    "over_90_pct": 32.26,
+    "collectability_reserve": 31000.0,
+    "reserve_by_bucket": [
+      {
+        "bucket": "0-30",
+        "amount": 65000.0,
+        "reserve_pct": 0.0,
+        "reserve_amount": 0.0,
+        "definition_section": "engagement-financial-metric-definitions.md #4.2",
+        "source": "engine:health_calc",
+        "citation": "raw/wip-ageing-report.csv rows 2-6"
+      },
+      {
+        "bucket": "31-60",
+        "amount": 30000.0,
+        "reserve_pct": 5.0,
+        "reserve_amount": 1500.0,
+        "definition_section": "engagement-financial-metric-definitions.md #4.2",
+        "source": "engine:health_calc",
+        "citation": "raw/wip-ageing-report.csv rows 2-6"
+      },
+      {
+        "bucket": "61-90",
+        "amount": 10000.0,
+        "reserve_pct": 20.0,
+        "reserve_amount": 2000.0,
+        "definition_section": "engagement-financial-metric-definitions.md #4.2",
+        "source": "engine:health_calc",
+        "citation": "raw/wip-ageing-report.csv rows 2-6"
+      },
+      {
+        "bucket": "90+",
+        "amount": 50000.0,
+        "reserve_pct": 55.0,
+        "reserve_amount": 27500.0,
+        "definition_section": "engagement-financial-metric-definitions.md #4.2",
+        "source": "engine:health_calc",
+        "citation": "raw/wip-ageing-report.csv rows 2-6"
+      }
+    ],
+    "definition_section": "engagement-financial-metric-definitions.md #4.1; engagement-financial-metric-definitions.md #4.2",
+    "source": "engine:health_calc",
+    "citation": "raw/wip-ageing-report.csv rows 2-6",
+    "confidence": 0.98
+  },
+  "forecast": {
+    "etc_cost": 309290.0,
+    "eac_cost": 791290.0,
+    "eac_variance_amount": 31290.0,
+    "eac_over_plan_pct": 4.12,
+    "system_etc_cost": 280000,
+    "milestone_slip_remediation_cost": 13650.0,
+    "deferred_senior_review_cost": 15640.0,
+    "slipped_milestones": [
+      {
+        "milestone_id": "B-M2",
+        "name": "Decision-rights map",
+        "cost": 4950.0
+      },
+      {
+        "milestone_id": "B-M4",
+        "name": "Control workshop",
+        "cost": 4350.0
+      },
+      {
+        "milestone_id": "B-M7",
+        "name": "Pilot readiness",
+        "cost": 4350.0
+      }
+    ],
+    "deferred_senior_review_detail": [
+      {
+        "role": "Partner",
+        "missing_hours": 14.0,
+        "cost": 4200.0
+      },
+      {
+        "role": "Director",
+        "missing_hours": 52.0,
+        "cost": 11440.0
+      }
+    ],
+    "definition_section": "engagement-financial-metric-definitions.md #5.1; engagement-financial-metric-definitions.md #5.2",
+    "source": "engine:health_calc",
+    "citation": "raw/plan-budget-and-milestones.csv rows 2-15; raw/rate-card.csv rows 2-5",
+    "confidence": 0.97
+  },
+  "health": {
+    "composite_score": 65.3,
+    "overall_status": "amber",
+    "early_warning_flags": [
+      "utilisation_pct 75.54% is amber under engagement-financial-metric-definitions.md #2.2",
+      "wip_over_90_pct 32.26% is red under engagement-financial-metric-definitions.md #4.1",
+      "unbilled_exposure_pct_of_plan 25.66% is red under engagement-financial-metric-definitions.md #4.2",
+      "eac_over_plan_pct 4.12% is amber under engagement-financial-metric-definitions.md #5.2",
+      "milestone_slip_pct 33.33% is red under engagement-financial-metric-definitions.md #5.3",
+      "WIP collectability reserve is $31,000.00 under engagement-financial-metric-definitions.md #4.2"
+    ],
+    "source": "engine:health_calc",
+    "citation": "config/thresholds.json; engagement-financial-metric-definitions.md #1.1",
+    "confidence": 0.97
+  },
+  "benchmark_comparison": {
+    "status": "refused",
+    "reason": "Benchmark definition set ps-utilisation-gross-capacity-v1 does not match engagement/config definition set ps-commercial-control-standard-v1; comparison refused to avoid misleading cross-engagement metrics.",
+    "definition_set_match": false,
+    "benchmark_definition_set_id": "ps-utilisation-gross-capacity-v1",
+    "comparisons": [],
+    "source": "engine:health_calc",
+    "citation": "raw/practice-benchmarks.csv rows 2-6; engagement-financial-metric-definitions.md #1.1",
+    "confidence": 0.95
+  },
+  "driver_basis": {
+    "eac_components": [
+      {
+        "name": "actual_to_plan_variance",
+        "amount": 2000.0,
+        "citation": "engagement-financial-metric-definitions.md #3.1"
+      },
+      {
+        "name": "system_remaining_variance",
+        "amount": 0.0,
+        "citation": "engagement-financial-metric-definitions.md #5.1"
+      },
+      {
+        "name": "milestone_slip_remediation_cost",
+        "amount": 13650.0,
+        "citation": "engagement-financial-metric-definitions.md #5.1; engagement-financial-metric-definitions.md #5.3"
+      },
+      {
+        "name": "deferred_senior_review_cost",
+        "amount": 15640.0,
+        "citation": "engagement-financial-metric-definitions.md #5.1"
+      }
+    ],
+    "wip_reserve_components": [
+      {
+        "bucket": "0-30",
+        "amount": 65000.0,
+        "reserve_pct": 0.0,
+        "reserve_amount": 0.0,
+        "definition_section": "engagement-financial-metric-definitions.md #4.2",
+        "source": "engine:health_calc",
+        "citation": "raw/wip-ageing-report.csv rows 2-6"
+      },
+      {
+        "bucket": "31-60",
+        "amount": 30000.0,
+        "reserve_pct": 5.0,
+        "reserve_amount": 1500.0,
+        "definition_section": "engagement-financial-metric-definitions.md #4.2",
+        "source": "engine:health_calc",
+        "citation": "raw/wip-ageing-report.csv rows 2-6"
+      },
+      {
+        "bucket": "61-90",
+        "amount": 10000.0,
+        "reserve_pct": 20.0,
+        "reserve_amount": 2000.0,
+        "definition_section": "engagement-financial-metric-definitions.md #4.2",
+        "source": "engine:health_calc",
+        "citation": "raw/wip-ageing-report.csv rows 2-6"
+      },
+      {
+        "bucket": "90+",
+        "amount": 50000.0,
+        "reserve_pct": 55.0,
+        "reserve_amount": 27500.0,
+        "definition_section": "engagement-financial-metric-definitions.md #4.2",
+        "source": "engine:health_calc",
+        "citation": "raw/wip-ageing-report.csv rows 2-6"
+      }
+    ]
+  },
+  "escalations": [
+    "Benchmark definition set ps-utilisation-gross-capacity-v1 does not match engagement/config definition set ps-commercial-control-standard-v1; comparison refused to avoid misleading cross-engagement metrics."
+  ],
+  "provenance": {
+    "engines": [
+      "health_calc/1.0",
+      "driver_attribute/1.0"
+    ],
+    "generated_at": "2026-09-23T00:00:00Z",
+    "demo_scenario": "scenario-b-drama"
+  },
+  "driver_attribution": {
+    "largest_variance": "EAC cost variance to plan",
+    "total_variance": 31290.0,
+    "component_sum": 31290.0,
+    "components": [
+      {
+        "name": "deferred_senior_review_cost",
+        "amount": 15640.0,
+        "rank_basis": 15640.0,
+        "source": "engine:driver_attribute",
+        "citation": "engagement-financial-metric-definitions.md #5.1",
+        "confidence": 0.97,
+        "rank": 1
+      },
+      {
+        "name": "milestone_slip_remediation_cost",
+        "amount": 13650.0,
+        "rank_basis": 13650.0,
+        "source": "engine:driver_attribute",
+        "citation": "engagement-financial-metric-definitions.md #5.1; engagement-financial-metric-definitions.md #5.3",
+        "confidence": 0.97,
+        "rank": 2
+      },
+      {
+        "name": "actual_to_plan_variance",
+        "amount": 2000.0,
+        "rank_basis": 2000.0,
+        "source": "engine:driver_attribute",
+        "citation": "engagement-financial-metric-definitions.md #3.1",
+        "confidence": 0.97,
+        "rank": 3
+      },
+      {
+        "name": "system_remaining_variance",
+        "amount": 0.0,
+        "rank_basis": 0.0,
+        "source": "engine:driver_attribute",
+        "citation": "engagement-financial-metric-definitions.md #5.1",
+        "confidence": 0.97,
+        "rank": 4
+      }
+    ],
+    "reconciles": true,
+    "reconciliation_delta": 0.0,
+    "source": "engine:driver_attribute",
+    "citation": "engagement-financial-metric-definitions.md #6.1; engagement-financial-metric-definitions.md #6.3",
+    "confidence": 0.97
+  },
+  "wip_reserve_decomposition": {
+    "total_reserve": 31000.0,
+    "components": [
+      {
+        "bucket": "0-30",
+        "amount": 65000.0,
+        "reserve_pct": 0.0,
+        "reserve_amount": 0.0,
+        "source": "engine:driver_attribute",
+        "citation": "raw/wip-ageing-report.csv rows 2-6; engagement-financial-metric-definitions.md #6.2",
+        "confidence": 0.97
+      },
+      {
+        "bucket": "31-60",
+        "amount": 30000.0,
+        "reserve_pct": 5.0,
+        "reserve_amount": 1500.0,
+        "source": "engine:driver_attribute",
+        "citation": "raw/wip-ageing-report.csv rows 2-6; engagement-financial-metric-definitions.md #6.2",
+        "confidence": 0.97
+      },
+      {
+        "bucket": "61-90",
+        "amount": 10000.0,
+        "reserve_pct": 20.0,
+        "reserve_amount": 2000.0,
+        "source": "engine:driver_attribute",
+        "citation": "raw/wip-ageing-report.csv rows 2-6; engagement-financial-metric-definitions.md #6.2",
+        "confidence": 0.97
+      },
+      {
+        "bucket": "90+",
+        "amount": 50000.0,
+        "reserve_pct": 55.0,
+        "reserve_amount": 27500.0,
+        "source": "engine:driver_attribute",
+        "citation": "raw/wip-ageing-report.csv rows 2-6; engagement-financial-metric-definitions.md #6.2",
+        "confidence": 0.97
+      }
+    ],
+    "reconciles": true,
+    "source": "engine:driver_attribute",
+    "citation": "engagement-financial-metric-definitions.md #6.2",
+    "confidence": 0.97
+  }
+}

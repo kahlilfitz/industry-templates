@@ -1,10 +1,10 @@
 # Notice
 
-## Site design and submission architecture
+## Submission architecture
 
-The gallery's design language and its `submissions/` → generated-page architecture are adapted
-from [`microsoft/cat-agent-skills`](https://github.com/microsoft/cat-agent-skills), used under
-the MIT License:
+The `submissions/` package layout and generated catalog-branch approach are adapted from
+[`microsoft/cat-agent-skills`](https://github.com/microsoft/cat-agent-skills), used under the
+MIT License:
 
 ```
 MIT License
@@ -12,18 +12,9 @@ MIT License
 Copyright (c) Microsoft Corporation.
 ```
 
-What is adapted: the Astro + Tailwind site structure, the theme token system, the card and
-cover components, the gallery filter island, and the "contributors only touch `submissions/`,
-CI generates the rest" build model. What is new here: the industry facet that organises the
-gallery, the plugin-package submission format, the importer, and all template content.
-
-## Logo
-
-`public/paw.png` and `public/favicon.png` are the paw mark from that same repository
-(`public/paw.png`), reused under its MIT License and resized. The MIT License grants the right
-to use and modify the file; it does not grant trademark rights, so if this gallery ever needs a
-mark that is unambiguously its own, replace these two files — nothing else references the
-artwork.
+What is adapted: the contributor workflow in which authors edit only `submissions/` and CI
+generates distribution artifacts. What is new here: the industry-organized plugin package
+format, bundle importer, deterministic engine patterns, demo data and template content.
 
 ## Template content
 

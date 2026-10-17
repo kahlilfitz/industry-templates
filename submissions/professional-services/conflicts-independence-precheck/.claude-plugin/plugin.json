@@ -1,0 +1,7 @@
+{
+  "name": "conflicts-independence-precheck",
+  "version": "1.0.0",
+  "description": "Professional Services Cowork plugin: assemble a cited first-pass conflicts and independence pre-check. Resolves entity names and corporate families, searches client/matter/adverse-party/independence registers, classifies conflicts deterministically, and drafts a proposed memo or escalation packet for human QRM review. Draft-first; never clears, waives, accepts or approves a pursuit.",
+  "author": { "name": "Microsoft Professional Services Skills" },
+  "keywords": ["professional-services", "conflicts", "independence", "qrm", "pursuit", "risk", "compliance", "ethical-wall"]
+}

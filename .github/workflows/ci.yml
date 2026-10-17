@@ -18,29 +18,20 @@ jobs:
 
       - run: npm ci
 
-      # Validate every submission's metadata first, so a bad sidecar fails with
-      # an itemised message rather than an opaque build error later.
       - name: Validate submissions
         run: npm run check:submissions
 
-      # Regenerate the pages and bundles from submissions/ so the build always
-      # reflects the submission, never a stale committed artifact.
-      - name: Import submissions
-        run: npm run import:submissions
+      - name: Test repository scripts
+        run: npm run test:evaluation
 
-      - name: Fail if generated content is out of date
-        run: |
-          if ! git diff --quiet -- src/content; then
-            echo "::error::Generated content is out of date. Run 'npm run import:submissions' and commit the result."
-            git diff --stat -- src/content
-            exit 1
-          fi
-
-      # Exercise the catalog export too, so a bad skill layout or a duplicate
-      # skill name fails here rather than at deploy time. The output is thrown
-      # away — only the deploy job publishes the branch.
-      - name: Check catalog export
-        run: npm run import:submissions -- --catalog-output "$RUNNER_TEMP/catalog"
-
-      - name: Build site
+      - name: Build bundles
         run: npm run build
+
+      - name: Check catalog export
+        run: npm run build -- --catalog-output "$RUNNER_TEMP/catalog"
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: industry-template-bundles
+          path: public/bundles

@@ -2,14 +2,13 @@
 
 ## How to get help
 
-Templates in this gallery are **example implementations provided as-is**. They are not a
+Templates in this repository are **example implementations provided as-is**. They are not a
 supported Microsoft product and carry no service-level agreement.
 
 - **Something wrong with a template?**
   [Open an issue](https://github.com/SravaniSeethi/industry-templates/issues/new?template=feedback.yml)
   and name the template.
-- **Question about the gallery itself** — the site, the submission format, the importer? Same
-  place.
+- **Question about the repository, submission format or importer?** Same place.
 - **Want to contribute or change a template?** See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Before you file

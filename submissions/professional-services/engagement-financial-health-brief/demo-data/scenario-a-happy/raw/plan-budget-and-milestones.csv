@@ -1,0 +1,10 @@
+field,value,citation
+plan_revision,baseline-v1,engagement plan baseline section 1
+planned_revenue_to_date,505000,engagement plan economics table
+planned_delivery_cost_to_date,305000,engagement plan economics table
+planned_total_delivery_cost,695000,engagement plan economics table
+planned_remaining_delivery_cost,390000,engagement plan economics table
+system_etc_cost,389000,finance forecast export
+senior_review_plan_to_date,"Partner=16;Director=36",delivery quality gate plan
+milestones_due_by_review,5,milestone tracker
+milestones_slipped,0,milestone tracker

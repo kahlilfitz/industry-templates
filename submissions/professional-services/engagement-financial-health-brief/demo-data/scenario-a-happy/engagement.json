@@ -1,0 +1,16 @@
+{
+  "contract_version": "ps.engagement-financial-health-brief.v1",
+  "generated_at": "2026-09-23T00:00:00Z",
+  "demo_scenario": "scenario-a-happy",
+  "engagement": {
+    "engagement_id": "PS-EFH-1001",
+    "client_name": "Northstar Advisory Cooperative",
+    "engagement_name": "Portal Modernization Readiness",
+    "practice": "Digital Advisory",
+    "review_period": "2026-09",
+    "metric_definition_set_id": "ps-commercial-control-standard-v1",
+    "source": "connector:engagement-record",
+    "citation": "engagement record PS-EFH-1001, review period 2026-09",
+    "confidence": 0.99
+  }
+}

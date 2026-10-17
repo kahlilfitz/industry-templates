@@ -1,0 +1,16 @@
+{
+  "contract_version": "ps.change-order-scope-control.v1",
+  "rate_card": {
+    "name": "Northstar Labs blended role card",
+    "currency": "USD",
+    "citation": "SOW NSL-FIN-OM-2026 rev 2 Exhibit C rate card",
+    "source": "connector:contract-repository",
+    "confidence": 0.99
+  },
+  "rates": [
+    { "role": "partner", "hourly_rate": 450 },
+    { "role": "engagement_manager", "hourly_rate": 275 },
+    { "role": "solution_architect", "hourly_rate": 240 },
+    { "role": "consultant", "hourly_rate": 175 }
+  ]
+}

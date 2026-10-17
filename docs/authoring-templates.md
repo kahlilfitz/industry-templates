@@ -1,11 +1,11 @@
 # Authoring an industry template
 
 This is the longer form of [CONTRIBUTING.md](../CONTRIBUTING.md): how the packages in this
-gallery are put together, and why they are shaped that way.
+repository are put together, and why they are shaped that way.
 
 ## The archetype
 
-Every template in the gallery follows the same span:
+Every template follows the same span:
 
 ```
 Connect  →  Analyze  →  Act / Govern  →  Create

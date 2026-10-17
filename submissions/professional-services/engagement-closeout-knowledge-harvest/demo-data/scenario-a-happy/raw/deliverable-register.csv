@@ -1,0 +1,6 @@
+artifact_id,title,type,required,status,owner
+DEL-001,Final operating model deck,deliverable,true,complete,Delivery lead
+DEL-002,Decision log,project-record,true,complete,PMO
+DEL-003,Training handover pack,deliverable,true,draft,Change lead
+DEL-004,Benefits baseline,project-record,false,complete,Value lead
+DEL-005,Client-specific routing configuration workbook,configuration,false,complete,Architecture lead

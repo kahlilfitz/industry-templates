@@ -1,0 +1,4 @@
+client_record_id,entity_id,client_name,status,closed_on,matter_summary,substantially_related,citation
+CR-1200,ENT-AST-010,Aster Diagnostics LLC,former,2025-11-30,market-entry diligence for outpatient diagnostics platform,true,client register row CR-1200
+CR-1770,ENT-KELVAR-077,Kelvar Bio Systems Ltd,current,,,false,client register row CR-1770
+CR-2205,ENT-LAT-050,Lattice Energy Cooperative,current,,,false,client register row CR-2205

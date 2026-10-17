@@ -1,0 +1,152 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ps.change-order-scope-control.v1",
+  "title": "Change Order & Scope Control contract v1",
+  "description": "Versioned contract chaining sow-retrieve -> request-intake -> scope-match -> scope-classify -> change-order-draft. Carries data, confidence, provenance and citations across every hop so contractual scope calls and escalation are mechanical.",
+  "type": "object",
+  "required": ["contract_version", "engagement", "requests"],
+  "properties": {
+    "contract_version": { "const": "ps.change-order-scope-control.v1" },
+    "engagement": {
+      "type": "object",
+      "required": ["engagement_id", "client_name", "project_name"],
+      "properties": {
+        "engagement_id": { "type": "string" },
+        "client_name": { "type": "string" },
+        "project_name": { "type": "string" },
+        "contract_value": { "type": "number" },
+        "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+        "citation": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "sow": {
+      "type": "object",
+      "properties": {
+        "document_id": { "type": "string" },
+        "revision": { "type": "string" },
+        "clauses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "type", "quote", "citation", "source", "confidence"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "type": { "enum": ["scope", "deliverable", "assumption", "exclusion", "change_control", "rate"] },
+              "quote": { "type": "string" },
+              "tags": { "type": "array", "items": { "type": "string" } },
+              "conflict_group": { "type": "string" },
+              "citation": { "type": "string" },
+              "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["request_id", "summary", "source", "citation", "confidence"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "summary": { "type": "string" },
+          "request_text": { "type": "string" },
+          "requested_by": { "type": "string" },
+          "received_at": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "material_similarity": { "type": "number", "minimum": 0, "maximum": 1 },
+          "failed_assumption": { "type": "boolean" },
+          "estimate_hours": {
+            "type": "object",
+            "additionalProperties": { "type": "number", "minimum": 0 }
+          },
+          "estimate_basis": { "type": "string" },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "matches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["request_id", "matched_clauses", "confidence", "source", "citation"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "matched_clauses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["clause_id", "clause_type", "quote", "citation", "match_reason", "confidence", "source"],
+              "properties": {
+                "clause_id": { "type": "string" },
+                "clause_type": { "type": "string" },
+                "quote": { "type": "string" },
+                "citation": { "type": "string" },
+                "conflict_group": { "type": "string" },
+                "match_reason": { "type": "string" },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+                "source": { "type": "string", "pattern": "^(engine|skill|connector):" }
+              }
+            }
+          },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" }
+        }
+      }
+    },
+    "classifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["request_id", "classification", "governing_clause_quote", "citation", "confidence", "source"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "classification": { "enum": ["IN_SCOPE", "OUT_OF_SCOPE", "AMBIGUOUS"] },
+          "rule": { "type": "string" },
+          "rationale": { "type": "string" },
+          "governing_clause_quote": { "type": "string" },
+          "citation": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" }
+        }
+      }
+    },
+    "deltas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["request_id", "classification", "base_cost", "contingency", "total_cost", "calculation", "source", "citation", "confidence"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "classification": { "type": "string" },
+          "base_cost": { "type": "number" },
+          "contingency": { "type": "number" },
+          "total_cost": { "type": "number" },
+          "included_in_change_order": { "type": "boolean" },
+          "calculation": { "type": "string" },
+          "source": { "type": "string", "pattern": "^(engine|skill|connector):" },
+          "citation": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "change_order_draft": { "type": "object" },
+    "cumulative_drift": { "type": "object" },
+    "ambiguity_list": { "type": "array", "items": { "type": "object" } },
+    "escalations": { "type": "array", "items": { "type": "string" } },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "engines": { "type": "array", "items": { "type": "string" } },
+        "generated_at": { "type": "string" },
+        "demo_scenario": { "type": "string" }
+      }
+    }
+  }
+}

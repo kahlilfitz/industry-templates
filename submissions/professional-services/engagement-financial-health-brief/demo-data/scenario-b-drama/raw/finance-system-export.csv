@@ -1,0 +1,8 @@
+metric,value,currency,citation
+billed_revenue_to_date,760000,USD,finance export PS-EFH-2002 line billed revenue
+standard_value_of_billed_work_to_date,800000,USD,finance export PS-EFH-2002 line standard value
+billed_labour_revenue_to_date,690000,USD,finance export PS-EFH-2002 line labour revenue
+recognised_revenue_to_date,760000,USD,finance export PS-EFH-2002 line recognised revenue
+delivery_cost_to_date,482000,USD,finance export PS-EFH-2002 line delivery cost
+eligible_unbilled_time_amount,35000,USD,finance export PS-EFH-2002 unbilled time
+eligible_unbilled_expense_amount,5000,USD,finance export PS-EFH-2002 unbilled expense

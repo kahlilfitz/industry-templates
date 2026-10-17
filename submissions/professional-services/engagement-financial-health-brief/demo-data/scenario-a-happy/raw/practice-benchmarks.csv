@@ -1,0 +1,6 @@
+metric_definition_set_id,metric,median_value,citation
+ps-commercial-control-standard-v1,realisation_pct,94.5,Digital Advisory Q3 benchmark pack
+ps-commercial-control-standard-v1,utilisation_pct,76.0,Digital Advisory Q3 benchmark pack
+ps-commercial-control-standard-v1,margin_pct,36.0,Digital Advisory Q3 benchmark pack
+ps-commercial-control-standard-v1,wip_over_90_pct,7.5,Digital Advisory Q3 benchmark pack
+ps-commercial-control-standard-v1,eac_over_plan_pct,2.0,Digital Advisory Q3 benchmark pack

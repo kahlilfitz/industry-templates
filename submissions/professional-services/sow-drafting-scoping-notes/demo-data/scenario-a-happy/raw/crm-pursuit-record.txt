@@ -1,0 +1,8 @@
+CRM pursuit extract
+Pursuit ID: PS-2026-0914
+Client: Sable Ridge Services
+Project: Finance Workflow Pilot SOW
+Lifecycle stage: Pursuit - Contracting
+Expected start: 2026-10-05
+Commercial note: fixed-fee discovery pilot; pricing to be confirmed outside this drafting workflow.
+Pursuit owner: Dana Price

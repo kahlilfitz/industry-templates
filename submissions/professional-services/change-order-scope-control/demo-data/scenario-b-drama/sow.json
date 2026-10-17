@@ -1,0 +1,114 @@
+{
+  "contract_version": "ps.change-order-scope-control.v1",
+  "engagement": {
+    "engagement_id": "PS-CO-2002",
+    "client_name": "Meridian Harbor Group",
+    "project_name": "Invoice Exception Workflow Pilot",
+    "contract_value": 600000,
+    "source": "connector:contract-repository",
+    "citation": "SOW MHG-INV-PILOT-2026 rev 4",
+    "confidence": 0.99
+  },
+  "sow": {
+    "document_id": "SOW-MHG-INV-PILOT-2026",
+    "revision": "4",
+    "clauses": [
+      {
+        "id": "2.1",
+        "title": "Closed deliverable list",
+        "type": "deliverable",
+        "quote": "Supplier deliverables are limited to current-state assessment, future-state process design, pilot workflow prototype, training kit and go-live readiness report.",
+        "tags": ["closed_deliverables", "prototype", "training_kit", "readiness_report"],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "2.2",
+        "title": "Included workshops and interviews",
+        "type": "deliverable",
+        "quote": "The plan includes two design workshops with Finance Operations leads and AP supervisors and up to eight stakeholder interviews named in Appendix B.",
+        "tags": ["workshop", "stakeholder_interview", "ap_supervisor"],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.2",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "2.3",
+        "title": "Readiness report executive dashboard",
+        "type": "deliverable",
+        "quote": "The go-live readiness report includes an executive summary dashboard showing adoption risks, open decisions and launch readiness.",
+        "tags": ["executive_dashboard", "readiness_report", "adoption_risk"],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.3",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "2.4",
+        "title": "Prototype approver roles",
+        "type": "deliverable",
+        "quote": "The pilot workflow prototype will represent approval roles for AP, Procurement and Legal for invoice exception routing.",
+        "tags": ["legal_approver", "prototype", "workflow_exception"],
+        "conflict_group": "legal-workflow",
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 2.4",
+        "source": "connector:contract-repository",
+        "confidence": 0.97
+      },
+      {
+        "id": "3.1",
+        "title": "Client data assumption",
+        "type": "assumption",
+        "quote": "Client will provide one clean export from ERP-X and TicketFlow by 2026-08-14; re-extracts, reconciliation and schema changes remain Client responsibility.",
+        "tags": ["data_refresh", "data_reconciliation", "failed_assumption", "erp_export", "schema_change"],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 3.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "4.1",
+        "title": "Data and integration exclusions",
+        "type": "exclusion",
+        "quote": "Data cleansing, duplicate-vendor reconciliation, additional refreshes, schema remediation and new integrations are excluded.",
+        "tags": ["data_refresh", "data_reconciliation", "duplicate_vendor", "schema_change", "integration"],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "4.2",
+        "title": "Workshop, interview and training exclusions",
+        "type": "exclusion",
+        "quote": "Workshops beyond the two included sessions, stakeholder groups not listed in Appendix B and training sessions beyond the training kit are excluded.",
+        "tags": ["extra_workshop", "stakeholder_interview", "training_office_hours"],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.2",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      },
+      {
+        "id": "4.3",
+        "title": "Legal workflow redesign exclusion",
+        "type": "exclusion",
+        "quote": "Legal or compliance workflow redesign, policy interpretation and approval-authority redesign are excluded from this SOW.",
+        "tags": ["legal_approver", "workflow_exception", "policy_interpretation"],
+        "conflict_group": "legal-workflow",
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 4.3",
+        "source": "connector:contract-repository",
+        "confidence": 0.97
+      },
+      {
+        "id": "6.1",
+        "title": "Change-control route",
+        "type": "change_control",
+        "quote": "Additional work outside the deliverable list or caused by failed assumptions requires a written change order signed by both parties before performance.",
+        "tags": ["change_control", "failed_assumption", "extra_workshop", "data_refresh", "data_reconciliation", "stakeholder_interview", "training_office_hours"],
+        "citation": "SOW MHG-INV-PILOT-2026 rev 4 section 6.1",
+        "source": "connector:contract-repository",
+        "confidence": 0.99
+      }
+    ]
+  },
+  "provenance": {
+    "generated_at": "2026-09-23T00:00:00+00:00",
+    "demo_scenario": "scenario-b-drama"
+  }
+}

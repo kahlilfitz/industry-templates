@@ -1,0 +1,236 @@
+{
+  "contract_version": "ps.engagement-mobilization-onboarding-pack.v1",
+  "run_metadata": {
+    "generated_at": "2026-10-01T00:00:00Z",
+    "demo_scenario": "scenario-b-drama"
+  },
+  "engagement": {
+    "engagement_id": "MOB-NRB-3100",
+    "matter_id": "NRB-3100-MOB",
+    "title": "Digital servicing mobilization",
+    "client_name": "Nimbus Retail Bank",
+    "affiliates": [
+      "Nimbus Holdings"
+    ],
+    "sector": "banking",
+    "region": "Northeast US",
+    "source": "engine:scope_digest",
+    "confidence": 0.95,
+    "citation": "raw/sow-extract.md header; raw/pursuit-record.md context"
+  },
+  "joiner": {
+    "person": "Riley Chen",
+    "role": "Delivery analyst",
+    "responsibilities": [
+      "Supports branch data readiness",
+      "drafts governance notes"
+    ],
+    "point_of_contact": "Rowan Kim",
+    "onboarding_status": "joining",
+    "assignment_status": "confirmed",
+    "source": "raw:confirmed-roster.csv",
+    "confidence": 0.97,
+    "citation": "raw/confirmed-roster.csv row 3"
+  },
+  "scope_summary": {
+    "objectives": [
+      "Mobilize servicing transformation workstreams",
+      "establish risk controls",
+      "prepare migration readiness for branch servicing"
+    ],
+    "in_scope": [
+      "Operating model mobilization",
+      "risk control workshop planning",
+      "branch servicing data readiness",
+      "first sprint governance"
+    ],
+    "exclusions": [
+      "Payments modernization design",
+      "admin access provisioning",
+      "production migration execution"
+    ],
+    "deliverables": [
+      "Mobilization charter",
+      "risk control workshop plan",
+      "branch data readiness checklist",
+      "weekly steering pack"
+    ],
+    "key_dates": [
+      "2026-10-06 kickoff",
+      "2026-10-09 risk workshop",
+      "2026-10-13 data readiness checkpoint"
+    ],
+    "systems": [
+      "Engagement SharePoint",
+      "Delivery Planner",
+      "Client Teams channel",
+      "Knowledge Repository"
+    ],
+    "first_week_focus": [
+      "Review SOW exclusions before prior knowledge",
+      "meet engagement manager",
+      "request only role-approved access",
+      "attend risk control workshop",
+      "document questions for wall review"
+    ],
+    "source": "engine:scope_digest",
+    "confidence": 0.94,
+    "citation": "raw/sow-extract.md; confidentiality-and-ethical-wall-rules.md #1.2"
+  },
+  "engagement_terms": {
+    "confidentiality_terms": [
+      "Client servicing and payments information is client-confidential and may be shared only with cleared engagement team members."
+    ],
+    "ethical_wall_terms": [
+      "Staff with competitor or adverse-matter restrictions must not receive prior engagement material or client-confidential workspaces until Risk clears the wall."
+    ],
+    "source": "raw:engagement-letter-extract.md",
+    "confidence": 0.93,
+    "citation": "raw/engagement-letter-extract.md"
+  },
+  "team_roster": [
+    {
+      "person": "Rowan Kim",
+      "role": "Delivery manager",
+      "responsibilities": [
+        "Owns mobilization cadence",
+        "coordinates risk workshop"
+      ],
+      "point_of_contact": "Engagement partner",
+      "onboarding_status": "active",
+      "assignment_status": "confirmed",
+      "source": "raw:confirmed-roster.csv",
+      "confidence": 0.97,
+      "citation": "raw/confirmed-roster.csv row 2"
+    },
+    {
+      "person": "Riley Chen",
+      "role": "Delivery analyst",
+      "responsibilities": [
+        "Supports branch data readiness",
+        "drafts governance notes"
+      ],
+      "point_of_contact": "Rowan Kim",
+      "onboarding_status": "joining",
+      "assignment_status": "confirmed",
+      "source": "raw:confirmed-roster.csv",
+      "confidence": 0.97,
+      "citation": "raw/confirmed-roster.csv row 3"
+    }
+  ],
+  "proposed_staffing": [
+    {
+      "candidate_name": "Jules Park",
+      "role_title": "Delivery analyst",
+      "fit_score": 96.0,
+      "assignment_status": "proposed_not_assigned",
+      "source": "adapter:staffing-slate",
+      "confidence": 0.96,
+      "citation": "synthetic staffing row C-B-401"
+    }
+  ],
+  "staffing_exclusions": [
+    {
+      "person": "Dana Cho",
+      "role": "Delivery analyst",
+      "reason": "ineligible in Scenario 02 for Delivery analyst; independence/conflict details stay in the staffing record (need-to-know)",
+      "blocking_rule": null,
+      "source": "adapter:staffing-slate",
+      "confidence": 0.95,
+      "citation": "independence-eligibility-rules.md #3.1"
+    }
+  ],
+  "escalations": [
+    "PSS-B-001: top candidate requires confirmation before assignment",
+    "SOW exclusion controls over pursuit conflict: 'Payments modernization design' (confidentiality-and-ethical-wall-rules.md #1.2)",
+    "Confirmed roster row excluded: Dana Cho is ineligible/conflicted in Scenario 02 (independence-eligibility-rules.md #3.1)",
+    "1 source field(s) held for embedded instruction review (confidentiality-and-ethical-wall-rules.md #4.1-#4.5)"
+  ],
+  "holds": [
+    {
+      "hold_id": "HOLD-7dcf43721e1e",
+      "path": "raw/pursuit-record.md line 4",
+      "reason": "embedded_instruction:authority,scope",
+      "source": "engine:safety_text",
+      "confidence": 0.99,
+      "citation": "confidentiality-and-ethical-wall-rules.md #4.1-#4.5"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "scope_digest/1.0.6",
+      "knowledge_match/1.0.6"
+    ],
+    "generated_at": "2026-10-01T00:00:00Z",
+    "sources": [
+      "raw/sow-extract.md",
+      "raw/engagement-letter-extract.md",
+      "raw/pursuit-record.md",
+      "raw/confirmed-roster.csv",
+      "upstream/staffing"
+    ]
+  },
+  "prior_knowledge_candidates": [
+    {
+      "knowledge_id": "AST-B-REL",
+      "title": "Risk control workshop mobilization pattern",
+      "summary": "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.",
+      "relevance_score": 0.99,
+      "matched_terms": [
+        "control",
+        "first",
+        "governance",
+        "mobilization",
+        "planning",
+        "risk",
+        "servicing",
+        "workshop"
+      ],
+      "clearance_state": "RELEASE_CANDIDATE_SANITISED",
+      "confidentiality_permission": "cleared_for_internal_engagement_reuse",
+      "review_status": "pending_practice_review",
+      "source": "adapter:closeout-governed.knowledge_record",
+      "confidence": 0.91,
+      "citations": [
+        "upstream closeout AST-B-REL",
+        "upstream released_assets AST-B-REL",
+        "knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"
+      ]
+    }
+  ],
+  "knowledge_digest": {
+    "status": "hold",
+    "items": [
+      {
+        "knowledge_id": "AST-B-REL",
+        "title": "Risk control workshop mobilization pattern",
+        "summary": "Released Closeout knowledge candidate; use the title and citation only until practice review confirms.",
+        "relevance_score": 0.99,
+        "matched_terms": [
+          "control",
+          "first",
+          "governance",
+          "mobilization",
+          "planning",
+          "risk",
+          "servicing",
+          "workshop"
+        ],
+        "clearance_state": "RELEASE_CANDIDATE_SANITISED",
+        "confidentiality_permission": "cleared_for_internal_engagement_reuse",
+        "review_status": "pending_practice_review",
+        "source": "adapter:closeout-governed.knowledge_record",
+        "confidence": 0.91,
+        "citations": [
+          "upstream closeout AST-B-REL",
+          "upstream released_assets AST-B-REL",
+          "knowledge-reuse-rules.md #1.3,#2.1,#2.2,#3.1"
+        ]
+      }
+    ],
+    "excluded_items": [],
+    "source": "engine:knowledge_match",
+    "confidence": 0.92,
+    "citation": "knowledge-reuse-rules.md #1.1-#3.2"
+  }
+}

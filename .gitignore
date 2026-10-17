@@ -1,10 +1,24 @@
 node_modules/
-dist/
-.astro/
 .DS_Store
 *.log
+# Golden engine logs are test fixtures, not build output.
+!submissions/**/expected/*.log
 .env
 .env.production
 
 # Generated download packages — rebuilt from submissions/ on every build.
 public/bundles/
+
+# Local release candidates and Cowork run receipts.
+/evaluation-inbox/
+
+# SharePoint library link. `sharepoint` is a junction to the OneDrive-synced
+# Industry Templates library (npm run sharepoint:link; docs/sharepoint-sync.md).
+# No trailing slash so the link itself, not just a folder, is ignored.
+/sharepoint
+
+# Python build litter. Submissions ship scripts the agent runs from the plugin
+# folder, which leaves these next to the source; they must never be committed
+# or bundled.
+__pycache__/
+*.pyc

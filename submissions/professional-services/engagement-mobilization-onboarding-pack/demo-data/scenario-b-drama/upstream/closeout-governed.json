@@ -1,0 +1,63 @@
+{
+  "contract_version": "ps.engagement-closeout-knowledge-harvest.v1",
+  "knowledge_record": {
+    "record_id": "KR-NRB-B",
+    "status": "draft_pending_practice_review",
+    "title": "Servicing transformation closeout record",
+    "reusable_assets": [
+      {
+        "asset_id": "AST-B-REL",
+        "title": "Risk control workshop mobilization pattern",
+        "description": "Reusable pattern for first-week risk-control workshop planning in servicing transformations.",
+        "tags": [
+          "risk",
+          "mobilization",
+          "servicing",
+          "governance"
+        ],
+        "clearance_state": "RELEASE_CANDIDATE_SANITISED",
+        "confidentiality_permission": "cleared_for_internal_engagement_reuse",
+        "confidence": 0.91,
+        "source": "engine:sanitize_check",
+        "citation": "upstream closeout AST-B-REL"
+      }
+    ],
+    "lessons": []
+  },
+  "released_assets": [
+    {
+      "asset_id": "AST-B-REL",
+      "title": "Risk control workshop mobilization pattern",
+      "clearance_state": "RELEASE_CANDIDATE_SANITISED",
+      "review_required": true,
+      "confidence": 0.91,
+      "source": "engine:sanitize_check",
+      "citation": "upstream released_assets AST-B-REL"
+    }
+  ],
+  "held_assets": [
+    {
+      "asset_id": "AST-B-HOLD",
+      "title": "Payment modernization playbook",
+      "clearance_state": "HOLD_REDACTION_REQUIRED",
+      "reason": "client-specific payment design details",
+      "confidence": 0.94,
+      "source": "engine:sanitize_check",
+      "citation": "upstream held_assets AST-B-HOLD"
+    }
+  ],
+  "candidate_assets": [
+    {
+      "asset_id": "AST-B-CAND",
+      "title": "Raw payments candidate asset should never be read"
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "asset_identify/1.0.2",
+      "lesson_cluster/1.0.2",
+      "sanitize_check/1.0.2"
+    ],
+    "generated_at": "2026-09-30T17:00:00Z"
+  }
+}

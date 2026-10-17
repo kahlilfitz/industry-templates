@@ -1,0 +1,196 @@
+{
+  "contract_version": "ps.credential-case-study-assembly.v1",
+  "engagement": {
+    "engagement_id": "PS-CRD-2026-099",
+    "name": "Core Platform Migration Mobilisation",
+    "closeout_date": "2026-06-30",
+    "fees_usd": 4200000,
+    "duration_weeks": 34,
+    "board_visible": true,
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.93,
+    "citations": [
+      "closeout knowledge record CKR-099 #engagement"
+    ]
+  },
+  "client": {
+    "name": "Vantage Mutual Assurance",
+    "sector": "financial-services",
+    "geography": "Europe",
+    "size_descriptor": "top-five European insurer",
+    "source": "skill:closeout-retrieve",
+    "confidence": 0.94,
+    "citations": [
+      "closeout knowledge record CKR-099 #client"
+    ]
+  },
+  "deliverables": [
+    {
+      "title": "Core platform migration mobilisation",
+      "summary": "Mobilised a core insurance platform migration, mapped claims and policy workflows, and established delivery controls for the first release train.",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.91,
+      "citations": [
+        "closeout knowledge record CKR-099 #deliverables",
+        "final deliverable FD-099 section 3"
+      ]
+    },
+    {
+      "title": "Reference architecture and migration backlog",
+      "summary": "Defined target integration patterns, dependency map and sequenced migration backlog for claims operations.",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.9,
+      "citations": [
+        "final deliverable FD-099 section 4"
+      ]
+    }
+  ],
+  "outcomes": [
+    {
+      "metric": "claims workflows migrated to release backlog",
+      "value": 14,
+      "unit": "workflows",
+      "evidence_type": "verified_deliverable",
+      "clearance_scope": "public_marketing",
+      "governing_clause": "Engagement terms VM-19 clause 18.5",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.91,
+      "citations": [
+        "final deliverable FD-099 appendix B"
+      ]
+    },
+    {
+      "metric": "processing time reduction",
+      "value": 60,
+      "unit": "percent",
+      "evidence_type": "client_internal_estimate",
+      "clearance_scope": "uncleared",
+      "governing_clause": "Engagement terms VM-19 clause 18.8",
+      "source": "skill:closeout-retrieve",
+      "confidence": 0.67,
+      "citations": [
+        "client workshop note CW-099-7",
+        "BD request email BD-2026-404"
+      ]
+    }
+  ],
+  "provenance": {
+    "engines": [
+      "credential_draft/1.0"
+    ],
+    "generated_at": "2026-09-23",
+    "demo_scenario": "scenario-b-drama"
+  },
+  "taxonomy_match": {
+    "sector": {
+      "value": "financial-services",
+      "confidence": 0.91,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #1",
+      "ambiguous": false,
+      "scores": {
+        "financial-services": 4,
+        "public-sector": 0,
+        "healthcare": 0,
+        "industrial": 0,
+        "technology-media-telecom": 1,
+        "cross-industry": 0
+      }
+    },
+    "service_line": {
+      "value": "technology-transformation",
+      "confidence": 0.82,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #2",
+      "ambiguous": false,
+      "scores": {
+        "strategy-advisory": 0,
+        "technology-transformation": 3,
+        "data-ai-analytics": 1,
+        "risk-regulatory": 1,
+        "managed-services": 0
+      }
+    },
+    "capability": {
+      "value": "platform-migration",
+      "confidence": 0.73,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #3",
+      "ambiguous": true,
+      "scores": {
+        "process-redesign": 2,
+        "platform-migration": 2,
+        "ai-automation": 1,
+        "data-modernisation": 0,
+        "change-enablement": 0
+      }
+    },
+    "engagement_size_band": {
+      "value": "strategic",
+      "confidence": 0.96,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #4.4",
+      "fees_usd": 4200000.0,
+      "duration_weeks": 34
+    },
+    "outcome_type": {
+      "value": "cycle-time",
+      "confidence": 0.73,
+      "source": "engine:credential_draft",
+      "citation": "credential-taxonomy.md #5",
+      "ambiguous": false,
+      "scores": {
+        "cost-reduction": 0,
+        "cycle-time": 2,
+        "risk-reduction": 1,
+        "revenue-growth": 0,
+        "experience-improvement": 0,
+        "resilience-quality": 0
+      }
+    },
+    "source": "engine:credential_draft",
+    "citations": [
+      "credential-taxonomy.md #1-#6"
+    ],
+    "confidence": 0.73,
+    "escalations": [
+      "capability: competing taxonomy hints within ambiguity band 0.05; confirm match (credential-taxonomy.md #6.3)"
+    ]
+  },
+  "draft_assets": {
+    "credential_entry": {
+      "title_seed": "Core Platform Migration Mobilisation",
+      "client_name_seed": "Vantage Mutual Assurance",
+      "taxonomy": {
+        "sector": "financial-services",
+        "service_line": "technology-transformation",
+        "capability": "platform-migration",
+        "engagement_size_band": "strategic",
+        "outcome_type": "cycle-time"
+      },
+      "source": "engine:credential_draft",
+      "confidence": 0.73,
+      "citations": [
+        "credential-taxonomy.md #1-#6"
+      ]
+    },
+    "case_study": {
+      "forms_required": [
+        "short",
+        "medium",
+        "long"
+      ],
+      "copy_instruction": "Model drafts copy only after permission_check separates cleared and uncleared figures.",
+      "source": "engine:credential_draft",
+      "confidence": 0.73,
+      "citations": [
+        "credential-taxonomy.md #6.1"
+      ]
+    },
+    "source": "engine:credential_draft",
+    "confidence": 0.73,
+    "citations": [
+      "credential-taxonomy.md #1-#6"
+    ]
+  }
+}
