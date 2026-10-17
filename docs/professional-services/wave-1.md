@@ -227,6 +227,9 @@ Decisions taken while preparing the five Ready plugins' tracker tabs and deploym
   `name.short` "Time & Expense Narrative Check"; `metadata.json`, the catalog and the tracker say
   "Time & Expense Narrative Compliance" (set by the 1.0.12 listing-name decision). Aligning them
   needs a new version and evaluation, so it is T&E `BACKLOG.md` O-01.
+- **T&E output quality: accepted as documented.** The deployment doc quotes 4.1/5 from
+  `recommendations.html` (the mean of the 10 should-trigger cases) and notes that the behavioral
+  report header shows 4.3/5 across all 15 cases. No change.
 
 ### Owner decision: derived manifest-1.28 MOS package (2026-10-16)
 
