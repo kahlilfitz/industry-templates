@@ -194,6 +194,23 @@ Notes on the board:
   date yet; each gets a row in its version history when it is frozen, and its tracker gets a new tab
   keyed to the new SHA. The superseded candidates' tracker tabs are not completed.
 
+### Owner decisions: human-test preparation (2026-10-16)
+
+Decisions taken while preparing the five Ready plugins' tracker tabs and deployment docs.
+
+- **Closeout adapted should-trigger prompts: accepted.** Cowork ran the 1.0.5 should-trigger
+  prompts on its own Fabrikam fixture, which wasn't archived. Five prompts (AA-P1, AI-P2, LC-P2,
+  SC-P2, KR-P2) are reworded to the demo data, with the same skill and intent; the other five are
+  word for word.
+- **Closeout R-01 probe: accepted.** The R-01 row renames AST-003 so its title includes the
+  scenario A client name and expects `[client]` in the held title, because no demo scenario covers
+  it.
+- **Closeout comparison wording: accepted.** "Match IDs, scores, states and citations; timestamps
+  may differ."
+- **Publish target: Cowork only.** `packageMetadata.json` (PKG-B001) is not needed. The 17
+  packageMetadata-only items in the five plugins' `BACKLOG.md` are closed as not applicable. T&E R7
+  stays open for its `assert` item.
+
 ### Owner decision: derived manifest-1.28 MOS package (2026-10-16)
 
 The owner chose to keep the devPreview evaluation process and add a manifest-1.28 build for the
