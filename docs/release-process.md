@@ -306,9 +306,12 @@ Do this after a `Ready for human review` verdict.
    or `tests\` waits for the next version.
 
    ```powershell
-   git archive --format=zip -o <slug>-demo-data-v<version>.zip --add-file=<README.md> `
-     HEAD:submissions/<industry>/<slug> demo-data tests/sample-test-prompts.csv
+   git -c core.autocrlf=false archive --format=zip -o <slug>-demo-data-v<version>.zip `
+     --add-file=<README.md> HEAD:submissions/<industry>/<slug> demo-data tests/sample-test-prompts.csv
    ```
+
+   `core.autocrlf=false` keeps the files byte-identical to the repository (LF); Git for Windows
+   sets it to `true` system-wide, which makes `git archive` write CRLF.
 
    Testers attach these files in their own Cowork chats; they are never sent to the Cowork
    evaluation.
