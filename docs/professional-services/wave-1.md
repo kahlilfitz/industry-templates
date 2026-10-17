@@ -209,7 +209,13 @@ Decisions taken while preparing the five Ready plugins' tracker tabs and deploym
   may differ."
 - **Publish target: Cowork only.** `packageMetadata.json` (PKG-B001) is not needed. The 17
   packageMetadata-only items in the five plugins' `BACKLOG.md` are closed as not applicable. T&E R7
-  stays open for its `assert` item.
+  stays open for its `assert` item. The five deployment docs now say "Publish target: Cowork only".
+- **Closeout 1.0.2 known limitations: re-checked on 1.0.5.** Three are fixed or addressed: the §7.2
+  hold list, the knowledge-record drafting guidance, and injected text affecting `lesson_cluster`
+  (screened by the steering guard; not re-tested). The empty-payload label (an overall
+  `RELEASE_CANDIDATE_SANITISED` with record confidence 0.9) is still present. It goes in
+  `BACKLOG.md` as O-01 and in the deployment doc's Known limitations. There is no plugin change,
+  because it is not a Cowork finding.
 
 ### Owner decision: derived manifest-1.28 MOS package (2026-10-16)
 
