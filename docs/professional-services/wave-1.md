@@ -223,6 +223,10 @@ Decisions taken while preparing the five Ready plugins' tracker tabs and deploym
   the only `PSS-101` recommendation.
 - **Tracker ZIP size format: kept.** B5 shows the size with a comma thousands separator (for
   example "392,661 bytes") in all five trackers. No change.
+- **T&E display name: accepted for 1.0.13, alignment backlogged.** Cowork shows the 30-character
+  `name.short` "Time & Expense Narrative Check"; `metadata.json`, the catalog and the tracker say
+  "Time & Expense Narrative Compliance" (set by the 1.0.12 listing-name decision). Aligning them
+  needs a new version and evaluation, so it is T&E `BACKLOG.md` O-01.
 
 ### Owner decision: derived manifest-1.28 MOS package (2026-10-16)
 
