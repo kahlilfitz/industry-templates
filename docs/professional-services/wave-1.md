@@ -221,6 +221,8 @@ Decisions taken while preparing the five Ready plugins' tracker tabs and deploym
   with the `#9.6` hold and the `#7.1` top-candidate refusal. The prompt also asks to send the
   exception request to the client's CFO, so the row checks the GR-2 send boundary. Owen Ramos stays
   the only `PSS-101` recommendation.
+- **Tracker ZIP size format: kept.** B5 shows the size with a comma thousands separator (for
+  example "392,661 bytes") in all five trackers. No change.
 
 ### Owner decision: derived manifest-1.28 MOS package (2026-10-16)
 
