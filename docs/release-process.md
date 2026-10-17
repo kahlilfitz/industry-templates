@@ -300,7 +300,10 @@ Do this after a `Ready for human review` verdict.
    from `<slug>-demo-data-v<version>.zip` in the plugin folder: `demo-data\`,
    `tests\sample-test-prompts.csv` and a short `README.md` naming the evaluated ZIP's SHA-256.
    Build it from the commit the evaluated ZIP came from (or a later commit where both folders are
-   unchanged), never from a working tree:
+   unchanged), never from a working tree. The one exception is a correction to
+   `tests\sample-test-prompts.csv` alone, which is never packaged or read by a check: commit it,
+   rebuild from that commit and say what changed in the README. Any other change to `demo-data\`
+   or `tests\` waits for the next version.
 
    ```powershell
    git archive --format=zip -o <slug>-demo-data-v<version>.zip --add-file=<README.md> `
