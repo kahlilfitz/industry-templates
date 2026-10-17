@@ -234,6 +234,10 @@ Decisions taken while preparing the five Ready plugins' tracker tabs and deploym
   frozen on 2026-10-12 but never evaluated or archived. Their version-history and frozen-register
   rows now read "Not evaluated (superseded)", by 1.0.4, 1.0.6 and 1.0.6. The dated 2026-10-15 log
   line about "four Ready plugins" stays as written.
+- **DRQG G8 over-withholding: re-run, not reproduced.** On 1.0.8, eight ordinary notes appended to
+  PR-B1 raised no G8 hold, and two instruction controls did, as designed. It is logged in DRQG
+  `BACKLOG.md` as O-01, closed with the evidence and kept as a watch item for testers. There is no
+  plugin change.
 
 ### Owner decision: derived manifest-1.28 MOS package (2026-10-16)
 
