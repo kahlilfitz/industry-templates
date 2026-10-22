@@ -29,6 +29,12 @@ Test policy (owner, 2026-10-15):
 - **Plugin suites** hold only checks that came from a Cowork finding; checks from internal review
   (QA rounds, class sweeps, hardening, detector corpora, MOS3 layout) were deleted on 2026-10-15.
   A plugin with no Cowork-driven checks has no suite.
+- **Cowork evaluation matrices are Cowork findings** (owner, 2026-10-22). The collected workbook
+  and notes pair in `Evaluation Matrices\` counts like `recommendations.html`:
+  - Matrix blockers (the notes' "Top blockers" and "Rows marked blocked") that a plugin change
+    resolves are handled like required fixes, with a regression check named for the matrix and item.
+  - Harness or environment blockers are reported to the owner, not fixed in the plugin.
+  - Other matrix items are advisory and go to `BACKLOG.md`. See [AGENTS.md](../AGENTS.md).
 - **Packaging rules** in `scripts\mos3-package.ts` (`check:submissions`) stay.
 - **Regression protection** stays: the script unit tests, the packaging rules and the plugin suites.
   The fix agent runs the plugin's suite before and after applying Cowork fixes (owner: "run the

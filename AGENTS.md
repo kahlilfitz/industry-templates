@@ -6,12 +6,24 @@ review and publishing.
 
 ## Change scope
 
-Cowork's `recommendations.html` decides what changes between versions.
+Cowork's `recommendations.html` and Cowork's evaluation matrices decide what changes between
+versions.
 
 - Change only what the task names: blocker or required fixes from the latest archived
-  `recommendations.html`, owner decisions, or regressions your own change caused. Advisory items
-  go to the submission's `BACKLOG.md`, not into the plugin. Report any other defect you find; do
-  not fix it.
+  `recommendations.html`, matrix blockers (below), owner decisions, or regressions your own change
+  caused. Advisory items go to the submission's `BACKLOG.md`, not into the plugin. Report any other
+  defect you find; do not fix it.
+- Owner decision (2026-10-22): Cowork's evaluation matrix output is a Cowork finding. That covers
+  the workbook and notes pair (`<slug>-v<version>-eval-matrix-YYYY-MM-DD-HHMM.xlsx` and
+  `-matrix-notes-YYYY-MM-DD-HHMM.md`, collected into the plugin's SharePoint
+  `Evaluation Matrices\` folder) for the plugin's current version.
+  - **Matrix blockers**, meaning the notes' "Top blockers" and "Rows marked blocked", are handled
+    like required fixes when a plugin change resolves them. Each one adds a regression check named
+    for the matrix and item (for example `matrix 2026-10-22-1133 blocker 2`).
+  - Blockers that sit in the eval harness or environment (tool spies, fault injection, multi-turn
+    support, sibling plugins, runtime) are not fixed in the plugin. Report them to the owner.
+  - Other matrix items (unresolved questions, guardrail gaps) are advisory: they go to
+    `BACKLOG.md` unless the owner promotes them.
 - Except for the one-time owner exceptions below, never relax, delete or change the expected result
   of an existing test or check. If a fix makes an existing test fail outside those exceptions, stop,
   do not commit, and report the conflict.
@@ -63,11 +75,11 @@ This is not a general waiver, an evaluation verdict, or a publish decision.
 - The repository's regression tests are the script unit tests (`npm run test:evaluation`), which
   CI runs. Plugin suites are not CI-gated; the evaluation fix agent runs its plugin's suite before
   and after applying fixes. Otherwise run one only when the task asks for it.
-- Every blocker or required Cowork fix adds at least one regression check, named for its fix ID,
-  that fails before the fix and passes after.
-- Plugin suites hold only checks that came from a Cowork finding (internal checks were deleted on
-  2026-10-15). Add a plugin check only in response to a Cowork finding; never add checks from
-  internal review.
+- Every blocker or required Cowork fix, including a matrix blocker fixed in the plugin, adds at least
+  one regression check, named for its fix ID or matrix item, that fails before the fix and passes after.
+- Plugin suites hold only checks that came from a Cowork finding, which includes Cowork's evaluation
+  matrices (internal checks were deleted on 2026-10-15). Add a plugin check only in response to a
+  Cowork finding; never add checks from internal review.
 - Cowork's built-in evaluation is the plugin evaluation. Never send tests or demo data to Cowork.
 
 ## SharePoint library (`sharepoint\`)
