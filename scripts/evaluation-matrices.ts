@@ -4,16 +4,40 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   statSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { ROOT, findSubmission, sha256, sharepointPluginDir } from "./evaluation-workflow.js";
 
 export const MATRIX_BUILT_FOLDER = join("4 - Matrices", "2 - Built");
 export const MATRIX_DESTINATION_FOLDER = "Evaluation Matrices";
+export const MATRIX_LEDGER_FILE = join("evaluation-inbox", "matrix-collected.json");
+
+export type MatrixLedgerEntry = { source: string; digest: string; destination: string; collectedAt: string };
+
+export function readMatrixLedger(path: string): MatrixLedgerEntry[] {
+  if (!existsSync(path)) return [];
+  const data = JSON.parse(readFileSync(path, "utf8")) as { collected?: MatrixLedgerEntry[] };
+  if (!Array.isArray(data.collected)) throw new Error(`matrix ledger is malformed: ${path}`);
+  return data.collected;
+}
+
+function writeMatrixLedger(path: string, entries: MatrixLedgerEntry[]): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const temp = `${path}.${process.pid}.tmp`;
+  writeFileSync(temp, `${JSON.stringify({ collected: entries }, null, 2)}\n`);
+  renameSync(temp, path);
+}
+
+function ledgerKey(source: string, digest: string, destination: string): string {
+  return `${source}\0${digest}\0${destination}`;
+}
 
 export type MatrixResult = {
   source: string;
@@ -74,6 +98,9 @@ export class MatrixWatcher {
     repoRoot?: string;
     stableSeconds?: number;
     dryRun?: boolean;
+    // Records collected pairs: SharePoint rewrites Office files after upload, so a
+    // collected workbook can no longer be compared byte-for-byte with its source.
+    ledgerPath?: string;
   }) {
     this.repoRoot = options.repoRoot ?? ROOT;
     this.stableMilliseconds = (options.stableSeconds ?? 15) * 1000;
@@ -155,11 +182,18 @@ export class MatrixWatcher {
             throw new Error(`matrix destination is not a regular directory: ${directory}`);
           }
         }
-        const planned = group.map((file) => {
-          const destination = join(directory, basename(file.source));
+        const ledger = this.options.ledgerPath ? readMatrixLedger(this.options.ledgerPath) : [];
+        const collected = new Set(ledger.map((entry) => ledgerKey(entry.source, entry.digest, entry.destination)));
+        const targets = group.map((file) => {
           if (!file.digest) throw new Error(`matrix has no content digest: ${file.source}`);
-          return { ...file, digest: file.digest, destination, exists: existingCopy(destination, file.digest) };
+          const destination = join(directory, basename(file.source));
+          return { ...file, digest: file.digest, destination, recorded: collected.has(ledgerKey(file.source, file.digest, destination)) && existsSync(destination) };
         });
+        if (targets.every((file) => file.recorded)) {
+          results.push(...targets.map(({ source, destination }): MatrixResult => ({ source, destination, status: "unchanged", message: "already collected" })));
+          continue;
+        }
+        const planned = targets.map((file) => ({ ...file, exists: file.recorded || existingCopy(file.destination, file.digest) }));
         const copied: MatrixResult[] = [];
         for (const file of planned) {
           const { source, digest, destination } = file;
@@ -185,6 +219,13 @@ export class MatrixWatcher {
             throw error;
           }
           copied.push({ source, destination, status: "copied" });
+        }
+        if (this.options.ledgerPath && !this.options.dryRun) {
+          const now = new Date().toISOString();
+          const additions = planned
+            .filter((file) => !collected.has(ledgerKey(file.source, file.digest, file.destination)))
+            .map(({ source, digest, destination }) => ({ source, digest, destination, collectedAt: now }));
+          writeMatrixLedger(this.options.ledgerPath, [...ledger, ...additions]);
         }
         results.push(...copied);
       } catch (error) {

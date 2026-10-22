@@ -103,6 +103,11 @@ The collector:
   and verifies SHA-256; Built originals and the evaluation archives remain untouched;
 - skips byte-identical destination files, including after a restart; preflights both destinations
   and refuses differing files instead of replacing them;
+- records each collected pair (source path, SHA-256 and destination) in the gitignored
+  `evaluation-inbox\matrix-collected.json` and skips recorded pairs whose SharePoint copies still
+  exist without comparing them again, because SharePoint rewrites uploaded `.xlsx` files with its
+  own metadata. A deleted SharePoint copy is copied again; a changed Built original is a new source
+  and still meets the no-overwrite check;
 - ignores hidden, Office lock and partial-download files; reports unrecognized filenames, unknown
   plugins, missing plugin folders and copy conflicts explicitly and retries on subsequent polls.
   Other valid pairs still get collected. Incomplete pairs remain pending; `--once` exits nonzero
@@ -120,6 +125,7 @@ for changes to sync. Options:
 | `--sharepoint-root <path>` | Override the usual environment-variable / `sharepoint\` link resolution |
 | `--poll-seconds <n>` | Positive polling interval; default 30 |
 | `--stable-seconds <n>` | Positive unchanged-content interval; default 15 |
+| `--ledger <path>` | Collected-pair record; default `evaluation-inbox\matrix-collected.json` |
 
 A timestamped new build uses new filenames; resolve a differing-file conflict with the owner
 rather than deleting or overwriting shared evidence.

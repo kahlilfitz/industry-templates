@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, sym
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { type TestContext } from "node:test";
-import { MATRIX_BUILT_FOLDER, MATRIX_DESTINATION_FOLDER, MatrixWatcher, parseMatrixName } from "./evaluation-matrices.js";
+import { MATRIX_BUILT_FOLDER, MATRIX_DESTINATION_FOLDER, MatrixWatcher, parseMatrixName, readMatrixLedger } from "./evaluation-matrices.js";
 import { ROOT, sha256, sharepointPluginDir } from "./evaluation-workflow.js";
 import { makeMos3Submission, write } from "./test-fixtures.js";
 
@@ -74,6 +74,49 @@ test("matrix watcher copies stable pairs byte-for-byte to the Wave 1 plugin; res
   const restarted = new MatrixWatcher(f.options);
   restarted.scan(2000);
   assert.ok(restarted.scan(3000).every((result) => result.status === "unchanged"));
+});
+
+test("matrix ledger skips collected pairs after SharePoint rewrites the workbook, and still guards new pairs", (t) => {
+  const f = fixture(t);
+  const ledgerPath = join(f.root, "state", "matrix-collected.json");
+  const sources = pair(f.builtRoot);
+  const watcher = new MatrixWatcher({ ...f.options, ledgerPath });
+  watcher.scan(0);
+  assert.ok(watcher.scan(1000).every((result) => result.status === "copied"));
+  const ledger = readMatrixLedger(ledgerPath);
+  assert.deepEqual(ledger.map((entry) => entry.source), sources);
+  assert.deepEqual(ledger.map((entry) => entry.digest), sources.map((source) => sha256(source)));
+  // SharePoint adds metadata to Office files after upload.
+  const workbook = join(f.outDir, names()[0]);
+  write(workbook, Buffer.from([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4, 5]));
+  const restarted = new MatrixWatcher({ ...f.options, ledgerPath });
+  restarted.scan(2000);
+  const results = restarted.scan(3000);
+  assert.ok(results.every((result) => result.status === "unchanged" && result.message === "already collected"), JSON.stringify(results));
+  assert.notEqual(sha256(workbook), sha256(sources[0]), "the SharePoint copy is left alone");
+  const unrecorded = new MatrixWatcher(f.options);
+  unrecorded.scan(4000);
+  assert.ok(unrecorded.scan(5000).every((result) => result.status === "error"), "without a ledger record the difference is still a conflict");
+  rmSync(workbook);
+  const recopy = new MatrixWatcher({ ...f.options, ledgerPath });
+  recopy.scan(6000);
+  assert.deepEqual(recopy.scan(7000).map((result) => result.status).sort(), ["copied", "unchanged"]);
+  assert.equal(sha256(workbook), sha256(sources[0]));
+  write(sources[1], "# Rebuilt notes\n");
+  const changed = new MatrixWatcher({ ...f.options, ledgerPath });
+  changed.scan(8000);
+  assert.ok(changed.scan(9000).every((result) => result.status === "error" && /nothing overwritten/.test(result.message ?? "")));
+  assert.equal(readMatrixLedger(ledgerPath).length, 2);
+});
+
+test("matrix watcher dry runs do not write the ledger", (t) => {
+  const f = fixture(t);
+  const ledgerPath = join(f.root, "matrix-collected.json");
+  pair(f.builtRoot);
+  const watcher = new MatrixWatcher({ ...f.options, ledgerPath, dryRun: true });
+  watcher.scan(0);
+  assert.ok(watcher.scan(1000).every((result) => result.status === "dry-run"));
+  assert.equal(existsSync(ledgerPath), false);
 });
 
 test("matrix watcher preserves each timestamp and routes Wave 2 and legacy layouts", (t) => {
@@ -208,7 +251,7 @@ test("matrix CLI supports one-shot copying, dry runs and a nonzero exit for a fa
   pair(f.builtRoot);
   const script = join(ROOT, "scripts", "watch-evaluation-matrices.ts");
   const args = ["--import", "tsx", script, "--once", "--queue-root", f.queueRoot,
-    "--sharepoint-root", f.sharepointRoot, "--stable-seconds", "0.01"];
+    "--sharepoint-root", f.sharepointRoot, "--stable-seconds", "0.01", "--ledger", join(f.root, "ledger.json")];
   // The CLI uses the real repository's submission metadata, but all writes stay in the fixture.
   const dryRun = execFileSync(process.execPath, [...args, "--dry-run"], { cwd: ROOT, encoding: "utf8" });
   assert.match(dryRun, /dry-run:/);
@@ -217,7 +260,8 @@ test("matrix CLI supports one-shot copying, dry runs and a nonzero exit for a fa
   assert.match(copied, /copied:/);
   assert.ok(existsSync(join(f.outDir, names()[0])));
   write(join(f.outDir, names()[1]), "conflict");
-  const failed = spawnSync(process.execPath, args, { cwd: ROOT, encoding: "utf8" });
+  // A fresh ledger has no record of the pair, so the changed destination is a real conflict.
+  const failed = spawnSync(process.execPath, [...args.slice(0, -1), join(f.root, "fresh-ledger.json")], { cwd: ROOT, encoding: "utf8" });
   assert.equal(failed.status, 1);
   assert.match(failed.stderr, /nothing overwritten/);
   const invalid = spawnSync(process.execPath, [...args, "--poll-seconds", "0"], { cwd: ROOT, encoding: "utf8" });

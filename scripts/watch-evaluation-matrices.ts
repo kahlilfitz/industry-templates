@@ -1,13 +1,14 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { join } from "node:path";
 import {
+  ROOT,
   defaultQueueRoot,
   parseArgs,
   requiredArg,
   resolveInputPath,
   resolveSharepointRoot,
 } from "./evaluation-workflow.js";
-import { MATRIX_BUILT_FOLDER, MatrixWatcher, type MatrixResult } from "./evaluation-matrices.js";
+import { MATRIX_BUILT_FOLDER, MATRIX_LEDGER_FILE, MatrixWatcher, type MatrixResult } from "./evaluation-matrices.js";
 
 function positiveNumber(value: string | undefined, fallback: number, flag: string): number {
   const number = value === undefined ? fallback : Number(value);
@@ -17,7 +18,7 @@ function positiveNumber(value: string | undefined, fallback: number, flag: strin
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2), new Set(["once", "dry-run"]));
-  const allowed = new Set(["once", "dry-run", "built-root", "queue-root", "sharepoint-root", "poll-seconds", "stable-seconds"]);
+  const allowed = new Set(["once", "dry-run", "built-root", "queue-root", "sharepoint-root", "poll-seconds", "stable-seconds", "ledger"]);
   for (const name of args.keys()) {
     if (!allowed.has(name)) throw new Error(`unknown option --${name}`);
   }
@@ -38,7 +39,8 @@ async function main(): Promise<void> {
   });
   const pollSeconds = positiveNumber(args.get("poll-seconds"), 30, "--poll-seconds");
   const stableSeconds = positiveNumber(args.get("stable-seconds"), 15, "--stable-seconds");
-  const watcher = new MatrixWatcher({ builtRoot, sharepointRoot, stableSeconds, dryRun: args.has("dry-run") });
+  const ledgerPath = args.has("ledger") ? resolveInputPath(requiredArg(args, "ledger")) : join(ROOT, MATRIX_LEDGER_FILE);
+  const watcher = new MatrixWatcher({ builtRoot, sharepointRoot, stableSeconds, dryRun: args.has("dry-run"), ledgerPath });
   const reported = new Map<string, string>();
   const report = (results: MatrixResult[]) => {
     const present = new Set(results.map((result) => result.source));
@@ -56,6 +58,7 @@ async function main(): Promise<void> {
   };
   console.log(`Watching completed evaluation matrices: ${builtRoot}`);
   console.log(`SharePoint library: ${sharepointRoot}`);
+  console.log(`Collected-pair ledger: ${ledgerPath}`);
   console.log(`Poll: ${pollSeconds}s; stable content: ${stableSeconds}s. Originals stay in Built; existing files are never overwritten.`);
   if (args.has("dry-run")) console.log("Dry run: no files or folders will be written.");
   let results = watcher.scan();
