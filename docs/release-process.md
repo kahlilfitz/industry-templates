@@ -35,6 +35,11 @@ Test policy (owner, 2026-10-15):
     resolves are handled like required fixes, with a regression check named for the matrix and item.
   - Harness or environment blockers are reported to the owner, not fixed in the plugin.
   - Other matrix items are advisory and go to `BACKLOG.md`. See [AGENTS.md](../AGENTS.md).
+- **Honest-empty outputs pass** (owner, 2026-10-22, confirming the decision every matrix's notes
+  ask for). A row passes when its criterion calls for less output and the plugin produces it:
+  withheld markers, declared gaps, verbatim script input errors with nothing written, refusals and
+  holds. Two cases still fail: over-refusal on a happy-path row with complete inputs, and an empty
+  output that declares no gap and quotes no error.
 - **Packaging rules** in `scripts\mos3-package.ts` (`check:submissions`) stay.
 - **Regression protection** stays: the script unit tests, the packaging rules and the plugin suites.
   The fix agent runs the plugin's suite before and after applying Cowork fixes (owner: "run the

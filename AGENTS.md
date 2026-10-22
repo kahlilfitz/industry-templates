@@ -24,6 +24,15 @@ versions.
     support, sibling plugins, runtime) are not fixed in the plugin. Report them to the owner.
   - Other matrix items (unresolved questions, guardrail gaps) are advisory: they go to
     `BACKLOG.md` unless the owner promotes them.
+- Owner decision (2026-10-22), **honest-empty grading**: a row passes when its pass criterion calls
+  for less output and the plugin produces it. That covers withheld markers and placeholders,
+  declared gaps, script input errors quoted verbatim with nothing written, refusals and holds.
+  Two cases still fail:
+  - **Over-refusal:** a happy-path row with complete inputs that refuses, holds or returns nothing.
+  - **Undeclared empty output:** an empty result that names no missing source or field and quotes
+    no script error.
+
+  Never weaken a guardrail, withholding rule or hold to make a completeness-graded row pass.
 - Except for the one-time owner exceptions below, never relax, delete or change the expected result
   of an existing test or check. If a fix makes an existing test fail outside those exceptions, stop,
   do not commit, and report the conflict.
