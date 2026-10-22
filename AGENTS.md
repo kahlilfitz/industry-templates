@@ -93,7 +93,8 @@ Rules:
   the result; do not recreate the folder by hand.
 - Everything written there syncs to SharePoint for the whole team. Write only evaluation archives
   (through `npm run evaluation:archive`/`evaluation:watch`), MOS packages (through
-  `npm run mos:build`, only after the owner promotes `<slug>-cowork.zip`) and documents the user asks
-  for. Never
+  `npm run mos:build`, only after the owner promotes `<slug>-cowork.zip`), completed evaluation
+  matrix/notes pairs (through `npm run evaluation:watch-matrices`, copied without overwriting into
+  the plugin's `Evaluation Matrices\` folder) and documents the user asks for. Never
   delete, rename or overwrite other people's files, and never delete recursively through the link.
 - Never commit, copy into `submissions/`, or bundle anything from `sharepoint\`.

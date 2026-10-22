@@ -59,7 +59,7 @@ Windows only. The link is a directory junction, which needs no administrator rig
 
 ## How scripts find the library
 
-`evaluation:archive`, `evaluation:watch` and `mos:build` resolve the archive root in this order:
+`evaluation:archive`, `evaluation:watch`, `evaluation:watch-matrices` and `mos:build` resolve the library root in this order:
 
 1. `--sharepoint-root <path>`
 2. `INDUSTRY_TEMPLATES_SHAREPOINT_ROOT`
@@ -79,6 +79,10 @@ A plain `sharepoint` folder (not a link) is refused unless passed explicitly wit
 - After the owner promotes `<slug>-cowork.zip` in a Retail-layout plugin folder, `npm run mos:build`
   writes the derived manifest-1.28 package to its `MOS Package\` folder
   ([release process, Step 6](release-process.md#step-6-publish-and-file-the-evidence)).
+- `npm run evaluation:watch-matrices` copies completed workbook/notes pairs from OneDrive's
+  `Cowork Plugin Evals\4 - Matrices\2 - Built\` into each matching plugin's `Evaluation Matrices\`
+  folder. It keeps the originals, skips identical copies and refuses to overwrite differing files
+  ([matrix collection](release-process.md#collect-evaluation-matrices)).
 - Close Excel or Word trackers when done. If two people edit offline at once, OneDrive keeps both as
   `<name>-<COMPUTERNAME>.<ext>`. `sharepoint:doctor` lists these; merge and delete the copy.
 - Check the OneDrive tray icon is not paused before archiving evidence.

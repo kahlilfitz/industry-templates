@@ -57,7 +57,9 @@ Test policy (owner, 2026-10-15):
 | `evaluation-inbox\<slug>\<version>\` | The plugin ZIP, the `evaluation-run.json` receipt, `cowork-prompt.txt` and `fix-brief.md` | No (local) |
 | `<OneDrive>\Documents\Cowork\Tasks\<task>\` | Cowork's `input\` and `output\` | No |
 | `<OneDrive>\Cowork Plugin Evals\` | Cowork's evaluation queue: `1 - To evaluate`, `2 - In progress`, `3 - Evaluated\<slug>\v<version> - <timestamp>\`, `4 - Needs attention` and `eval-ledger.md` | No |
+| `<OneDrive>\Cowork Plugin Evals\4 - Matrices\` | Cowork's matrix requests in `1 - Queue\` and completed workbook/notes pairs in `2 - Built\` | No |
 | `sharepoint\<Industry>\<slug>\Evaluation\<version>\` | The archived ZIP and the three reports | No (SharePoint) |
+| `<SharePoint plugin folder>\Evaluation Matrices\` | Collected matrix workbooks and build notes, with their original versioned/timestamped names | No (SharePoint) |
 | `sharepoint\<Industry>\<slug>\` | The deployment doc, the tracker workbook, the demo-data ZIP for testers and promoted ZIPs | No (SharePoint) |
 
 Professional Services Waves 1 and 2 use the Retail library layout instead: the plugin folder is
@@ -66,6 +68,61 @@ the tracker is `<Title Case Slug> - Human Test Tracker.xlsx`, and the promoted Z
 `<slug>-cowork.zip`. `SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts` lists the plugins that use
 it; the archive script follows it automatically. After promotion, its `MOS Package\` folder holds the
 derived manifest-1.28 package (Step 6).
+
+## Collect evaluation matrices
+
+For passing evaluations, Cowork has a separate watcher that consumes matrix requests from
+`<OneDrive>\Cowork Plugin Evals\4 - Matrices\1 - Queue\` and writes completed outputs to
+`4 - Matrices\2 - Built\`. This repository's collector watches **Built**, not Queue; it neither
+requests nor builds matrices and does not change evaluation, human-review or publish decisions.
+
+```powershell
+npm run evaluation:watch-matrices
+npm run evaluation:watch-matrices -- --once --dry-run
+npm run evaluation:watch-matrices -- --once
+```
+
+Each completed build is a matching pair in the same folder (nested folders under Built are also
+scanned):
+
+| File | Name |
+|---|---|
+| Workbook | `<slug>-v<version>-eval-matrix-YYYY-MM-DD-HHMM.xlsx` |
+| Notes | `<slug>-v<version>-matrix-notes-YYYY-MM-DD-HHMM.md` |
+
+Example: `time-expense-narrative-compliance-v1.0.13-eval-matrix-2026-10-22-1015.xlsx` and
+`time-expense-narrative-compliance-v1.0.13-matrix-notes-2026-10-22-1015.md`.
+
+The collector:
+
+- requires both files with the same slug, version and timestamp, non-empty and unchanged across
+  observations for at least 15 seconds; polls every 30 seconds by default;
+- resolves the slug from repository submission metadata and reuses `sharepointPluginDir` routing
+  (including Professional Services Waves 1 and 2); the existing plugin folder must be present;
+- copies both files, preserving their names, into `<SharePoint plugin folder>\Evaluation Matrices\`
+  and verifies SHA-256; Built originals and the evaluation archives remain untouched;
+- skips byte-identical destination files, including after a restart; preflights both destinations
+  and refuses differing files instead of replacing them;
+- ignores hidden, Office lock and partial-download files; reports unrecognized filenames, unknown
+  plugins, missing plugin folders and copy conflicts explicitly and retries on subsequent polls.
+  Other valid pairs still get collected. Incomplete pairs remain pending; `--once` exits nonzero
+  if anything is still pending or failed.
+
+Leave the command running to collect future builds; `Ctrl+C` stops it. OneDrive must stay running
+for changes to sync. Options:
+
+| Option | Purpose |
+|---|---|
+| `--once` | Scan current outputs, wait once for stability if needed, then exit |
+| `--dry-run` | Report destinations without writing files or folders |
+| `--queue-root <path>` | Override `OneDriveCommercial` / `OneDrive` + `Cowork Plugin Evals` |
+| `--built-root <path>` | Watch another Built folder directly; cannot combine with `--queue-root` |
+| `--sharepoint-root <path>` | Override the usual environment-variable / `sharepoint\` link resolution |
+| `--poll-seconds <n>` | Positive polling interval; default 30 |
+| `--stable-seconds <n>` | Positive unchanged-content interval; default 15 |
+
+A timestamped new build uses new filenames; resolve a differing-file conflict with the owner
+rather than deleting or overwriting shared evidence.
 
 ## Step 1: build the plugin
 

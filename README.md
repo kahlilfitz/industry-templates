@@ -161,6 +161,22 @@ npm run evaluation:watch -- --slug <plugin-slug>     # archive the Cowork report
 `Ready for human review` is never a publish signal. Publication still needs two independent
 human testers, the tracker's Publish gate and an owner decision of Publish.
 
+### Collect evaluation matrices
+
+After a passing evaluation, Cowork's matrix watcher processes requests in
+`<OneDrive>\Cowork Plugin Evals\4 - Matrices\1 - Queue` and writes a workbook and notes into
+`4 - Matrices\2 - Built`. Run the separate collector:
+
+```powershell
+npm run evaluation:watch-matrices
+```
+
+It copies stable workbook/notes pairs into the matching SharePoint plugin's
+`Evaluation Matrices\` folder without changing the originals or overwriting existing files.
+Use `-- --once --dry-run` to preview, or `-- --once` to collect current outputs and exit.
+See [matrix collection](docs/release-process.md#collect-evaluation-matrices) for filenames,
+options and error handling.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). One submission folder, one pull request — CI validates
