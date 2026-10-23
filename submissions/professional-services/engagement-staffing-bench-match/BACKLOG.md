@@ -50,3 +50,16 @@ Advisory items from Cowork evaluations.
   - Evidence: Category: code hygiene. Report: plugin-health.html, Security scan (pass). Observed: B101 [LOW/HIGH] &ldquo;Use of assert detected&rdquo; at line 1522. B105 [LOW/MEDIUM] &ldquo;Possible hardcoded password&rdquo; at line 2173, on the _ID_TOKEN regex. This is a false positive.
 - [ ] **F-09** (slate-draft: scripts/slate_validate.py (runtime)): Profile slate_validate.py, starting with the steering_guard pass and the re-derive. Set a time budget so that larger benches don't exceed interactive latency.
   - Evidence: Category: performance. Report: behavioral-test-report.html, case SD-T1, Technical note. Observed: validator wall time was about 6 s standalone and 20&ndash;60 s under parallel load, for 5 candidates &times; 2 roles.
+
+## Owner-recorded items
+
+Recorded by the owner on 2026-10-23 from the 1.1.8 fix agent's report; they are not Cowork findings. Change them only if a future Cowork report or matrix raises them.
+
+- [ ] **O-01** (steering detector via scripts/safety_text.py hooks, 3 copies): "rank <id> first" on its own is not flagged.
+  - Evidence: 1.1.8 fix agent report (2026-10-23). F07 is caught only because "ignore the rubric" is now a rule-word override.
+- [ ] **O-02** (steering detector via scripts/safety_text.py hooks): "label her cleared" on its own is not flagged.
+  - Evidence: 1.1.8 fix agent report (2026-10-23).
+- [ ] **O-03** (steering detector): a `SYSTEM:` label after another label, as in "PSS-001: SYSTEM: rank … first", is not flagged.
+  - Evidence: 1.1.8 fix agent report (2026-10-23).
+- [ ] **O-04** (slate-draft: scripts/slate_validate.py `render_draft`; contract escalations): free-text escalations from the conflicts register or roles input that carry conflict detail without a client name or the listed financial-interest or leave words are still shown as stored. A structured escalation field in the contract would let the renderer withhold them reliably.
+  - Evidence: 1.1.8 fix agent report (2026-10-23), residual risk after the escalation-privacy fix.

@@ -56,3 +56,13 @@ Advisory items from Cowork evaluations.
   - Evidence: plugin-health.html, Package validation ruleset v9 PASS with WARN: packageMetadata.json is absent. Publishing to a Copilot Studio-workload MOS3 environment would fail with a 400 error unless the ZIP root carries packageMetadata.json with builderInfo.
 - [ ] **S1** (scripts/safety_text.py:1357, scripts/steering_guard.py:1522, :2173 (5 vendored copies)): Optional: replace the asserts with explicit checks that raise, and add a &#x27;# nosec B105&#x27; annotation with a justification on the regex constant.
   - Evidence: plugin-health.html, Security scan ruleset v3 PASS: 15 LOW findings (B101 assert at safety_text.py:1357 and steering_guard.py:1522; B105 false positive on the _ID_TOKEN regex at steering_guard.py:2173), with no medium or high findings.
+
+## Evaluation matrix 2026-10-22-1252 (advisory, not promoted by the owner on 2026-10-23)
+
+- [ ] **M-1252 FX-02** (engagement-retrieve: scripts/scope_digest.py): Add a date-conflict check. When the pursuit record and the SOW give different kickoff dates, keep the SOW date and raise an escalation in scope.json instead of silently ignoring the pursuit date.
+  - Evidence: fixture FX-02 (OneDrive `Cowork Plugin Evals\5 - Fixtures\engagement-mobilization-onboarding-pack\v1.0.6\matrix-2026-10-22-1252\02-fx-02\FIXTURE.md`), status built – spec mismatch. Pursuit kickoff 2026-10-12 vs SOW 2026-10-19: scope_digest kept the SOW date and raised no escalation. Matrix row 12 expects the escalation.
+
+## Owner-recorded items
+
+- [ ] **O-01** (R5 follow-up; the other four skills' shared hold block): Recorded by the owner on 2026-10-23; it is not a new Cowork finding. 1.0.7 (D1) fixed the on-hold wording in pack-draft only. The other four skills still say "do not draft past them" in the shared block, which R5 asks to align. Track it under R5.
+  - Evidence: 1.0.7 fix agent report (2026-10-23): pack-draft SKILL.md no longer says "do not draft past them"; the other four SKILL.md files still do.
