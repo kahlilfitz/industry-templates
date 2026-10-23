@@ -147,6 +147,7 @@ Where things live:
 | Plugin folder (Retail layout, since 2026-10-16) | `sharepoint\Professional Services\Wave 1\<Title Case Slug>\` (for example `Wave 1\Time Expense Narrative Compliance\`) |
 | Archived evidence | `<plugin folder>\Evaluation\v<version>\` |
 | Deployment doc (owner decision) | `<plugin folder>\PLUGIN-DETAILS-AND-DEPLOYMENT.md`; the `<Title Case Slug> - Human Test Tracker.xlsx` workbooks are history only from 2026-10-23 |
+| Demo data and sample prompts | `<plugin folder>\<slug>-demo-data-v<version>.zip`, plus a loose `sample-test-prompts.csv` copied byte for byte from it (Retail layout; added 2026-10-23) |
 | Promoted distributable | `<plugin folder>\<slug>-cowork.zip` (only after C2) |
 | Derived MOS package (manifest 1.28) | `<plugin folder>\MOS Package\` (`<slug>-mos3-v<version>.zip`, `README.md`, `skills\`), built by `npm run mos:build` only after C4 ([decision](#owner-decision-derived-manifest-128-mos-package-2026-10-16)) |
 | Industry status page | `sharepoint\Professional Services\README.md` |

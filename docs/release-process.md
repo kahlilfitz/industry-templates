@@ -77,7 +77,8 @@ Test policy (owner, 2026-10-15):
 Professional Services Waves 1 and 2 use the Retail library layout instead: the plugin folder is
 `sharepoint\Professional Services\Wave <n>\<Title Case Slug>\`, archives go to `Evaluation\v<version>\`,
 and the promoted ZIP is `<slug>-cowork.zip`. `SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts`
-lists the plugins that use it; the archive script follows it automatically. After promotion, its
+lists the plugins that use it; the archive script follows it automatically. The plugin folder also
+holds a loose `sample-test-prompts.csv` copied from the demo-data ZIP (Step 5). After promotion, its
 `MOS Package\` folder holds the derived manifest-1.28 package (Step 6). Human test tracker workbooks
 already in SharePoint are kept as history and are no longer updated.
 
@@ -416,6 +417,11 @@ infer it from the verdict.
 
    These files are attached in people's own Cowork chats; they are never sent to the Cowork
    evaluation.
+
+   In the Retail layout, also copy that ZIP's `tests/sample-test-prompts.csv` loose into the plugin
+   folder as `sample-test-prompts.csv`, byte for byte, as Retail does. Write it from the ZIP, not
+   the working tree, so it matches the published version's demo data. Keep its columns as they are:
+   some plugin suites read them.
 3. The owner records the decision in the deployment doc's **Owner decision** field: `Publish`
    with the date and the evaluated SHA-256, or `Hold` with the reason. Only the owner writes it.
 4. Promote (Step 6) only when that field reads `Publish` for this exact version and SHA-256.
