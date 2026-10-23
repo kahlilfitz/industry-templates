@@ -12,6 +12,7 @@
     "evaluation:archive": "tsx scripts/archive-evaluation.ts",
     "evaluation:watch": "tsx scripts/watch-evaluation.ts",
     "evaluation:watch-matrices": "tsx scripts/watch-evaluation-matrices.ts",
+    "evaluation:request-matrix": "tsx scripts/request-matrix.ts",
     "evaluation:fix": "tsx scripts/fix-evaluation.ts",
     "mos:build": "tsx scripts/build-mos-package.ts",
     "sharepoint:link": "tsx scripts/sharepoint.ts link",

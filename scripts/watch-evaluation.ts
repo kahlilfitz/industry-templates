@@ -91,6 +91,7 @@ function archive(
   source: string,
   inboxRoot: string,
   sharepointRoot: string,
+  extra: string[],
 ): void {
   runScript("archive-evaluation.ts", [
     "--slug",
@@ -103,11 +104,12 @@ function archive(
     inboxRoot,
     "--sharepoint-root",
     sharepointRoot,
+    ...extra,
   ]);
 }
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2), new Set(["no-fix", "no-prepare"]));
+  const args = parseArgs(process.argv.slice(2), new Set(["no-fix", "no-prepare", "no-matrix"]));
   const slug = requiredArg(args, "slug");
   const submission = findSubmission(slug);
   const version = args.get("version")?.trim() || submission.version;
@@ -156,6 +158,11 @@ async function main(): Promise<void> {
   console.log(`Expected ZIP SHA-256: ${runData.artifactSha256}`);
   console.log(`Archive root (${sharepointSource}): ${sharepointRoot}`);
   console.log(fix ? "After archiving, the fix step starts a Copilot CLI agent (--no-fix to skip)." : "Fix step disabled (--no-fix).");
+  console.log(
+    args.has("no-matrix")
+      ? "Matrix request disabled (--no-matrix)."
+      : "A Ready verdict also sends the ZIP to Cowork's matrix queue (--no-matrix to skip).",
+  );
 
   const reported = new Set<string>();
   const once = (key: string, message: string) => {
@@ -214,7 +221,10 @@ async function main(): Promise<void> {
           continue;
         }
         console.log(`All three reports are present and stable: ${candidate.dir}`);
-        archive(slug, version, candidate.dir, inboxRoot, sharepointRoot);
+        archive(slug, version, candidate.dir, inboxRoot, sharepointRoot, [
+          ...(args.has("no-matrix") ? ["--no-matrix"] : []),
+          ...(args.has("queue-root") ? ["--queue-root", requiredArg(args, "queue-root")] : []),
+        ]);
         if (fix) {
           runScript("fix-evaluation.ts", [
             "--slug",
