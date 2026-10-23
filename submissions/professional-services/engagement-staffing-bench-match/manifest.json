@@ -2,7 +2,7 @@
   "$schema": "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
   "manifestVersion": "devPreview",
   "packageName": "com.microsoft.cowork.engagement-staffing-bench-match",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "id": "2daf60c8-e275-4f95-901b-b01b54defd72",
   "developer": {
     "name": "Microsoft Corporation",

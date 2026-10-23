@@ -4,6 +4,37 @@ Versions before 1.1.5 are recorded in the git history of
 `submissions/professional-services/engagement-staffing-bench-match/` (1.1.4 was the automated
 `Ready` candidate).
 
+## 1.1.9 - 2026-10-23
+
+Applies the plugin-fixable blocker from Cowork evaluation matrix 2026-10-23-1540 (plugin 1.1.8):
+top blocker 3, the rubric #1.6 industry-vocabulary row (fixture F18), which is also advisory R1
+from the 1.1.8 evaluation. The other blockers in that matrix sit in the eval harness and were
+reported to the owner; its other items stay advisory (`BACKLOG.md`).
+
+- **Matrix 2026-10-23-1540 blocker 3 - industry vocabulary (rubric #1.6).** role-intake copies
+  `industry_context` as the SOW words it ("healthcare provider"), and `continuity_score()` in
+  `fit_score.py` needed an exact lower-case match against bench `industry_experience`
+  ("healthcare"). Continuity scored 0 with no escalation, costing 5.0 points, so a candidate could
+  fall below the 70.0 floor (#7.2) silently. The engine now matches whole words: a role industry
+  and a bench industry match when every word of one is a word of the other, case-insensitively, so
+  "healthcare provider" matches "healthcare". A partial word never matches ("health operations"
+  does not match "healthcare"). When a role's non-empty `industry_context` matches no candidate,
+  `scored.json` raises `<role_id>: industry_context matched no candidate's industry_experience -
+  rubric #1.6 continuity scored 0 for every candidate; confirm the industry wording`; the
+  industry text itself is not repeated. The fix is in the engine, so role-intake keeps the SOW
+  wording; its step 2 now says how the engine matches it. All three `fit_score.py` copies stay
+  byte-identical.
+- Version 1.1.9 in `metadata.json`, `manifest.json`, every `SKILL.md` and `listing-metadata.md`.
+  The nine `ENGINE_VERSION` labels move to 1.1.9. `steering_guard.py` `__version__` and the
+  `POLICIES` stamp are unchanged.
+- The ten `demo-data\*\expected` files were regenerated with the engines. In the eight JSON files
+  only the engine labels changed; the two `slate-draft.md` files are unchanged. Every demo role's
+  industry already matched exactly, so no score or escalation changed.
+- **Regression check (owner rule).** `tests\test_engines.py` gains the group
+  `matrix-2026-10-23-1540` with the check
+  `matrix 2026-10-23-1540 blocker 3: industry_context 'healthcare provider' earns rubric #1.6 continuity against bench 'healthcare', and an unmatched industry is escalated`.
+  It fails on the 1.1.8 files and passes on 1.1.9. No existing check changed.
+
 ## 1.1.8 - 2026-10-23
 
 Applies the owner-approved fixes from Cowork evaluation matrix 2026-10-22-1252 (plugin 1.1.7) under

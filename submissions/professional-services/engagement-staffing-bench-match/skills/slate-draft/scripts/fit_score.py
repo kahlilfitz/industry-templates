@@ -43,7 +43,7 @@ from input_guard import (
 from safety_text import ScreeningLog, is_suspect, safe_citation, safe_text, same_client, sanitize_free_text
 
 ENGINE = "engine:fit_score"
-ENGINE_VERSION = "fit_score/1.1.8"
+ENGINE_VERSION = "fit_score/1.1.9"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 DEFAULT_DURATION_WEEKS = 52
 
@@ -483,11 +483,22 @@ def seniority_rule(role_level, cand_level):
     }.get(diff, "fit-scoring-rubric.md #3.4")
 
 
+def _words(text):
+    return frozenset(re.findall(r"[^\W_]+", text.casefold()))
+
+
 def continuity_score(role, cand):
+    # fit-scoring-rubric.md #1.6: the role's industry and a bench industry match when every whole
+    # word of one appears in the other ("healthcare provider" matches "healthcare").
     practice = role.get("industry_context", "")
-    practice = "" if has_marker(practice) else practice.lower()
-    industries = {x.lower() for x in _usable(cand.get("industry_experience", []))}
-    return 1.0 if practice and practice in industries else 0.0
+    practice = frozenset() if has_marker(practice) else _words(practice)
+    if not practice:
+        return 0.0
+    for industry in _usable(cand.get("industry_experience", [])):
+        words = _words(industry)
+        if words and (words <= practice or practice <= words):
+            return 1.0
+    return 0.0
 
 
 # ---------------------------------------------------------------------------------------------
@@ -558,6 +569,13 @@ def score(roles_payload, bench_payload):
                 "citation": "fit-scoring-rubric.md #7.3; " + safe_citation(cand["citation"]),
                 "screening_holds": list(holds),
             })
+        practice = role.get("industry_context", "")
+        if (isinstance(practice, str) and _words(practice) and not has_marker(practice)
+                and not any(c["component_scores"]["continuity"] for c in candidate_scores)):
+            safety_escalations.append(
+                f"{role['role_id']}: industry_context matched no candidate's industry_experience - "
+                "rubric #1.6 continuity scored 0 for every candidate; confirm the industry wording"
+            )
         scored_roles.append({
             "role_id": role["role_id"],
             "role_title": role["title"],

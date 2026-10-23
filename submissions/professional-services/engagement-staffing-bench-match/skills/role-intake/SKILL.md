@@ -4,7 +4,7 @@ description: "Reads a signed engagement, SOW role extract, mobilisation note or 
 license: Proprietary
 compatibility: "Reads user-supplied files (staffing request email, SOW role extract, rate-card excerpt) with the file-read tool; Python 3 optional to build the JSON payload. No bundled engine and no connectors required. Read-only: never writes to a resource or staffing system."
 metadata:
-  version: "1.1.8"
+  version: "1.1.9"
   icon: ic_fluent_document_briefcase_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
@@ -26,7 +26,7 @@ At the start of every Engagement Staffing & Bench Match run.
 - Rate-card or commercial guardrail excerpt if supplied.
 ## Steps
 1. Extract `engagement{}` with `source`, `confidence` and `citation`. Include every source-backed parent, subsidiary or affiliate in `engagement.affiliates[]`; never infer corporate relationships. Use the engagement ID exactly as it appears in the source; if the firm's internal code is not supplied, carry the SOW ID and add an escalation.
-2. Extract each role into `roles[]`: required and preferred skills, required certifications, seniority, start date, allocation, location, `remote_ok`, `required_languages`, duration, `industry_context` (the client industry named in the SOW or request — `fit_score.py` reads it for rubric #1.6) and rate band. Normalize seniority to lowercase canonical values: `associate`, `consultant`, `senior consultant`, `manager`, `senior manager`, `director` or `partner`. `required_languages` is the SOW's stated working language plus any language the role itself names (for example "Spanish-speaking").
+2. Extract each role into `roles[]`: required and preferred skills, required certifications, seniority, start date, allocation, location, `remote_ok`, `required_languages`, duration, `industry_context` (the client industry as the SOW or request words it — `fit_score.py` reads it for rubric #1.6 and matches whole words against bench `industry_experience`, so "healthcare provider" matches "healthcare"; it escalates a role whose industry matches no candidate) and rate band. Normalize seniority to lowercase canonical values: `associate`, `consultant`, `senior consultant`, `manager`, `senior manager`, `director` or `partner`. `required_languages` is the SOW's stated working language plus any language the role itself names (for example "Spanish-speaking").
 3. Set each role's `confidence` by how far the staffing request restates the SOW row (allocation, start, duration, location, every required and preferred skill and certification): 0.96 all, 0.95 some, 0.94 none or role not named. `engagement.confidence` is 0.96 when the request names the SOW client, else 0.94. Preserve uncertainty. If a role requirement is ambiguous or unstated (for example no language stated), carry it as an escalation rather than guessing.
 4. Record any partner preference for a named person as an escalation note only — never as a selection.
 5. Hand off the contract payload to `bench-query`.

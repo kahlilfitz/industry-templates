@@ -1,4 +1,4 @@
-# Listing metadata draft: Engagement Staffing & Bench Match 1.1.8
+# Listing metadata draft: Engagement Staffing & Bench Match 1.1.9
 
 Draft for the shared "Skills and Plugin Metadata Template" workbook. Not packaged. The manifest
 values below are copied exactly from `manifest.json`.

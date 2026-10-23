@@ -1,8 +1,9 @@
 """Regression suite for engagement-staffing-bench-match.
 
 Every check here answers a Cowork evaluation finding (1.1.2 and 1.1.3 blockers, the 1.1.6 blocker
-and required fixes F-01 to F-03 applied in 1.1.7, and Cowork evaluation matrix 2026-10-22-1252
-blocker 3 and owner-promoted F07 applied in 1.1.8); see tests/README.md.
+and required fixes F-01 to F-03 applied in 1.1.7, Cowork evaluation matrix 2026-10-22-1252
+blocker 3 and owner-promoted F07 applied in 1.1.8, and Cowork evaluation matrix 2026-10-23-1540
+blocker 3 applied in 1.1.9); see tests/README.md.
 
 Run from the submission folder (submissions/professional-services/<slug>/):
 
@@ -44,6 +45,7 @@ GROUPS = (
     ("skill-guardrails", "SkillGuardrailTests"),
     ("input-contract", "InputContractTests"),
     ("matrix-2026-10-22-1252", "Matrix20261022Tests"),
+    ("matrix-2026-10-23-1540", "Matrix20261023Tests"),
 )
 
 
@@ -1001,6 +1003,66 @@ class Matrix20261022Tests(_EngineInjectionHarness, unittest.TestCase):
                                      "%s: C-105 must be held for review" % name)
                     self.assertIn("#9.6", "%s %s" % (eligibility.get("blocking_rule"), eligibility.get("citation")))
 
+
+class Matrix20261023Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork evaluation matrix 2026-10-23-1540 (plugin 1.1.8): top blocker 3, the R1 rubric #1.6
+    industry-vocabulary row (fixture F18), applied in 1.1.9."""
+
+    def score_with(self, industry_context, experience):
+        """Run fit_score.py on scenario-a-happy with every role's industry_context and C-101's
+        industry_experience replaced; returns the scored document."""
+        roles = self._load("roles.json")
+        for role in roles["roles"]:
+            role["industry_context"] = industry_context
+        bench = self._load("bench.json")
+        for candidate in bench["bench_candidates"]:
+            if candidate["candidate_id"] == "C-101":
+                candidate["industry_experience"] = experience
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            for name, doc in (("roles.json", roles), ("bench.json", bench)):
+                (temp / name).write_text(json.dumps(doc), encoding="utf-8")
+            self._run(fit_score, ["fit_score.py", "--roles", str(temp / "roles.json"),
+                                  "--bench", str(temp / "bench.json"), "--out", str(temp / "scored.json")])
+            return json.loads((temp / "scored.json").read_text(encoding="utf-8"))
+
+    @staticmethod
+    def candidate(scored, role_id, candidate_id):
+        role = next(r for r in scored["scored_roles"] if r["role_id"] == role_id)
+        return next(c for c in role["candidate_scores"] if c["candidate_id"] == candidate_id)
+
+    @named("matrix 2026-10-23-1540 blocker 3: industry_context 'healthcare provider' earns rubric #1.6 "
+           "continuity against bench 'healthcare', and an unmatched industry is escalated")
+    def test_matrix_2026_10_23_1540_blocker_3_industry_vocabulary(self):
+        name = "matrix 2026-10-23-1540 blocker 3"
+        baseline = self.score_with("health operations", ["health operations", "customer operations"])
+        scored = self.score_with("healthcare provider", ["healthcare"])
+        c101 = self.candidate(scored, "PSS-001", "C-101")
+        self.assertEqual(1.0, c101["component_scores"]["continuity"],
+                         "%s: C-101 R1 #1.6 must be 1.0 when 'healthcare' is a whole word of "
+                         "'healthcare provider'" % name)
+        self.assertEqual(self.candidate(baseline, "PSS-001", "C-101")["fit_score"], c101["fit_score"],
+                         "%s: SOW wording must not cost C-101 R1 the 5.0 continuity points" % name)
+        self.assertEqual("fit-scoring-rubric.md #1.6", c101["component_citations"]["continuity"])
+        self.assertFalse(any("industry_context" in str(item) for item in scored["escalations"]),
+                         "%s: a matched industry must not be escalated" % name)
+
+        # Whole words only: "healthcare" is not a whole word of "health operations", and C-103's
+        # "retail operations" never matches a health role.
+        partial = self.score_with("health operations", ["healthcare"])
+        for candidate_id in ("C-101", "C-103"):
+            with self.subTest(candidate=candidate_id):
+                self.assertEqual(0.0, self.candidate(partial, "PSS-001", candidate_id)
+                                 ["component_scores"]["continuity"])
+
+        # A non-empty industry_context that matches no candidate is no longer silent.
+        unmatched = self.score_with("energy utilities", ["healthcare"])
+        for role_id in ("PSS-001", "PSS-002"):
+            with self.subTest(role=role_id):
+                self.assertTrue(any(role_id in str(item) and "industry_context" in str(item)
+                                    and "#1.6" in str(item) for item in unmatched["escalations"]),
+                                "%s: %s industry_context matched no candidate without an escalation"
+                                % (name, role_id))
 
 
 class StreamingResult(unittest.TestResult):

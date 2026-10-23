@@ -83,10 +83,10 @@
     "generated_at": "2026-09-23T21:20:34Z",
     "demo_scenario": "scenario-a-happy",
     "engines": [
-      "fit_score/1.1.8",
-      "slate_rank/1.1.8",
-      "constraint_check/1.1.8",
-      "slate_validate/1.1.8"
+      "fit_score/1.1.9",
+      "slate_rank/1.1.9",
+      "constraint_check/1.1.9",
+      "slate_validate/1.1.9"
     ],
     "policies": {
       "fit-scoring-rubric.md": "1.1.5",
