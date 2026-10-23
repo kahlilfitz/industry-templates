@@ -1,8 +1,8 @@
 # Agent guide
 
 Follow [CONTRIBUTING.md](CONTRIBUTING.md) for submission conventions and
-[docs/release-process.md](docs/release-process.md) for packaging, Cowork evaluation, fixes, human
-review and publishing.
+[docs/release-process.md](docs/release-process.md) for packaging, Cowork evaluation, fixes, the
+owner's Publish decision and publishing.
 
 ## Change scope
 
@@ -46,6 +46,10 @@ versions.
   Owner decision (2026-10-16): the fix step itself prepares the next version when its checks find
   nothing that needs the owner's attention; the agent still never runs `evaluation:prepare`.
 - Never infer an owner sign-off or a publish decision.
+- Owner decision (2026-10-23): human testing is not part of the release process ("remove human
+  testing from the process"). After a `Ready` verdict, publication still needs the owner's
+  `Publish` decision recorded in the plugin's SharePoint deployment doc ("Publish after Ready").
+  Do not ask about or plan testers, trackers or a human spot check.
 
 ## One-time owner exception: T&E R-03
 
@@ -76,6 +80,18 @@ Every other golden, check and expectation stays unchanged. Follow the
 [exception's evidence requirements](docs/release-process.md#one-time-owner-exception-for-te-1013-r-02).
 This is not a general waiver, an evaluation verdict, or a publish decision.
 
+## One-time owner exception: removing human testing
+
+Owner-approved on 2026-10-23, with removing human testing from the release process: the passing
+verdict is renamed from `Ready for human review` to `Ready`, so the verdict expectations in
+`scripts\evaluation-workflow.test.ts` (extractVerdict values and error text, verdictGuidance text,
+and the Cowork prompt verdict list) change to match. Every test input stays, archived
+`Ready for human review` reports still parse as `Ready`, other `Ready for ...` phrases still throw,
+and the prompts must still say Ready is `not a publish signal`. No plugin suite, golden or other
+check changes. See the
+[exception's scope](docs/release-process.md#one-time-owner-exception-removing-human-testing).
+This is not a general waiver or a publish decision.
+
 ## Tests and demo data
 
 - A MOS3 plugin's tests and demo data live in `submissions\<industry>\<slug>\tests\` and
@@ -101,9 +117,9 @@ This is not a general waiver, an evaluation verdict, or a publish decision.
   evaluated ZIPs. Professional Services Waves 1 and 2 mirror Retail: `Wave <n>\<Title Case Slug>\` and
   `Evaluation\v<version>\` (`SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts`). Every other
   plugin uses `<slug>\` and `Evaluation\<version>\`.
-- `PLUGIN-DETAILS-AND-DEPLOYMENT.md` and the human-test tracker in each plugin folder
-  (`<Title Case Slug> - Human Test Tracker.xlsx` in the Retail layout, otherwise
-  `<slug>-human-test-tracker.xlsx`).
+- `PLUGIN-DETAILS-AND-DEPLOYMENT.md` in each plugin folder, which holds the owner's Publish
+  decision. Human-test tracker workbooks there are history only (human testing was removed on
+  2026-10-23).
 - `sharepoint\Industry-Templates-Plugin-Testing-Strategy.docx` — release bar and testing strategy.
 
 Rules:

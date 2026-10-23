@@ -119,7 +119,7 @@ function main(): void {
   console.log(`${VERDICT_REPORT}: ${actionable.length} blocker/required fix(es), ${advisory} advisory.`);
   if (actionable.length === 0) {
     save("nothing-to-fix");
-    console.log("Nothing for the fix agent to do. Next: the two-tester human spot check (docs/release-process.md).");
+    console.log("Nothing for the fix agent to do. Next: the owner's Publish decision (docs/release-process.md, Step 5).");
     return;
   }
 

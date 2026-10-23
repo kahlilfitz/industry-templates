@@ -1,13 +1,14 @@
 # Release process
 
 This process follows the *Industry Templates Plugin Testing and Validation Strategy*
-(`sharepoint\Industry-Templates-Plugin-Testing-Strategy.docx`):
+(`sharepoint\Industry-Templates-Plugin-Testing-Strategy.docx`), except that human testing is not
+part of it (owner, 2026-10-23: "remove human testing from the process"; "Publish after Ready"):
 
 1. Build the plugin.
 2. Package it.
 3. Run Cowork's built-in plugin evaluation.
 4. Fix what the evaluation recommends, then repeat from step 2.
-5. Human spot check.
+5. Owner Publish decision, after a Ready verdict.
 6. Publish and file the evidence.
 
 | Step | Who | Command |
@@ -16,7 +17,7 @@ This process follows the *Industry Templates Plugin Testing and Validation Strat
 | 2. Package | Operator, or the fix step after clean fixes | `npm run evaluation:prepare -- --slug <slug>` |
 | 3. Evaluate in Cowork | Cowork (queue), or operator | Automatic from the queue folder; otherwise a new task with the ZIP and the prompt |
 | 4. Archive and fix | Watcher, then fix agent | `npm run evaluation:watch -- --slug <slug>` |
-| 5. Human spot check | Two testers | Tracker workbook in SharePoint |
+| 5. Publish decision | Owner | Record `Publish` in the plugin's deployment doc in SharePoint |
 | 6. Publish | Owner | Promote the evaluated ZIP byte for byte |
 
 Cowork evaluates the plugin by itself: it writes its own test cases from the skill descriptions.
@@ -71,21 +72,21 @@ Test policy (owner, 2026-10-15):
 | `<OneDrive>\Cowork Plugin Evals\4 - Matrices\` | Cowork's matrix requests in `1 - Queue\` and completed workbook/notes pairs in `2 - Built\` | No |
 | `sharepoint\<Industry>\<slug>\Evaluation\<version>\` | The archived ZIP and the three reports | No (SharePoint) |
 | `<SharePoint plugin folder>\Evaluation Matrices\` | Collected matrix workbooks and build notes, with their original versioned/timestamped names | No (SharePoint) |
-| `sharepoint\<Industry>\<slug>\` | The deployment doc, the tracker workbook, the demo-data ZIP for testers and promoted ZIPs | No (SharePoint) |
+| `sharepoint\<Industry>\<slug>\` | The deployment doc (with the owner's Publish decision), the demo-data ZIP and promoted ZIPs | No (SharePoint) |
 
 Professional Services Waves 1 and 2 use the Retail library layout instead: the plugin folder is
 `sharepoint\Professional Services\Wave <n>\<Title Case Slug>\`, archives go to `Evaluation\v<version>\`,
-the tracker is `<Title Case Slug> - Human Test Tracker.xlsx`, and the promoted ZIP is
-`<slug>-cowork.zip`. `SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts` lists the plugins that use
-it; the archive script follows it automatically. After promotion, its `MOS Package\` folder holds the
-derived manifest-1.28 package (Step 6).
+and the promoted ZIP is `<slug>-cowork.zip`. `SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts`
+lists the plugins that use it; the archive script follows it automatically. After promotion, its
+`MOS Package\` folder holds the derived manifest-1.28 package (Step 6). Human test tracker workbooks
+already in SharePoint are kept as history and are no longer updated.
 
 ## Collect evaluation matrices
 
 For passing evaluations, Cowork has a separate watcher that consumes matrix requests from
 `<OneDrive>\Cowork Plugin Evals\4 - Matrices\1 - Queue\` and writes completed outputs to
 `4 - Matrices\2 - Built\`. This repository's collector watches **Built**, not Queue; it neither
-requests nor builds matrices and does not change evaluation, human-review or publish decisions.
+requests nor builds matrices and does not change evaluation or publish decisions.
 
 ```powershell
 npm run evaluation:watch-matrices
@@ -293,7 +294,7 @@ If there are no blocker or required items, the fix step does nothing and the plu
 
 | Verdict | Meaning | Next |
 |---|---|---|
-| Ready for human review | Every bar in the strategy is met | Step 5. This is not a publish signal |
+| Ready | Every bar in the strategy is met | Step 5. This is not a publish signal |
 | No-ship | There is at least one blocker or required fix | The fix step runs; then step 2 for the new version |
 | Blocked | The evaluation could not complete, or the ZIP identity is unclear | Find out why. If the plugin must change, fix it and re-run as a new version. If not, the version stays; re-running an already archived version is not supported, so tell the owner |
 
@@ -309,10 +310,14 @@ The strategy's bar, which the prompt states:
 
 A guardrail or safety failure is always a stop.
 
+Reports archived between 2026-10-12 and 2026-10-23 state `Ready for human review`. The archive
+script reads that label as `Ready`, and the wave logs keep it as recorded.
+
 ### One-time owner exception for T&E R-03
 
-**Owner approval: 2026-10-16.** This and the [1.0.13 R-02 exception](#one-time-owner-exception-for-te-1013-r-02)
-are the only exceptions to the existing-check restrictions in this process and `AGENTS.md`:
+**Owner approval: 2026-10-16.** This, the [1.0.13 R-02 exception](#one-time-owner-exception-for-te-1013-r-02)
+and the [human-testing removal exception](#one-time-owner-exception-removing-human-testing) are the
+only exceptions to the existing-check restrictions in this process and `AGENTS.md`:
 
 - **Plugin and release:** `time-expense-narrative-compliance`, implementation release **1.0.12**.
 - **Finding:** required **R-03 (ND-01)** from the archived **1.0.10** Cowork
@@ -362,16 +367,38 @@ This exception permits only these golden updates and this check change, as part 
 padding a draft to reach 12 words, unrelated test changes, weaker billing or safety rules, or
 packaging or publishing without their existing gates.
 
-## Step 5: human spot check
+### One-time owner exception: removing human testing
 
-Do this after a `Ready for human review` verdict.
+**Owner approval: 2026-10-23** ("remove human testing from the process"; "Publish after Ready").
+
+- **Scope:** the script unit tests in `scripts\evaluation-workflow.test.ts` only. The passing
+  verdict is renamed from `Ready for human review` to `Ready`, so these expectations change:
+  - `extractVerdict normalizes supported Cowork verdicts` and `extractVerdict reads the new phrase
+    whole and never as a bare Ready`: the expected value `"Ready for human review"` becomes
+    `"Ready"`, and the expected error lists `Ready, Blocked, or No-ship`. Every input stays,
+    including the archived `Ready for human review` phrasings, and `Ready for publication` must
+    still throw.
+  - `verdictGuidance never treats Ready as a publish signal` (formerly `... Ready for human
+    review ...`): the expected Ready guidance names the owner's Publish decision instead of two
+    testers and the tracker, and the Blocked guidance no longer mentions human-review evidence
+    but must still tell the operator to raise it with the owner before remediating.
+  - The Cowork prompt check expects `exactly one of: Ready, Blocked, or No-ship`; it still requires
+    `not a publish signal`.
+- **Not permitted:** any change to plugin suites, goldens or any other check, weaker guardrails, or
+  publishing without the owner's recorded Publish decision. Ready is still never a publish signal.
+
+## Step 5: owner Publish decision
+
+Do this after a `Ready` verdict. Human testing is not part of the process (owner, 2026-10-23), so
+no testers or tracker are involved. Publication still needs the owner's explicit decision; never
+infer it from the verdict.
 
 1. Create `PLUGIN-DETAILS-AND-DEPLOYMENT.md` in the plugin folder (`sharepoint\<Industry>\<slug>\`,
    or the Retail-layout folder above) from the
    [deployment-doc template](templates/plugin-details-and-deployment.md), or refresh the existing
    one for this version. Record the evaluated SHA-256 in it.
-2. Put the demo data next to it. The plugin ZIP holds no demo data or tests, so testers get them
-   from `<slug>-demo-data-v<version>.zip` in the plugin folder: `demo-data\`,
+2. Put the demo data next to it, zipped. The plugin ZIP holds no demo data or tests, so people
+   trying the plugin get them from `<slug>-demo-data-v<version>.zip` in the plugin folder: `demo-data\`,
    `tests\sample-test-prompts.csv` and a short `README.md` naming the evaluated ZIP's SHA-256.
    Build it from the commit the evaluated ZIP came from (or a later commit where both folders are
    unchanged), never from a working tree. The one exception is a correction to
@@ -387,19 +414,11 @@ Do this after a `Ready for human review` verdict.
    `core.autocrlf=false` keeps the files byte-identical to the repository (LF); Git for Windows
    sets it to `true` system-wide, which makes `git archive` write CRLF.
 
-   Testers attach these files in their own Cowork chats; they are never sent to the Cowork
+   These files are attached in people's own Cowork chats; they are never sent to the Cowork
    evaluation.
-3. Add a tab for this version to the plugin's tracker workbook (`<slug>-human-test-tracker.xlsx`,
-   or `<Title Case Slug> - Human Test Tracker.xlsx` in the Retail layout),
-   following the [tracker spec](templates/human-test-tracker.md). There is one workbook per
-   plugin and one tab per version. Its **Inputs** paths are relative to the demo-data ZIP.
-4. Two independent testers install the archived ZIP and run the critical-path prompts. They record
-   the results in the tracker.
-5. Promote only when the tab's **Publish gate** reads `PASS` and its **Owner decision** reads
-   `Publish`.
-
-Tracker workbooks carry an encrypting sensitivity label. Open and edit them in Excel desktop, or
-through Excel COM.
+3. The owner records the decision in the deployment doc's **Owner decision** field: `Publish`
+   with the date and the evaluated SHA-256, or `Hold` with the reason. Only the owner writes it.
+4. Promote (Step 6) only when that field reads `Publish` for this exact version and SHA-256.
 
 ## Step 6: publish and file the evidence
 
@@ -447,7 +466,7 @@ This repository is public; the SharePoint library is not.
 |---|---|
 | Plugin source, versions, commits and ZIP SHA-256s | The Cowork HTML reports |
 | Automated verdicts and headline figures | The testing-strategy document; scenario and CRM evidence |
-| Summaries, in your own words, of findings about the plugin's own synthetic behaviour | Reviewer identities, tracker results and owner decision records |
+| Summaries, in your own words, of findings about the plugin's own synthetic behaviour | Owner decision records (and historical tracker results) |
 | Cowork task names | Deployment docs and library URLs |
 
 Never copy report text or internal URLs into the repository, a commit message or a bundle.

@@ -20,10 +20,10 @@ export const REQUIRED_REPORTS = [
 ] as const;
 
 /**
- * "Ready for human review" means every measured bar is met and only the evidence the two-reviewer
- * human review supplies is pending. It is never a publish signal.
+ * "Ready" means every measured bar is met. It is never a publish signal: publication needs the
+ * owner's recorded Publish decision (owner, 2026-10-23: human testing removed from the process).
  */
-export type EvaluationVerdict = "Ready for human review" | "Blocked" | "No-ship";
+export type EvaluationVerdict = "Ready" | "Blocked" | "No-ship";
 
 export type PackageFormat = "claude-plugin" | "mos3";
 
@@ -379,8 +379,9 @@ export function confirmsArtifactMatch(html: string, digest: string): boolean {
 }
 
 /**
- * The automated verdict stated in recommendations.html. "Ready for human review" is matched first so
- * it is never read as a bare "Ready"; a bare legacy "Ready" maps to it, and "Stop" maps to No-ship.
+ * The automated verdict stated in recommendations.html. Reports archived between 2026-10-12 and
+ * 2026-10-23 say "Ready for human review"; it is matched whole and maps to "Ready", and any other
+ * "Ready for ..." phrase is rejected. "Stop" maps to No-ship.
  */
 export function extractVerdict(html: string): EvaluationVerdict {
   const text = htmlToText(html);
@@ -388,31 +389,27 @@ export function extractVerdict(html: string): EvaluationVerdict {
     /\bautomated\s+verdict[\s:—-]*(ready[\s-]+for[\s-]+human[\s-]+review|ready(?![\s-]+for\b)|blocked|no[\s-]?ship|stop)\b/i,
   );
   if (!match) {
-    throw new Error(
-      `${VERDICT_REPORT} must state an automated verdict of Ready for human review, Blocked, or No-ship`,
-    );
+    throw new Error(`${VERDICT_REPORT} must state an automated verdict of Ready, Blocked, or No-ship`);
   }
   const value = match[1].toLowerCase();
-  if (value.startsWith("ready")) return "Ready for human review";
+  if (value.startsWith("ready")) return "Ready";
   if (value === "blocked") return "Blocked";
   return "No-ship";
 }
 
 /** Guidance printed after a verdict is archived. */
 export function verdictGuidance(verdict: EvaluationVerdict): string[] {
-  if (verdict === "Ready for human review") {
+  if (verdict === "Ready") {
     return [
-      "Next: two independent reviewers install this exact ZIP and complete the tracker tab; " +
-        "publication still needs the Publish gate and the owner decision.",
+      "Next: the owner records a Publish decision in the deployment doc; only then promote this exact ZIP. " +
+        "Ready is not a publish signal.",
     ];
   }
   const lines = ["Do not publish this artifact. Fix the reported blockers and prepare a new version."];
   if (verdict === "Blocked") {
     lines.push(
-      "Blocked means evidence human review cannot supply is missing, or a gate failed closed without " +
-        "an observed plugin defect. Missing human-review evidence alone should not produce Blocked under " +
-        "the current prompt; if that is the only reason given, check the report's \"Pending human-review " +
-        "evidence\" section and raise it with the owner before remediating.",
+      "Blocked means the evaluation could not complete or the ZIP identity is unclear, without an observed " +
+        "plugin defect. Find out why and raise it with the owner before remediating.",
     );
   }
   return lines;

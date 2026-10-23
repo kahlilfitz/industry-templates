@@ -2,9 +2,9 @@
 
 > **Where the filled-in document lives.** Copy this template, fill it in, and save it in the
 > SharePoint library at `<Industry>/<plugin-slug>/PLUGIN-DETAILS-AND-DEPLOYMENT.md`, next to the
-> plugin's `Evaluation/` folder and human-test tracker. The filled-in document accompanies the
-> distributable ZIP and records the human-gate status and the people responsible for it, so it stays
-> in SharePoint with the evidence and is never committed to this repository. See
+> plugin's `Evaluation/` folder. The filled-in document accompanies the distributable ZIP and
+> records the owner's publish decision, so it stays in SharePoint with the evidence and is never
+> committed to this repository. See
 > [What is public and what stays in SharePoint](../release-process.md#what-is-public-and-what-stays-in-sharepoint).
 > Delete this blockquote, the required-fields table and every `<!-- guidance -->` comment when you
 > fill it in.
@@ -25,7 +25,7 @@ Required fields, all of which must be filled before the document is shared:
 | Deployment and install steps | Section 8 |
 | Adaptation guidance | Section 6 |
 | Known limitations and backlog | Section 8 |
-| Human-gate status | Read-first note and section 8 |
+| Owner decision (`Pending`, `Publish` or `Hold`) | Read-first note and section 8 |
 | Change history | Section 7 and the document change history |
 
 Take every number from the archived reports for that version (`plugin-health.html`,
@@ -41,10 +41,9 @@ Evaluated package: `Evaluation/<version>/<plugin-slug>.zip` · Version <version>
 
 > **Read this first if you are deciding whether to publish.** The Cowork automated verdict for
 > <version> is **<Ready | Blocked | No-ship>**, but this is not a publication decision. The
-> Industry Templates testing strategy requires **two independent human reviewers** to run every
-> prompt in the human-test tracker (the critical-path prompts are the mandatory minimum it must
-> contain) and the accountable owner to record a `Publish` decision before the evaluated ZIP can be
-> promoted to the plugin-folder-level distributable.
+> evaluated ZIP can be promoted to the plugin-folder-level distributable only after a `Ready`
+> verdict and the accountable owner's `Publish` decision recorded in section 8. Human testing is not
+> part of the release process.
 
 <!-- guidance: If the verdict is Blocked or No-ship, replace the paragraph above with one sentence
 stating that this version must not be published and naming the next version being prepared. -->
@@ -74,7 +73,7 @@ Source-only (in the repository, never in the ZIP): `metadata.json`, `README.md`,
 **Demo data and sample prompts (not in the package).** `<plugin-slug>-demo-data-v<version>.zip`
 in this folder (SHA-256 `<SHA-256>`) holds `demo-data/` (`scenario-a-happy`: <one-line synthetic
 scenario>; `scenario-b-drama`: <one-line synthetic scenario>), `tests/sample-test-prompts.csv` and a
-`README.md`. Testers attach these files in Cowork; the tracker's Inputs paths are relative to it.
+`README.md`. Attach these files in Cowork to try the plugin.
 
 | Field | Value |
 |---|---|
@@ -89,10 +88,10 @@ scenario>; `scenario-b-drama`: <one-line synthetic scenario>), `tests/sample-tes
 | Evaluated ZIP SHA-256 | `<SHA-256>` (<bytes> bytes, <file count> files) |
 
 The evaluated bytes are filed under `Evaluation/<version>/<plugin-slug>.zip`. Do not create the
-plugin-folder-level distributable until the human gate clears. The intended distributable name is
+plugin-folder-level distributable until the owner records `Publish`. The intended distributable name is
 `<plugin-slug>-plugin-v<version>.zip` (`<plugin-slug>-cowork.zip` in the Retail layout), and it
-must be copied byte-identical from the evaluated ZIP only after the tracker's publish gate reads
-PASS and the owner decision is `Publish`.
+must be copied byte-identical from the evaluated ZIP only after a `Ready` verdict and the owner's
+`Publish` decision for this version.
 
 ---
 
@@ -218,7 +217,7 @@ suite from the repository (`tests/`) before packaging.
 
 Cowork evaluates a ZIP, not a source folder. File the exact evaluated ZIP under
 `Evaluation/<version>/`, record its SHA-256, and only promote that same byte sequence after the
-human gate clears.
+owner records `Publish`.
 
 ---
 
@@ -231,7 +230,7 @@ blocker classes, and the SHA-256. -->
 
 | Version | Automated verdict | Evidence summary | Publication status |
 |---|---|---|---|
-| <version> | **<verdict>** | <summary>. SHA `<SHA-256>`. | <Do not publish \| Automated Ready; human gate pending \| Published <date>> |
+| <version> | **<verdict>** | <summary>. SHA `<SHA-256>`. | <Do not publish \| Ready; owner decision pending \| Published <date>> |
 
 ---
 
@@ -253,10 +252,9 @@ blocker classes, and the SHA-256. -->
 | Run currency | Run on the evaluated artifact, SHA `<SHA-256>` |
 | Evidence | `Evaluation/<version>/recommendations.html`; `Evaluation/<version>/behavioral-test-report.html`; `Evaluation/<version>/plugin-health.html`; `Evaluation/<version>/<plugin-slug>.zip` |
 
-**Human-gate status: <Not started | In progress | Passed <date> | Failed>.** The tracker workbook in
-this folder is prepared with <n> prompts, including every critical-path prompt. Both reviewers run
-every prompt in the tracker. Publication can proceed only after the workbook publish gate evaluates
-to PASS and the owner decision in the tracker is `Publish`.
+**Owner decision: <Pending | Publish <YYYY-MM-DD>, SHA `<SHA-256>` | Hold <YYYY-MM-DD>: <reason>>.**
+Only the accountable owner fills this in. Publication can proceed only after a `Ready` verdict and
+a `Publish` decision naming this version's SHA-256.
 
 **Distributable status: <Not yet promoted | Promoted <date>>.** After a `Publish` decision, copy
 the evaluated ZIP byte-identical from `Evaluation/<version>/` to
@@ -276,10 +274,8 @@ re-evaluation.
 
 **Required follow-ups before publication.**
 
-- Two independent human testers run every prompt in the tracker. Critical-path prompts it must
-  contain: <list the critical-path prompts by name>.
 - <Policy owner confirmation of illustrative rules, if any.>
-- The accountable owner records `Publish` in the tracker.
+- The accountable owner records `Publish` in the owner decision above.
 - Before promotion, perform an artifact identity check against the evaluated ZIP SHA-256.
 
 **Known limitations / next-version backlog.** Non-blocking findings from the <version> report.
@@ -294,7 +290,7 @@ separate "Blockers to fix in <next version>" heading, then every WEAK.>
 
 | Date | Version | Change |
 |---|---|---|
-| <YYYY-MM-DD> | <version> | <Created after <verdict> evaluation \| human gate passed \| promoted> |
+| <YYYY-MM-DD> | <version> | <Created after <verdict> evaluation \| owner decision recorded \| promoted> |
 
 *Package maintained by <owning team or role>. Evidence in `Evaluation/<version>/`. Reports are
 generated by the plugin evaluation built into Cowork.*

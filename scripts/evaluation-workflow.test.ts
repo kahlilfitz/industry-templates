@@ -58,8 +58,8 @@ test("htmlToText removes markup and decodes common entities", () => {
 });
 
 test("extractVerdict normalizes supported Cowork verdicts", () => {
-  assert.equal(extractVerdict("<p>Automated verdict: Ready for human review</p>"), "Ready for human review");
-  assert.equal(extractVerdict("<p>Automated verdict: Ready</p>"), "Ready for human review");
+  assert.equal(extractVerdict("<p>Automated verdict: Ready for human review</p>"), "Ready");
+  assert.equal(extractVerdict("<p>Automated verdict: Ready</p>"), "Ready");
   assert.equal(extractVerdict("<p>Automated verdict — Blocked</p>"), "Blocked");
   assert.equal(extractVerdict("<p>Automated verdict: NO-SHIP</p>"), "No-ship");
   assert.equal(extractVerdict("<p>Automated verdict: STOP</p>"), "No-ship");
@@ -69,31 +69,31 @@ test("extractVerdict normalizes supported Cowork verdicts", () => {
 test("extractVerdict reads the new phrase whole and never as a bare Ready", () => {
   assert.equal(
     extractVerdict("<h2>Automated verdict</h2><p><strong>READY FOR HUMAN REVIEW</strong> — not a publish signal</p>"),
-    "Ready for human review",
+    "Ready",
   );
-  assert.equal(extractVerdict("<p>Automated verdict: Ready-for-human-review</p>"), "Ready for human review");
+  assert.equal(extractVerdict("<p>Automated verdict: Ready-for-human-review</p>"), "Ready");
   // A different "Ready for ..." phrase is not silently accepted as the legacy bare Ready.
   assert.throws(
     () => extractVerdict("<p>Automated verdict: Ready for publication</p>"),
-    /must state an automated verdict of Ready for human review, Blocked, or No-ship/,
+    /must state an automated verdict of Ready, Blocked, or No-ship/,
   );
   // The first stated verdict wins, and words after the phrase do not change it.
   assert.equal(
     extractVerdict("<p>Automated verdict: Ready for human review. Blocked items: none.</p><p>Automated verdict: No-ship</p>"),
-    "Ready for human review",
+    "Ready",
   );
   assert.equal(extractVerdict("<p>Automated verdict: Blocked</p><p>Automated verdict: Ready</p>"), "Blocked");
 });
 
-test("verdictGuidance never treats Ready for human review as a publish signal", () => {
-  assert.deepEqual(verdictGuidance("Ready for human review"), [
-    "Next: two independent reviewers install this exact ZIP and complete the tracker tab; " +
-      "publication still needs the Publish gate and the owner decision.",
+test("verdictGuidance never treats Ready as a publish signal", () => {
+  assert.deepEqual(verdictGuidance("Ready"), [
+    "Next: the owner records a Publish decision in the deployment doc; only then promote this exact ZIP. " +
+      "Ready is not a publish signal.",
   ]);
   assert.match(verdictGuidance("No-ship")[0], /^Do not publish this artifact/);
   const blocked = verdictGuidance("Blocked").join(" ");
   assert.match(blocked, /^Do not publish this artifact/);
-  assert.match(blocked, /Missing human-review evidence alone should not produce Blocked under the current prompt/);
+  assert.match(blocked, /raise it with the owner before remediating/);
 });
 
 test("containsDigest tolerates formatting in rendered HTML text", () => {
@@ -272,7 +272,7 @@ test("both Cowork prompt templates request the two Cowork reports plus recommend
     assert.match(text, /Cowork's built-in plugin evaluation/);
     assert.match(text, /SHA-256 check: MATCH/);
     assert.match(text, /Automated verdict:/);
-    assert.match(text, /exactly one of: Ready for human review, Blocked, or No-ship/);
+    assert.match(text, /exactly one of: Ready, Blocked, or No-ship/);
     // The fix step parses this table (scripts/recommendations.ts).
     assert.match(text, /ID \| Severity \| Skill or file \| Evidence \| Suggested change/);
     assert.match(text, /blocker, required, advisory/);

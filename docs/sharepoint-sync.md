@@ -1,7 +1,7 @@
 # SharePoint sync
 
 The Industry Templates SharePoint library holds the planning documents, scenario and scoring
-references, evaluation evidence, human-test trackers and promoted distributables. It is **not**
+references, evaluation evidence, deployment docs and promoted distributables. It is **not**
 tracked by git. Each collaborator syncs the library with the OneDrive client and links it into the
 repository as `sharepoint\`, so agents and scripts can use stable `sharepoint\<Industry>\...` paths
 while every change syncs to SharePoint for the whole team.
@@ -83,7 +83,7 @@ A plain `sharepoint` folder (not a link) is refused unless passed explicitly wit
   `Cowork Plugin Evals\4 - Matrices\2 - Built\` into each matching plugin's `Evaluation Matrices\`
   folder. It keeps the originals, skips identical copies and refuses to overwrite differing files
   ([matrix collection](release-process.md#collect-evaluation-matrices)).
-- Close Excel or Word trackers when done. If two people edit offline at once, OneDrive keeps both as
+- Close Excel or Word files when done. If two people edit offline at once, OneDrive keeps both as
   `<name>-<COMPUTERNAME>.<ext>`. `sharepoint:doctor` lists these; merge and delete the copy.
 - Check the OneDrive tray icon is not paused before archiving evidence.
 

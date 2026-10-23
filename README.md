@@ -158,8 +158,8 @@ npm run evaluation:watch -- --slug <plugin-slug>     # archive the Cowork report
    - if every fix was applied with no conflicts, the next version is prepared automatically (queued
      like the run before it); otherwise the step stops with the reasons. `--no-prepare` turns this off.
 
-`Ready for human review` is never a publish signal. Publication still needs two independent
-human testers, the tracker's Publish gate and an owner decision of Publish.
+`Ready` is never a publish signal. Publication still needs the owner's `Publish` decision,
+recorded in the plugin's deployment doc. Human testing is not part of the process.
 
 ### Collect evaluation matrices
 

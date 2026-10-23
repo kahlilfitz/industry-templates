@@ -384,7 +384,7 @@ export function buildMosPackage(options: BuildMosOptions): BuildMosResult {
     const promoted = join(pluginDir, `${slug}-cowork.zip`);
     if (!existsSync(promoted)) {
       throw new Error(
-        `${promoted} does not exist. Build the MOS package only after human review sign-off (C2) and the C4 promotion; ` +
+        `${promoted} does not exist. Build the MOS package only after the owner's Publish decision (C2) and the C4 promotion; ` +
           "pass --out-dir for a dry run.",
       );
     }

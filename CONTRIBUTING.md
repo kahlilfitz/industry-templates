@@ -159,7 +159,7 @@ Merges to `main` also refresh the generated `catalog` branch.
 
 ## SharePoint library
 
-Planning documents, scenario references, evaluation evidence and human-test trackers live in the
+Planning documents, scenario references and evaluation evidence live in the
 Industry Templates SharePoint library, not in git. Sync it with OneDrive and link it into the
 repository as `sharepoint\` with `npm run sharepoint:link` — see
 [SharePoint sync](docs/sharepoint-sync.md). Never commit anything from it.
@@ -172,9 +172,10 @@ Before treating a plugin as publishable, follow the [release process](docs/relea
 2. run Cowork's built-in evaluation on it, which produces the two strategy reports plus
    `recommendations.html`;
 3. let the watcher archive the reports and start the fix agent on blocker and required fixes;
-4. repeat with the next version until the verdict is `Ready for human review`;
-5. run the two-tester human spot check.
+4. repeat with the next version until the verdict is `Ready`;
+5. wait for the owner to record `Publish` in the plugin's deployment doc. There is no human
+   testing step.
 
-`Ready for human review` is never a publish signal.
+`Ready` is never a publish signal.
 
 By contributing you agree your template is shared under the repository's [MIT license](LICENSE).

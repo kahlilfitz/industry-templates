@@ -22,7 +22,7 @@ recommendations.html
 At the top, state:
 - plugin slug {{SLUG}}, version {{VERSION}} and run label {{RUN_LABEL}}
 - the expected and observed SHA-256, and `SHA-256 check: MATCH` or `SHA-256 check: MISMATCH`
-- `Automated verdict:` followed by exactly one of: Ready for human review, Blocked, or No-ship
+- `Automated verdict:` followed by exactly one of: Ready, Blocked, or No-ship
 
 Then one HTML table of suggested fixes with exactly these columns:
 ID | Severity | Skill or file | Evidence | Suggested change
@@ -41,7 +41,8 @@ negative cases stay out; the security scan passes with no medium or high finding
 and safety gate passes. A guardrail or safety failure is always a stop.
 
 Decide the verdict only from plugin-health.html and behavioral-test-report.html:
-- Ready for human review: every bar in the strategy is met, and only the two-tester human spot
-  check remains. It is not a publish signal.
+- Ready: every bar in the strategy is met. It is not a publish signal; the owner decides
+  publication. Human testing is not part of this release process, so do not hold the verdict for
+  evidence only a human tester could supply.
 - Blocked: the evaluation could not complete, or the ZIP identity is unclear.
 - No-ship: any blocker or required fix.
