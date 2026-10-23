@@ -215,6 +215,21 @@ Notes on the board:
   keyed to the new SHA. The superseded candidates' tracker tabs are not completed. (From 2026-10-23
   trackers are no longer used.)
 
+### Owner decisions: Retail layout match (2026-10-23)
+
+The owner reviewed what remained between the PS plugin folders and Retail's layout.
+
+- **Prompts CSV: matched.** Each plugin folder holds `sample-test-prompts.csv`, Retail's name. It is
+  copied byte for byte from the published demo-data ZIP
+  ([release process](../release-process.md#step-5-owner-publish-decision)). Columns are not
+  reshaped to Retail's six, because the DRQG and Mobilization suites read the two-column format.
+- **Test Outcome Report: skipped** (owner: "skip the test report"). Retail's
+  `<Title>-Test-Report.html` came from a one-off run and has no generator. The archived Cowork
+  reports cover the same ground.
+- **Scenario matrix: equivalent kept** (owner: "keep the equivalent matrix folder"). Cowork's
+  versioned workbooks and notes in `Evaluation Matrices\` stand in for Retail's single
+  `<Title> - Evaluation Scenario Matrix.xlsx`. Nothing is copied under Retail's name.
+
 ### Owner decision: remove human testing (2026-10-23)
 
 The owner removed human testing from the release process (owner: "remove human testing from the
