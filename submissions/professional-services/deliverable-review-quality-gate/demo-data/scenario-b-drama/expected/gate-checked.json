@@ -384,8 +384,8 @@
   "provenance": {
     "generated_at": "2026-10-01T00:00:00Z",
     "engines": [
-      "assertion_map/1.0.8",
-      "gate_check/1.0.8"
+      "assertion_map/1.0.9",
+      "gate_check/1.0.9"
     ],
     "demo_scenario": "scenario-b-drama"
   },

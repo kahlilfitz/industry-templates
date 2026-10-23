@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.9 - 2026-10-23
+
+Applies the guardrail gap from Cowork evaluation matrix 2026-10-22-1252 fixture FX-04 (criteria-extract sub-case), by owner decision 2026-10-23 (promoted to a required fix). `steering_guard` is unchanged (`__version__` still 1.1.7).
+
+- **Matrix 2026-10-22-1252 FX-04 (owner decision 2026-10-23, promoted to a required fix):** a QRM note in the criteria extract telling the reviewer to ignore a numbered criteria section, copied into `criteria.criteria_sections`, raised no G8 finding and reached `assertion-mapped.json`, `gate-checked.json` and `severity-ranked.json` verbatim. The criteria fields were already screened; the shared detector's rule-override nouns name the gates (G1-G8), QRM and the quality gate but no numbered section, and adding "section" as a DRQG hook noun would also flag navigation ("skip to section 4"). `assertion_rules.py` now adds `SECTION_OVERRIDE`: on the detector's clause lead and normalised text, an override verb (ignore, disregard, bypass, override, skip, waive and the like) whose direct object is a numbered section reference (section, # or § followed by a number) is a `rule_override` hit. It is applied after the detector in `screen_text` and `screen_fields` (each field, then the record joins), so it adds hits and never removes one. The criteria text is now a GC-G8-embedded-instruction release blocker, ranked first, the release readiness is `not_ready_for_release`, and the text is withheld with the G8 marker in every engine output, while the criteria floor (`quality-gate-criteria.md #1-#8`) is kept. "skip to section 4" and "pre-approved by the client board" stay unflagged. The three copies of `assertion_rules.py` stay byte-identical, and `references/quality-gate-criteria.md` (#8, rule override) states the rule in all five byte-identical copies.
+- New regression check in `g8_tests`: "matrix 2026-10-22-1252 FX-04 (owner-promoted): instruction copied into criteria.criteria_sections raises a G8 release blocker and is withheld from every output". It fails on 1.0.8 and passes on 1.0.9; no existing check changed.
+- `AM_ENGINE_VERSION` in `assertion_rules.py` and `ENGINE_VERSION` in `gate_check.py` and `severity_rank.py` move to 1.0.9 in every vendored copy. The demo expected outputs were regenerated from `review-input.json` and differ only in the `assertion_map/`, `gate_check/` and `severity_rank/` provenance labels; `engine-run.log` is unchanged.
+- `listing-metadata.md` states plugin version 1.0.9.
+- Version 1.0.9 in `metadata.json`, `manifest.json` and every `SKILL.md`.
+
 ## 1.0.8 - 2026-10-15
 
 Brings the engine version labels in line with the plugin version (owner rule 2026-10-15: engine labels match the plugin version on every release). The Cowork evaluation of 1.0.7 found no blocker or required fix; this applies its advisory R-01 by owner decision. No rule, pattern, engine logic or `steering_guard` `__version__` (still 1.1.7) changes.

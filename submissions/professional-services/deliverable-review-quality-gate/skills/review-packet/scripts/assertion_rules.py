@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 import steering_guard as sg  # vendored shared detector; never edit (tests/check_shared_copies.py pins its SHA-256)
 
 AM_ENGINE = "engine:assertion_map"
-AM_ENGINE_VERSION = "1.0.8"
+AM_ENGINE_VERSION = "1.0.9"
 AM_LEDGER_TAG = f"assertion_map/{AM_ENGINE_VERSION}"
 CONTRACT_VERSION = "ps.deliverable-review-quality-gate.v1"
 # The engines in run order; provenance.engines names them as `<engine>/<version>` (record_engine).
@@ -1760,6 +1760,14 @@ STEERING_HOOKS = dict(
                       "quality gate", "gate criteria", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"),
     trusted_domains=(),
 )
+# Rule override aimed at a numbered criteria section (an override verb whose object is "section 8", Cowork evaluation
+# matrix 2026-10-22-1252 FX-04). The detector's rule nouns name no section, and a hook noun "section" would also match
+# navigation ("skip to section 4") through the detector's filler words, so this rule only adds a hit, on the detector's
+# own clause lead, when the section reference is the override verb's direct object. Matched on the detector's
+# normalised text, so look-alike letters and format characters cannot hide it (quality-gate-criteria.md #8.5).
+SECTION_OVERRIDE = re.compile(sg._LEAD + r"(?:ignore|disregard|bypass|override|overrule|set\saside|forget|circumvent|skip|"
+                              r"waive|suspend|turn\soff|disable)\s(?:(?:the|this|that|these|those|all|any|our|your)\s)?"
+                              r"(?:(?:qrm|criteria|criterion|quality\sgate|gate|review)\s)?(?:sections?\s?#?|§\s?|#)\d")
 OVERSIZE = "oversize"
 SPLIT = "split"
 INSTRUCTION = "instruction"
@@ -1825,19 +1833,40 @@ def is_withheld(value):
     return withheld_kind(value) is not None
 
 
+def _section_override(value):
+    """SECTION_OVERRIDE as a detector hit on value's normalised text, or [] (the span is in normalised characters)."""
+    match = SECTION_OVERRIDE.search(sg.normalize(value))
+    return [sg.Hit("rule_override", match.start(), match.end())] if match else []
+
+
 @functools.lru_cache(maxsize=4096)
 def _screen_cached(value):
-    return tuple(sg.scan(value, **STEERING_HOOKS))
+    return tuple(sg.scan(value, **STEERING_HOOKS)) or tuple(_section_override(value))
 
 
 def screen_text(value):
-    """steering_guard hits for one untrusted string, with the DRQG hooks (cached: keys and IDs repeat)."""
+    """steering_guard hits for one untrusted string, with the DRQG hooks and SECTION_OVERRIDE (cached: keys and IDs
+    repeat)."""
     return list(_screen_cached(value)) if isinstance(value, str) else []
 
 
 @functools.lru_cache(maxsize=16384)
 def _screen_fields_cached(items):
-    return tuple(sg.scan_fields(dict(items), **STEERING_HOOKS))
+    found = tuple(sg.scan_fields(dict(items), **STEERING_HOOKS))
+    values = [value for _, value in items if isinstance(value, str) and value.strip()]
+    if found or not values:
+        return found
+    # SECTION_OVERRIDE the way scan_fields reads a record: each field, then the ' ; ' and label-stripped joins (a field
+    # that trips is returned as-is, a join that trips is one 'split' hit). The detector already held an over-long join.
+    for value in values:
+        found += tuple(_section_override(value))
+    if found or len(values) < 2:
+        return found
+    for joined in (" ; ".join(values), " ".join(sg._LABEL.sub("", value).strip() for value in values)):
+        hits = _section_override(joined)
+        if hits:
+            return (sg.Hit("split", hits[0].start, hits[0].end),)
+    return ()
 
 
 def screen_fields(fields):

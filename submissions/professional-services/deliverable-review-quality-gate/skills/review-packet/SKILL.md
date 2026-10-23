@@ -4,7 +4,7 @@ description: "Drafts the partner/QRM review packet from verified gate_check and 
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/severity_rank.py --verify, with its bundled gate_check.py, assertion_rules.py and steering_guard.py. Reads severity-ranked.json and review-input.json and writes a draft markdown packet; no network access or connector is required."
 metadata:
-  version: "1.0.8"
+  version: "1.0.9"
   author: Microsoft Professional Services Skills
   category: writing
   icon: ic_fluent_document_bullet_list_24_regular
