@@ -1,5 +1,6 @@
 DRAFT - HUMAN REVIEW REQUIRED
 DRAFT - pending partner approval and independence/resource-management review
+# Staffing slate draft - ENG-PS-2026-1042
 
 ## Refusals
 No refusals.
@@ -18,11 +19,11 @@ No refusals.
 | 1 | C-102 Leo Brooks | 100.0 | 90.0 | 90.0 | rate-band component 1.0 (fit-scoring-rubric.md #6.1) | PSS-002; C-102; independence-eligibility-rules.md #1.1; independence-eligibility-rules.md #1.2,#9.1 |
 
 ## Not recommended
-| Role | Candidate | Verdict | Blocking rule | Citation |
-|---|---|---|---|---|
-| PSS-001 | C-102 Leo Brooks | below_score_floor | fit-scoring-rubric.md #7.2 | independence-eligibility-rules.md #1.1; fit-scoring-rubric.md #7.2 |
-| PSS-002 | C-101 Ava Morgan | needs_review | independence-eligibility-rules.md #6.2 | independence-eligibility-rules.md #6.2; fit-scoring-rubric.md #7.3 |
-| PSS-002 | C-103 Mara Singh | ineligible | independence-eligibility-rules.md #6.1 | independence-eligibility-rules.md #6.1; fit-scoring-rubric.md #7.3 |
+| Role | Candidate | Verdict | Conflict category | Blocking rule | Citation |
+|---|---|---|---|---|---|
+| PSS-001 | C-102 Leo Brooks | below_score_floor | none | fit-scoring-rubric.md #7.2 | independence-eligibility-rules.md #1.1; fit-scoring-rubric.md #7.2 |
+| PSS-002 | C-101 Ava Morgan | needs_review | availability | independence-eligibility-rules.md #6.2 | independence-eligibility-rules.md #6.2; fit-scoring-rubric.md #7.3 |
+| PSS-002 | C-103 Mara Singh | ineligible | availability | independence-eligibility-rules.md #6.1 | independence-eligibility-rules.md #6.1; fit-scoring-rubric.md #7.3 |
 
 ## Gap statements
 No staffing gaps identified.
@@ -31,3 +32,6 @@ No staffing gaps identified.
 - Partner approval and independence/resource-management review are required before any assignment.
 - A needs_review or ineligible verdict changes only through a corrected source record and an engine re-run.
 - Escalations recorded in validated.json: 0.
+
+### Escalations
+No escalations recorded.

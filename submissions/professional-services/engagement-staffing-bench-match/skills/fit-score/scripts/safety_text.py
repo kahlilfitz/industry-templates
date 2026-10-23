@@ -32,6 +32,8 @@ STAFFING_HOOKS = {
         "conflicts register",
         "score floor",
         "eligibility verdict",
+        "rubric",
+        "rubrics",
     ),
 }
 OVERSIZE_REASON = "text too long to screen for embedded instructions; withheld for review"

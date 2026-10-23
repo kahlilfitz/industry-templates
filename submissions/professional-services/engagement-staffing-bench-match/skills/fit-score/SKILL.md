@@ -4,7 +4,7 @@ description: "Computes deterministic, pre-governance candidate-role fit scores, 
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/fit_score.py and scripts/slate_rank.py on roles.json and bench.json from earlier skills or the user. No connectors required. Writes local JSON only; never writes to a resource or staffing system."
 metadata:
-  version: "1.1.7"
+  version: "1.1.8"
   icon: ic_fluent_data_bar_vertical_star_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
@@ -21,7 +21,7 @@ After `bench-query` and before `constraint-check` in every staffing run.
 ## Inputs
 `roles.json` + `bench.json` using contract `ps.engagement-staffing-bench-match.v1`.
 ## Steps
-1. Validate that every role and candidate carries `source`, `confidence` and `citation`; flag duplicate candidate IDs and missing rates.
+1. Validate that every role and candidate carries `source`, `confidence` and `citation`; flag missing rates. A duplicate candidate ID is an input error under `independence-eligibility-rules.md #9.7`: `fit_score.py` refuses it with one `error:` line and writes nothing, so stop and report that one-line error; never hand-build the output.
 2. Run the scoring engine.
 3. Run the ranking engine.
 4. Quote scores, components, utilisation and provisional rank verbatim. The model may explain the meaning but never recomputes a number.
