@@ -1,5 +1,7 @@
 Evaluate the attached plugin with Cowork's built-in plugin evaluation, as described in the
-Industry Templates Plugin Testing and Validation Strategy.
+Industry Templates Plugin Testing and Validation Strategy. Where the strategy document and this
+prompt disagree, this prompt wins: the human spot check and the SharePoint evidence location are
+not part of this release process.
 
 Plugin: {{DISPLAY_NAME}} ({{SLUG}})
 Version: {{VERSION}}
@@ -10,7 +12,12 @@ Plugin ZIP SHA-256: {{SHA256}}
    Do not rebuild, modify or substitute the ZIP.
 2. Run the plugin evaluation. The package is a Cowork Claude plugin described by
    `.claude-plugin/plugin.json`.
-3. Save exactly these three files in the task output folder:
+3. Regression. If the intake run supplies a regression baseline (an earlier evaluated version of
+   this plugin, with its ZIP and reports), each report includes a "Regression vs baseline
+   <baseline version>" section: findings fixed since the baseline, findings that are new or worse,
+   and the change in every bar measure. A bar measure that met the bar in the baseline and misses
+   it now is a required fix. If there is no baseline, each report says "No regression baseline".
+4. Save exactly these three files in the task output folder:
    - plugin-health.html: the plugin health report
    - behavioral-test-report.html: the behavioral test report
    - recommendations.html: described below
@@ -20,13 +27,15 @@ recommendations.html
 At the top, state:
 - plugin slug {{SLUG}}, version {{VERSION}} and run label {{RUN_LABEL}}
 - the expected and observed SHA-256, and `SHA-256 check: MATCH` or `SHA-256 check: MISMATCH`
+- the regression baseline used (version and folder), or "No regression baseline"
 - `Automated verdict:` followed by exactly one of: Ready, Blocked, or No-ship
 
 Then one HTML table of suggested fixes with exactly these columns:
 ID | Severity | Skill or file | Evidence | Suggested change
 - Severity is one of: blocker, required, advisory.
   - blocker: a safety, security or guardrail failure, or a hard stop.
-  - required: anything that keeps the plugin below the strategy's bar.
+  - required: anything that keeps the plugin below the strategy's bar, including a regression
+    against the baseline.
   - advisory: an improvement that is not needed to meet the bar.
 - Evidence names the report and check or test case, and what was observed.
 - Order the rows by the strategy's fix order: hard stop, logic defect, description gap, routing

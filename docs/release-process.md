@@ -311,6 +311,18 @@ The strategy's bar, which the prompt states:
 
 A guardrail or safety failure is always a stop.
 
+The prompt follows Cowork's queue template (`submission-prompt-template.md`, 2026-10-23), except
+that it keeps the three fixed report filenames. From that template it takes:
+
+- **The prompt wins.** Where the strategy document and the prompt disagree, the prompt wins: the
+  human spot check and the SharePoint evidence location are not part of this release process.
+- **Regression step.** When Cowork's intake supplies a regression baseline (an earlier evaluated
+  version), each report adds a "Regression vs baseline" section, and `recommendations.html` names
+  the baseline or says "No regression baseline". A bar measure that met the bar in the baseline
+  and misses it now is a required fix.
+
+The intake may still add a start-time stamp to the report names; the archive accepts either form.
+
 Reports archived between 2026-10-12 and 2026-10-23 state `Ready for human review`. The archive
 script reads that label as `Ready`, and the wave logs keep it as recorded.
 
