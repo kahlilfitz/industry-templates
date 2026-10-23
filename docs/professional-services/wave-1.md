@@ -147,6 +147,7 @@ Where things live:
 | Plugin folder (Retail layout, since 2026-10-16) | `sharepoint\Professional Services\Wave 1\<Title Case Slug>\` (for example `Wave 1\Time Expense Narrative Compliance\`) |
 | Archived evidence | `<plugin folder>\Evaluation\v<version>\` |
 | Deployment doc (owner decision) | `<plugin folder>\PLUGIN-DETAILS-AND-DEPLOYMENT.md`; the `<Title Case Slug> - Human Test Tracker.xlsx` workbooks are history only from 2026-10-23 |
+| Demo data and sample prompts | `<plugin folder>\<slug>-demo-data-v<version>.zip`, plus a loose `sample-test-prompts.csv` copied byte for byte from it (Retail layout; added 2026-10-23) |
 | Promoted distributable | `<plugin folder>\<slug>-cowork.zip` (only after C2) |
 | Derived MOS package (manifest 1.28) | `<plugin folder>\MOS Package\` (`<slug>-mos3-v<version>.zip`, `README.md`, `skills\`), built by `npm run mos:build` only after C4 ([decision](#owner-decision-derived-manifest-128-mos-package-2026-10-16)) |
 | Industry status page | `sharepoint\Professional Services\README.md` |
@@ -213,6 +214,21 @@ Notes on the board:
   date yet; each gets a row in its version history when it is frozen, and its tracker gets a new tab
   keyed to the new SHA. The superseded candidates' tracker tabs are not completed. (From 2026-10-23
   trackers are no longer used.)
+
+### Owner decisions: Retail layout match (2026-10-23)
+
+The owner reviewed what remained between the PS plugin folders and Retail's layout.
+
+- **Prompts CSV: matched.** Each plugin folder holds `sample-test-prompts.csv`, Retail's name. It is
+  copied byte for byte from the published demo-data ZIP
+  ([release process](../release-process.md#step-5-owner-publish-decision)). Columns are not
+  reshaped to Retail's six, because the DRQG and Mobilization suites read the two-column format.
+- **Test Outcome Report: skipped** (owner: "skip the test report"). Retail's
+  `<Title>-Test-Report.html` came from a one-off run and has no generator. The archived Cowork
+  reports cover the same ground.
+- **Scenario matrix: equivalent kept** (owner: "keep the equivalent matrix folder"). Cowork's
+  versioned workbooks and notes in `Evaluation Matrices\` stand in for Retail's single
+  `<Title> - Evaluation Scenario Matrix.xlsx`. Nothing is copied under Retail's name.
 
 ### Owner decision: remove human testing (2026-10-23)
 
