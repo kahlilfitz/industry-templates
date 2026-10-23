@@ -4,7 +4,7 @@ description: "Drafts the partner-ready staffing recommendation from constraint-c
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/slate_validate.py on governed.json from constraint-check, re-derived from roles.json, bench.json and constraints.json. No connectors required. Returns the draft in chat or as a document; never sends, posts or writes back to any system."
 metadata:
-  version: "1.1.7"
+  version: "1.1.8"
   icon: ic_fluent_clipboard_text_edit_24_regular
   author: Microsoft Professional Services Skills
   category: writing
@@ -25,7 +25,7 @@ After `constraint-check`, when the user asks for a slate, recommendation, partne
    The draft is the engine-rendered `slate-draft.md`: present it verbatim. You may add prose only outside the tables, and never change a figure, verdict or ID; steps 2-6 describe what it already contains.
 2. Lead with any Govern refusals, especially if the top provisional candidate was disqualified.
 3. For each role, list final eligible candidates in engine order with fit score, component highlights, availability, utilisation after staffing, rate-band context and citations (record IDs and rule sections only). Check `constraints_considered[]` before placing anyone in the recommendation.
-4. Include ineligible and needs-review candidates in a separate "not recommended" section with blocking rule and citation. Label eligible candidates below 70.0 as `below_score_floor` under `fit-scoring-rubric.md #7.2`. If any applicable conflict record is unexplained, unknown or not clearly resolved, move the candidate to Needs Review even if another upstream field says eligible.
+4. Include ineligible and needs-review candidates in a separate "not recommended" section with conflict category, blocking rule and citation. Label eligible candidates below 70.0 as `below_score_floor` under `fit-scoring-rubric.md #7.2`. If any applicable conflict record is unexplained, unknown or not clearly resolved, move the candidate to Needs Review even if another upstream field says eligible.
 5. Write the gap statement verbatim for any role with no eligible candidate above the recommendable score floor.
 6. Start the output with the exact lines `DRAFT - HUMAN REVIEW REQUIRED` and `DRAFT - pending partner approval and independence/resource-management review`, and present it to the user for review.
 
@@ -35,21 +35,26 @@ python3 scripts/slate_validate.py --roles roles.json --bench bench.json --constr
 ## Tools
 The bash tool runs `slate_validate.py`; the file-read tool reads `validated.json` and the rendered `slate-draft.md`. The draft is returned in chat or saved as a document. Never call an email, Teams or posting tool.
 ## Output format
-Markdown with these sections: DRAFT banner; Refusals; Recommended slate (table per role); Not recommended (table); Gap statements; Next steps. If `gaps[]` is empty, write `No staffing gaps identified.` under Gap statements.
+Markdown with these sections: DRAFT banner, then a heading naming the engagement ID; Refusals; Recommended slate (table per role); Not recommended (table); Gap statements; Next steps, ending with an Escalations sub-part. If `gaps[]` is empty, write `No staffing gaps identified.` under Gap statements. The Not recommended table shows each candidate's conflict category: the `type` of every applicable `constraints_considered[]` record whose disposition is not clear, resolved, non_material or not_applicable (`none` if there is none, `unrecognised` for an unknown type); never the client name or reason. The Escalations sub-part lists each entry of `validated.json` `escalations[]` on its own line, with flagged text already replaced by its `[FLAGGED: ...]` marker; it writes `No escalations recorded.` when there are none. An escalation that carries conflict, financial-interest or leave detail never shows a client name, financial-interest specifics or a leave reason: it shows only the role ID, the action (refused, withheld), the candidate as shown in the tables, the conflict category (same vocabulary as the Not recommended column, taken from the candidate's `constraints_considered[]` records) and the rule sections. If the escalation cannot be matched to a candidate on the slate, it shows `escalation detail withheld - conflict category unrecognised` with its rule sections only. Capacity, gap, preferred-candidate context and redaction notes are shown as stored.
 
 ```markdown
 DRAFT - HUMAN REVIEW REQUIRED
 DRAFT - pending partner approval and independence/resource-management review
+# Staffing slate draft - <engagement_id>
 ## Refusals
 ## Recommended slate
 ### <role_id> <role_title>
 | Rank | Candidate | Fit score | Availability % | Utilisation after staffing % | Rate-band context | Citations |
 |---|---|---|---|---|---|---|
 ## Not recommended
-| Role | Candidate | Verdict | Blocking rule | Citation |
-|---|---|---|---|---|
+| Role | Candidate | Verdict | Conflict category | Blocking rule | Citation |
+|---|---|---|---|---|---|
 ## Gap statements
 ## Next steps
+- Escalations recorded in validated.json: <count>.
+### Escalations
+- <escalation as stored in validated.json: capacity, gap, preferred-candidate context or redaction note>
+- <role_id>: <action> top provisional candidate <candidate> - conflict category <category> (<rule sections>)
 ```
 ## Grounding requirements
 Every score, rank, verdict, utilisation figure and gap statement comes from `governed.json`. Cite role records, bench records and rule sections. Show conflict category, disposition and rule; do not repeat financial-interest details or leave reasons.

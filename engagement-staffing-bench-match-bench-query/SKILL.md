@@ -4,7 +4,7 @@ description: "Normalizes bench, availability, rate and conflicts-register data i
 license: Proprietary
 compatibility: "Reads user-supplied roster, availability, leave, rate-card and conflicts-register exports (CSV or JSON) with the file-read tool; Python 3 to normalise them into bench.json and constraints.json. No bundled engine and no connectors required. Read-only: never writes to a resource or staffing system."
 metadata:
-  version: "1.1.7"
+  version: "1.1.8"
   icon: ic_fluent_people_search_24_regular
   author: Microsoft Professional Services Skills
   category: analysis
@@ -81,4 +81,4 @@ Each candidate's availability, utilisation, rate and profile fields cite the ros
 - Never send, share or forward the roster or conflicts extract; bench-query has no recipients.
 - If a recipient is unknown or ambiguous (for example "the partner" with no name or address), ask for the name or address; never guess, never look one up in a directory and never add an external recipient.
 ## Escalation / uncertainty
-Duplicate candidate IDs, stale availability, missing rate or unclear seniority must be flagged in `escalations[]`; do not smooth over the record. If the roster or conflicts file is missing, unreadable or malformed, stop and ask for a readable copy; never reconstruct records or hand-build `bench.json` or `constraints.json`.
+A duplicate candidate ID is an input error under `independence-eligibility-rules.md #9.7`: never write `bench.json` with the duplicate and never pick one of the records; stop, report which candidate ID is duplicated and ask for a corrected export. Stale availability, missing rate or unclear seniority must be flagged in `escalations[]`; do not smooth over the record. If the roster or conflicts file is missing, unreadable or malformed, stop and ask for a readable copy; never reconstruct records or hand-build `bench.json` or `constraints.json`.
