@@ -4,7 +4,7 @@ description: "Runs the explicit Govern step: deterministic gate_check and severi
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) for the bundled scripts/gate_check.py and scripts/severity_rank.py, and scripts/assertion_map.py when assertion-mapped.json is missing; every script it runs is inside this skill. Reads review-input.json and engine output; no network access or connector is required."
 metadata:
-  version: "1.0.8"
+  version: "1.0.9"
   author: Microsoft Professional Services Skills
   category: analysis
   icon: ic_fluent_shield_checkmark_24_regular

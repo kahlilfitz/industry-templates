@@ -4,7 +4,7 @@ description: "Starts every Scenario 03 mobilization run, including a cold start:
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run scripts/scope_digest.py. Reads user-supplied files: the SOW, engagement-letter and pursuit-record extracts, the confirmed-roster CSV and the Scenario 02 staffing JSON. No connectors required; writes scope.json only."
 metadata:
-  version: "1.0.6"
+  version: "1.0.7"
   icon: ic_fluent_document_search_24_regular
   author: Microsoft Professional Services Skills
   category: retrieval

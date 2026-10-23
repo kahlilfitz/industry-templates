@@ -77,6 +77,11 @@ Advisory items from Cowork evaluations.
 - [x] **R-12** (owner decision 2026-10-16: not applicable, Cowork is the only publish target; Package root: packageMetadata.json): The release owner should decide the publish target. Add packageMetadata.json only if the plugin will publish through the Copilot Studio workload.
   - Evidence: Packaging. plugin-health.html Package validation (ruleset v9) WARN PKG-B001: packageMetadata.json is absent. A publish to a Copilot Studio-workload MOS3 target needs builderInfo. This is unchanged from v1.0.4 and is outside the strategy bar.
 
+## Evaluation matrix 2026-10-22-1252 (advisory, not promoted by the owner on 2026-10-23)
+
+- [ ] **M-1252 F-11** (knowledge-record: scripts/record_check.py skeleton; confidentiality-sanitisation-rules.md #8.6): The `title_withheld` marker can never be rendered. An asset whose title is withheld is always held (HOLD_EMBEDDED_INSTRUCTION), and the marker is rendered only in the released-asset table. Either drop `title_withheld` from the rules and skill text or render it for held assets too.
+  - Evidence: fixture F-11 `render-shape` (OneDrive `Cowork Plugin Evals\5 - Fixtures\engagement-closeout-knowledge-harvest\v1.0.5\matrix-2026-10-22-1252\11-f-11\FIXTURE.md`), status built – spec mismatch. A-005 and A-006 titles were withheld and both assets held; the record_check skeleton has `citation_withheld` but no `title_withheld` (same result as the 1133 matrix). Matrix row 76.
+
 ## Owner-recorded limitations
 
 - [ ] **O-01** (sanitize-check: scripts/closeout_core.py overall disposition; knowledge-record confidence): Carried from the 1.0.2 report and recorded by the owner on 2026-10-16; it is not a 1.0.5 Cowork finding. Return an overall HOLD (or a no-content state) with low record confidence when a payload has no assets and no lessons, instead of `RELEASE_CANDIDATE_SANITISED`. Change it only if a future Cowork report raises it.

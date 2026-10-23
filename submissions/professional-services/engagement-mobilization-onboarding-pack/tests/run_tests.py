@@ -335,9 +335,31 @@ def v106_checks(t,ba,bb):
     ident=all(len({raw(s,x) for s in skills})==1 for x in R01_SHARED)
     ck("1.0.6 R-01: the phrase is detected, not written: each of the 5 shipped steering_guard.py copies has no copy of it in its own text yet still flags it as an attack (on one line, as rule_override when split across lines, and split across adjacent values through split_partners), and steering_guard.py, safety_text.py and the ethical-wall reference are byte-identical in every skill (the fix is re-vendored, not made in one copy)",
        len(res)==5 and all(x[1] for x in res) and ident,str([(x[0],x[2]) for x in res if not x[1]])+("" if ident else " copies differ"))
+# ---- 1.0.7: Cowork evaluation matrix 2026-10-22-1252, top blocker 3 (open spec conflicts), owner decisions 2026-10-23.
+# D1: pack-draft's Steps drafted an on_hold_internal_only pack holds-first while Failure handling said "do not draft
+# past them" and Escalation said to stop on any open hold. L2: the engine renders "Proposed, not assigned: <name> for
+# <role>" but pack-draft step 5 told the model to write "proposed - not assigned", rewording engine text.
+D1_RULE="drafted for internal use: lead with the holds and their citations, render the held draft as internal-only, keep every `[withheld ...]` marker, never draft or restore content that depends on an open hold, and say it must not be shared with the joiner until the holds clear"
+L2_LINE="Proposed, not assigned: <name> for <role>"
+def v107_sec(x,h):
+    m=re.search(r"(?ms)^## "+re.escape(h)+r"[^\n]*\n(.*?)(?=^## |\Z)",x); return re.sub(r"\s+"," ",m.group(1)) if m else ""
+def v107_checks(t,ba,bb):
+    pd=open(os.path.join(PLUGIN_ROOT,"skills","pack-draft","SKILL.md"),encoding="utf-8").read()
+    secs={h:v107_sec(pd,h) for h in ("Steps","Failure handling","Escalation / uncertainty")}
+    esc_stop=[s for s in re.split(r"(?<=[.;])\s",secs["Escalation / uncertainty"]) if "hold" in s.lower() and "stop before drafting" in s.lower()]
+    ck("matrix 2026-10-22-1252 blocker 3 (D1): pack-draft drafts an on_hold_internal_only pack internal-only with holds first and never drafts past a hold's content",
+       "do not draft past" not in re.sub(r"\s+"," ",pd).lower() and all(D1_RULE in v for v in secs.values()) and not esc_stop
+       and "`on_hold_internal_only`" in secs["Steps"] and "`hold_reasons`" in secs["Steps"],
+       str({"do not draft past":"do not draft past" in pd.lower(),"rule in":[h for h,v in secs.items() if D1_RULE in v],"escalation stops on a hold":esc_stop}))
+    s5=re.search(r"(?m)^5\. (.*)$",pd); s5=s5.group(1) if s5 else ""
+    fresh=open(CHAIN["scenario-b-drama"]["pack"],encoding="utf-8").read(); gold=open(os.path.join(bb,"expected","mobilization-pack.md"),encoding="utf-8").read()
+    jl="- Proposed, not assigned: Jules Park for Delivery analyst"
+    ck("matrix 2026-10-22-1252 blocker 3 (L2): pack-draft quotes the engine's 'Proposed, not assigned:' line exactly",
+       L2_LINE in s5 and "never reword it" in s5 and "proposed - not assigned" not in pd.lower() and jl in fresh.splitlines() and jl in gold.splitlines(),
+       str({"step 5":s5[:160],"engine line fresh":jl in fresh,"engine line golden":jl in gold}))
 CHAIN={}  # scenario -> chain outputs, filled by the shared setup in main()
 # Canonical group order; a full run is these groups in this order.
-GROUPS=[v101_checks,v102_checks,v106_checks]
+GROUPS=[v101_checks,v102_checks,v106_checks,v107_checks]
 def main(argv=None):
   import argparse
   ap=argparse.ArgumentParser(description="Mobilization shipped regression checks.",allow_abbrev=False)

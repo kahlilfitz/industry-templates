@@ -1,17 +1,38 @@
 # Agent guide
 
 Follow [CONTRIBUTING.md](CONTRIBUTING.md) for submission conventions and
-[docs/release-process.md](docs/release-process.md) for packaging, Cowork evaluation, fixes, human
-review and publishing.
+[docs/release-process.md](docs/release-process.md) for packaging, Cowork evaluation, fixes, the
+owner's Publish decision and publishing.
 
 ## Change scope
 
-Cowork's `recommendations.html` decides what changes between versions.
+Cowork's `recommendations.html` and Cowork's evaluation matrices decide what changes between
+versions.
 
 - Change only what the task names: blocker or required fixes from the latest archived
-  `recommendations.html`, owner decisions, or regressions your own change caused. Advisory items
-  go to the submission's `BACKLOG.md`, not into the plugin. Report any other defect you find; do
-  not fix it.
+  `recommendations.html`, matrix blockers (below), owner decisions, or regressions your own change
+  caused. Advisory items go to the submission's `BACKLOG.md`, not into the plugin. Report any other
+  defect you find; do not fix it.
+- Owner decision (2026-10-22): Cowork's evaluation matrix output is a Cowork finding. That covers
+  the workbook and notes pair (`<slug>-v<version>-eval-matrix-YYYY-MM-DD-HHMM.xlsx` and
+  `-matrix-notes-YYYY-MM-DD-HHMM.md`, collected into the plugin's SharePoint
+  `Evaluation Matrices\` folder) for the plugin's current version.
+  - **Matrix blockers**, meaning the notes' "Top blockers" and "Rows marked blocked", are handled
+    like required fixes when a plugin change resolves them. Each one adds a regression check named
+    for the matrix and item (for example `matrix 2026-10-22-1133 blocker 2`).
+  - Blockers that sit in the eval harness or environment (tool spies, fault injection, multi-turn
+    support, sibling plugins, runtime) are not fixed in the plugin. Report them to the owner.
+  - Other matrix items (unresolved questions, guardrail gaps) are advisory: they go to
+    `BACKLOG.md` unless the owner promotes them.
+- Owner decision (2026-10-22), **honest-empty grading**: a row passes when its pass criterion calls
+  for less output and the plugin produces it. That covers withheld markers and placeholders,
+  declared gaps, script input errors quoted verbatim with nothing written, refusals and holds.
+  Two cases still fail:
+  - **Over-refusal:** a happy-path row with complete inputs that refuses, holds or returns nothing.
+  - **Undeclared empty output:** an empty result that names no missing source or field and quotes
+    no script error.
+
+  Never weaken a guardrail, withholding rule or hold to make a completeness-graded row pass.
 - Except for the one-time owner exceptions below, never relax, delete or change the expected result
   of an existing test or check. If a fix makes an existing test fail outside those exceptions, stop,
   do not commit, and report the conflict.
@@ -25,6 +46,10 @@ Cowork's `recommendations.html` decides what changes between versions.
   Owner decision (2026-10-16): the fix step itself prepares the next version when its checks find
   nothing that needs the owner's attention; the agent still never runs `evaluation:prepare`.
 - Never infer an owner sign-off or a publish decision.
+- Owner decision (2026-10-23): human testing is not part of the release process ("remove human
+  testing from the process"). After a `Ready` verdict, publication still needs the owner's
+  `Publish` decision recorded in the plugin's SharePoint deployment doc ("Publish after Ready").
+  Do not ask about or plan testers, trackers or a human spot check.
 
 ## One-time owner exception: T&E R-03
 
@@ -55,6 +80,18 @@ Every other golden, check and expectation stays unchanged. Follow the
 [exception's evidence requirements](docs/release-process.md#one-time-owner-exception-for-te-1013-r-02).
 This is not a general waiver, an evaluation verdict, or a publish decision.
 
+## One-time owner exception: removing human testing
+
+Owner-approved on 2026-10-23, with removing human testing from the release process: the passing
+verdict is renamed from `Ready for human review` to `Ready`, so the verdict expectations in
+`scripts\evaluation-workflow.test.ts` (extractVerdict values and error text, verdictGuidance text,
+and the Cowork prompt verdict list) change to match. Every test input stays, archived
+`Ready for human review` reports still parse as `Ready`, other `Ready for ...` phrases still throw,
+and the prompts must still say Ready is `not a publish signal`. No plugin suite, golden or other
+check changes. See the
+[exception's scope](docs/release-process.md#one-time-owner-exception-removing-human-testing).
+This is not a general waiver or a publish decision.
+
 ## Tests and demo data
 
 - A MOS3 plugin's tests and demo data live in `submissions\<industry>\<slug>\tests\` and
@@ -63,11 +100,11 @@ This is not a general waiver, an evaluation verdict, or a publish decision.
 - The repository's regression tests are the script unit tests (`npm run test:evaluation`), which
   CI runs. Plugin suites are not CI-gated; the evaluation fix agent runs its plugin's suite before
   and after applying fixes. Otherwise run one only when the task asks for it.
-- Every blocker or required Cowork fix adds at least one regression check, named for its fix ID,
-  that fails before the fix and passes after.
-- Plugin suites hold only checks that came from a Cowork finding (internal checks were deleted on
-  2026-10-15). Add a plugin check only in response to a Cowork finding; never add checks from
-  internal review.
+- Every blocker or required Cowork fix, including a matrix blocker fixed in the plugin, adds at least
+  one regression check, named for its fix ID or matrix item, that fails before the fix and passes after.
+- Plugin suites hold only checks that came from a Cowork finding, which includes Cowork's evaluation
+  matrices (internal checks were deleted on 2026-10-15). Add a plugin check only in response to a
+  Cowork finding; never add checks from internal review.
 - Cowork's built-in evaluation is the plugin evaluation. Never send tests or demo data to Cowork.
 
 ## SharePoint library (`sharepoint\`)
@@ -80,9 +117,9 @@ This is not a general waiver, an evaluation verdict, or a publish decision.
   evaluated ZIPs. Professional Services Waves 1 and 2 mirror Retail: `Wave <n>\<Title Case Slug>\` and
   `Evaluation\v<version>\` (`SHAREPOINT_WAVES` in `scripts\evaluation-workflow.ts`). Every other
   plugin uses `<slug>\` and `Evaluation\<version>\`.
-- `PLUGIN-DETAILS-AND-DEPLOYMENT.md` and the human-test tracker in each plugin folder
-  (`<Title Case Slug> - Human Test Tracker.xlsx` in the Retail layout, otherwise
-  `<slug>-human-test-tracker.xlsx`).
+- `PLUGIN-DETAILS-AND-DEPLOYMENT.md` in each plugin folder, which holds the owner's Publish
+  decision. Human-test tracker workbooks there are history only (human testing was removed on
+  2026-10-23).
 - `sharepoint\Industry-Templates-Plugin-Testing-Strategy.docx` — release bar and testing strategy.
 
 Rules:
@@ -93,7 +130,8 @@ Rules:
   the result; do not recreate the folder by hand.
 - Everything written there syncs to SharePoint for the whole team. Write only evaluation archives
   (through `npm run evaluation:archive`/`evaluation:watch`), MOS packages (through
-  `npm run mos:build`, only after the owner promotes `<slug>-cowork.zip`) and documents the user asks
-  for. Never
+  `npm run mos:build`, only after the owner promotes `<slug>-cowork.zip`), completed evaluation
+  matrix/notes pairs (through `npm run evaluation:watch-matrices`, copied without overwriting into
+  the plugin's `Evaluation Matrices\` folder) and documents the user asks for. Never
   delete, rename or overwrite other people's files, and never delete recursively through the link.
 - Never commit, copy into `submissions/`, or bundle anything from `sharepoint\`.

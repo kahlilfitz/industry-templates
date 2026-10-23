@@ -4,7 +4,7 @@ description: "Retrieves and structures a draft deliverable, recipients, evidence
 license: Proprietary
 compatibility: "No scripts of its own. Reads the user-supplied draft deliverable, evidence index, recipient list, registers and prior review notes read-only (for example from an engagement workspace, SharePoint or OneDrive); no connector is required. Produces review-input.json for assertion-map, whose engine needs Python 3."
 metadata:
-  version: "1.0.8"
+  version: "1.0.9"
   author: Microsoft Professional Services Skills
   category: analysis
   icon: ic_fluent_document_arrow_down_24_regular

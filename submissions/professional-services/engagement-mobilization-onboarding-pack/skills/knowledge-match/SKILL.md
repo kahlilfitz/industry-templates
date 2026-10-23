@@ -4,7 +4,7 @@ description: "Matches released Scenario 01 Closeout knowledge to the engagement 
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run scripts/knowledge_match.py. Reads user-supplied files: scope.json, the raw engagement inputs and staffing JSON, the Scenario 01 Closeout governed JSON and the ethical-wall register CSV. No connectors required; writes matched.json only."
 metadata:
-  version: "1.0.6"
+  version: "1.0.7"
   icon: ic_fluent_book_search_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

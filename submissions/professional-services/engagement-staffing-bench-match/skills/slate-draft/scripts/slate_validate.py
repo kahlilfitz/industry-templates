@@ -65,7 +65,7 @@ from safety_text import (
 
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 ENGINE = "engine:slate_validate"
-ENGINE_VERSION = "slate_validate/1.1.7"
+ENGINE_VERSION = "slate_validate/1.1.8"
 SAFE_DISPOSITIONS = {"clear", "resolved", "non_material", "not_applicable"}
 BLOCKING_TYPES = {
     "financial_interest",
@@ -81,6 +81,8 @@ AVAILABILITY_TYPES = {"availability", "availability_evidence"}
 COVERAGE_TYPE = "conflicts_register_coverage"
 # Rows constraint_check writes itself (not register rows); they are never rebuilt as register input.
 ENGINE_ROW_TYPES = AVAILABILITY_TYPES | {COVERAGE_TYPE, "source_screening"}
+# Constraint types the draft may name as a conflict category; anything else shows as "unrecognised".
+CATEGORY_TYPES = set(constraint_check.KNOWN_TYPES) | ENGINE_ROW_TYPES
 REGISTER_FIELDS = (
     "type", "client_name", "status", "material", "role_type", "process", "end_date",
     "resolved_date", "source", "confidence", "citation",
@@ -1089,19 +1091,146 @@ def _rate_cell(candidate):
     return f"rate-band component {_number(score)}" + (f" ({'; '.join(rules)})" if rules else "")
 
 
+def _conflict_category(candidate):
+    """Types of the applicable constraint records that are not safe; never a client name or reason."""
+    categories = []
+    for record in candidate.get("constraints_considered") or []:
+        if (not isinstance(record, dict) or record.get("applies_to_engagement") is False
+                or record.get("disposition") in SAFE_DISPOSITIONS):
+            continue
+        kind = record.get("type")
+        category = kind if isinstance(kind, str) and kind in CATEGORY_TYPES else "unrecognised"
+        if category not in categories:
+            categories.append(category)
+    return "; ".join(categories) or "none"
+
+
+def _escalation_line(text):
+    """An escalation as stored in validated.json; withheld unless it is clean or carries only engine markers."""
+    if not isinstance(text, str) or not text.strip() or not is_engine_marker(text) or is_suspect(text):
+        return WITHHELD_CELL
+    rest = re.sub(ENGINE_MARKER, "", text).strip()
+    if rest and is_reserved_label(rest):
+        return WITHHELD_CELL
+    return " ".join(text.split())
+
+
+_TOP_ESCALATION = re.compile(r"(?P<role>[^\s:]+): (?P<action>refused|withheld) top provisional candidate\b")
+_SECONDARY_ESCALATION = re.compile(r"(?P<role>[^\s:]+): secondary validation withheld\b")
+# Fail-closed backstop for escalation prose that the structured data cannot place: financial-interest
+# specifics and leave reasons (slate-draft Grounding) are never repeated in the draft.
+_SENSITIVE_DETAIL = re.compile(
+    r"\bfinancial[\s_-]*interests?\b|\bequity\b|\bshare(?:s|holding|holdings|holder|holders)\b|\bstock(?:s|holding)?\b"
+    r"|\bdividends?\b|\bdivest\w*|\bmaternity\b|\bpaternity\b|\b(?:medical|parental|sick|bereavement|compassionate|"
+    r"family|personal|disability|adoption|caregiver|carer'?s?|garden|unpaid|special|study)\s+leave\b",
+    re.I,
+)
+
+
+def _client_names(validated_payload):
+    """Entity keys of the client, its declared affiliates and every client named by a constraint record."""
+    engagement = validated_payload.get("engagement") or {}
+    names = [engagement.get("client_name")]
+    names += engagement.get("affiliates") if isinstance(engagement.get("affiliates"), list) else []
+    for role in validated_payload["governed_roles"]:
+        for slate in ("candidate_slate", "recommended_candidates"):
+            for candidate in role.get(slate) or []:
+                for record in candidate.get("constraints_considered") or []:
+                    if isinstance(record, dict):
+                        names.append(record.get("client_name"))
+    keys = set()
+    for name in names:
+        if isinstance(name, str) and name.strip() and not has_marker(name) and name != constraint_check.FOREIGN_LABEL:
+            keys.update(constraint_check.entity_keys(name))
+    return keys
+
+
+def _conflict_escalation_lines(validated_payload):
+    """The visible escalation lines. An escalation that carries conflict, financial-interest or leave
+    detail shows only the role, action, candidate, conflict category and rule sections, rebuilt from
+    the validated slate; one the slate cannot place is shown with category ``unrecognised`` and no
+    detail (fail closed). Every other escalation is shown as stored (``_escalation_line``)."""
+    roles = {id_key(role["role_id"]): role for role in validated_payload["governed_roles"]}
+    clients = _client_names(validated_payload)
+
+    def sensitive(text):
+        return bool(_SENSITIVE_DETAIL.search(text)) or constraint_check._names_foreign(text, clients)
+
+    def detail_free(candidate):
+        return all(category in AVAILABILITY_TYPES or category == "none"
+                   for category in _conflict_category(candidate).split("; "))
+
+    def rules_tail(rules):
+        rules = list(dict.fromkeys(rules))
+        return f" ({'; '.join(rules)})" if rules else ""
+
+    def withheld(text, prefix):
+        return f"{prefix}escalation detail withheld - conflict category unrecognised" + rules_tail(
+            _RULE_SECTION.findall(text))
+
+    lines = []
+    for text in validated_payload["escalations"]:
+        shown = _escalation_line(text)
+        if shown == WITHHELD_CELL:
+            lines.append(shown)
+            continue
+        top, secondary = _TOP_ESCALATION.match(shown), _SECONDARY_ESCALATION.match(shown)
+        match = top or secondary
+        role = roles.get(id_key(match.group("role"))) if match else None
+        if role is None:
+            scope = _ROLE_SCOPE.match(shown)
+            known = scope and (id_key(scope.group(1)) in roles or any(
+                id_key(scope.group(1)) == id_key(candidate["candidate_id"])
+                for item in roles.values() for candidate in item["candidate_slate"]))
+            lines.append(withheld(shown, f"{_cell(scope.group(1))}: " if known else "") if sensitive(shown)
+                         else shown)
+            continue
+        role_id = _cell(role["role_id"])
+        if top:
+            action = top.group("action")
+            head = f"{role_id}: {action} top provisional candidate"
+            slate = [candidate for candidate in role["candidate_slate"] if candidate.get("provisional_rank") == 1]
+        else:
+            head = f"{role_id}: secondary validation withheld"
+            slate = [candidate for candidate in role["candidate_slate"]
+                     if (candidate.get("secondary_validation") or {}).get("status") == "withheld"
+                     and isinstance(candidate.get("candidate_name"), str)
+                     and not has_marker(candidate["candidate_name"])
+                     and _names_candidate(shown, candidate)]
+        if len(slate) != 1:
+            lines.append(f"{head} - conflict category unrecognised" + rules_tail(_RULE_SECTION.findall(shown)))
+            continue
+        candidate = slate[0]
+        if detail_free(candidate) and not sensitive(shown):
+            lines.append(shown)
+            continue
+        if top:
+            rules = _rule_sections(candidate["eligibility"].get("blocking_rule"),
+                                   f"{RULES} #7.1" if action == "refused" else RULE_VERDICT)
+        else:
+            rules = _rule_sections((candidate.get("secondary_validation") or {}).get("citation"))
+        lines.append(f"{head} {_candidate_cell(candidate)} - conflict category "
+                     f"{_conflict_category(candidate)}" + rules_tail(rules))
+    return lines
+
+
 def render_draft(validated_payload):
     """Render the slate-draft skeleton (SKILL.md ``## Output format``) from a validated document.
 
-    Pure: returns LF text. Only engine figures, verdicts, record IDs, rule sections and the engine's
-    gap statements are rendered, never a free-text citation, reason, escalation or placeholder. The
-    rendered lines are screened on their own and as adjacent runs (D22); a hit refuses the draft.
+    Pure: returns LF text. Only the engagement ID, engine figures, verdicts, conflict categories,
+    record IDs, rule sections, the engine's gap statements and the escalations in validated.json
+    (flagged text already replaced by its engine marker; conflict, financial-interest and leave
+    detail replaced by the conflict category) are rendered, never a client name, free-text
+    citation, reason or placeholder. The rendered lines are screened on their own and as
+    adjacent runs (D22); a hit refuses the draft.
     """
     try:
         _check_validated(validated_payload)
     except InputError as error:
         raise InputError(f"validated.json: {error}") from None
     roles = validated_payload["governed_roles"]
-    lines = list(DRAFT_BANNER) + ["", "## Refusals"]
+    engagement_id = _cell(validated_payload["engagement"]["engagement_id"])
+    lines = list(DRAFT_BANNER) + [f"# Staffing slate draft - {engagement_id}", "", "## Refusals"]
 
     refusals = []
     for role in roles:
@@ -1161,10 +1290,12 @@ def render_draft(validated_payload):
             verdict = "below_score_floor" if below else _cell(eligibility["verdict"])
             rows.append(
                 f"| {_cell(role['role_id'])} | {_candidate_cell(candidate)} | {verdict} "
+                f"| {_conflict_category(candidate)} "
                 f"| {'; '.join(blocking) or MISSING_CELL} | {'; '.join(citation) or MISSING_CELL} |"
             )
     if rows:
-        lines += ["| Role | Candidate | Verdict | Blocking rule | Citation |", "|---|---|---|---|---|"] + rows
+        lines += ["| Role | Candidate | Verdict | Conflict category | Blocking rule | Citation |",
+                  "|---|---|---|---|---|---|"] + rows
     else:
         lines.append("No candidate is listed as not recommended.")
 
@@ -1185,7 +1316,10 @@ def render_draft(validated_payload):
     if gaps:
         lines.append("- Route each gap to recruiting, subcontractor search, start-date negotiation or "
                      "scope adjustment; do not pad the slate.")
-    lines.append(f"- Escalations recorded in validated.json: {len(validated_payload['escalations'])}.")
+    escalations = validated_payload["escalations"]
+    lines.append(f"- Escalations recorded in validated.json: {len(escalations)}.")
+    lines += ["", "### Escalations"]
+    lines += [f"- {line}" for line in _conflict_escalation_lines(validated_payload)] or ["No escalations recorded."]
 
     texts = [line for line in lines if line.strip()]
     need(not any(is_suspect(text) for text in texts) and not list_run_indices(texts),

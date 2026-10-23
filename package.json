@@ -11,12 +11,13 @@
     "evaluation:prepare": "tsx scripts/prepare-evaluation.ts",
     "evaluation:archive": "tsx scripts/archive-evaluation.ts",
     "evaluation:watch": "tsx scripts/watch-evaluation.ts",
+    "evaluation:watch-matrices": "tsx scripts/watch-evaluation-matrices.ts",
     "evaluation:fix": "tsx scripts/fix-evaluation.ts",
     "mos:build": "tsx scripts/build-mos-package.ts",
     "sharepoint:link": "tsx scripts/sharepoint.ts link",
     "sharepoint:doctor": "tsx scripts/sharepoint.ts doctor",
     "sharepoint:unlink": "tsx scripts/sharepoint.ts unlink",
-    "test:evaluation": "tsx --test scripts/evaluation-workflow.test.ts scripts/recommendations.test.ts scripts/sharepoint-sync.test.ts scripts/mos3-package.test.ts scripts/mos-package.test.ts"
+    "test:evaluation": "tsx --test scripts/evaluation-workflow.test.ts scripts/evaluation-matrices.test.ts scripts/recommendations.test.ts scripts/sharepoint-sync.test.ts scripts/mos3-package.test.ts scripts/mos-package.test.ts"
   },
   "devDependencies": {
     "@microsoft/app-manifest": "^1.1.3",

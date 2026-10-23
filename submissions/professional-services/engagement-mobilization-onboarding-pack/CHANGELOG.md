@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.7 - 2026-10-23
+
+Applies Cowork evaluation matrix 2026-10-22-1252 top blocker 3 (open spec conflicts) in `pack-draft`, per owner decision 2026-10-23. Skill text only; no engine logic changed.
+
+- **Matrix 2026-10-22-1252 blocker 3 (D1, applied).** `skills/pack-draft/SKILL.md` Steps, Failure handling and Escalation now agree: an `on_hold_internal_only` pack is drafted for internal use, leading with the holds and their citations, rendering the held draft as internal-only, keeping every `[withheld ...]` marker, never drafting or restoring content that depends on an open hold, and saying it must not be shared with the joiner until the holds clear. Removed Failure handling's "do not draft past them" and Escalation's stop-on-any-open-hold wording; Escalation still stops on `InputError`, a contract-version mismatch or a missing required file. Step 2 adds that every engine section is still rendered in order and held content stays as its hold line or `[withheld ...]` marker. The other four skills' Failure-handling lines are unchanged (they do not draft packs).
+- **Matrix 2026-10-22-1252 blocker 3 (L2, applied).** `pack-draft` step 5 now keeps the engine's `Proposed, not assigned: <name> for <role>` line exactly as rendered (never reworded, never moved into the confirmed roster lines) instead of asking for "proposed - not assigned". The engine string, `roster-pull` (its status column value "proposed - not assigned") and `tests/sample-test-prompts.csv` are unchanged.
+- **Version declarations** are bumped to 1.0.7 in `metadata.json` (`updatedAt` 2026-10-23), `manifest.json` (same application ID), all five `SKILL.md` files, `listing-metadata.md` and all five byte-identical copies of the safety helper's engine `VERSION`. Regenerated both scenarios' `scope.json`, `matched.json`, `governed.json` and `access-checklist.json` goldens with the engines; only `provenance.engines` version labels changed. Both `mobilization-pack.md` goldens are unchanged. The steering guard's `__version__` stays 1.1.7.
+- **Regression checks.** Added the `v107_checks` group to `tests/run_tests.py` (2 checks, named `matrix 2026-10-22-1252 blocker 3 (D1)` and `(L2)`; suite 51/51, baseline 49/49). Both fail against the 1.0.6 `pack-draft` text and pass on 1.0.7. Existing checks are unchanged.
+- **Scope.** BACKLOG items R-02 (1.0.5), L2 and D1 (1.0.6) are marked done. Other advisory items remain in `BACKLOG.md`.
+
 ## 1.0.6 - 2026-10-15
 
 - **R-01 (blocker, applied).** Replaced literal instruction-override examples with abstract descriptions in the shared steering guard's attribution docstring and adjacent comment, the safety helper's comments/docstrings and the ethical-wall reference's split-instruction example. The canonical files in `engagement-retrieve` are re-vendored byte-identically into all five skills. Detector patterns, executable logic and the steering guard's `__version__` are unchanged; tests and attack vectors remain outside the package.
