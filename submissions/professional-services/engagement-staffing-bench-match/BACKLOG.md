@@ -112,3 +112,15 @@ fixtures) and were reported to the owner. The unresolved questions repeat R2, R4
   - Evidence: behavioral-test-report-2026-10-23-1618.html: slate-draft SD-1 and SD-2 and constraint-check CC-1 and CC-2 (12/12 runs PASS). This is baseline R7, unchanged. Eligible rows cite &#x27;#1.2,#9.1&#x27;. C-104 is R1-ineligible and R2-recommended with no &#x27;verdicts are per role&#x27; note. constraint_check.py and slate_validate.py took about 30–63 s wall time against about 3 s CPU. Fix-order category: weak output.
 - [ ] **R8** (Package root (packageMetadata.json); manifest.json; scripts/steering_guard.py; duplicated shared files): Add packageMetadata.json only if the Copilot Studio workload is a target. Replace the assert with an explicit check. Add a build-time check that the duplicated files stay identical.
   - Evidence: plugin-health-2026-10-23-1618.html: package validation PASS with 1 WARN (PKG-B001); tool descriptions PASS with 1 WARN (no agentConnectors); security scan PASS with 6 LOW findings (B101 at steering_guard.py:1522 and B105 at :2173, 3 copies each), 0 medium and 0 high. This is baseline R8, unchanged. The duplicated files are still byte-identical in v1.1.9. These items do not affect the bar.
+
+## Matrix 2026-10-23-1707 (plugin 1.1.9)
+
+Gate passed (115 scenarios, 18 fixtures, 10 datasets). Top blocker 3 includes the two N1
+over-match rows, which are expected to FAIL. They are plugin-fixable and will be handled as a
+required fix (regression check `matrix 2026-10-23-1707 blocker 3`) once the owner confirms the
+#1.6 matching rule (unresolved question 1). Option (b) under N1, equal word sets only, would break
+the existing check `matrix 2026-10-23-1540 blocker 3` ("healthcare provider" must match
+"healthcare"), so it is not usable as written. Top blockers 1 and 2 and the 7 blocked rows sit in
+the eval harness (fixtures F06, F07, F17, F18, the fixture divergence in question 5, fault
+injection and multi-turn) and are reported to the owner. Questions 2 to 4 repeat N2, N3 and
+R2 to R8 above. The honest-empty grading question was settled by owner decision 2026-10-22.
