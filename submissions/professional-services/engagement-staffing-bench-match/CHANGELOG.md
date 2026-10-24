@@ -4,6 +4,62 @@ Versions before 1.1.5 are recorded in the git history of
 `submissions/professional-services/engagement-staffing-bench-match/` (1.1.4 was the automated
 `Ready` candidate).
 
+## 1.1.13 - 2026-10-24
+
+Applies required N9 and R3 from the 1.1.12 Cowork evaluation (`2026-10-24-0245`, verdict No-ship).
+G1 needs a Cowork rerun; this is not a Ready verdict or a publish decision.
+The eleven advisory items already recorded in `BACKLOG.md` are included unchanged.
+
+- **N9 - industry notes that share a financial-looking word.** 1.1.12 still ran slate-draft's
+  financial-interest and leave word screen over the shared industry words, so "private equity"
+  vs "equity research" and "stock exchanges" vs "stock brokerage" printed as
+  `escalation detail withheld - conflict category unrecognised` (SD-5). The role-level rubric
+  #1.6 escalation now comes from one pure `fit_score.industry_escalation(role, candidates)`
+  (output unchanged; all three copies byte-identical). `slate_validate.py` re-derives each role's
+  note from the `roles` and `bench_candidates` carried in `validated.json` and shows a stored
+  escalation unscreened only when it equals that note exactly and names no client or affiliate.
+  Every other escalation, including look-alike industry lines carrying holding or leave detail,
+  takes the 1.1.12 path unchanged. Cowork's suggested neutral fallback (`industry-continuity
+  note withheld`) was not adopted: the existing `1.1.11 N6` legacy-note check requires
+  unverified sensitive lines to keep the `conflict category unrecognised` wording and legacy
+  lines to render as stored, and it is unchanged. For the same reason advisory N10 (a
+  non-sensitive look-alike still renders as stored) stays in `BACKLOG.md`. slate-draft Output
+  format describes the rule.
+- **G1 - needs a Cowork rerun.** G1 is the behavioral pass rate (19/21, 90.5%, against the 95%
+  bar), caused by SD-5 (N9) and RI-3 (R3). Both causes are fixed; only Cowork's full 21-case suite
+  can confirm the bar.
+- **R3 - role-intake grounding and missing-field rules.** Practice comes only from an explicit
+  statement in the SOW or request body, never a sender's signature, title or team name; an
+  unstated practice stays empty and is escalated. A repeated SOW ID still needs the
+  "internal code not supplied" escalation. Requirements with no contract field, such as on-site
+  days, retain their source wording and citation in a role-specific escalation. Partner
+  preferences name the person only, without inventing or looking up a candidate ID. The existing
+  confidence ladder, contract, scoring and eligibility behavior are unchanged. Cowork's
+  RI-1 through RI-3 were not rerun; the instruction regressions do not claim behavioral passes.
+- Version 1.1.13 in `metadata.json`, `manifest.json`, all five `SKILL.md` files and
+  `listing-metadata.md`; all nine engine labels are 1.1.13.
+  Copied scripts remain byte-identical. The steering detector's `__version__` and policy stamps
+  are unchanged.
+- **Test edits:** `tests\test_engines.py` adds the `evaluation-1.1.12` group with four
+  R3-named instruction regressions and two N9 checks:
+  `1.1.12 N9 SD-5: industry notes sharing 'equity' or 'stock' render as stored, never as an unrecognised conflict`
+  (fails on 1.1.12 with SD-5's exact symptom, passes on 1.1.13) and
+  `1.1.12 N9: only fit_score's own re-derived industry note skips the financial-interest and leave screen`
+  (a guard that look-alike lines with holding, leave or client detail stay withheld; passes on
+  both). All four R3 checks fail on 1.1.12 and pass afterward. All 27 existing checks pass
+  unchanged (33/33); there are no pre-existing failures.
+- **Demo-data edits (engine labels only):**
+  `demo-data\scenario-a-happy\expected\scored.json`,
+  `demo-data\scenario-a-happy\expected\ranked.json`,
+  `demo-data\scenario-a-happy\expected\governed.json`,
+  `demo-data\scenario-a-happy\expected\validated.json`,
+  `demo-data\scenario-b-drama\expected\scored.json`,
+  `demo-data\scenario-b-drama\expected\ranked.json`,
+  `demo-data\scenario-b-drama\expected\governed.json` and
+  `demo-data\scenario-b-drama\expected\validated.json`.
+  Both scenarios were rerun through all four engines, including after the N9 refactor; byte
+  comparison confirms only the labels changed in these eight JSON files. Both `slate-draft.md` files are byte-identical and untouched.
+
 ## 1.1.12 - 2026-10-23
 
 Applies required N6 from the 1.1.11 Cowork evaluation (run `2026-10-23-2232`, verdict No-ship).

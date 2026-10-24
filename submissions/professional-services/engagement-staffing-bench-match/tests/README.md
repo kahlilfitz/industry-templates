@@ -52,7 +52,8 @@ python tests\test_engines.py --group slate-validate --group demo-data
 
 The groups, in run order, are `constraint-check`, `fit-score`, `slate-validate`, `demo-data`,
 `evaluator-paraphrases`, `skill-guardrails`, `input-contract`, `matrix-2026-10-22-1252`,
-`matrix-2026-10-23-1540`, `matrix-2026-10-23-1707`, `evaluation-1.1.10` and `evaluation-1.1.11`. Checks added for a
+`matrix-2026-10-23-1540`, `matrix-2026-10-23-1707`, `evaluation-1.1.10`, `evaluation-1.1.11`
+and `evaluation-1.1.12`. Checks added for a
 Cowork evaluation matrix or a promoted advisory print the item name instead of the method name.
 
 ## What the suite covers
@@ -62,7 +63,7 @@ the 1.1.6 blocker and required fixes F-01 to F-03, in the archived Cowork report
 evaluation matrix 2026-10-22-1252 blocker 3 and owner-promoted item F07, applied in 1.1.8, and
 Cowork evaluation matrix 2026-10-23-1540 blocker 3, applied in 1.1.9, and Cowork evaluation matrix
 2026-10-23-1707 blocker 3, applied in 1.1.10, and owner-promoted 1.1.10 advisories N4 and N5, applied in
-1.1.11, and required 1.1.11 N6, applied in 1.1.12). Internal QA,
+1.1.11, and required 1.1.11 N6, applied in 1.1.12, and required 1.1.12 N9 and R3, applied in 1.1.13). Internal QA,
 hardening, shared-detector, layout, shared-copy and golden checks were removed by owner decision;
 new checks are added only in response to Cowork findings.
 
@@ -105,6 +106,26 @@ available to this fix step, and access to the archived SharePoint evaluation was
 
 `sample-test-prompts.csv` holds the human spot-check prompts; it is not a check.
 
+## 1.1.12 findings addressed in 1.1.13
+
+The `evaluation-1.1.12` group adds two N9 checks and four R3-named instruction regressions for RI-1 through RI-3:
+explicit practice grounding excluding sender metadata, a repeated SOW ID still requiring the
+internal-code escalation, cited preservation of requirements without a contract field (on-site
+days), and person-only preference notes without an invented candidate ID. All four fail against
+the unfixed 1.1.12 instructions and pass after R3; all 27 existing checks pass unchanged (33/33
+total). There were no pre-existing failures. These check the skill instructions, not live model
+behavior; Cowork's RI-1 through RI-3 have not been rerun.
+
+The N9 checks build roles and a bench whose industries share "equity" and "stock" ("private
+equity"/"equity research", "stock exchanges"/"stock brokerage", the SD-5 shape) and run all four
+engines. `1.1.12 N9 SD-5: ...` requires each role's engine note to appear in the draft as stored
+and no `conflict category unrecognised`; it fails on 1.1.12 and passes on 1.1.13.
+`1.1.12 N9: only fit_score's own ...` swaps in look-alike lines carrying holding, leave or client
+detail and requires them withheld; it passes on both versions and guards the screen. Cowork's
+neutral fallback wording was not adopted because `test_n6_legacy_industry_notes_and_sensitive_details`
+(unchanged) requires the existing fallback and legacy-line behaviour; N10 stays advisory.
+
+G1 needs Cowork's full 21-case, three-run suite; no behavioral pass rate is claimed here.
 ## Scenarios
 
 - **`scenario-a-happy`**: two open roles and a clean bench and conflicts extract. Ava Morgan is

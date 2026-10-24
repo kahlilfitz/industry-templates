@@ -5,7 +5,8 @@ and required fixes F-01 to F-03 applied in 1.1.7, Cowork evaluation matrix 2026-
 blocker 3 and owner-promoted F07 applied in 1.1.8, Cowork evaluation matrix 2026-10-23-1540
 blocker 3 applied in 1.1.9, Cowork evaluation matrix 2026-10-23-1707 blocker 3 applied in 1.1.10,
 and owner-promoted 1.1.10 advisories N4 and N5 applied in 1.1.11,
-and required 1.1.11 N6 applied in 1.1.12); see tests/README.md.
+and required 1.1.11 N6 applied in 1.1.12, and required 1.1.12 N9 and R3 applied in 1.1.13);
+see tests/README.md.
 
 Run from the submission folder (submissions/professional-services/<slug>/):
 
@@ -51,6 +52,7 @@ GROUPS = (
     ("matrix-2026-10-23-1707", "Matrix202610231707Tests"),
     ("evaluation-1.1.10", "Evaluation1110Tests"),
     ("evaluation-1.1.11", "Evaluation1111Tests"),
+    ("evaluation-1.1.12", "Evaluation1112Tests"),
 )
 
 
@@ -1324,6 +1326,98 @@ class Evaluation1111Tests(_EngineInjectionHarness, unittest.TestCase):
                     self.assertIn("#1.6", line)
                     self.assertIn("- " + line, draft)
                 self.assertNotIn("conflict category unrecognised", draft)
+
+
+class Evaluation1112Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork 1.1.12 required R3 (explicit role-intake grounding and missing-field rules) and N9
+    (fit_score's own industry notes survive slate-draft rendering whatever words they share)."""
+
+    def _industry_draft(self, role_industries, bench_industries):
+        roles = self._load("roles.json")
+        for role, industry in zip(roles["roles"], role_industries):
+            role["industry_context"] = industry
+        bench = self._load("bench.json")
+        for candidate, industry in zip(bench["bench_candidates"], bench_industries):
+            candidate["industry_experience"] = industry
+        validated = slate_validate.validate(constraint_check.govern(
+            slate_rank.rank(fit_score.score(roles, bench)), self._load("constraints.json")))
+        return validated, slate_validate.render_draft(validated)
+
+    @named("1.1.12 N9 SD-5: industry notes sharing 'equity' or 'stock' render as stored, never as an unrecognised conflict")
+    def test_n9_engine_industry_notes_render_as_stored(self):
+        validated, draft = self._industry_draft(
+            ("private equity", "stock exchanges"),
+            (["health operations"], ["equity research"], ["stock brokerage"]),
+        )
+        for role_id, pair in (("PSS-001", "PSS-001/C-102 shares 'equity'"),
+                              ("PSS-002", "PSS-002/C-103 shares 'stock'")):
+            line = next(text for text in validated["escalations"]
+                        if text.startswith(role_id + ": no full industry match"))
+            self.assertIn(pair, line)
+            self.assertIn("fit-scoring-rubric.md #1.6", line)
+            self.assertIn("- " + line, draft)
+        self.assertNotIn("conflict category unrecognised", draft)
+
+    @named("1.1.12 N9: only fit_score's own re-derived industry note skips the financial-interest and leave screen")
+    def test_n9_lookalike_industry_notes_stay_screened(self):
+        validated, _ = self._industry_draft(
+            ("private equity", "stock exchanges"),
+            (["health operations"], ["equity research"], ["stock brokerage"]),
+        )
+        engine_line = next(text for text in validated["escalations"]
+                           if text.startswith("PSS-001: no full industry match"))
+        for line, detail in (
+            (engine_line + "; holds restricted shares", "restricted shares"),
+            (engine_line.replace("shares 'equity'", "shares 'equity stake, 4,000 units'"), "4,000 units"),
+            (engine_line + "; parental leave", "parental leave"),
+            (engine_line + "; Orchard Ridge Clinics", "Orchard Ridge Clinics"),
+        ):
+            with self.subTest(detail=detail):
+                payload = json.loads(json.dumps(validated))
+                payload["escalations"] = [line]
+                draft = slate_validate.render_draft(payload)
+                self.assertNotIn(detail, draft)
+                self.assertNotIn("- " + line, draft)
+
+    @named("1.1.12 R3 RI-1-RI-3: practice comes only from an explicit SOW or request-body statement")
+    def test_r3_practice_excludes_sender_metadata(self):
+        steps = _skill_section("role-intake", "Steps")
+        step_one = steps.split("\n2.", 1)[0].lower()
+        for phrase in ("explicit practice statement", "sow or request body",
+                       "never take it from a sender's signature, title or team name",
+                       "leave it empty and escalate", "never infer it"):
+            self.assertIn(phrase, step_one, "R3: step 1 must state " + phrase)
+        self.assertIn("not evidence for practice",
+                      _skill_section("role-intake", "Grounding requirements").lower())
+        self.assertIn("unstated practice stays empty and is escalated",
+                      _skill_section("role-intake", "Escalation / uncertainty").lower())
+
+    @named("1.1.12 R3 RI-3: a repeated SOW ID still needs the internal-code escalation")
+    def test_r3_repeated_sow_id_is_not_an_internal_code(self):
+        steps = _skill_section("role-intake", "Steps")
+        step_one = steps.split("\n2.", 1)[0].lower()
+        self.assertIn("even if the request repeats it", step_one)
+        self.assertIn("carry it and add the internal-code escalation", step_one)
+        uncertainty = _skill_section("role-intake", "Escalation / uncertainty").lower()
+        self.assertIn("internal code not supplied", uncertainty)
+        self.assertIn("does not supply the firm's internal engagement code", uncertainty)
+
+    @named("1.1.12 R3 RI-1-RI-3: on-site days without a contract field remain cited escalations")
+    def test_r3_requirements_without_contract_fields_are_preserved(self):
+        steps = _skill_section("role-intake", "Steps").lower()
+        for phrase in ("no contract field", "on-site days", "role-specific escalation",
+                       "source wording and citation", "never drop it or invent a field"):
+            self.assertIn(phrase, steps, "R3: unsupported requirements need " + phrase)
+        self.assertIn("no contract field",
+                      _skill_section("role-intake", "Grounding requirements").lower())
+
+    @named("1.1.12 R3 RI-1-RI-3: a preference escalation names the person without inventing a candidate ID")
+    def test_r3_preference_names_person_only(self):
+        steps = _skill_section("role-intake", "Steps").lower()
+        step_four = steps.split("\n4.", 1)[1].split("\n5.", 1)[0]
+        self.assertIn("name the person only", step_four)
+        self.assertIn("do not invent or look up a candidate id", step_four)
+        self.assertIn("never as a selection", step_four)
 
 
 class StreamingResult(unittest.TestResult):

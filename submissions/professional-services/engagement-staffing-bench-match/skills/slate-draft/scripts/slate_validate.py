@@ -28,6 +28,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import constraint_check
+import fit_score
 from input_guard import (
     ArgumentParser,
     InputError,
@@ -65,7 +66,7 @@ from safety_text import (
 
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 ENGINE = "engine:slate_validate"
-ENGINE_VERSION = "slate_validate/1.1.12"
+ENGINE_VERSION = "slate_validate/1.1.13"
 SAFE_DISPOSITIONS = {"clear", "resolved", "non_material", "not_applicable"}
 BLOCKING_TYPES = {
     "financial_interest",
@@ -1148,11 +1149,24 @@ def _client_names(validated_payload):
     return keys
 
 
+def _engine_industry_notes(validated_payload):
+    """The rubric #1.6 industry notes fit_score emits for this payload, re-derived from the roles
+    and bench candidates carried in validated.json; empty when they cannot be re-derived."""
+    roles, candidates = validated_payload.get("roles"), validated_payload.get("bench_candidates")
+    if not isinstance(roles, list) or not isinstance(candidates, list):
+        return set()
+    try:
+        notes = {fit_score.industry_escalation(role, candidates) for role in roles}
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return set()
+    return {note for note in notes if isinstance(note, str) and _INDUSTRY_ESCALATION.match(note)}
+
+
 def _conflict_escalation_lines(validated_payload):
     """The visible escalation lines. An escalation that carries conflict, financial-interest or leave
     detail shows only the role, action, candidate, conflict category and rule sections, rebuilt from
     the validated slate; one the slate cannot place is shown with category ``unrecognised`` and no
-    detail (fail closed). Every other escalation is shown as stored (``_escalation_line``)."""
+    detail (fail closed). An industry note equal to fit_score's re-derived note is shown as stored; every`n    other escalation is shown as stored (``_escalation_line``)."""
     roles = {id_key(role["role_id"]): role for role in validated_payload["governed_roles"]}
     clients = _client_names(validated_payload)
 
@@ -1171,10 +1185,16 @@ def _conflict_escalation_lines(validated_payload):
         return f"{prefix}escalation detail withheld - conflict category unrecognised" + rules_tail(
             _RULE_SECTION.findall(text))
 
+    engine_notes = _engine_industry_notes(validated_payload)
     lines = []
     for text in validated_payload["escalations"]:
         shown = _escalation_line(text)
         if shown == WITHHELD_CELL:
+            lines.append(shown)
+            continue
+        # An industry note equal to fit_score's re-derived note holds only role and candidate IDs and
+        # industry words (1.1.12 N9), so it skips the financial-interest and leave word screen.
+        if text in engine_notes and not constraint_check._names_foreign(shown, clients):
             lines.append(shown)
             continue
         industry = _INDUSTRY_ESCALATION.match(shown)

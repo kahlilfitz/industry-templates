@@ -43,7 +43,7 @@ from input_guard import (
 from safety_text import ScreeningLog, is_suspect, safe_citation, safe_text, same_client, sanitize_free_text
 
 ENGINE = "engine:fit_score"
-ENGINE_VERSION = "fit_score/1.1.12"
+ENGINE_VERSION = "fit_score/1.1.13"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 DEFAULT_DURATION_WEEKS = 52
 
@@ -545,6 +545,39 @@ def industry_match(role, cand):
     return ("partial", tuple(sorted(shared))) if shared else (None, ())
 
 
+def industry_escalation(role, candidates):
+    """The role-level rubric #1.6 escalation for one role, or None. Pure, so slate_validate can
+    re-derive it from validated.json and recognise the engine's own industry note exactly."""
+    partial_pairs = []
+    any_full = False
+    for cand in candidates:
+        match, shared = industry_match(role, cand)
+        if match == "full":
+            any_full = True
+        elif match == "partial":
+            partial_pairs.append(f"{role['role_id']}/{cand['candidate_id']} shares '{' '.join(shared)}'")
+    practice_tokens, practice_core = _role_industry(role)
+    partial = ""
+    if partial_pairs:
+        listed = partial_pairs[:PARTIAL_INDUSTRY_CAP]
+        more = len(partial_pairs) - len(listed)
+        partial = ("partial industry match (fit-scoring-rubric.md #1.6 continuity scored 0; confirm): "
+                   + "; ".join(listed) + (f"; and {more} more" if more else ""))
+    if practice_tokens and not any_full:
+        if not practice_core:
+            return (f"{role['role_id']}: industry_context has only generic words and matched no "
+                    "candidate's industry_experience - fit-scoring-rubric.md #1.6 continuity scored 0 for every "
+                    "candidate; confirm the industry wording")
+        if partial:
+            return (f"{role['role_id']}: no full industry match - industry_context fully matched no "
+                    f"candidate's industry_experience; {partial}")
+        return (f"{role['role_id']}: industry_context matched no candidate's industry_experience - "
+                "fit-scoring-rubric.md #1.6 continuity scored 0 for every candidate; confirm the industry wording")
+    if partial:
+        return f"{role['role_id']}: {partial}"
+    return None
+
+
 def continuity_score(role, cand):
     return 1.0 if industry_match(role, cand)[0] == "full" else 0.0
 
@@ -572,14 +605,11 @@ def score(roles_payload, bench_payload):
     scored_roles = []
     for role in roles_payload["roles"]:
         candidate_scores = []
-        partial_pairs = []
         for cand, holds in zip(candidates, screening_holds):
             availability = availability_context(role, cand)
             for warning in availability["calculation_warnings"]:
                 safety_escalations.append(f"{role['role_id']}/{cand['candidate_id']}: {warning}")
-            match, shared = industry_match(role, cand)
-            if match == "partial":
-                partial_pairs.append(f"{role['role_id']}/{cand['candidate_id']} shares '{' '.join(shared)}'")
+
             components = {
                 "skills": round(skill_score(role, cand), 3),
                 "seniority": round(seniority_score(role.get("seniority"), cand.get("seniority")), 3),
@@ -621,33 +651,9 @@ def score(roles_payload, bench_payload):
                 "citation": "fit-scoring-rubric.md #7.3; " + safe_citation(cand["citation"]),
                 "screening_holds": list(holds),
             })
-        practice_tokens, practice_core = _role_industry(role)
-        any_full = any(c["component_scores"]["continuity"] for c in candidate_scores)
-        partial = ""
-        if partial_pairs:
-            listed = partial_pairs[:PARTIAL_INDUSTRY_CAP]
-            more = len(partial_pairs) - len(listed)
-            partial = ("partial industry match (fit-scoring-rubric.md #1.6 continuity scored 0; confirm): "
-                       + "; ".join(listed) + (f"; and {more} more" if more else ""))
-        if practice_tokens and not any_full:
-            if not practice_core:
-                safety_escalations.append(
-                    f"{role['role_id']}: industry_context has only generic words and matched no "
-                    "candidate's industry_experience - fit-scoring-rubric.md #1.6 continuity scored 0 for every "
-                    "candidate; confirm the industry wording"
-                )
-            elif partial:
-                safety_escalations.append(
-                    f"{role['role_id']}: no full industry match - industry_context fully matched no "
-                    f"candidate's industry_experience; {partial}"
-                )
-            else:
-                safety_escalations.append(
-                    f"{role['role_id']}: industry_context matched no candidate's industry_experience - "
-                    "fit-scoring-rubric.md #1.6 continuity scored 0 for every candidate; confirm the industry wording"
-                )
-        elif partial:
-            safety_escalations.append(f"{role['role_id']}: {partial}")
+        industry_note = industry_escalation(role, candidates)
+        if industry_note:
+            safety_escalations.append(industry_note)
         scored_roles.append({
             "role_id": role["role_id"],
             "role_title": role["title"],
