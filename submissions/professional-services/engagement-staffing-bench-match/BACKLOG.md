@@ -227,3 +227,16 @@ R2 to R8 above. The honest-empty grading question was settled by owner decision 
   - Evidence: plugin-health-2026-10-24-0950.html: package validation PASS with 1 WARN (PKG-B001, no packageMetadata.json); tool descriptions PASS with 1 WARN (no agentConnectors); security scan PASS with 6 LOW bandit findings (B101 assert at :1522 and B105 at :2173, 3 copies each). Unchanged. Fix-order category: packaging / security note (no bar impact).
 - [ ] **N12** (slate-draft: scripts/slate_validate.py line 1169 (_conflict_escalation_lines docstring)): Replace &#x27;`n&#x27; with a real newline, and check the release tooling converts escape sequences when it edits files.
   - Evidence: behavioral-test-report-2026-10-24-0950.html, Regression vs baseline 1.1.12 (new finding N12): the docstring contains a literal PowerShell escape: "…shown as stored; every`n other escalation…". It has no runtime effect. Fix-order category: cosmetic.
+
+## Matrix 2026-10-24-1127 (plugin 1.1.13)
+
+Gate passed (134 scenarios, 20 fixtures, 10 datasets). Top blocker 3, the known-FAIL rows, is
+plugin-fixable but waits for the owner's rule decisions: N10 (unresolved question 2: screen a
+look-alike industry line or replace it with a neutral note) and N11 (question 1: neutralise numbers
+and leave words such as "maternity" on the re-derived path). Both reproduce on 1.1.13, and neither
+fix would change the existing `1.1.11 N6` or `1.1.12 N9` checks. R7, which the row also covers,
+has no stated rule (question 7). Once decided, each fix adds a check named
+`matrix 2026-10-24-1127 blocker 3`. Top blockers 1 and 2 and the 7 blocked rows sit in the eval
+harness (F06, F07, F17 and F18 fixtures, fault injection and multi-turn) and go to the owner.
+Questions 3 to 7 repeat N7, N2, N3, N8 and R2 to R8 above. The honest-empty grading question was
+settled by owner decision 2026-10-22.
