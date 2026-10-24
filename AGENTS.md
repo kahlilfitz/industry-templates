@@ -98,6 +98,20 @@ check changes. See the
 [exception's scope](docs/release-process.md#one-time-owner-exception-removing-human-testing).
 This is not a general waiver or a publish decision.
 
+## One-time owner exception: Staffing 1.1.14 N10
+
+Owner-approved on 2026-10-24 ("follow the recommendations for 1.1.14", option B), for
+`engagement-staffing-bench-match` **1.1.14 only**, while applying **matrix 2026-10-24-1127 top
+blocker 3** (1.1.13 N10: slate-draft shows an industry note only when it equals the note
+`fit_score.py` re-derives; every look-alike is withheld). In `tests\test_engines.py`, the check
+`1.1.11 N6: legacy industry notes render as stored without bypassing sensitive-detail holds` is
+renamed `1.1.11 N6: legacy industry notes are withheld without bypassing sensitive-detail holds`,
+and only its first block changes: the four legacy lines are no longer shown as stored and the draft
+shows the withheld line instead. Its sensitive-detail subtests and its SKILL.md assertion stay
+unchanged, and so does every other check and golden. See the
+[exception's scope](docs/release-process.md#one-time-owner-exception-staffing-1114-n10).
+This is not a general waiver, an evaluation verdict, or a publish decision.
+
 ## Tests and demo data
 
 - A MOS3 plugin's tests and demo data live in `submissions\<industry>\<slug>\tests\` and

@@ -5,7 +5,8 @@ and required fixes F-01 to F-03 applied in 1.1.7, Cowork evaluation matrix 2026-
 blocker 3 and owner-promoted F07 applied in 1.1.8, Cowork evaluation matrix 2026-10-23-1540
 blocker 3 applied in 1.1.9, Cowork evaluation matrix 2026-10-23-1707 blocker 3 applied in 1.1.10,
 and owner-promoted 1.1.10 advisories N4 and N5 applied in 1.1.11,
-and required 1.1.11 N6 applied in 1.1.12, and required 1.1.12 N9 and R3 applied in 1.1.13);
+and required 1.1.11 N6 applied in 1.1.12, and required 1.1.12 N9 and R3 applied in 1.1.13, and Cowork evaluation matrix 2026-10-24-1127
+blocker 3 (1.1.13 N10 and N11) applied in 1.1.14);
 see tests/README.md.
 
 Run from the submission folder (submissions/professional-services/<slug>/):
@@ -53,6 +54,7 @@ GROUPS = (
     ("evaluation-1.1.10", "Evaluation1110Tests"),
     ("evaluation-1.1.11", "Evaluation1111Tests"),
     ("evaluation-1.1.12", "Evaluation1112Tests"),
+    ("matrix-2026-10-24-1127", "Matrix202610241127Tests"),
 )
 
 
@@ -1243,7 +1245,7 @@ class Evaluation1111Tests(_EngineInjectionHarness, unittest.TestCase):
             self.assertIn("- " + line, draft)
         self.assertNotIn("conflict category unrecognised", draft)
 
-    @named("1.1.11 N6: legacy industry notes render as stored without bypassing sensitive-detail holds")
+    @named("1.1.11 N6: legacy industry notes are withheld without bypassing sensitive-detail holds")
     def test_n6_legacy_industry_notes_and_sensitive_details(self):
         governed = constraint_check.govern(
             slate_rank.rank(fit_score.score(self._load("roles.json"), self._load("bench.json"))),
@@ -1264,9 +1266,10 @@ class Evaluation1111Tests(_EngineInjectionHarness, unittest.TestCase):
         ]
         validated["escalations"] = lines
         draft = slate_validate.render_draft(validated)
+        # Owner exception 2026-10-24 (matrix 2026-10-24-1127 blocker 3, N10): look-alikes are withheld.
         for line in lines:
-            self.assertIn("- " + line, draft)
-        self.assertNotIn("conflict category unrecognised", draft)
+            self.assertNotIn("- " + line, draft)
+        self.assertIn("PSS-001: escalation detail withheld - conflict category unrecognised (rubric #1.6)", draft)
 
         for detail in ("holds restricted shares", "restricted equity holding", "parental leave",
                        "Orchard Ridge Clinics"):
@@ -1418,6 +1421,58 @@ class Evaluation1112Tests(_EngineInjectionHarness, unittest.TestCase):
         self.assertIn("name the person only", step_four)
         self.assertIn("do not invent or look up a candidate id", step_four)
         self.assertIn("never as a selection", step_four)
+
+
+class Matrix202610241127Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork evaluation matrix 2026-10-24-1127 top blocker 3 (1.1.13 N10 and N11): only fit_score's
+    own re-derived industry note is shown, and never with numbers or leave words in its shared words."""
+
+    _industry_draft = Evaluation1112Tests._industry_draft
+    WITHHELD = ("- PSS-001: escalation detail withheld - conflict category unrecognised "
+                "(fit-scoring-rubric.md #1.6)")
+
+    @named("matrix 2026-10-24-1127 blocker 3: N11 a re-derived industry note sharing a number is withheld")
+    def test_n11_numeric_shared_words_are_withheld(self):
+        validated, draft = self._industry_draft(("40000 retail",), (["health operations"], ["40000 banking"]))
+        line = next(text for text in validated["escalations"]
+                    if text.startswith("PSS-001: no full industry match"))
+        self.assertIn("PSS-001/C-102 shares '40000'", line)
+        self.assertNotIn("40000", draft)
+        self.assertNotIn("- " + line, draft)
+        self.assertIn(self.WITHHELD, draft)
+
+    @named("matrix 2026-10-24-1127 blocker 3: N11 a re-derived industry note sharing a leave word is withheld")
+    def test_n11_leave_shared_words_are_withheld(self):
+        for role_industry, bench_industry, detail in (
+            ("maternity care", "maternity clinics", "maternity"),
+            ("paternity services", "paternity advisory", "paternity"),
+            ("parental leave administration", "parental leave consulting", "parental"),
+        ):
+            with self.subTest(detail=detail):
+                validated, draft = self._industry_draft((role_industry,), (["health operations"], [bench_industry]))
+                line = next(text for text in validated["escalations"] if text.startswith("PSS-001:"))
+                self.assertIn(detail, line)
+                self.assertNotIn(detail, draft)
+                self.assertIn(self.WITHHELD, draft)
+
+    @named("matrix 2026-10-24-1127 blocker 3: N10 an industry look-alike that is not fit_score's note is withheld")
+    def test_n10_lookalike_industry_lines_are_withheld(self):
+        validated, _ = self._industry_draft(("retail banking",), (["banking"],))
+        engine_line = next(text for text in validated["escalations"] if text.startswith("PSS-001:"))
+        prefix = "PSS-001: partial industry match (fit-scoring-rubric.md #1.6 continuity scored 0; confirm): "
+        for lookalike, detail in (
+            (prefix + "PSS-001/C-101 shares 'held through a family trust, 4,000 units, sale pending'",
+             "family trust"),
+            (prefix + "PSS-001/C-101 shares 'insurance'", "shares 'insurance'"),
+        ):
+            with self.subTest(detail=detail):
+                payload = json.loads(json.dumps(validated))
+                payload["escalations"] = [engine_line, lookalike]
+                draft = slate_validate.render_draft(payload)
+                self.assertIn("- " + engine_line, draft)
+                self.assertNotIn(detail, draft)
+                self.assertNotIn("- " + lookalike, draft)
+                self.assertIn(self.WITHHELD, draft)
 
 
 class StreamingResult(unittest.TestResult):

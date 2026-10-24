@@ -64,7 +64,7 @@ from safety_text import (
 )
 
 ENGINE = "engine:constraint_check"
-ENGINE_VERSION = "constraint_check/1.1.13"
+ENGINE_VERSION = "constraint_check/1.1.14"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 RULES = "independence-eligibility-rules.md"
 CONFIDENCE_FLOOR = 0.75       # independence-eligibility-rules.md #8.1

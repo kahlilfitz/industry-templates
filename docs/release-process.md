@@ -407,6 +407,26 @@ packaging or publishing without their existing gates.
 - **Not permitted:** any change to plugin suites, goldens or any other check, weaker guardrails, or
   publishing without the owner's recorded Publish decision. Ready is still never a publish signal.
 
+### One-time owner exception: Staffing 1.1.14 N10
+
+**Owner approval: 2026-10-24** ("follow the recommendations for 1.1.14", option B for N10).
+
+- **Scope:** `engagement-staffing-bench-match` 1.1.14 only, applying matrix 2026-10-24-1127 top
+  blocker 3. Slate-draft removes the legacy "shares → overlaps on" path: an industry note is shown
+  only when it equals the note `fit_score.py` re-derives from `validated.json`; every look-alike is
+  withheld as `escalation detail withheld - conflict category unrecognised (<rules>)`. Older-version
+  intermediates are already refused under rule #9.8, so only edited or injected lines are affected.
+- **Changed check:** in `tests\test_engines.py`, `1.1.11 N6: legacy industry notes render as stored
+  without bypassing sensitive-detail holds` is renamed `1.1.11 N6: legacy industry notes are
+  withheld without bypassing sensitive-detail holds`. In its first block, the four legacy lines
+  must not appear as stored and the draft must contain `PSS-001: escalation detail withheld -
+  conflict category unrecognised (rubric #1.6)`, replacing `assertIn("- " + line, draft)` and
+  `assertNotIn("conflict category unrecognised", draft)`.
+- **Evidence:** the new `matrix 2026-10-24-1127 blocker 3` checks fail on 1.1.13 and pass on 1.1.14;
+  `1.1.12 N9 SD-5` (engine notes sharing "equity" or "stock" render as stored) still passes.
+- **Not permitted:** any change to the N6 sensitive-detail subtests or SKILL.md assertion, any other
+  check or golden beyond version labels, or weaker guardrails. This is not a publish decision.
+
 ## Step 5: owner Publish decision
 
 Do this after a `Ready` verdict. Human testing is not part of the process (owner, 2026-10-23), so

@@ -66,7 +66,7 @@ from safety_text import (
 
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 ENGINE = "engine:slate_validate"
-ENGINE_VERSION = "slate_validate/1.1.13"
+ENGINE_VERSION = "slate_validate/1.1.14"
 SAFE_DISPOSITIONS = {"clear", "resolved", "non_material", "not_applicable"}
 BLOCKING_TYPES = {
     "financial_interest",
@@ -1129,6 +1129,11 @@ _SENSITIVE_DETAIL = re.compile(
     r"family|personal|disability|adoption|caregiver|carer'?s?|garden|unpaid|special|study)\s+leave\b",
     re.I,
 )
+# The shared words fit_score quotes in its own industry note come from free text, so numbers and
+# leave words there are withheld too (matrix 2026-10-24-1127 blocker 3, N11). fit_score sorts the
+# words, so any "leave" counts, not only "<reason> leave".
+_SHARED_WORDS = re.compile(r" shares '([^']*)'")
+_UNSAFE_SHARED_WORD = re.compile(r"\d|\bmaternit\w*|\bpaternit\w*|\bleaves?\b", re.I)
 
 
 def _client_names(validated_payload):
@@ -1166,7 +1171,9 @@ def _conflict_escalation_lines(validated_payload):
     """The visible escalation lines. An escalation that carries conflict, financial-interest or leave
     detail shows only the role, action, candidate, conflict category and rule sections, rebuilt from
     the validated slate; one the slate cannot place is shown with category ``unrecognised`` and no
-    detail (fail closed). An industry note equal to fit_score's re-derived note is shown as stored; every`n    other escalation is shown as stored (``_escalation_line``)."""
+    detail (fail closed). An industry note is shown as stored only when it equals fit_score's
+    re-derived note, names no client or affiliate and shares no number or leave word; any other
+    industry note is withheld. Every other escalation is shown as stored (``_escalation_line``)."""
     roles = {id_key(role["role_id"]): role for role in validated_payload["governed_roles"]}
     clients = _client_names(validated_payload)
 
@@ -1192,22 +1199,18 @@ def _conflict_escalation_lines(validated_payload):
         if shown == WITHHELD_CELL:
             lines.append(shown)
             continue
-        # An industry note equal to fit_score's re-derived note holds only role and candidate IDs and
-        # industry words (1.1.12 N9), so it skips the financial-interest and leave word screen.
-        if text in engine_notes and not constraint_check._names_foreign(shown, clients):
-            lines.append(shown)
-            continue
         industry = _INDUSTRY_ESCALATION.match(shown)
-        industry_role = roles.get(id_key(industry.group("role"))) if industry else None
-        if industry_role is not None:
-            detail = shown
-            for candidate in industry_role["candidate_slate"]:
-                pair = f"{industry.group('role')}/{candidate['candidate_id']}"
-                # The legacy engine verb is not a financial-interest noun; other detail stays screened.
-                detail = detail.replace(f"{pair} shares '", f"{pair} overlaps on '")
-            if not sensitive(detail):
+        if industry:
+            # Only fit_score's own re-derived note holds nothing but role and candidate IDs and industry
+            # words, so only it skips the financial-interest screen (1.1.12 N9). A look-alike is withheld
+            # (N10), and so is an engine note sharing a number or leave word (N11).
+            if (text in engine_notes and not constraint_check._names_foreign(shown, clients)
+                    and not any(_UNSAFE_SHARED_WORD.search(words) for words in _SHARED_WORDS.findall(shown))):
                 lines.append(shown)
-                continue
+            else:
+                role_id = industry.group("role")
+                lines.append(withheld(shown, f"{_cell(role_id)}: " if id_key(role_id) in roles else ""))
+            continue
         top, secondary = _TOP_ESCALATION.match(shown), _SECONDARY_ESCALATION.match(shown)
         match = top or secondary
         role = roles.get(id_key(match.group("role"))) if match else None

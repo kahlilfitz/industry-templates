@@ -4,6 +4,31 @@ Versions before 1.1.5 are recorded in the git history of
 `submissions/professional-services/engagement-staffing-bench-match/` (1.1.4 was the automated
 `Ready` candidate).
 
+## 1.1.14 - 2026-10-24
+
+Applies Cowork evaluation matrix 2026-10-24-1127 top blocker 3 (the known-FAIL N10 and N11 rows of
+the 1.1.13 matrix), with the owner's rule decisions of 2026-10-24, and advisory N12. This is not a
+Ready verdict or a publish decision.
+
+- **N11 - numbers and leave words in fit_score's own industry note.** The 1.1.13 N9 path showed a
+  re-derived note unscreened, so shared words from the SOW and roster such as "40000" or
+  "maternity" printed. slate-draft still shows a re-derived note as stored when its shared words
+  read like financial terms ("equity", "stock"), but withholds it when a shared word contains a
+  digit or is "maternity", "paternity" or "leave". A genuine "maternity care" overlap is therefore
+  withheld (fail closed). `fit_score.py` is unchanged.
+- **N10 - industry look-alikes.** The legacy "shares → overlaps on" path is removed: a line that
+  looks like an industry note but is not the note `fit_score.py` re-derives is withheld as
+  `escalation detail withheld - conflict category unrecognised (<rules>)`. Under the owner's
+  one-time exception, the `1.1.11 N6` legacy-note check now expects its four legacy lines to be
+  withheld; its sensitive-detail subtests are unchanged.
+- **N12** - the `_conflict_escalation_lines` docstring no longer contains a literal `` `n ``.
+- R7 (per-role eligibility note) stays advisory; it would change the `slate-draft.md` goldens.
+- Regression checks `matrix 2026-10-24-1127 blocker 3` (three) fail on 1.1.13 and pass on 1.1.14;
+  suite 36/36. Goldens changed only in their engine labels.
+- slate-draft Output format describes the rule.
+- Version 1.1.14 in `metadata.json`, `manifest.json`, all five `SKILL.md` files and
+  `listing-metadata.md`; all nine engine labels are 1.1.14.
+
 ## 1.1.13 - 2026-10-24
 
 Applies required N9 and R3 from the 1.1.12 Cowork evaluation (`2026-10-24-0245`, verdict No-ship).

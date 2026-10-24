@@ -43,7 +43,7 @@ from input_guard import (
 from safety_text import ScreeningLog, is_suspect, safe_citation, safe_text, same_client, sanitize_free_text
 
 ENGINE = "engine:fit_score"
-ENGINE_VERSION = "fit_score/1.1.13"
+ENGINE_VERSION = "fit_score/1.1.14"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 DEFAULT_DURATION_WEEKS = 52
 
