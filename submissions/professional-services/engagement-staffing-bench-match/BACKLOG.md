@@ -92,7 +92,7 @@ fixtures) and were reported to the owner. The unresolved questions repeat R2, R4
 
 ## 1.1.9 evaluation (evaluate-engagement-staffing-bench-match-v1.1.9-2026-10-23)
 
-- [ ] **N1** (fit-score, constraint-check, slate-draft: scripts/fit_score.py continuity_score() (3 copies)): Stop treating either-way subset as a full match. Options: (a) map industry wording to a controlled vocabulary or synonym table in fit-scoring-rubric.md (for example &#x27;healthcare provider&#x27; to &#x27;healthcare&#x27;); or (b) give full credit only for equal word sets after normalisation, and give no credit plus an escalation (&#x27;partial industry match — confirm&#x27;) for a partial match. Add regression tests for &#x27;services&#x27;, &#x27;retail banking&#x27;, &#x27;health insurance&#x27; and &#x27;healthcare provider&#x27;.
+- [x] **N1** (done in 1.1.10: Cowork evaluation matrix 2026-10-23-1707 blocker 3, owner decision 2026-10-23; `fit_score.py` `continuity_score()` ignores generic qualifier words (company, firm, industry, operation, provider, sector, service and plurals), gives full credit only when the remaining words are equal, and escalates a partial match; fit-score, constraint-check, slate-draft: scripts/fit_score.py continuity_score() (3 copies)): Stop treating either-way subset as a full match. Options: (a) map industry wording to a controlled vocabulary or synonym table in fit-scoring-rubric.md (for example &#x27;healthcare provider&#x27; to &#x27;healthcare&#x27;); or (b) give full credit only for equal word sets after normalisation, and give no credit plus an escalation (&#x27;partial industry match — confirm&#x27;) for a partial match. Add regression tests for &#x27;services&#x27;, &#x27;retail banking&#x27;, &#x27;health insurance&#x27; and &#x27;healthcare provider&#x27;.
   - Evidence: behavioral-test-report-2026-10-23-1618.html: Regression vs baseline 1.1.8, engine edge tests E4, E5, E6 and E9. Whole-word subset matching in either direction over-matches. Role &#x27;services&#x27; matches bench &#x27;financial services&#x27; and &#x27;professional services&#x27;. &#x27;retail banking&#x27; matches &#x27;retail&#x27;, and &#x27;health insurance&#x27; matches &#x27;insurance&#x27;. Each adds 5.0 points (#1.6) with no escalation. In E9 a clear candidate with retail-only experience moved from 68.9 below_score_floor to 73.9 recommended (R1 rank 2). Fix-order category: logic defect (the engine output contradicts the rubric&#x27;s &#x27;relevant industry&#x27;). Advisory because no bar measure is missed. This is the highest-priority item.
 - [ ] **N2** (fit-score, constraint-check, slate-draft, role-intake, bench-query: references/fit-scoring-rubric.md #1.6 (5 copies)): Document the #1.6 matching rule (as corrected under N1) and the no-match escalation in fit-scoring-rubric.md, and keep all 5 copies byte-identical.
   - Evidence: plugin-health-2026-10-23-1618.html: Regression vs baseline 1.1.8, findings new or worse (N2). fit_score.py cites &#x27;fit-scoring-rubric.md #1.6&#x27; for whole-word matching and the no-match escalation, but rubric #1.6 (unchanged in v1.1.9) states only &#x27;Relevant industry or delivery continuity&#x27;, with no matching rule. Fix-order category: description gap.
@@ -115,12 +115,11 @@ fixtures) and were reported to the owner. The unresolved questions repeat R2, R4
 
 ## Matrix 2026-10-23-1707 (plugin 1.1.9)
 
-Gate passed (115 scenarios, 18 fixtures, 10 datasets). Top blocker 3 includes the two N1
-over-match rows, which are expected to FAIL. They are plugin-fixable and will be handled as a
-required fix (regression check `matrix 2026-10-23-1707 blocker 3`) once the owner confirms the
-#1.6 matching rule (unresolved question 1). Option (b) under N1, equal word sets only, would break
-the existing check `matrix 2026-10-23-1540 blocker 3` ("healthcare provider" must match
-"healthcare"), so it is not usable as written. Top blockers 1 and 2 and the 7 blocked rows sit in
+Gate passed (115 scenarios, 18 fixtures, 10 datasets). Top blocker 3, the two N1 over-match rows,
+was fixed in 1.1.10 under the owner's choice of the qualifier rule for unresolved question 1
+(regression check `matrix 2026-10-23-1707 blocker 3`); see N1 above. Option (b) under N1 as
+written, equal word sets only, would have broken the existing check `matrix 2026-10-23-1540
+blocker 3` ("healthcare provider" must match "healthcare"). Top blockers 1 and 2 and the 7 blocked rows sit in
 the eval harness (fixtures F06, F07, F17, F18, the fixture divergence in question 5, fault
 injection and multi-turn) and are reported to the owner. Questions 2 to 4 repeat N2, N3 and
 R2 to R8 above. The honest-empty grading question was settled by owner decision 2026-10-22.

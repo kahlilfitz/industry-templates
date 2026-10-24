@@ -4,6 +4,41 @@ Versions before 1.1.5 are recorded in the git history of
 `submissions/professional-services/engagement-staffing-bench-match/` (1.1.4 was the automated
 `Ready` candidate).
 
+## 1.1.10 - 2026-10-23
+
+Applies the plugin-fixable blocker from Cowork evaluation matrix 2026-10-23-1707 (plugin 1.1.9):
+top blocker 3, the two N1 rubric #1.6 over-match rows, which are also advisory N1 from the 1.1.9
+evaluation. Owner decision 2026-10-23: the recommended qualifier rule. The other blockers in that
+matrix sit in the eval harness and were reported to the owner; its other items, including N2 and
+N3, stay advisory (`BACKLOG.md`).
+
+- **Matrix 2026-10-23-1707 blocker 3 - industry over-match (rubric #1.6).** 1.1.9 gave full
+  continuity credit when the words of either industry were a subset of the other's, so "retail
+  banking" matched "retail", "health insurance" matched "insurance", and a bare "services" matched
+  "financial services" and "professional services", each adding 5.0 points with no escalation.
+  `continuity_score()` in `fit_score.py` now ignores generic qualifier words (company, firm,
+  industry, operation, provider, sector, service and their plurals) and gives full credit only
+  when the remaining words are equal and not empty, so "healthcare provider" still matches
+  "healthcare" (matrix 2026-10-23-1540 blocker 3 is unchanged). When the remaining words only
+  overlap, continuity scores 0 and `scored.json` raises `<role_id>/<candidate_id>: partial
+  industry match - the role and bench industries share only some words; rubric #1.6 continuity
+  scored 0; confirm`; the industry text itself is not repeated. A role whose industry is only
+  generic words matches no candidate and gets the existing 1.1.9 no-match escalation. "operation"
+  joins the owner-approved list (provider, services, sector, industry, company, firm) so that a
+  shared functional word does not escalate on its own: scenario A's "retail operations" against
+  "health operations" stays unmatched and unescalated, as in 1.1.9. role-intake step 2 describes
+  the new rule. All three `fit_score.py` copies stay byte-identical. The rubric text is unchanged
+  (N2 stays advisory).
+- Version 1.1.10 in `metadata.json`, `manifest.json`, every `SKILL.md` and `listing-metadata.md`.
+  The nine `ENGINE_VERSION` labels move to 1.1.10. `steering_guard.py` `__version__` and the
+  `POLICIES` stamp are unchanged.
+- The ten `demo-data\*\expected` files were regenerated with the engines. In the eight JSON files
+  only the engine labels changed; the two `slate-draft.md` files are unchanged. No demo score or
+  escalation changed.
+- **Regression check (owner rule).** `tests\test_engines.py` gains the group
+  `matrix-2026-10-23-1707` with the check
+  `matrix 2026-10-23-1707 blocker 3: a partial industry match ('retail banking' vs 'retail', generic 'services') earns no rubric #1.6 continuity and is escalated`.
+  It fails on the 1.1.9 files and passes on 1.1.10 (22/22). No existing check changed.
 ## 1.1.9 - 2026-10-23
 
 Applies the plugin-fixable blocker from Cowork evaluation matrix 2026-10-23-1540 (plugin 1.1.8):

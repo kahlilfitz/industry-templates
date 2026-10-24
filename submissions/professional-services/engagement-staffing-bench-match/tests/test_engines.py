@@ -2,8 +2,9 @@
 
 Every check here answers a Cowork evaluation finding (1.1.2 and 1.1.3 blockers, the 1.1.6 blocker
 and required fixes F-01 to F-03 applied in 1.1.7, Cowork evaluation matrix 2026-10-22-1252
-blocker 3 and owner-promoted F07 applied in 1.1.8, and Cowork evaluation matrix 2026-10-23-1540
-blocker 3 applied in 1.1.9); see tests/README.md.
+blocker 3 and owner-promoted F07 applied in 1.1.8, Cowork evaluation matrix 2026-10-23-1540
+blocker 3 applied in 1.1.9, and Cowork evaluation matrix 2026-10-23-1707 blocker 3 applied in
+1.1.10); see tests/README.md.
 
 Run from the submission folder (submissions/professional-services/<slug>/):
 
@@ -46,6 +47,7 @@ GROUPS = (
     ("input-contract", "InputContractTests"),
     ("matrix-2026-10-22-1252", "Matrix20261022Tests"),
     ("matrix-2026-10-23-1540", "Matrix20261023Tests"),
+    ("matrix-2026-10-23-1707", "Matrix202610231707Tests"),
 )
 
 
@@ -1063,6 +1065,53 @@ class Matrix20261023Tests(_EngineInjectionHarness, unittest.TestCase):
                                     and "#1.6" in str(item) for item in unmatched["escalations"]),
                                 "%s: %s industry_context matched no candidate without an escalation"
                                 % (name, role_id))
+
+
+class Matrix202610231707Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork evaluation matrix 2026-10-23-1707 (plugin 1.1.9): top blocker 3, the two N1 rubric #1.6
+    over-match rows, applied in 1.1.10 under owner decision 2026-10-23 (generic qualifier words
+    are ignored; the remaining industry words must be equal)."""
+
+    score_with = Matrix20261023Tests.score_with
+    candidate = staticmethod(Matrix20261023Tests.candidate)
+
+    @named("matrix 2026-10-23-1707 blocker 3: a partial industry match ('retail banking' vs 'retail', "
+           "generic 'services') earns no rubric #1.6 continuity and is escalated")
+    def test_matrix_2026_10_23_1707_blocker_3_partial_industry_match(self):
+        name = "matrix 2026-10-23-1707 blocker 3"
+        for practice, experience in (("retail banking", ["retail"]), ("retail", ["retail banking"]),
+                                     ("health insurance", ["insurance"])):
+            with self.subTest(industry_context=practice, industry_experience=experience):
+                scored = self.score_with(practice, experience)
+                no_match = self.score_with(practice, ["energy utilities"])
+                c101 = self.candidate(scored, "PSS-001", "C-101")
+                self.assertEqual(0.0, c101["component_scores"]["continuity"],
+                                 "%s: %r must not earn #1.6 against %r" % (name, practice, experience))
+                self.assertEqual(self.candidate(no_match, "PSS-001", "C-101")["fit_score"], c101["fit_score"],
+                                 "%s: a partial industry match must not add the 5.0 #1.6 points" % name)
+                self.assertTrue(any("PSS-001/C-101" in str(item) and "partial industry match" in str(item)
+                                    and "#1.6" in str(item) for item in scored["escalations"]),
+                                "%s: the partial match for PSS-001/C-101 was not escalated" % name)
+
+        # A generic word alone is not an industry: "services" matches neither "financial services"
+        # nor "professional services", and the role is escalated as matching no candidate.
+        scored = self.score_with("services", ["financial services", "professional services"])
+        for role_id in ("PSS-001", "PSS-002"):
+            with self.subTest(role=role_id):
+                role = next(r for r in scored["scored_roles"] if r["role_id"] == role_id)
+                self.assertEqual([0.0] * len(role["candidate_scores"]),
+                                 [c["component_scores"]["continuity"] for c in role["candidate_scores"]],
+                                 "%s: generic 'services' must earn no #1.6 continuity" % name)
+                self.assertTrue(any(role_id in str(item) and "industry_context" in str(item)
+                                    and "#1.6" in str(item) for item in scored["escalations"]),
+                                "%s: %s generic industry_context was not escalated" % (name, role_id))
+
+        # Equal industry words after the generic qualifiers are ignored still match, unescalated.
+        scored = self.score_with("healthcare provider", ["healthcare services"])
+        self.assertEqual(1.0, self.candidate(scored, "PSS-001", "C-101")["component_scores"]["continuity"],
+                         "%s: 'healthcare provider' must match 'healthcare services'" % name)
+        self.assertFalse(any("C-101" in str(item) and "partial industry match" in str(item)
+                             for item in scored["escalations"]))
 
 
 class StreamingResult(unittest.TestResult):

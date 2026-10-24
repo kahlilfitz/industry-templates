@@ -43,7 +43,7 @@ from input_guard import (
 from safety_text import ScreeningLog, is_suspect, safe_citation, safe_text, same_client, sanitize_free_text
 
 ENGINE = "engine:fit_score"
-ENGINE_VERSION = "fit_score/1.1.9"
+ENGINE_VERSION = "fit_score/1.1.10"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 DEFAULT_DURATION_WEEKS = 52
 
@@ -487,18 +487,36 @@ def _words(text):
     return frozenset(re.findall(r"[^\W_]+", text.casefold()))
 
 
-def continuity_score(role, cand):
-    # fit-scoring-rubric.md #1.6: the role's industry and a bench industry match when every whole
-    # word of one appears in the other ("healthcare provider" matches "healthcare").
+GENERIC_INDUSTRY_WORDS = frozenset({
+    "company", "companies", "firm", "firms", "industry", "industries", "operation", "operations",
+    "provider", "providers", "sector", "sectors", "service", "services",
+})
+
+
+def _industry_words(text):
+    return _words(text) - GENERIC_INDUSTRY_WORDS
+
+
+def industry_match(role, cand):
+    """fit-scoring-rubric.md #1.6: "full" when, ignoring generic qualifier words, the role's
+    industry words equal a bench industry's ("healthcare provider" matches "healthcare");
+    "partial" when they only share a word ("retail banking" and "retail"); otherwise None."""
     practice = role.get("industry_context", "")
-    practice = frozenset() if has_marker(practice) else _words(practice)
+    practice = frozenset() if has_marker(practice) else _industry_words(practice)
     if not practice:
-        return 0.0
+        return None
+    result = None
     for industry in _usable(cand.get("industry_experience", [])):
-        words = _words(industry)
-        if words and (words <= practice or practice <= words):
-            return 1.0
-    return 0.0
+        words = _industry_words(industry)
+        if words == practice:
+            return "full"
+        if words & practice:
+            result = "partial"
+    return result
+
+
+def continuity_score(role, cand):
+    return 1.0 if industry_match(role, cand) == "full" else 0.0
 
 
 # ---------------------------------------------------------------------------------------------
@@ -528,6 +546,11 @@ def score(roles_payload, bench_payload):
             availability = availability_context(role, cand)
             for warning in availability["calculation_warnings"]:
                 safety_escalations.append(f"{role['role_id']}/{cand['candidate_id']}: {warning}")
+            if industry_match(role, cand) == "partial":
+                safety_escalations.append(
+                    f"{role['role_id']}/{cand['candidate_id']}: partial industry match - the role and "
+                    "bench industries share only some words; rubric #1.6 continuity scored 0; confirm"
+                )
             components = {
                 "skills": round(skill_score(role, cand), 3),
                 "seniority": round(seniority_score(role.get("seniority"), cand.get("seniority")), 3),
