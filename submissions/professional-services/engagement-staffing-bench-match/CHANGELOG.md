@@ -4,6 +4,42 @@ Versions before 1.1.5 are recorded in the git history of
 `submissions/professional-services/engagement-staffing-bench-match/` (1.1.4 was the automated
 `Ready` candidate).
 
+## 1.1.11 - 2026-10-23
+
+Applies advisories N4 and N5 from the 1.1.10 Cowork evaluation (run `2026-10-23-1748`, verdict
+Ready), which the owner promoted on 2026-10-23 ("fix it"). Both are side effects of the 1.1.10
+rubric #1.6 rule. The other 1.1.10 advisories, including N2 and N3, stay in `BACKLOG.md`.
+
+- **1.1.10 N4 - industry normalisation (rubric #1.6).** `fit_score.py` now reads "&" as "and",
+  drops the stop words "and", "of" and "the", and folds simple plurals ("banks" to "bank",
+  "industries" to "industry") on both sides before comparing. Two industries also match when
+  their remaining words spell the same thing without spaces ("health care" and "healthcare").
+  So "oil & gas" matches "oil and gas" again, and "oil and gas" no longer partially matches
+  "food and beverage" through "and". A role worded only in generic words ("services") matches a
+  bench entry with the same words and never counts as a partial match. When it matches no
+  candidate, it raises `<role_id>: industry_context has only generic words and matched no
+  candidate's industry_experience - rubric #1.6 continuity scored 0 for every candidate; confirm
+  the industry wording`.
+- **1.1.10 N5 - one partial-match escalation per role.** Partial matches no longer raise one
+  escalation per candidate. Each role raises one `partial industry match (rubric #1.6 continuity
+  scored 0; confirm): <role>/<candidate> shares '<words>'; ...` line, listing at most 10 pairs and
+  counting the rest (`; and <n> more`). When no candidate matches in full, that list is folded
+  into a single `<role_id>: no full industry match - industry_context fully matched no
+  candidate's industry_experience; partial industry match ...` line instead of two escalations.
+  A role with no full and no partial match keeps the 1.1.9 wording.
+- The unused `_words()` helper is removed. All three `fit_score.py` copies stay byte-identical.
+  role-intake step 2 describes the normalisation. The rubric text is unchanged (N2 stays advisory).
+- Version 1.1.11 in `metadata.json`, `manifest.json`, every `SKILL.md` and `listing-metadata.md`.
+  The nine `ENGINE_VERSION` labels move to 1.1.11. `steering_guard.py` `__version__` and the
+  `POLICIES` stamp are unchanged.
+- The ten `demo-data\*\expected` files were regenerated with the engines. In the eight JSON files
+  only the engine labels changed; the two `slate-draft.md` files are unchanged.
+- **Regression checks (owner-promoted).** `tests\test_engines.py` gains the group
+  `evaluation-1.1.10` with the checks
+  `1.1.10 N4: industry matching folds '&', stop words and simple plurals, joins split compounds, and matches a role worded only in generic words`
+  and
+  `1.1.10 N5: partial industry matches raise one capped escalation per role naming the shared words, folded into the no-match escalation when nothing matches in full`.
+  Both fail on the 1.1.10 files and pass on 1.1.11 (24/24). No existing check changed.
 ## 1.1.10 - 2026-10-23
 
 Applies the plugin-fixable blocker from Cowork evaluation matrix 2026-10-23-1707 (plugin 1.1.9):

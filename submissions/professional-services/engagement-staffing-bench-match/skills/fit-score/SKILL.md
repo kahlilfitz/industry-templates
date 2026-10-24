@@ -4,7 +4,7 @@ description: "Computes deterministic, pre-governance candidate-role fit scores, 
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/fit_score.py and scripts/slate_rank.py on roles.json and bench.json from earlier skills or the user. No connectors required. Writes local JSON only; never writes to a resource or staffing system."
 metadata:
-  version: "1.1.10"
+  version: "1.1.11"
   icon: ic_fluent_data_bar_vertical_star_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

@@ -4,7 +4,7 @@ description: "Normalizes bench, availability, rate and conflicts-register data i
 license: Proprietary
 compatibility: "Reads user-supplied roster, availability, leave, rate-card and conflicts-register exports (CSV or JSON) with the file-read tool; Python 3 to normalise them into bench.json and constraints.json. No bundled engine and no connectors required. Read-only: never writes to a resource or staffing system."
 metadata:
-  version: "1.1.10"
+  version: "1.1.11"
   icon: ic_fluent_people_search_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

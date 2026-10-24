@@ -43,7 +43,7 @@ from input_guard import (
 from safety_text import ScreeningLog, is_suspect, safe_citation, safe_text, same_client, sanitize_free_text
 
 ENGINE = "engine:fit_score"
-ENGINE_VERSION = "fit_score/1.1.10"
+ENGINE_VERSION = "fit_score/1.1.11"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 DEFAULT_DURATION_WEEKS = 52
 
@@ -483,40 +483,70 @@ def seniority_rule(role_level, cand_level):
     }.get(diff, "fit-scoring-rubric.md #3.4")
 
 
-def _words(text):
-    return frozenset(re.findall(r"[^\W_]+", text.casefold()))
-
-
 GENERIC_INDUSTRY_WORDS = frozenset({
-    "company", "companies", "firm", "firms", "industry", "industries", "operation", "operations",
-    "provider", "providers", "sector", "sectors", "service", "services",
+    "company", "firm", "industry", "operation", "provider", "sector", "service",
 })
+INDUSTRY_STOP_WORDS = frozenset({"and", "of", "the"})
+PARTIAL_INDUSTRY_CAP = 10       # role/candidate pairs named in one partial-match escalation
 
 
-def _industry_words(text):
-    return _words(text) - GENERIC_INDUSTRY_WORDS
+def _singular(word):
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 3 and word.endswith("s") and not word.endswith(("ss", "us", "is")):
+        return word[:-1]
+    return word
+
+
+def _industry_tokens(text):
+    """Industry words in order: '&' read as 'and', stop words dropped, simple plurals folded."""
+    words = re.findall(r"[^\W_]+", text.casefold().replace("&", " and "))
+    return [_singular(word) for word in words if word not in INDUSTRY_STOP_WORDS]
+
+
+def _industry_key(tokens):
+    return frozenset(tokens), "".join(tokens)
+
+
+def _same_industry(left, right):
+    # Equal word sets, or the same letters once spaces go ("health care" and "healthcare").
+    return bool(left[1]) and (left[0] == right[0] or left[1] == right[1])
+
+
+def _role_industry(role):
+    practice = role.get("industry_context", "")
+    if not isinstance(practice, str) or has_marker(practice):
+        return [], []
+    tokens = _industry_tokens(practice)
+    return tokens, [token for token in tokens if token not in GENERIC_INDUSTRY_WORDS]
 
 
 def industry_match(role, cand):
-    """fit-scoring-rubric.md #1.6: "full" when, ignoring generic qualifier words, the role's
-    industry words equal a bench industry's ("healthcare provider" matches "healthcare");
-    "partial" when they only share a word ("retail banking" and "retail"); otherwise None."""
-    practice = role.get("industry_context", "")
-    practice = frozenset() if has_marker(practice) else _industry_words(practice)
-    if not practice:
-        return None
-    result = None
+    """fit-scoring-rubric.md #1.6. Returns ("full", ()) when, ignoring generic qualifier words,
+    the role's industry words equal a bench industry's ("healthcare provider" matches
+    "healthcare"); ("partial", shared words) when they only share a word ("retail banking" and
+    "retail"); otherwise (None, ()). A role worded only in generic words ("services") matches
+    only the same generic words and is never a partial match."""
+    tokens, core = _role_industry(role)
+    if not tokens:
+        return None, ()
+    generic_only = not core
+    practice = _industry_key(tokens if generic_only else core)
+    shared = set()
     for industry in _usable(cand.get("industry_experience", [])):
-        words = _industry_words(industry)
-        if words == practice:
-            return "full"
-        if words & practice:
-            result = "partial"
-    return result
+        bench = _industry_tokens(industry)
+        if not generic_only:
+            bench = [token for token in bench if token not in GENERIC_INDUSTRY_WORDS]
+        words = _industry_key(bench)
+        if _same_industry(practice, words):
+            return "full", ()
+        if not generic_only:
+            shared |= practice[0] & words[0]
+    return ("partial", tuple(sorted(shared))) if shared else (None, ())
 
 
 def continuity_score(role, cand):
-    return 1.0 if industry_match(role, cand) == "full" else 0.0
+    return 1.0 if industry_match(role, cand)[0] == "full" else 0.0
 
 
 # ---------------------------------------------------------------------------------------------
@@ -542,15 +572,14 @@ def score(roles_payload, bench_payload):
     scored_roles = []
     for role in roles_payload["roles"]:
         candidate_scores = []
+        partial_pairs = []
         for cand, holds in zip(candidates, screening_holds):
             availability = availability_context(role, cand)
             for warning in availability["calculation_warnings"]:
                 safety_escalations.append(f"{role['role_id']}/{cand['candidate_id']}: {warning}")
-            if industry_match(role, cand) == "partial":
-                safety_escalations.append(
-                    f"{role['role_id']}/{cand['candidate_id']}: partial industry match - the role and "
-                    "bench industries share only some words; rubric #1.6 continuity scored 0; confirm"
-                )
+            match, shared = industry_match(role, cand)
+            if match == "partial":
+                partial_pairs.append(f"{role['role_id']}/{cand['candidate_id']} shares '{' '.join(shared)}'")
             components = {
                 "skills": round(skill_score(role, cand), 3),
                 "seniority": round(seniority_score(role.get("seniority"), cand.get("seniority")), 3),
@@ -592,13 +621,33 @@ def score(roles_payload, bench_payload):
                 "citation": "fit-scoring-rubric.md #7.3; " + safe_citation(cand["citation"]),
                 "screening_holds": list(holds),
             })
-        practice = role.get("industry_context", "")
-        if (isinstance(practice, str) and _words(practice) and not has_marker(practice)
-                and not any(c["component_scores"]["continuity"] for c in candidate_scores)):
-            safety_escalations.append(
-                f"{role['role_id']}: industry_context matched no candidate's industry_experience - "
-                "rubric #1.6 continuity scored 0 for every candidate; confirm the industry wording"
-            )
+        practice_tokens, practice_core = _role_industry(role)
+        any_full = any(c["component_scores"]["continuity"] for c in candidate_scores)
+        partial = ""
+        if partial_pairs:
+            listed = partial_pairs[:PARTIAL_INDUSTRY_CAP]
+            more = len(partial_pairs) - len(listed)
+            partial = ("partial industry match (rubric #1.6 continuity scored 0; confirm): "
+                       + "; ".join(listed) + (f"; and {more} more" if more else ""))
+        if practice_tokens and not any_full:
+            if not practice_core:
+                safety_escalations.append(
+                    f"{role['role_id']}: industry_context has only generic words and matched no "
+                    "candidate's industry_experience - rubric #1.6 continuity scored 0 for every "
+                    "candidate; confirm the industry wording"
+                )
+            elif partial:
+                safety_escalations.append(
+                    f"{role['role_id']}: no full industry match - industry_context fully matched no "
+                    f"candidate's industry_experience; {partial}"
+                )
+            else:
+                safety_escalations.append(
+                    f"{role['role_id']}: industry_context matched no candidate's industry_experience - "
+                    "rubric #1.6 continuity scored 0 for every candidate; confirm the industry wording"
+                )
+        elif partial:
+            safety_escalations.append(f"{role['role_id']}: {partial}")
         scored_roles.append({
             "role_id": role["role_id"],
             "role_title": role["title"],

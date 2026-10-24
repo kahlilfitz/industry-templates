@@ -3,8 +3,8 @@
 Every check here answers a Cowork evaluation finding (1.1.2 and 1.1.3 blockers, the 1.1.6 blocker
 and required fixes F-01 to F-03 applied in 1.1.7, Cowork evaluation matrix 2026-10-22-1252
 blocker 3 and owner-promoted F07 applied in 1.1.8, Cowork evaluation matrix 2026-10-23-1540
-blocker 3 applied in 1.1.9, and Cowork evaluation matrix 2026-10-23-1707 blocker 3 applied in
-1.1.10); see tests/README.md.
+blocker 3 applied in 1.1.9, Cowork evaluation matrix 2026-10-23-1707 blocker 3 applied in 1.1.10,
+and owner-promoted 1.1.10 advisories N4 and N5 applied in 1.1.11); see tests/README.md.
 
 Run from the submission folder (submissions/professional-services/<slug>/):
 
@@ -48,6 +48,7 @@ GROUPS = (
     ("matrix-2026-10-22-1252", "Matrix20261022Tests"),
     ("matrix-2026-10-23-1540", "Matrix20261023Tests"),
     ("matrix-2026-10-23-1707", "Matrix202610231707Tests"),
+    ("evaluation-1.1.10", "Evaluation1110Tests"),
 )
 
 
@@ -1112,6 +1113,106 @@ class Matrix202610231707Tests(_EngineInjectionHarness, unittest.TestCase):
                          "%s: 'healthcare provider' must match 'healthcare services'" % name)
         self.assertFalse(any("C-101" in str(item) and "partial industry match" in str(item)
                              for item in scored["escalations"]))
+
+
+class Evaluation1110Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork 1.1.10 evaluation advisories N4 and N5 (side effects of the 1.1.10 rubric #1.6
+    rule), applied in 1.1.11 under owner decision 2026-10-23."""
+
+    score_with = Matrix20261023Tests.score_with
+    candidate = staticmethod(Matrix20261023Tests.candidate)
+
+    def continuity(self, practice, experience, candidate_id="C-101"):
+        scored = self.score_with(practice, experience)
+        return self.candidate(scored, "PSS-001", candidate_id)["component_scores"]["continuity"], scored
+
+    @named("1.1.10 N4: industry matching folds '&', stop words and simple plurals, joins split "
+           "compounds, and matches a role worded only in generic words")
+    def test_1_1_10_n4_industry_normalisation(self):
+        name = "1.1.10 N4"
+        for practice, experience in (("oil & gas", ["oil and gas"]), ("oil and gas", ["Oil & Gas"]),
+                                     ("bank", ["banks"]), ("banks", ["bank"]),
+                                     ("health care", ["healthcare"]), ("healthcare", ["health care"]),
+                                     ("services", ["services"]), ("healthcare provider", ["healthcare"])):
+            with self.subTest(industry_context=practice, industry_experience=experience):
+                continuity, scored = self.continuity(practice, experience)
+                self.assertEqual(1.0, continuity, "%s: %r must match %r" % (name, practice, experience))
+                self.assertFalse(any("PSS-001/C-101" in str(item) and "industry match" in str(item)
+                                     for item in scored["escalations"]),
+                                 "%s: a full match must not be escalated" % name)
+
+        # A stop word alone is not a shared industry word.
+        continuity, scored = self.continuity("oil and gas", ["food and beverage"])
+        self.assertEqual(0.0, continuity)
+        self.assertFalse(any("partial industry match" in str(item) for item in scored["escalations"]),
+                         "%s: 'oil and gas' and 'food and beverage' share only 'and'" % name)
+        continuity, _ = self.continuity("retail banking", ["retail"])
+        self.assertEqual(0.0, continuity, "%s: 'retail banking' must still not match 'retail'" % name)
+
+        # A generic-only role that matches nobody says so, rather than "matched no candidate".
+        continuity, scored = self.continuity("services", ["financial services"])
+        self.assertEqual(0.0, continuity)
+        for role_id in ("PSS-001", "PSS-002"):
+            with self.subTest(role=role_id):
+                self.assertTrue(any(str(item).startswith(role_id + ": industry_context has only generic words")
+                                    and "#1.6" in str(item) for item in scored["escalations"]),
+                                "%s: %s generic-only industry_context needs its own escalation" % (name, role_id))
+                self.assertFalse(any("partial industry match" in str(item) for item in scored["escalations"]))
+
+    def score_bench(self, practice, first, others, count):
+        """Scenario A with every role's industry_context set, C-101 given ``first`` and ``count``
+        added C-103 clones given ``others``."""
+        roles = self._load("roles.json")
+        for role in roles["roles"]:
+            role["industry_context"] = practice
+        bench = self._load("bench.json")
+        template = next(c for c in bench["bench_candidates"] if c["candidate_id"] == "C-103")
+        for candidate in bench["bench_candidates"]:
+            if candidate["candidate_id"] == "C-101":
+                candidate["industry_experience"] = first
+        for index in range(count):
+            candidate_id = "C-%d" % (300 + index)
+            bench["bench_candidates"].append(dict(json.loads(json.dumps(template)), candidate_id=candidate_id,
+                                                  name="Clone %d" % index, industry_experience=others,
+                                                  citation="bench export row " + candidate_id))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            for file_name, doc in (("roles.json", roles), ("bench.json", bench)):
+                (temp / file_name).write_text(json.dumps(doc), encoding="utf-8")
+            self._run(fit_score, ["fit_score.py", "--roles", str(temp / "roles.json"),
+                                  "--bench", str(temp / "bench.json"), "--out", str(temp / "scored.json")])
+            return json.loads((temp / "scored.json").read_text(encoding="utf-8"))
+
+    @named("1.1.10 N5: partial industry matches raise one capped escalation per role naming the "
+           "shared words, folded into the no-match escalation when nothing matches in full")
+    def test_1_1_10_n5_one_partial_escalation_per_role(self):
+        name = "1.1.10 N5"
+        # Only partial matches: one escalation per role, no separate "matched no candidate" line.
+        scored = self.score_bench("retail banking", ["retail"], ["retail"], 30)
+        for role_id in ("PSS-001", "PSS-002"):
+            with self.subTest(case="partial only", role=role_id):
+                lines = [str(item) for item in scored["escalations"] if str(item).startswith(role_id + ":")
+                         and ("industry" in str(item))]
+                self.assertEqual(1, len(lines), "%s: %s needs exactly one industry escalation, got %r"
+                                 % (name, role_id, lines))
+                line = lines[0]
+                self.assertIn("no full industry match", line)
+                self.assertIn("partial industry match", line)
+                self.assertIn("#1.6", line)
+                self.assertIn("%s/C-101 shares 'retail'" % role_id, line)
+                self.assertLessEqual(line.count(" shares '"), 10, "%s: the pair list must be capped" % name)
+                self.assertIn("more", line, "%s: pairs past the cap must be counted" % name)
+
+        # A full match exists: one partial escalation per role, without the no-match wording.
+        scored = self.score_bench("retail", ["retail"], ["retail banking"], 30)
+        for role_id in ("PSS-001", "PSS-002"):
+            with self.subTest(case="full and partial", role=role_id):
+                lines = [str(item) for item in scored["escalations"] if str(item).startswith(role_id + ":")
+                         and "industry" in str(item)]
+                self.assertEqual(1, len(lines), "%s: %s got %r" % (name, role_id, lines))
+                self.assertIn("partial industry match", lines[0])
+                self.assertNotIn("no full industry match", lines[0])
+                self.assertNotIn("%s/C-101" % role_id, lines[0], "%s: C-101 matched in full" % name)
 
 
 class StreamingResult(unittest.TestResult):

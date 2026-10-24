@@ -4,7 +4,7 @@ description: "Drafts the partner-ready staffing recommendation from constraint-c
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/slate_validate.py on governed.json from constraint-check, re-derived from roles.json, bench.json and constraints.json. No connectors required. Returns the draft in chat or as a document; never sends, posts or writes back to any system."
 metadata:
-  version: "1.1.10"
+  version: "1.1.11"
   icon: ic_fluent_clipboard_text_edit_24_regular
   author: Microsoft Professional Services Skills
   category: writing

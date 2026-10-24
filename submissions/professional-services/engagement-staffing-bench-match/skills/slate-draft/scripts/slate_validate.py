@@ -65,7 +65,7 @@ from safety_text import (
 
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 ENGINE = "engine:slate_validate"
-ENGINE_VERSION = "slate_validate/1.1.10"
+ENGINE_VERSION = "slate_validate/1.1.11"
 SAFE_DISPOSITIONS = {"clear", "resolved", "non_material", "not_applicable"}
 BLOCKING_TYPES = {
     "financial_interest",
