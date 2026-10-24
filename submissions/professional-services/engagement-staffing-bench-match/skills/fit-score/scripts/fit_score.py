@@ -43,7 +43,7 @@ from input_guard import (
 from safety_text import ScreeningLog, is_suspect, safe_citation, safe_text, same_client, sanitize_free_text
 
 ENGINE = "engine:fit_score"
-ENGINE_VERSION = "fit_score/1.1.11"
+ENGINE_VERSION = "fit_score/1.1.12"
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 DEFAULT_DURATION_WEEKS = 52
 
@@ -627,13 +627,13 @@ def score(roles_payload, bench_payload):
         if partial_pairs:
             listed = partial_pairs[:PARTIAL_INDUSTRY_CAP]
             more = len(partial_pairs) - len(listed)
-            partial = ("partial industry match (rubric #1.6 continuity scored 0; confirm): "
+            partial = ("partial industry match (fit-scoring-rubric.md #1.6 continuity scored 0; confirm): "
                        + "; ".join(listed) + (f"; and {more} more" if more else ""))
         if practice_tokens and not any_full:
             if not practice_core:
                 safety_escalations.append(
                     f"{role['role_id']}: industry_context has only generic words and matched no "
-                    "candidate's industry_experience - rubric #1.6 continuity scored 0 for every "
+                    "candidate's industry_experience - fit-scoring-rubric.md #1.6 continuity scored 0 for every "
                     "candidate; confirm the industry wording"
                 )
             elif partial:
@@ -644,7 +644,7 @@ def score(roles_payload, bench_payload):
             else:
                 safety_escalations.append(
                     f"{role['role_id']}: industry_context matched no candidate's industry_experience - "
-                    "rubric #1.6 continuity scored 0 for every candidate; confirm the industry wording"
+                    "fit-scoring-rubric.md #1.6 continuity scored 0 for every candidate; confirm the industry wording"
                 )
         elif partial:
             safety_escalations.append(f"{role['role_id']}: {partial}")

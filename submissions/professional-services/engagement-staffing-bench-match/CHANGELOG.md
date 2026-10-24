@@ -4,6 +4,49 @@ Versions before 1.1.5 are recorded in the git history of
 `submissions/professional-services/engagement-staffing-bench-match/` (1.1.4 was the automated
 `Ready` candidate).
 
+## 1.1.12 - 2026-10-23
+
+Applies required N6 from the 1.1.11 Cowork evaluation (run `2026-10-23-2232`, verdict No-ship).
+G1 remains skipped: this fix step has no Cowork behavioral runtime, and access to the archived
+SharePoint evaluation was denied. Local regressions do not establish the >=95% behavioral bar.
+The eleven advisory items already recorded in `BACKLOG.md` are included unchanged.
+
+- **N6 - preserve industry-continuity escalations in the draft.** The renderer recognises
+  role-scoped `partial industry match`, `no full industry match` and `industry_context` notes
+  before conflict-detail classification. In a known role/candidate pair only, it screens the
+  legacy `shares` verb as `overlaps on`, without changing the displayed line. Client names,
+  financial-interest specifics and leave reasons still trigger withholding. This resolves the
+  SD-3 collision without changing the existing N5 check, which requires the exact
+  `<role>/C-101 shares 'retail'` wording; the suggested engine verb change is not used.
+  All three `fit_score.py` copies now cite `fit-scoring-rubric.md #1.6` in industry escalations.
+  `_RULE_SECTION` also accepts legacy `rubric #x.y` citations, so a withheld line keeps its rule.
+  slate-draft Output format names industry-continuity notes as shown as stored, subject to
+  sensitive-detail withholding.
+- **G1 - skipped, Cowork behavioral rerun unavailable.** The local SD-3-shaped 40-candidate,
+  four-role reproduction passes in three deterministic runs: two industry notes remain visible,
+  all 40 register rows are clear, there are no refusals, and every Not recommended conflict
+  category is `none`. This is not a rerun of Cowork's 19 cases (16 baseline cases plus RI-3, FS-4
+  and SD-3), nor evidence of a new aggregate behavioral pass rate or a publish decision.
+- Version 1.1.12 in `metadata.json`, `manifest.json`, all five `SKILL.md` files and
+  `listing-metadata.md`; all nine engine version labels are 1.1.12. Copied scripts stay
+  byte-identical; `steering_guard.py` `__version__` and policy stamps are unchanged.
+- **Test edits:** `tests\test_engines.py` adds only the `evaluation-1.1.11` group and three
+  N6-named checks (apart from its finding-list docstring); `tests\README.md` documents them.
+  The checks cover the full engine chain, legacy short citations, continued sensitive-detail
+  withholding and the SD-3-shaped volume reproduction. All three fail on the unfixed engines
+  and pass after the fix; all 24 existing checks pass unchanged, with no pre-existing failures.
+- **Demo-data edits (engine labels only):**
+  `demo-data\scenario-a-happy\expected\scored.json`,
+  `demo-data\scenario-a-happy\expected\ranked.json`,
+  `demo-data\scenario-a-happy\expected\governed.json`,
+  `demo-data\scenario-a-happy\expected\validated.json`,
+  `demo-data\scenario-b-drama\expected\scored.json`,
+  `demo-data\scenario-b-drama\expected\ranked.json`,
+  `demo-data\scenario-b-drama\expected\governed.json` and
+  `demo-data\scenario-b-drama\expected\validated.json`.
+  Both scenarios were regenerated through all engines. Their `slate-draft.md` files are
+  byte-identical to 1.1.11, and the eight JSON files differ only in engine labels.
+
 ## 1.1.11 - 2026-10-23
 
 Applies advisories N4 and N5 from the 1.1.10 Cowork evaluation (run `2026-10-23-1748`, verdict

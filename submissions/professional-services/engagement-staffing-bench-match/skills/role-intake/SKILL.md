@@ -4,7 +4,7 @@ description: "Reads a signed engagement, SOW role extract, mobilisation note or 
 license: Proprietary
 compatibility: "Reads user-supplied files (staffing request email, SOW role extract, rate-card excerpt) with the file-read tool; Python 3 optional to build the JSON payload. No bundled engine and no connectors required. Read-only: never writes to a resource or staffing system."
 metadata:
-  version: "1.1.11"
+  version: "1.1.12"
   icon: ic_fluent_document_briefcase_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

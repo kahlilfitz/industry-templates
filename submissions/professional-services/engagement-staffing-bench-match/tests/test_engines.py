@@ -4,7 +4,8 @@ Every check here answers a Cowork evaluation finding (1.1.2 and 1.1.3 blockers, 
 and required fixes F-01 to F-03 applied in 1.1.7, Cowork evaluation matrix 2026-10-22-1252
 blocker 3 and owner-promoted F07 applied in 1.1.8, Cowork evaluation matrix 2026-10-23-1540
 blocker 3 applied in 1.1.9, Cowork evaluation matrix 2026-10-23-1707 blocker 3 applied in 1.1.10,
-and owner-promoted 1.1.10 advisories N4 and N5 applied in 1.1.11); see tests/README.md.
+and owner-promoted 1.1.10 advisories N4 and N5 applied in 1.1.11,
+and required 1.1.11 N6 applied in 1.1.12); see tests/README.md.
 
 Run from the submission folder (submissions/professional-services/<slug>/):
 
@@ -49,6 +50,7 @@ GROUPS = (
     ("matrix-2026-10-23-1540", "Matrix20261023Tests"),
     ("matrix-2026-10-23-1707", "Matrix202610231707Tests"),
     ("evaluation-1.1.10", "Evaluation1110Tests"),
+    ("evaluation-1.1.11", "Evaluation1111Tests"),
 )
 
 
@@ -1213,6 +1215,115 @@ class Evaluation1110Tests(_EngineInjectionHarness, unittest.TestCase):
                 self.assertIn("partial industry match", lines[0])
                 self.assertNotIn("no full industry match", lines[0])
                 self.assertNotIn("%s/C-101" % role_id, lines[0], "%s: C-101 matched in full" % name)
+
+
+class Evaluation1111Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork 1.1.11 required N6: industry-continuity notes must survive draft rendering."""
+
+    @named("1.1.11 N6: partial industry notes retain the role, shared words and #1.6 in the draft")
+    def test_n6_industry_notes_are_shown_as_stored(self):
+        roles = self._load("roles.json")
+        for role in roles["roles"]:
+            role["industry_context"] = "retail banking"
+        bench = self._load("bench.json")
+        bench["bench_candidates"][0]["industry_experience"] = ["banking"]
+        scored = fit_score.score(roles, bench)
+        ranked = slate_rank.rank(scored)
+        governed = constraint_check.govern(ranked, self._load("constraints.json"))
+        validated = slate_validate.validate(governed)
+        draft = slate_validate.render_draft(validated)
+        for role in roles["roles"]:
+            role_id = role["role_id"]
+            line = next(text for text in validated["escalations"]
+                        if text.startswith(role_id + ":") and "partial industry match" in text)
+            self.assertIn(role_id + "/C-101 shares 'banking'", line)
+            self.assertIn("fit-scoring-rubric.md #1.6", line)
+            self.assertIn("- " + line, draft)
+        self.assertNotIn("conflict category unrecognised", draft)
+
+    @named("1.1.11 N6: legacy industry notes render as stored without bypassing sensitive-detail holds")
+    def test_n6_legacy_industry_notes_and_sensitive_details(self):
+        governed = constraint_check.govern(
+            slate_rank.rank(fit_score.score(self._load("roles.json"), self._load("bench.json"))),
+            self._load("constraints.json"),
+        )
+        validated = slate_validate.validate(governed)
+        partial = ("partial industry match (rubric #1.6 continuity scored 0; confirm): "
+                   "PSS-001/C-101 shares 'banking'")
+        lines = [
+            "PSS-001: " + partial,
+            "PSS-001: no full industry match - industry_context fully matched no "
+            "candidate's industry_experience; " + partial,
+            "PSS-001: industry_context matched no candidate's industry_experience - "
+            "rubric #1.6 continuity scored 0 for every candidate; confirm the industry wording",
+            "PSS-001: industry_context has only generic words and matched no "
+            "candidate's industry_experience - rubric #1.6 continuity scored 0 for every "
+            "candidate; confirm the industry wording",
+        ]
+        validated["escalations"] = lines
+        draft = slate_validate.render_draft(validated)
+        for line in lines:
+            self.assertIn("- " + line, draft)
+        self.assertNotIn("conflict category unrecognised", draft)
+
+        for detail in ("holds restricted shares", "restricted equity holding", "parental leave",
+                       "Orchard Ridge Clinics"):
+            with self.subTest(detail=detail):
+                validated["escalations"] = ["PSS-001: " + partial + "; " + detail + " (rubric #1.6)"]
+                draft = slate_validate.render_draft(validated)
+                self.assertNotIn(detail, draft)
+                self.assertIn("escalation detail withheld - conflict category unrecognised "
+                              "(rubric #1.6)", draft)
+        self.assertIn("industry-continuity notes", _skill_section("slate-draft", "Output format"))
+
+    @named("1.1.11 N6 SD-3: 40 candidates by four roles retain both industry notes in three local runs")
+    def test_n6_sd3_volume_draft(self):
+        roles = self._load("roles.json")
+        role_template = roles["roles"][0]
+        industries = ("retail banking", "oil and gas", "healthcare", "health care")
+        roles["roles"] = [
+            dict(role_template, role_id="V%d" % (index + 1), industry_context=industry)
+            for index, industry in enumerate(industries)
+        ]
+        bench = self._load("bench.json")
+        templates = bench["bench_candidates"]
+        experiences = ("retail banking", "banking", "oil and gas", "oil", "healthcare")
+        bench["bench_candidates"] = [
+            dict(templates[1 if index % 5 in (1, 3) else 0],
+                 candidate_id="V-%d" % (201 + index), name="Volume Candidate %d" % (index + 1),
+                 current_allocation_pct=0, industry_experience=[experiences[index % 5]],
+                 citation="bench export row V-%d" % (201 + index))
+            for index in range(40)
+        ]
+        constraints = self._load("constraints.json")
+        constraints["roles"] = roles["roles"]
+        constraints["constraints"] = [
+            dict(constraints["constraints"][0], candidate_id=candidate["candidate_id"],
+                 citation="conflicts extract row " + candidate["candidate_id"])
+            for candidate in bench["bench_candidates"]
+        ]
+        for run in range(3):
+            with self.subTest(run=run + 1):
+                governed = constraint_check.govern(
+                    slate_rank.rank(fit_score.score(roles, bench)), constraints)
+                validated = slate_validate.validate(governed)
+                draft = slate_validate.render_draft(validated)
+                self.assertEqual(4, len(validated["governed_roles"]))
+                self.assertEqual(2, len(validated["escalations"]))
+                for role in validated["governed_roles"]:
+                    self.assertEqual(40, len(role["candidate_slate"]))
+                    self.assertFalse(role["top_provisional_candidate_refused"])
+                    for candidate in role["candidate_slate"]:
+                        self.assertEqual("none", slate_validate._conflict_category(candidate))
+                self.assertIn("No refusals.", draft)
+                for role_id, shared in (("V1", "banking"), ("V2", "oil")):
+                    line = next(text for text in validated["escalations"]
+                                if text.startswith(role_id + ":"))
+                    self.assertIn("partial industry match", line)
+                    self.assertIn("shares '%s'" % shared, line)
+                    self.assertIn("#1.6", line)
+                    self.assertIn("- " + line, draft)
+                self.assertNotIn("conflict category unrecognised", draft)
 
 
 class StreamingResult(unittest.TestResult):

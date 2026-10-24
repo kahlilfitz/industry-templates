@@ -65,7 +65,7 @@ from safety_text import (
 
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 ENGINE = "engine:slate_validate"
-ENGINE_VERSION = "slate_validate/1.1.11"
+ENGINE_VERSION = "slate_validate/1.1.12"
 SAFE_DISPOSITIONS = {"clear", "resolved", "non_material", "not_applicable"}
 BLOCKING_TYPES = {
     "financial_interest",
@@ -114,7 +114,7 @@ DRAFT_BANNER = (
 WITHHELD_CELL = f"withheld ({HOLD_RULE})"
 MISSING_CELL = "not in validated.json"
 _RULE_SECTION = re.compile(
-    r"(?:fit-scoring-rubric|independence-eligibility-rules)\.md #\d+\.\d+(?:[-,]#\d+\.\d+)*"
+    r"(?:(?:fit-scoring-rubric|independence-eligibility-rules)\.md|rubric) #\d+\.\d+(?:[-,]#\d+\.\d+)*"
 )
 _ROLE_SCOPE = re.compile(r"([^\s:]+):")
 # Field names that may appear in an error path; any other member name prints as <member> (D17).
@@ -1117,6 +1117,9 @@ def _escalation_line(text):
 
 _TOP_ESCALATION = re.compile(r"(?P<role>[^\s:]+): (?P<action>refused|withheld) top provisional candidate\b")
 _SECONDARY_ESCALATION = re.compile(r"(?P<role>[^\s:]+): secondary validation withheld\b")
+_INDUSTRY_ESCALATION = re.compile(
+    r"(?P<role>[^\s:]+): (?:partial industry match\b|no full industry match\b|industry_context\b)"
+)
 # Fail-closed backstop for escalation prose that the structured data cannot place: financial-interest
 # specifics and leave reasons (slate-draft Grounding) are never repeated in the draft.
 _SENSITIVE_DETAIL = re.compile(
@@ -1174,6 +1177,17 @@ def _conflict_escalation_lines(validated_payload):
         if shown == WITHHELD_CELL:
             lines.append(shown)
             continue
+        industry = _INDUSTRY_ESCALATION.match(shown)
+        industry_role = roles.get(id_key(industry.group("role"))) if industry else None
+        if industry_role is not None:
+            detail = shown
+            for candidate in industry_role["candidate_slate"]:
+                pair = f"{industry.group('role')}/{candidate['candidate_id']}"
+                # The legacy engine verb is not a financial-interest noun; other detail stays screened.
+                detail = detail.replace(f"{pair} shares '", f"{pair} overlaps on '")
+            if not sensitive(detail):
+                lines.append(shown)
+                continue
         top, secondary = _TOP_ESCALATION.match(shown), _SECONDARY_ESCALATION.match(shown)
         match = top or secondary
         role = roles.get(id_key(match.group("role"))) if match else None
