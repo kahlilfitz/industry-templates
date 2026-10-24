@@ -45,6 +45,12 @@ versions.
   never force-push, and never push to `main`. The unattended `evaluation:fix` agent never pushes.
   Owner decision (2026-10-16): the fix step itself prepares the next version when its checks find
   nothing that needs the owner's attention; the agent still never runs `evaluation:prepare`.
+- Owner decision (2026-10-24, "prepare plugin for cowork after fixes"): after an interactive agent
+  applies fixes and commits the new version, it runs `npm run evaluation:prepare -- --slug <slug>`
+  without waiting to be asked, then commits the evaluation records and stops. It prepares only
+  when nothing needs the owner's attention: the plugin suite and `npm run check:submissions` pass,
+  the version, engine labels and CHANGELOG are bumped, and no existing-check conflict or open owner
+  decision remains. Otherwise it stops and reports.
 - Never infer an owner sign-off or a publish decision.
 - Owner decision (2026-10-23): human testing is not part of the release process ("remove human
   testing from the process"). After a `Ready` verdict, publication still needs the owner's
