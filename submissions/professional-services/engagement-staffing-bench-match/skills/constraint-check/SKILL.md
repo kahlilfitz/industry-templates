@@ -4,7 +4,7 @@ description: "Applies staffing independence, conflict, prior-role (including pri
 license: Proprietary
 compatibility: "Requires Python 3 (standard library only) to run the bundled scripts/constraint_check.py on roles.json from role-intake, bench.json and constraints.json from bench-query, and ranked.json from fit-score. No connectors required. Writes local JSON only; never clears conflicts or writes to a resource, staffing or conflicts system."
 metadata:
-  version: "1.1.8"
+  version: "1.1.14"
   icon: ic_fluent_person_prohibited_24_regular
   author: Microsoft Professional Services Skills
   category: analysis

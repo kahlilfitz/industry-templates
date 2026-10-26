@@ -1,8 +1,13 @@
 """Regression suite for engagement-staffing-bench-match.
 
 Every check here answers a Cowork evaluation finding (1.1.2 and 1.1.3 blockers, the 1.1.6 blocker
-and required fixes F-01 to F-03 applied in 1.1.7, and Cowork evaluation matrix 2026-10-22-1252
-blocker 3 and owner-promoted F07 applied in 1.1.8); see tests/README.md.
+and required fixes F-01 to F-03 applied in 1.1.7, Cowork evaluation matrix 2026-10-22-1252
+blocker 3 and owner-promoted F07 applied in 1.1.8, Cowork evaluation matrix 2026-10-23-1540
+blocker 3 applied in 1.1.9, Cowork evaluation matrix 2026-10-23-1707 blocker 3 applied in 1.1.10,
+and owner-promoted 1.1.10 advisories N4 and N5 applied in 1.1.11,
+and required 1.1.11 N6 applied in 1.1.12, and required 1.1.12 N9 and R3 applied in 1.1.13, and Cowork evaluation matrix 2026-10-24-1127
+blocker 3 (1.1.13 N10 and N11) applied in 1.1.14);
+see tests/README.md.
 
 Run from the submission folder (submissions/professional-services/<slug>/):
 
@@ -44,6 +49,12 @@ GROUPS = (
     ("skill-guardrails", "SkillGuardrailTests"),
     ("input-contract", "InputContractTests"),
     ("matrix-2026-10-22-1252", "Matrix20261022Tests"),
+    ("matrix-2026-10-23-1540", "Matrix20261023Tests"),
+    ("matrix-2026-10-23-1707", "Matrix202610231707Tests"),
+    ("evaluation-1.1.10", "Evaluation1110Tests"),
+    ("evaluation-1.1.11", "Evaluation1111Tests"),
+    ("evaluation-1.1.12", "Evaluation1112Tests"),
+    ("matrix-2026-10-24-1127", "Matrix202610241127Tests"),
 )
 
 
@@ -1001,6 +1012,467 @@ class Matrix20261022Tests(_EngineInjectionHarness, unittest.TestCase):
                                      "%s: C-105 must be held for review" % name)
                     self.assertIn("#9.6", "%s %s" % (eligibility.get("blocking_rule"), eligibility.get("citation")))
 
+
+class Matrix20261023Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork evaluation matrix 2026-10-23-1540 (plugin 1.1.8): top blocker 3, the R1 rubric #1.6
+    industry-vocabulary row (fixture F18), applied in 1.1.9."""
+
+    def score_with(self, industry_context, experience):
+        """Run fit_score.py on scenario-a-happy with every role's industry_context and C-101's
+        industry_experience replaced; returns the scored document."""
+        roles = self._load("roles.json")
+        for role in roles["roles"]:
+            role["industry_context"] = industry_context
+        bench = self._load("bench.json")
+        for candidate in bench["bench_candidates"]:
+            if candidate["candidate_id"] == "C-101":
+                candidate["industry_experience"] = experience
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            for name, doc in (("roles.json", roles), ("bench.json", bench)):
+                (temp / name).write_text(json.dumps(doc), encoding="utf-8")
+            self._run(fit_score, ["fit_score.py", "--roles", str(temp / "roles.json"),
+                                  "--bench", str(temp / "bench.json"), "--out", str(temp / "scored.json")])
+            return json.loads((temp / "scored.json").read_text(encoding="utf-8"))
+
+    @staticmethod
+    def candidate(scored, role_id, candidate_id):
+        role = next(r for r in scored["scored_roles"] if r["role_id"] == role_id)
+        return next(c for c in role["candidate_scores"] if c["candidate_id"] == candidate_id)
+
+    @named("matrix 2026-10-23-1540 blocker 3: industry_context 'healthcare provider' earns rubric #1.6 "
+           "continuity against bench 'healthcare', and an unmatched industry is escalated")
+    def test_matrix_2026_10_23_1540_blocker_3_industry_vocabulary(self):
+        name = "matrix 2026-10-23-1540 blocker 3"
+        baseline = self.score_with("health operations", ["health operations", "customer operations"])
+        scored = self.score_with("healthcare provider", ["healthcare"])
+        c101 = self.candidate(scored, "PSS-001", "C-101")
+        self.assertEqual(1.0, c101["component_scores"]["continuity"],
+                         "%s: C-101 R1 #1.6 must be 1.0 when 'healthcare' is a whole word of "
+                         "'healthcare provider'" % name)
+        self.assertEqual(self.candidate(baseline, "PSS-001", "C-101")["fit_score"], c101["fit_score"],
+                         "%s: SOW wording must not cost C-101 R1 the 5.0 continuity points" % name)
+        self.assertEqual("fit-scoring-rubric.md #1.6", c101["component_citations"]["continuity"])
+        self.assertFalse(any("industry_context" in str(item) for item in scored["escalations"]),
+                         "%s: a matched industry must not be escalated" % name)
+
+        # Whole words only: "healthcare" is not a whole word of "health operations", and C-103's
+        # "retail operations" never matches a health role.
+        partial = self.score_with("health operations", ["healthcare"])
+        for candidate_id in ("C-101", "C-103"):
+            with self.subTest(candidate=candidate_id):
+                self.assertEqual(0.0, self.candidate(partial, "PSS-001", candidate_id)
+                                 ["component_scores"]["continuity"])
+
+        # A non-empty industry_context that matches no candidate is no longer silent.
+        unmatched = self.score_with("energy utilities", ["healthcare"])
+        for role_id in ("PSS-001", "PSS-002"):
+            with self.subTest(role=role_id):
+                self.assertTrue(any(role_id in str(item) and "industry_context" in str(item)
+                                    and "#1.6" in str(item) for item in unmatched["escalations"]),
+                                "%s: %s industry_context matched no candidate without an escalation"
+                                % (name, role_id))
+
+
+class Matrix202610231707Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork evaluation matrix 2026-10-23-1707 (plugin 1.1.9): top blocker 3, the two N1 rubric #1.6
+    over-match rows, applied in 1.1.10 under owner decision 2026-10-23 (generic qualifier words
+    are ignored; the remaining industry words must be equal)."""
+
+    score_with = Matrix20261023Tests.score_with
+    candidate = staticmethod(Matrix20261023Tests.candidate)
+
+    @named("matrix 2026-10-23-1707 blocker 3: a partial industry match ('retail banking' vs 'retail', "
+           "generic 'services') earns no rubric #1.6 continuity and is escalated")
+    def test_matrix_2026_10_23_1707_blocker_3_partial_industry_match(self):
+        name = "matrix 2026-10-23-1707 blocker 3"
+        for practice, experience in (("retail banking", ["retail"]), ("retail", ["retail banking"]),
+                                     ("health insurance", ["insurance"])):
+            with self.subTest(industry_context=practice, industry_experience=experience):
+                scored = self.score_with(practice, experience)
+                no_match = self.score_with(practice, ["energy utilities"])
+                c101 = self.candidate(scored, "PSS-001", "C-101")
+                self.assertEqual(0.0, c101["component_scores"]["continuity"],
+                                 "%s: %r must not earn #1.6 against %r" % (name, practice, experience))
+                self.assertEqual(self.candidate(no_match, "PSS-001", "C-101")["fit_score"], c101["fit_score"],
+                                 "%s: a partial industry match must not add the 5.0 #1.6 points" % name)
+                self.assertTrue(any("PSS-001/C-101" in str(item) and "partial industry match" in str(item)
+                                    and "#1.6" in str(item) for item in scored["escalations"]),
+                                "%s: the partial match for PSS-001/C-101 was not escalated" % name)
+
+        # A generic word alone is not an industry: "services" matches neither "financial services"
+        # nor "professional services", and the role is escalated as matching no candidate.
+        scored = self.score_with("services", ["financial services", "professional services"])
+        for role_id in ("PSS-001", "PSS-002"):
+            with self.subTest(role=role_id):
+                role = next(r for r in scored["scored_roles"] if r["role_id"] == role_id)
+                self.assertEqual([0.0] * len(role["candidate_scores"]),
+                                 [c["component_scores"]["continuity"] for c in role["candidate_scores"]],
+                                 "%s: generic 'services' must earn no #1.6 continuity" % name)
+                self.assertTrue(any(role_id in str(item) and "industry_context" in str(item)
+                                    and "#1.6" in str(item) for item in scored["escalations"]),
+                                "%s: %s generic industry_context was not escalated" % (name, role_id))
+
+        # Equal industry words after the generic qualifiers are ignored still match, unescalated.
+        scored = self.score_with("healthcare provider", ["healthcare services"])
+        self.assertEqual(1.0, self.candidate(scored, "PSS-001", "C-101")["component_scores"]["continuity"],
+                         "%s: 'healthcare provider' must match 'healthcare services'" % name)
+        self.assertFalse(any("C-101" in str(item) and "partial industry match" in str(item)
+                             for item in scored["escalations"]))
+
+
+class Evaluation1110Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork 1.1.10 evaluation advisories N4 and N5 (side effects of the 1.1.10 rubric #1.6
+    rule), applied in 1.1.11 under owner decision 2026-10-23."""
+
+    score_with = Matrix20261023Tests.score_with
+    candidate = staticmethod(Matrix20261023Tests.candidate)
+
+    def continuity(self, practice, experience, candidate_id="C-101"):
+        scored = self.score_with(practice, experience)
+        return self.candidate(scored, "PSS-001", candidate_id)["component_scores"]["continuity"], scored
+
+    @named("1.1.10 N4: industry matching folds '&', stop words and simple plurals, joins split "
+           "compounds, and matches a role worded only in generic words")
+    def test_1_1_10_n4_industry_normalisation(self):
+        name = "1.1.10 N4"
+        for practice, experience in (("oil & gas", ["oil and gas"]), ("oil and gas", ["Oil & Gas"]),
+                                     ("bank", ["banks"]), ("banks", ["bank"]),
+                                     ("health care", ["healthcare"]), ("healthcare", ["health care"]),
+                                     ("services", ["services"]), ("healthcare provider", ["healthcare"])):
+            with self.subTest(industry_context=practice, industry_experience=experience):
+                continuity, scored = self.continuity(practice, experience)
+                self.assertEqual(1.0, continuity, "%s: %r must match %r" % (name, practice, experience))
+                self.assertFalse(any("PSS-001/C-101" in str(item) and "industry match" in str(item)
+                                     for item in scored["escalations"]),
+                                 "%s: a full match must not be escalated" % name)
+
+        # A stop word alone is not a shared industry word.
+        continuity, scored = self.continuity("oil and gas", ["food and beverage"])
+        self.assertEqual(0.0, continuity)
+        self.assertFalse(any("partial industry match" in str(item) for item in scored["escalations"]),
+                         "%s: 'oil and gas' and 'food and beverage' share only 'and'" % name)
+        continuity, _ = self.continuity("retail banking", ["retail"])
+        self.assertEqual(0.0, continuity, "%s: 'retail banking' must still not match 'retail'" % name)
+
+        # A generic-only role that matches nobody says so, rather than "matched no candidate".
+        continuity, scored = self.continuity("services", ["financial services"])
+        self.assertEqual(0.0, continuity)
+        for role_id in ("PSS-001", "PSS-002"):
+            with self.subTest(role=role_id):
+                self.assertTrue(any(str(item).startswith(role_id + ": industry_context has only generic words")
+                                    and "#1.6" in str(item) for item in scored["escalations"]),
+                                "%s: %s generic-only industry_context needs its own escalation" % (name, role_id))
+                self.assertFalse(any("partial industry match" in str(item) for item in scored["escalations"]))
+
+    def score_bench(self, practice, first, others, count):
+        """Scenario A with every role's industry_context set, C-101 given ``first`` and ``count``
+        added C-103 clones given ``others``."""
+        roles = self._load("roles.json")
+        for role in roles["roles"]:
+            role["industry_context"] = practice
+        bench = self._load("bench.json")
+        template = next(c for c in bench["bench_candidates"] if c["candidate_id"] == "C-103")
+        for candidate in bench["bench_candidates"]:
+            if candidate["candidate_id"] == "C-101":
+                candidate["industry_experience"] = first
+        for index in range(count):
+            candidate_id = "C-%d" % (300 + index)
+            bench["bench_candidates"].append(dict(json.loads(json.dumps(template)), candidate_id=candidate_id,
+                                                  name="Clone %d" % index, industry_experience=others,
+                                                  citation="bench export row " + candidate_id))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            for file_name, doc in (("roles.json", roles), ("bench.json", bench)):
+                (temp / file_name).write_text(json.dumps(doc), encoding="utf-8")
+            self._run(fit_score, ["fit_score.py", "--roles", str(temp / "roles.json"),
+                                  "--bench", str(temp / "bench.json"), "--out", str(temp / "scored.json")])
+            return json.loads((temp / "scored.json").read_text(encoding="utf-8"))
+
+    @named("1.1.10 N5: partial industry matches raise one capped escalation per role naming the "
+           "shared words, folded into the no-match escalation when nothing matches in full")
+    def test_1_1_10_n5_one_partial_escalation_per_role(self):
+        name = "1.1.10 N5"
+        # Only partial matches: one escalation per role, no separate "matched no candidate" line.
+        scored = self.score_bench("retail banking", ["retail"], ["retail"], 30)
+        for role_id in ("PSS-001", "PSS-002"):
+            with self.subTest(case="partial only", role=role_id):
+                lines = [str(item) for item in scored["escalations"] if str(item).startswith(role_id + ":")
+                         and ("industry" in str(item))]
+                self.assertEqual(1, len(lines), "%s: %s needs exactly one industry escalation, got %r"
+                                 % (name, role_id, lines))
+                line = lines[0]
+                self.assertIn("no full industry match", line)
+                self.assertIn("partial industry match", line)
+                self.assertIn("#1.6", line)
+                self.assertIn("%s/C-101 shares 'retail'" % role_id, line)
+                self.assertLessEqual(line.count(" shares '"), 10, "%s: the pair list must be capped" % name)
+                self.assertIn("more", line, "%s: pairs past the cap must be counted" % name)
+
+        # A full match exists: one partial escalation per role, without the no-match wording.
+        scored = self.score_bench("retail", ["retail"], ["retail banking"], 30)
+        for role_id in ("PSS-001", "PSS-002"):
+            with self.subTest(case="full and partial", role=role_id):
+                lines = [str(item) for item in scored["escalations"] if str(item).startswith(role_id + ":")
+                         and "industry" in str(item)]
+                self.assertEqual(1, len(lines), "%s: %s got %r" % (name, role_id, lines))
+                self.assertIn("partial industry match", lines[0])
+                self.assertNotIn("no full industry match", lines[0])
+                self.assertNotIn("%s/C-101" % role_id, lines[0], "%s: C-101 matched in full" % name)
+
+
+class Evaluation1111Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork 1.1.11 required N6: industry-continuity notes must survive draft rendering."""
+
+    @named("1.1.11 N6: partial industry notes retain the role, shared words and #1.6 in the draft")
+    def test_n6_industry_notes_are_shown_as_stored(self):
+        roles = self._load("roles.json")
+        for role in roles["roles"]:
+            role["industry_context"] = "retail banking"
+        bench = self._load("bench.json")
+        bench["bench_candidates"][0]["industry_experience"] = ["banking"]
+        scored = fit_score.score(roles, bench)
+        ranked = slate_rank.rank(scored)
+        governed = constraint_check.govern(ranked, self._load("constraints.json"))
+        validated = slate_validate.validate(governed)
+        draft = slate_validate.render_draft(validated)
+        for role in roles["roles"]:
+            role_id = role["role_id"]
+            line = next(text for text in validated["escalations"]
+                        if text.startswith(role_id + ":") and "partial industry match" in text)
+            self.assertIn(role_id + "/C-101 shares 'banking'", line)
+            self.assertIn("fit-scoring-rubric.md #1.6", line)
+            self.assertIn("- " + line, draft)
+        self.assertNotIn("conflict category unrecognised", draft)
+
+    @named("1.1.11 N6: legacy industry notes are withheld without bypassing sensitive-detail holds")
+    def test_n6_legacy_industry_notes_and_sensitive_details(self):
+        governed = constraint_check.govern(
+            slate_rank.rank(fit_score.score(self._load("roles.json"), self._load("bench.json"))),
+            self._load("constraints.json"),
+        )
+        validated = slate_validate.validate(governed)
+        partial = ("partial industry match (rubric #1.6 continuity scored 0; confirm): "
+                   "PSS-001/C-101 shares 'banking'")
+        lines = [
+            "PSS-001: " + partial,
+            "PSS-001: no full industry match - industry_context fully matched no "
+            "candidate's industry_experience; " + partial,
+            "PSS-001: industry_context matched no candidate's industry_experience - "
+            "rubric #1.6 continuity scored 0 for every candidate; confirm the industry wording",
+            "PSS-001: industry_context has only generic words and matched no "
+            "candidate's industry_experience - rubric #1.6 continuity scored 0 for every "
+            "candidate; confirm the industry wording",
+        ]
+        validated["escalations"] = lines
+        draft = slate_validate.render_draft(validated)
+        # Owner exception 2026-10-24 (matrix 2026-10-24-1127 blocker 3, N10): look-alikes are withheld.
+        for line in lines:
+            self.assertNotIn("- " + line, draft)
+        self.assertIn("PSS-001: escalation detail withheld - conflict category unrecognised (rubric #1.6)", draft)
+
+        for detail in ("holds restricted shares", "restricted equity holding", "parental leave",
+                       "Orchard Ridge Clinics"):
+            with self.subTest(detail=detail):
+                validated["escalations"] = ["PSS-001: " + partial + "; " + detail + " (rubric #1.6)"]
+                draft = slate_validate.render_draft(validated)
+                self.assertNotIn(detail, draft)
+                self.assertIn("escalation detail withheld - conflict category unrecognised "
+                              "(rubric #1.6)", draft)
+        self.assertIn("industry-continuity notes", _skill_section("slate-draft", "Output format"))
+
+    @named("1.1.11 N6 SD-3: 40 candidates by four roles retain both industry notes in three local runs")
+    def test_n6_sd3_volume_draft(self):
+        roles = self._load("roles.json")
+        role_template = roles["roles"][0]
+        industries = ("retail banking", "oil and gas", "healthcare", "health care")
+        roles["roles"] = [
+            dict(role_template, role_id="V%d" % (index + 1), industry_context=industry)
+            for index, industry in enumerate(industries)
+        ]
+        bench = self._load("bench.json")
+        templates = bench["bench_candidates"]
+        experiences = ("retail banking", "banking", "oil and gas", "oil", "healthcare")
+        bench["bench_candidates"] = [
+            dict(templates[1 if index % 5 in (1, 3) else 0],
+                 candidate_id="V-%d" % (201 + index), name="Volume Candidate %d" % (index + 1),
+                 current_allocation_pct=0, industry_experience=[experiences[index % 5]],
+                 citation="bench export row V-%d" % (201 + index))
+            for index in range(40)
+        ]
+        constraints = self._load("constraints.json")
+        constraints["roles"] = roles["roles"]
+        constraints["constraints"] = [
+            dict(constraints["constraints"][0], candidate_id=candidate["candidate_id"],
+                 citation="conflicts extract row " + candidate["candidate_id"])
+            for candidate in bench["bench_candidates"]
+        ]
+        for run in range(3):
+            with self.subTest(run=run + 1):
+                governed = constraint_check.govern(
+                    slate_rank.rank(fit_score.score(roles, bench)), constraints)
+                validated = slate_validate.validate(governed)
+                draft = slate_validate.render_draft(validated)
+                self.assertEqual(4, len(validated["governed_roles"]))
+                self.assertEqual(2, len(validated["escalations"]))
+                for role in validated["governed_roles"]:
+                    self.assertEqual(40, len(role["candidate_slate"]))
+                    self.assertFalse(role["top_provisional_candidate_refused"])
+                    for candidate in role["candidate_slate"]:
+                        self.assertEqual("none", slate_validate._conflict_category(candidate))
+                self.assertIn("No refusals.", draft)
+                for role_id, shared in (("V1", "banking"), ("V2", "oil")):
+                    line = next(text for text in validated["escalations"]
+                                if text.startswith(role_id + ":"))
+                    self.assertIn("partial industry match", line)
+                    self.assertIn("shares '%s'" % shared, line)
+                    self.assertIn("#1.6", line)
+                    self.assertIn("- " + line, draft)
+                self.assertNotIn("conflict category unrecognised", draft)
+
+
+class Evaluation1112Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork 1.1.12 required R3 (explicit role-intake grounding and missing-field rules) and N9
+    (fit_score's own industry notes survive slate-draft rendering whatever words they share)."""
+
+    def _industry_draft(self, role_industries, bench_industries):
+        roles = self._load("roles.json")
+        for role, industry in zip(roles["roles"], role_industries):
+            role["industry_context"] = industry
+        bench = self._load("bench.json")
+        for candidate, industry in zip(bench["bench_candidates"], bench_industries):
+            candidate["industry_experience"] = industry
+        validated = slate_validate.validate(constraint_check.govern(
+            slate_rank.rank(fit_score.score(roles, bench)), self._load("constraints.json")))
+        return validated, slate_validate.render_draft(validated)
+
+    @named("1.1.12 N9 SD-5: industry notes sharing 'equity' or 'stock' render as stored, never as an unrecognised conflict")
+    def test_n9_engine_industry_notes_render_as_stored(self):
+        validated, draft = self._industry_draft(
+            ("private equity", "stock exchanges"),
+            (["health operations"], ["equity research"], ["stock brokerage"]),
+        )
+        for role_id, pair in (("PSS-001", "PSS-001/C-102 shares 'equity'"),
+                              ("PSS-002", "PSS-002/C-103 shares 'stock'")):
+            line = next(text for text in validated["escalations"]
+                        if text.startswith(role_id + ": no full industry match"))
+            self.assertIn(pair, line)
+            self.assertIn("fit-scoring-rubric.md #1.6", line)
+            self.assertIn("- " + line, draft)
+        self.assertNotIn("conflict category unrecognised", draft)
+
+    @named("1.1.12 N9: only fit_score's own re-derived industry note skips the financial-interest and leave screen")
+    def test_n9_lookalike_industry_notes_stay_screened(self):
+        validated, _ = self._industry_draft(
+            ("private equity", "stock exchanges"),
+            (["health operations"], ["equity research"], ["stock brokerage"]),
+        )
+        engine_line = next(text for text in validated["escalations"]
+                           if text.startswith("PSS-001: no full industry match"))
+        for line, detail in (
+            (engine_line + "; holds restricted shares", "restricted shares"),
+            (engine_line.replace("shares 'equity'", "shares 'equity stake, 4,000 units'"), "4,000 units"),
+            (engine_line + "; parental leave", "parental leave"),
+            (engine_line + "; Orchard Ridge Clinics", "Orchard Ridge Clinics"),
+        ):
+            with self.subTest(detail=detail):
+                payload = json.loads(json.dumps(validated))
+                payload["escalations"] = [line]
+                draft = slate_validate.render_draft(payload)
+                self.assertNotIn(detail, draft)
+                self.assertNotIn("- " + line, draft)
+
+    @named("1.1.12 R3 RI-1-RI-3: practice comes only from an explicit SOW or request-body statement")
+    def test_r3_practice_excludes_sender_metadata(self):
+        steps = _skill_section("role-intake", "Steps")
+        step_one = steps.split("\n2.", 1)[0].lower()
+        for phrase in ("explicit practice statement", "sow or request body",
+                       "never take it from a sender's signature, title or team name",
+                       "leave it empty and escalate", "never infer it"):
+            self.assertIn(phrase, step_one, "R3: step 1 must state " + phrase)
+        self.assertIn("not evidence for practice",
+                      _skill_section("role-intake", "Grounding requirements").lower())
+        self.assertIn("unstated practice stays empty and is escalated",
+                      _skill_section("role-intake", "Escalation / uncertainty").lower())
+
+    @named("1.1.12 R3 RI-3: a repeated SOW ID still needs the internal-code escalation")
+    def test_r3_repeated_sow_id_is_not_an_internal_code(self):
+        steps = _skill_section("role-intake", "Steps")
+        step_one = steps.split("\n2.", 1)[0].lower()
+        self.assertIn("even if the request repeats it", step_one)
+        self.assertIn("carry it and add the internal-code escalation", step_one)
+        uncertainty = _skill_section("role-intake", "Escalation / uncertainty").lower()
+        self.assertIn("internal code not supplied", uncertainty)
+        self.assertIn("does not supply the firm's internal engagement code", uncertainty)
+
+    @named("1.1.12 R3 RI-1-RI-3: on-site days without a contract field remain cited escalations")
+    def test_r3_requirements_without_contract_fields_are_preserved(self):
+        steps = _skill_section("role-intake", "Steps").lower()
+        for phrase in ("no contract field", "on-site days", "role-specific escalation",
+                       "source wording and citation", "never drop it or invent a field"):
+            self.assertIn(phrase, steps, "R3: unsupported requirements need " + phrase)
+        self.assertIn("no contract field",
+                      _skill_section("role-intake", "Grounding requirements").lower())
+
+    @named("1.1.12 R3 RI-1-RI-3: a preference escalation names the person without inventing a candidate ID")
+    def test_r3_preference_names_person_only(self):
+        steps = _skill_section("role-intake", "Steps").lower()
+        step_four = steps.split("\n4.", 1)[1].split("\n5.", 1)[0]
+        self.assertIn("name the person only", step_four)
+        self.assertIn("do not invent or look up a candidate id", step_four)
+        self.assertIn("never as a selection", step_four)
+
+
+class Matrix202610241127Tests(_EngineInjectionHarness, unittest.TestCase):
+    """Cowork evaluation matrix 2026-10-24-1127 top blocker 3 (1.1.13 N10 and N11): only fit_score's
+    own re-derived industry note is shown, and never with numbers or leave words in its shared words."""
+
+    _industry_draft = Evaluation1112Tests._industry_draft
+    WITHHELD = ("- PSS-001: escalation detail withheld - conflict category unrecognised "
+                "(fit-scoring-rubric.md #1.6)")
+
+    @named("matrix 2026-10-24-1127 blocker 3: N11 a re-derived industry note sharing a number is withheld")
+    def test_n11_numeric_shared_words_are_withheld(self):
+        validated, draft = self._industry_draft(("40000 retail",), (["health operations"], ["40000 banking"]))
+        line = next(text for text in validated["escalations"]
+                    if text.startswith("PSS-001: no full industry match"))
+        self.assertIn("PSS-001/C-102 shares '40000'", line)
+        self.assertNotIn("40000", draft)
+        self.assertNotIn("- " + line, draft)
+        self.assertIn(self.WITHHELD, draft)
+
+    @named("matrix 2026-10-24-1127 blocker 3: N11 a re-derived industry note sharing a leave word is withheld")
+    def test_n11_leave_shared_words_are_withheld(self):
+        for role_industry, bench_industry, detail in (
+            ("maternity care", "maternity clinics", "maternity"),
+            ("paternity services", "paternity advisory", "paternity"),
+            ("parental leave administration", "parental leave consulting", "parental"),
+        ):
+            with self.subTest(detail=detail):
+                validated, draft = self._industry_draft((role_industry,), (["health operations"], [bench_industry]))
+                line = next(text for text in validated["escalations"] if text.startswith("PSS-001:"))
+                self.assertIn(detail, line)
+                self.assertNotIn(detail, draft)
+                self.assertIn(self.WITHHELD, draft)
+
+    @named("matrix 2026-10-24-1127 blocker 3: N10 an industry look-alike that is not fit_score's note is withheld")
+    def test_n10_lookalike_industry_lines_are_withheld(self):
+        validated, _ = self._industry_draft(("retail banking",), (["banking"],))
+        engine_line = next(text for text in validated["escalations"] if text.startswith("PSS-001:"))
+        prefix = "PSS-001: partial industry match (fit-scoring-rubric.md #1.6 continuity scored 0; confirm): "
+        for lookalike, detail in (
+            (prefix + "PSS-001/C-101 shares 'held through a family trust, 4,000 units, sale pending'",
+             "family trust"),
+            (prefix + "PSS-001/C-101 shares 'insurance'", "shares 'insurance'"),
+        ):
+            with self.subTest(detail=detail):
+                payload = json.loads(json.dumps(validated))
+                payload["escalations"] = [engine_line, lookalike]
+                draft = slate_validate.render_draft(payload)
+                self.assertIn("- " + engine_line, draft)
+                self.assertNotIn(detail, draft)
+                self.assertNotIn("- " + lookalike, draft)
+                self.assertIn(self.WITHHELD, draft)
 
 
 class StreamingResult(unittest.TestResult):

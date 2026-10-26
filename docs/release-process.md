@@ -14,7 +14,7 @@ part of it (owner, 2026-10-23: "remove human testing from the process"; "Publish
 | Step | Who | Command |
 |---|---|---|
 | 1. Build the plugin | Contributor or agent | Follow [CONTRIBUTING.md](../CONTRIBUTING.md); `npm run check:submissions` |
-| 2. Package | Operator, or the fix step after clean fixes | `npm run evaluation:prepare -- --slug <slug>` |
+| 2. Package | Operator, or the agent or fix step after clean fixes | `npm run evaluation:prepare -- --slug <slug>` |
 | 3. Evaluate in Cowork | Cowork (queue), or operator | Automatic from the queue folder; otherwise a new task with the ZIP and the prompt |
 | 4. Archive, request the matrix (Ready) and fix | Watcher, then fix agent | `npm run evaluation:watch -- --slug <slug>` |
 | 5. Publish decision | Owner | Record `Publish` in the plugin's deployment doc in SharePoint |
@@ -193,6 +193,13 @@ This command:
    `queueSubmission` in `evaluation-run.json`. The prompt is `cowork-prompt.txt` with a header that
    names the queued ZIP. Pass `--no-queue` to skip the queue and evaluate manually (Step 3), or
    `--queue-root` to use another folder; the two cannot be combined.
+
+After clean fixes the agent prepares the new version without being asked (owner decision
+2026-10-24, "prepare plugin for cowork after fixes"): an interactive agent runs this command once
+the fix commit is in, and the unattended fix step prepares automatically (Step 4). Clean means the
+plugin suite and `npm run check:submissions` pass, the version, engine labels and CHANGELOG are
+bumped, and no existing-check conflict or open owner decision remains; otherwise the agent stops
+and reports.
 
 It runs no plugin tests and no external package validator; Cowork's evaluation is the package check. A version can be prepared only once. The version is bumped only after fixes (Step 4); to re-send an unchanged version whose queue run did not complete, use `--requeue`:
 
@@ -428,6 +435,26 @@ packaging or publishing without their existing gates.
     `not a publish signal`.
 - **Not permitted:** any change to plugin suites, goldens or any other check, weaker guardrails, or
   publishing without the owner's recorded Publish decision. Ready is still never a publish signal.
+
+### One-time owner exception: Staffing 1.1.14 N10
+
+**Owner approval: 2026-10-24** ("follow the recommendations for 1.1.14", option B for N10).
+
+- **Scope:** `engagement-staffing-bench-match` 1.1.14 only, applying matrix 2026-10-24-1127 top
+  blocker 3. Slate-draft removes the legacy "shares → overlaps on" path: an industry note is shown
+  only when it equals the note `fit_score.py` re-derives from `validated.json`; every look-alike is
+  withheld as `escalation detail withheld - conflict category unrecognised (<rules>)`. Older-version
+  intermediates are already refused under rule #9.8, so only edited or injected lines are affected.
+- **Changed check:** in `tests\test_engines.py`, `1.1.11 N6: legacy industry notes render as stored
+  without bypassing sensitive-detail holds` is renamed `1.1.11 N6: legacy industry notes are
+  withheld without bypassing sensitive-detail holds`. In its first block, the four legacy lines
+  must not appear as stored and the draft must contain `PSS-001: escalation detail withheld -
+  conflict category unrecognised (rubric #1.6)`, replacing `assertIn("- " + line, draft)` and
+  `assertNotIn("conflict category unrecognised", draft)`.
+- **Evidence:** the new `matrix 2026-10-24-1127 blocker 3` checks fail on 1.1.13 and pass on 1.1.14;
+  `1.1.12 N9 SD-5` (engine notes sharing "equity" or "stock" render as stored) still passes.
+- **Not permitted:** any change to the N6 sensitive-detail subtests or SKILL.md assertion, any other
+  check or golden beyond version labels, or weaker guardrails. This is not a publish decision.
 
 ## Step 5: owner Publish decision
 

@@ -28,6 +28,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import constraint_check
+import fit_score
 from input_guard import (
     ArgumentParser,
     InputError,
@@ -65,7 +66,7 @@ from safety_text import (
 
 CONTRACT = "ps.engagement-staffing-bench-match.v1"
 ENGINE = "engine:slate_validate"
-ENGINE_VERSION = "slate_validate/1.1.8"
+ENGINE_VERSION = "slate_validate/1.1.14"
 SAFE_DISPOSITIONS = {"clear", "resolved", "non_material", "not_applicable"}
 BLOCKING_TYPES = {
     "financial_interest",
@@ -114,7 +115,7 @@ DRAFT_BANNER = (
 WITHHELD_CELL = f"withheld ({HOLD_RULE})"
 MISSING_CELL = "not in validated.json"
 _RULE_SECTION = re.compile(
-    r"(?:fit-scoring-rubric|independence-eligibility-rules)\.md #\d+\.\d+(?:[-,]#\d+\.\d+)*"
+    r"(?:(?:fit-scoring-rubric|independence-eligibility-rules)\.md|rubric) #\d+\.\d+(?:[-,]#\d+\.\d+)*"
 )
 _ROLE_SCOPE = re.compile(r"([^\s:]+):")
 # Field names that may appear in an error path; any other member name prints as <member> (D17).
@@ -1117,6 +1118,9 @@ def _escalation_line(text):
 
 _TOP_ESCALATION = re.compile(r"(?P<role>[^\s:]+): (?P<action>refused|withheld) top provisional candidate\b")
 _SECONDARY_ESCALATION = re.compile(r"(?P<role>[^\s:]+): secondary validation withheld\b")
+_INDUSTRY_ESCALATION = re.compile(
+    r"(?P<role>[^\s:]+): (?:partial industry match\b|no full industry match\b|industry_context\b)"
+)
 # Fail-closed backstop for escalation prose that the structured data cannot place: financial-interest
 # specifics and leave reasons (slate-draft Grounding) are never repeated in the draft.
 _SENSITIVE_DETAIL = re.compile(
@@ -1125,6 +1129,11 @@ _SENSITIVE_DETAIL = re.compile(
     r"family|personal|disability|adoption|caregiver|carer'?s?|garden|unpaid|special|study)\s+leave\b",
     re.I,
 )
+# The shared words fit_score quotes in its own industry note come from free text, so numbers and
+# leave words there are withheld too (matrix 2026-10-24-1127 blocker 3, N11). fit_score sorts the
+# words, so any "leave" counts, not only "<reason> leave".
+_SHARED_WORDS = re.compile(r" shares '([^']*)'")
+_UNSAFE_SHARED_WORD = re.compile(r"\d|\bmaternit\w*|\bpaternit\w*|\bleaves?\b", re.I)
 
 
 def _client_names(validated_payload):
@@ -1145,11 +1154,26 @@ def _client_names(validated_payload):
     return keys
 
 
+def _engine_industry_notes(validated_payload):
+    """The rubric #1.6 industry notes fit_score emits for this payload, re-derived from the roles
+    and bench candidates carried in validated.json; empty when they cannot be re-derived."""
+    roles, candidates = validated_payload.get("roles"), validated_payload.get("bench_candidates")
+    if not isinstance(roles, list) or not isinstance(candidates, list):
+        return set()
+    try:
+        notes = {fit_score.industry_escalation(role, candidates) for role in roles}
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return set()
+    return {note for note in notes if isinstance(note, str) and _INDUSTRY_ESCALATION.match(note)}
+
+
 def _conflict_escalation_lines(validated_payload):
     """The visible escalation lines. An escalation that carries conflict, financial-interest or leave
     detail shows only the role, action, candidate, conflict category and rule sections, rebuilt from
     the validated slate; one the slate cannot place is shown with category ``unrecognised`` and no
-    detail (fail closed). Every other escalation is shown as stored (``_escalation_line``)."""
+    detail (fail closed). An industry note is shown as stored only when it equals fit_score's
+    re-derived note, names no client or affiliate and shares no number or leave word; any other
+    industry note is withheld. Every other escalation is shown as stored (``_escalation_line``)."""
     roles = {id_key(role["role_id"]): role for role in validated_payload["governed_roles"]}
     clients = _client_names(validated_payload)
 
@@ -1168,11 +1192,24 @@ def _conflict_escalation_lines(validated_payload):
         return f"{prefix}escalation detail withheld - conflict category unrecognised" + rules_tail(
             _RULE_SECTION.findall(text))
 
+    engine_notes = _engine_industry_notes(validated_payload)
     lines = []
     for text in validated_payload["escalations"]:
         shown = _escalation_line(text)
         if shown == WITHHELD_CELL:
             lines.append(shown)
+            continue
+        industry = _INDUSTRY_ESCALATION.match(shown)
+        if industry:
+            # Only fit_score's own re-derived note holds nothing but role and candidate IDs and industry
+            # words, so only it skips the financial-interest screen (1.1.12 N9). A look-alike is withheld
+            # (N10), and so is an engine note sharing a number or leave word (N11).
+            if (text in engine_notes and not constraint_check._names_foreign(shown, clients)
+                    and not any(_UNSAFE_SHARED_WORD.search(words) for words in _SHARED_WORDS.findall(shown))):
+                lines.append(shown)
+            else:
+                role_id = industry.group("role")
+                lines.append(withheld(shown, f"{_cell(role_id)}: " if id_key(role_id) in roles else ""))
             continue
         top, secondary = _TOP_ESCALATION.match(shown), _SECONDARY_ESCALATION.match(shown)
         match = top or secondary

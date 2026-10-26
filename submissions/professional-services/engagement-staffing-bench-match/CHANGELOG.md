@@ -4,6 +4,232 @@ Versions before 1.1.5 are recorded in the git history of
 `submissions/professional-services/engagement-staffing-bench-match/` (1.1.4 was the automated
 `Ready` candidate).
 
+## 1.1.14 - 2026-10-24
+
+Applies Cowork evaluation matrix 2026-10-24-1127 top blocker 3 (the known-FAIL N10 and N11 rows of
+the 1.1.13 matrix), with the owner's rule decisions of 2026-10-24, and advisory N12. This is not a
+Ready verdict or a publish decision.
+
+- **N11 - numbers and leave words in fit_score's own industry note.** The 1.1.13 N9 path showed a
+  re-derived note unscreened, so shared words from the SOW and roster such as "40000" or
+  "maternity" printed. slate-draft still shows a re-derived note as stored when its shared words
+  read like financial terms ("equity", "stock"), but withholds it when a shared word contains a
+  digit or is "maternity", "paternity" or "leave". A genuine "maternity care" overlap is therefore
+  withheld (fail closed). `fit_score.py` is unchanged.
+- **N10 - industry look-alikes.** The legacy "shares → overlaps on" path is removed: a line that
+  looks like an industry note but is not the note `fit_score.py` re-derives is withheld as
+  `escalation detail withheld - conflict category unrecognised (<rules>)`. Under the owner's
+  one-time exception, the `1.1.11 N6` legacy-note check now expects its four legacy lines to be
+  withheld; its sensitive-detail subtests are unchanged.
+- **N12** - the `_conflict_escalation_lines` docstring no longer contains a literal `` `n ``.
+- R7 (per-role eligibility note) stays advisory; it would change the `slate-draft.md` goldens.
+- Regression checks `matrix 2026-10-24-1127 blocker 3` (three) fail on 1.1.13 and pass on 1.1.14;
+  suite 36/36. Goldens changed only in their engine labels.
+- slate-draft Output format describes the rule.
+- Version 1.1.14 in `metadata.json`, `manifest.json`, all five `SKILL.md` files and
+  `listing-metadata.md`; all nine engine labels are 1.1.14.
+
+## 1.1.13 - 2026-10-24
+
+Applies required N9 and R3 from the 1.1.12 Cowork evaluation (`2026-10-24-0245`, verdict No-ship).
+G1 needs a Cowork rerun; this is not a Ready verdict or a publish decision.
+The eleven advisory items already recorded in `BACKLOG.md` are included unchanged.
+
+- **N9 - industry notes that share a financial-looking word.** 1.1.12 still ran slate-draft's
+  financial-interest and leave word screen over the shared industry words, so "private equity"
+  vs "equity research" and "stock exchanges" vs "stock brokerage" printed as
+  `escalation detail withheld - conflict category unrecognised` (SD-5). The role-level rubric
+  #1.6 escalation now comes from one pure `fit_score.industry_escalation(role, candidates)`
+  (output unchanged; all three copies byte-identical). `slate_validate.py` re-derives each role's
+  note from the `roles` and `bench_candidates` carried in `validated.json` and shows a stored
+  escalation unscreened only when it equals that note exactly and names no client or affiliate.
+  Every other escalation, including look-alike industry lines carrying holding or leave detail,
+  takes the 1.1.12 path unchanged. Cowork's suggested neutral fallback (`industry-continuity
+  note withheld`) was not adopted: the existing `1.1.11 N6` legacy-note check requires
+  unverified sensitive lines to keep the `conflict category unrecognised` wording and legacy
+  lines to render as stored, and it is unchanged. For the same reason advisory N10 (a
+  non-sensitive look-alike still renders as stored) stays in `BACKLOG.md`. slate-draft Output
+  format describes the rule.
+- **G1 - needs a Cowork rerun.** G1 is the behavioral pass rate (19/21, 90.5%, against the 95%
+  bar), caused by SD-5 (N9) and RI-3 (R3). Both causes are fixed; only Cowork's full 21-case suite
+  can confirm the bar.
+- **R3 - role-intake grounding and missing-field rules.** Practice comes only from an explicit
+  statement in the SOW or request body, never a sender's signature, title or team name; an
+  unstated practice stays empty and is escalated. A repeated SOW ID still needs the
+  "internal code not supplied" escalation. Requirements with no contract field, such as on-site
+  days, retain their source wording and citation in a role-specific escalation. Partner
+  preferences name the person only, without inventing or looking up a candidate ID. The existing
+  confidence ladder, contract, scoring and eligibility behavior are unchanged. Cowork's
+  RI-1 through RI-3 were not rerun; the instruction regressions do not claim behavioral passes.
+- Version 1.1.13 in `metadata.json`, `manifest.json`, all five `SKILL.md` files and
+  `listing-metadata.md`; all nine engine labels are 1.1.13.
+  Copied scripts remain byte-identical. The steering detector's `__version__` and policy stamps
+  are unchanged.
+- **Test edits:** `tests\test_engines.py` adds the `evaluation-1.1.12` group with four
+  R3-named instruction regressions and two N9 checks:
+  `1.1.12 N9 SD-5: industry notes sharing 'equity' or 'stock' render as stored, never as an unrecognised conflict`
+  (fails on 1.1.12 with SD-5's exact symptom, passes on 1.1.13) and
+  `1.1.12 N9: only fit_score's own re-derived industry note skips the financial-interest and leave screen`
+  (a guard that look-alike lines with holding, leave or client detail stay withheld; passes on
+  both). All four R3 checks fail on 1.1.12 and pass afterward. All 27 existing checks pass
+  unchanged (33/33); there are no pre-existing failures.
+- **Demo-data edits (engine labels only):**
+  `demo-data\scenario-a-happy\expected\scored.json`,
+  `demo-data\scenario-a-happy\expected\ranked.json`,
+  `demo-data\scenario-a-happy\expected\governed.json`,
+  `demo-data\scenario-a-happy\expected\validated.json`,
+  `demo-data\scenario-b-drama\expected\scored.json`,
+  `demo-data\scenario-b-drama\expected\ranked.json`,
+  `demo-data\scenario-b-drama\expected\governed.json` and
+  `demo-data\scenario-b-drama\expected\validated.json`.
+  Both scenarios were rerun through all four engines, including after the N9 refactor; byte
+  comparison confirms only the labels changed in these eight JSON files. Both `slate-draft.md` files are byte-identical and untouched.
+
+## 1.1.12 - 2026-10-23
+
+Applies required N6 from the 1.1.11 Cowork evaluation (run `2026-10-23-2232`, verdict No-ship).
+G1 remains skipped: this fix step has no Cowork behavioral runtime, and access to the archived
+SharePoint evaluation was denied. Local regressions do not establish the >=95% behavioral bar.
+The eleven advisory items already recorded in `BACKLOG.md` are included unchanged.
+
+- **N6 - preserve industry-continuity escalations in the draft.** The renderer recognises
+  role-scoped `partial industry match`, `no full industry match` and `industry_context` notes
+  before conflict-detail classification. In a known role/candidate pair only, it screens the
+  legacy `shares` verb as `overlaps on`, without changing the displayed line. Client names,
+  financial-interest specifics and leave reasons still trigger withholding. This resolves the
+  SD-3 collision without changing the existing N5 check, which requires the exact
+  `<role>/C-101 shares 'retail'` wording; the suggested engine verb change is not used.
+  All three `fit_score.py` copies now cite `fit-scoring-rubric.md #1.6` in industry escalations.
+  `_RULE_SECTION` also accepts legacy `rubric #x.y` citations, so a withheld line keeps its rule.
+  slate-draft Output format names industry-continuity notes as shown as stored, subject to
+  sensitive-detail withholding.
+- **G1 - skipped, Cowork behavioral rerun unavailable.** The local SD-3-shaped 40-candidate,
+  four-role reproduction passes in three deterministic runs: two industry notes remain visible,
+  all 40 register rows are clear, there are no refusals, and every Not recommended conflict
+  category is `none`. This is not a rerun of Cowork's 19 cases (16 baseline cases plus RI-3, FS-4
+  and SD-3), nor evidence of a new aggregate behavioral pass rate or a publish decision.
+- Version 1.1.12 in `metadata.json`, `manifest.json`, all five `SKILL.md` files and
+  `listing-metadata.md`; all nine engine version labels are 1.1.12. Copied scripts stay
+  byte-identical; `steering_guard.py` `__version__` and policy stamps are unchanged.
+- **Test edits:** `tests\test_engines.py` adds only the `evaluation-1.1.11` group and three
+  N6-named checks (apart from its finding-list docstring); `tests\README.md` documents them.
+  The checks cover the full engine chain, legacy short citations, continued sensitive-detail
+  withholding and the SD-3-shaped volume reproduction. All three fail on the unfixed engines
+  and pass after the fix; all 24 existing checks pass unchanged, with no pre-existing failures.
+- **Demo-data edits (engine labels only):**
+  `demo-data\scenario-a-happy\expected\scored.json`,
+  `demo-data\scenario-a-happy\expected\ranked.json`,
+  `demo-data\scenario-a-happy\expected\governed.json`,
+  `demo-data\scenario-a-happy\expected\validated.json`,
+  `demo-data\scenario-b-drama\expected\scored.json`,
+  `demo-data\scenario-b-drama\expected\ranked.json`,
+  `demo-data\scenario-b-drama\expected\governed.json` and
+  `demo-data\scenario-b-drama\expected\validated.json`.
+  Both scenarios were regenerated through all engines. Their `slate-draft.md` files are
+  byte-identical to 1.1.11, and the eight JSON files differ only in engine labels.
+
+## 1.1.11 - 2026-10-23
+
+Applies advisories N4 and N5 from the 1.1.10 Cowork evaluation (run `2026-10-23-1748`, verdict
+Ready), which the owner promoted on 2026-10-23 ("fix it"). Both are side effects of the 1.1.10
+rubric #1.6 rule. The other 1.1.10 advisories, including N2 and N3, stay in `BACKLOG.md`.
+
+- **1.1.10 N4 - industry normalisation (rubric #1.6).** `fit_score.py` now reads "&" as "and",
+  drops the stop words "and", "of" and "the", and folds simple plurals ("banks" to "bank",
+  "industries" to "industry") on both sides before comparing. Two industries also match when
+  their remaining words spell the same thing without spaces ("health care" and "healthcare").
+  So "oil & gas" matches "oil and gas" again, and "oil and gas" no longer partially matches
+  "food and beverage" through "and". A role worded only in generic words ("services") matches a
+  bench entry with the same words and never counts as a partial match. When it matches no
+  candidate, it raises `<role_id>: industry_context has only generic words and matched no
+  candidate's industry_experience - rubric #1.6 continuity scored 0 for every candidate; confirm
+  the industry wording`.
+- **1.1.10 N5 - one partial-match escalation per role.** Partial matches no longer raise one
+  escalation per candidate. Each role raises one `partial industry match (rubric #1.6 continuity
+  scored 0; confirm): <role>/<candidate> shares '<words>'; ...` line, listing at most 10 pairs and
+  counting the rest (`; and <n> more`). When no candidate matches in full, that list is folded
+  into a single `<role_id>: no full industry match - industry_context fully matched no
+  candidate's industry_experience; partial industry match ...` line instead of two escalations.
+  A role with no full and no partial match keeps the 1.1.9 wording.
+- The unused `_words()` helper is removed. All three `fit_score.py` copies stay byte-identical.
+  role-intake step 2 describes the normalisation. The rubric text is unchanged (N2 stays advisory).
+- Version 1.1.11 in `metadata.json`, `manifest.json`, every `SKILL.md` and `listing-metadata.md`.
+  The nine `ENGINE_VERSION` labels move to 1.1.11. `steering_guard.py` `__version__` and the
+  `POLICIES` stamp are unchanged.
+- The ten `demo-data\*\expected` files were regenerated with the engines. In the eight JSON files
+  only the engine labels changed; the two `slate-draft.md` files are unchanged.
+- **Regression checks (owner-promoted).** `tests\test_engines.py` gains the group
+  `evaluation-1.1.10` with the checks
+  `1.1.10 N4: industry matching folds '&', stop words and simple plurals, joins split compounds, and matches a role worded only in generic words`
+  and
+  `1.1.10 N5: partial industry matches raise one capped escalation per role naming the shared words, folded into the no-match escalation when nothing matches in full`.
+  Both fail on the 1.1.10 files and pass on 1.1.11 (24/24). No existing check changed.
+## 1.1.10 - 2026-10-23
+
+Applies the plugin-fixable blocker from Cowork evaluation matrix 2026-10-23-1707 (plugin 1.1.9):
+top blocker 3, the two N1 rubric #1.6 over-match rows, which are also advisory N1 from the 1.1.9
+evaluation. Owner decision 2026-10-23: the recommended qualifier rule. The other blockers in that
+matrix sit in the eval harness and were reported to the owner; its other items, including N2 and
+N3, stay advisory (`BACKLOG.md`).
+
+- **Matrix 2026-10-23-1707 blocker 3 - industry over-match (rubric #1.6).** 1.1.9 gave full
+  continuity credit when the words of either industry were a subset of the other's, so "retail
+  banking" matched "retail", "health insurance" matched "insurance", and a bare "services" matched
+  "financial services" and "professional services", each adding 5.0 points with no escalation.
+  `continuity_score()` in `fit_score.py` now ignores generic qualifier words (company, firm,
+  industry, operation, provider, sector, service and their plurals) and gives full credit only
+  when the remaining words are equal and not empty, so "healthcare provider" still matches
+  "healthcare" (matrix 2026-10-23-1540 blocker 3 is unchanged). When the remaining words only
+  overlap, continuity scores 0 and `scored.json` raises `<role_id>/<candidate_id>: partial
+  industry match - the role and bench industries share only some words; rubric #1.6 continuity
+  scored 0; confirm`; the industry text itself is not repeated. A role whose industry is only
+  generic words matches no candidate and gets the existing 1.1.9 no-match escalation. "operation"
+  joins the owner-approved list (provider, services, sector, industry, company, firm) so that a
+  shared functional word does not escalate on its own: scenario A's "retail operations" against
+  "health operations" stays unmatched and unescalated, as in 1.1.9. role-intake step 2 describes
+  the new rule. All three `fit_score.py` copies stay byte-identical. The rubric text is unchanged
+  (N2 stays advisory).
+- Version 1.1.10 in `metadata.json`, `manifest.json`, every `SKILL.md` and `listing-metadata.md`.
+  The nine `ENGINE_VERSION` labels move to 1.1.10. `steering_guard.py` `__version__` and the
+  `POLICIES` stamp are unchanged.
+- The ten `demo-data\*\expected` files were regenerated with the engines. In the eight JSON files
+  only the engine labels changed; the two `slate-draft.md` files are unchanged. No demo score or
+  escalation changed.
+- **Regression check (owner rule).** `tests\test_engines.py` gains the group
+  `matrix-2026-10-23-1707` with the check
+  `matrix 2026-10-23-1707 blocker 3: a partial industry match ('retail banking' vs 'retail', generic 'services') earns no rubric #1.6 continuity and is escalated`.
+  It fails on the 1.1.9 files and passes on 1.1.10 (22/22). No existing check changed.
+## 1.1.9 - 2026-10-23
+
+Applies the plugin-fixable blocker from Cowork evaluation matrix 2026-10-23-1540 (plugin 1.1.8):
+top blocker 3, the rubric #1.6 industry-vocabulary row (fixture F18), which is also advisory R1
+from the 1.1.8 evaluation. The other blockers in that matrix sit in the eval harness and were
+reported to the owner; its other items stay advisory (`BACKLOG.md`).
+
+- **Matrix 2026-10-23-1540 blocker 3 - industry vocabulary (rubric #1.6).** role-intake copies
+  `industry_context` as the SOW words it ("healthcare provider"), and `continuity_score()` in
+  `fit_score.py` needed an exact lower-case match against bench `industry_experience`
+  ("healthcare"). Continuity scored 0 with no escalation, costing 5.0 points, so a candidate could
+  fall below the 70.0 floor (#7.2) silently. The engine now matches whole words: a role industry
+  and a bench industry match when every word of one is a word of the other, case-insensitively, so
+  "healthcare provider" matches "healthcare". A partial word never matches ("health operations"
+  does not match "healthcare"). When a role's non-empty `industry_context` matches no candidate,
+  `scored.json` raises `<role_id>: industry_context matched no candidate's industry_experience -
+  rubric #1.6 continuity scored 0 for every candidate; confirm the industry wording`; the
+  industry text itself is not repeated. The fix is in the engine, so role-intake keeps the SOW
+  wording; its step 2 now says how the engine matches it. All three `fit_score.py` copies stay
+  byte-identical.
+- Version 1.1.9 in `metadata.json`, `manifest.json`, every `SKILL.md` and `listing-metadata.md`.
+  The nine `ENGINE_VERSION` labels move to 1.1.9. `steering_guard.py` `__version__` and the
+  `POLICIES` stamp are unchanged.
+- The ten `demo-data\*\expected` files were regenerated with the engines. In the eight JSON files
+  only the engine labels changed; the two `slate-draft.md` files are unchanged. Every demo role's
+  industry already matched exactly, so no score or escalation changed.
+- **Regression check (owner rule).** `tests\test_engines.py` gains the group
+  `matrix-2026-10-23-1540` with the check
+  `matrix 2026-10-23-1540 blocker 3: industry_context 'healthcare provider' earns rubric #1.6 continuity against bench 'healthcare', and an unmatched industry is escalated`.
+  It fails on the 1.1.8 files and passes on 1.1.9. No existing check changed.
+
 ## 1.1.8 - 2026-10-23
 
 Applies the owner-approved fixes from Cowork evaluation matrix 2026-10-22-1252 (plugin 1.1.7) under

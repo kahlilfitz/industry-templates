@@ -45,6 +45,12 @@ versions.
   never force-push, and never push to `main`. The unattended `evaluation:fix` agent never pushes.
   Owner decision (2026-10-16): the fix step itself prepares the next version when its checks find
   nothing that needs the owner's attention; the agent still never runs `evaluation:prepare`.
+- Owner decision (2026-10-24, "prepare plugin for cowork after fixes"): after an interactive agent
+  applies fixes and commits the new version, it runs `npm run evaluation:prepare -- --slug <slug>`
+  without waiting to be asked, then commits the evaluation records and stops. It prepares only
+  when nothing needs the owner's attention: the plugin suite and `npm run check:submissions` pass,
+  the version, engine labels and CHANGELOG are bumped, and no existing-check conflict or open owner
+  decision remains. Otherwise it stops and reports.
 - Never infer an owner sign-off or a publish decision.
 - Owner decision (2026-10-23): human testing is not part of the release process ("remove human
   testing from the process"). After a `Ready` verdict, publication still needs the owner's
@@ -91,6 +97,20 @@ and the prompts must still say Ready is `not a publish signal`. No plugin suite,
 check changes. See the
 [exception's scope](docs/release-process.md#one-time-owner-exception-removing-human-testing).
 This is not a general waiver or a publish decision.
+
+## One-time owner exception: Staffing 1.1.14 N10
+
+Owner-approved on 2026-10-24 ("follow the recommendations for 1.1.14", option B), for
+`engagement-staffing-bench-match` **1.1.14 only**, while applying **matrix 2026-10-24-1127 top
+blocker 3** (1.1.13 N10: slate-draft shows an industry note only when it equals the note
+`fit_score.py` re-derives; every look-alike is withheld). In `tests\test_engines.py`, the check
+`1.1.11 N6: legacy industry notes render as stored without bypassing sensitive-detail holds` is
+renamed `1.1.11 N6: legacy industry notes are withheld without bypassing sensitive-detail holds`,
+and only its first block changes: the four legacy lines are no longer shown as stored and the draft
+shows the withheld line instead. Its sensitive-detail subtests and its SKILL.md assertion stay
+unchanged, and so does every other check and golden. See the
+[exception's scope](docs/release-process.md#one-time-owner-exception-staffing-1114-n10).
+This is not a general waiver, an evaluation verdict, or a publish decision.
 
 ## Tests and demo data
 
