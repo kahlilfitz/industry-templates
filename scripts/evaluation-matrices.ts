@@ -2,6 +2,7 @@ import {
   constants,
   copyFileSync,
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   readFileSync,
@@ -13,9 +14,134 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
-import { ROOT, findSubmission, sha256, sharepointPluginDir } from "./evaluation-workflow.js";
+import {
+  EvaluationRun,
+  MatrixRequest,
+  MatrixRequestStatus,
+  ROOT,
+  findSubmission,
+  queuePairNames,
+  sha256,
+  sharepointPluginDir,
+} from "./evaluation-workflow.js";
 
+export const MATRIX_QUEUE_FOLDER = join("4 - Matrices", "1 - Queue");
 export const MATRIX_BUILT_FOLDER = join("4 - Matrices", "2 - Built");
+export const MATRIX_PROCESSED_FOLDER = join("4 - Matrices", "3 - Processed");
+
+function sameFile(path: string, digest: string, label: string): boolean {
+  if (!existsSync(path)) return false;
+  const stat = lstatSync(path);
+  if (!stat.isFile() || stat.isSymbolicLink() || sha256(path) !== digest) {
+    throw new Error(`${label} already holds a different ${basename(path)}: ${path}; nothing overwritten`);
+  }
+  return true;
+}
+
+/**
+ * Requests a Cowork evaluation matrix by copying the evaluated ZIP into `4 - Matrices\1 - Queue` as
+ * `<slug>-v<version>.zip`. Skips a version already queued, processed or built; never overwrites. The
+ * copy is staged in `4 - Matrices\` (the queue's volume, outside the folder Cowork watches) and
+ * hard-linked in, which fails rather than replaces, so Cowork never sees a partial ZIP.
+ */
+export function requestMatrix(options: {
+  queueRoot: string;
+  slug: string;
+  version: string;
+  artifactPath: string;
+  digest: string;
+  dryRun?: boolean;
+}): MatrixRequest {
+  const { queueRoot, slug, version, artifactPath, digest } = options;
+  const queueDir = join(queueRoot, MATRIX_QUEUE_FOLDER);
+  if (!existsSync(queueDir) || !statSync(queueDir).isDirectory()) {
+    throw new Error(`matrix queue folder does not exist: ${queueDir}`);
+  }
+  if (sha256(artifactPath) !== digest) {
+    throw new Error(`evaluated ZIP no longer matches its recorded SHA-256: ${artifactPath}`);
+  }
+  const { zip } = queuePairNames(slug, version);
+  const target = join(queueDir, zip);
+  const result = (status: MatrixRequestStatus): MatrixRequest => ({ zip: target, status, requestedAt: new Date().toISOString() });
+
+  if (sameFile(target, digest, "the matrix queue")) return result("already-queued");
+  if (sameFile(join(queueRoot, MATRIX_PROCESSED_FOLDER, zip), digest, "the matrix Processed folder")) {
+    return result("already-processed");
+  }
+  const builtDir = join(queueRoot, MATRIX_BUILT_FOLDER, slug);
+  if (existsSync(builtDir) && readdirSync(builtDir).some((name) => name.startsWith(`v${version} - `))) {
+    return result("already-built");
+  }
+  if (options.dryRun) return result("dry-run");
+
+  const staged = join(dirname(queueDir), `.matrix-${zip}.${process.pid}.tmp`);
+  copyFileSync(artifactPath, staged, constants.COPYFILE_EXCL);
+  try {
+    if (sha256(staged) !== digest) throw new Error("staged matrix ZIP hash verification failed");
+    try {
+      linkSync(staged, target);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") throw new Error(`${zip} appeared in the matrix queue while copying; nothing overwritten`);
+      // Without hard-link support, fall back to check-then-rename (same volume, so no EXDEV).
+      if (existsSync(target)) throw new Error(`${zip} appeared in the matrix queue while copying; nothing overwritten`);
+      renameSync(staged, target);
+    }
+  } finally {
+    if (existsSync(staged)) unlinkSync(staged);
+  }
+  if (sha256(target) !== digest) throw new Error(`queued matrix ZIP hash verification failed: ${target}`);
+  return result("queued");
+}
+
+/**
+ * Requests the matrix for an archived Ready run (its frozen inbox ZIP) and records the outcome in
+ * its evaluation-run.json. Throws if the run is not an archived Ready run or the request fails; a
+ * failure is recorded as `matrixRequestError` first.
+ */
+export function requestRunMatrix(runPath: string, queueRoot: string | undefined, dryRun = false): MatrixRequest {
+  const run = JSON.parse(readFileSync(runPath, "utf8")) as EvaluationRun;
+  if (run.status !== "archived" || run.automatedVerdict !== "Ready") {
+    throw new Error(
+      `only an archived Ready run gets a matrix; ${run.slug} ${run.artifactVersion} is ${run.status}` +
+        (run.automatedVerdict ? ` with verdict ${run.automatedVerdict}` : ""),
+    );
+  }
+  const save = (extra: Partial<EvaluationRun>) => {
+    const { matrixRequestError: _previous, ...rest } = run;
+    writeFileSync(runPath, `${JSON.stringify({ ...rest, ...extra }, null, 2)}\n`, "utf8");
+  };
+  try {
+    if (!queueRoot || !existsSync(queueRoot)) {
+      throw new Error("the Cowork queue folder is not available; pass --queue-root");
+    }
+    const request = requestMatrix({
+      queueRoot,
+      slug: run.slug,
+      version: run.artifactVersion,
+      artifactPath: join(dirname(runPath), run.artifactFile),
+      digest: run.artifactSha256,
+      dryRun,
+    });
+    if (!dryRun) save({ matrixRequest: request });
+    return request;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!dryRun) save({ matrixRequest: run.matrixRequest, matrixRequestError: message });
+    throw error;
+  }
+}
+
+export function describeMatrixRequest(request: MatrixRequest): string {
+  const messages: Record<MatrixRequestStatus, string> = {
+    queued: "Matrix requested: copied to Cowork's matrix queue",
+    "already-queued": "Matrix already requested: the same ZIP is in Cowork's matrix queue",
+    "already-processed": "Matrix already requested: Cowork has processed this ZIP",
+    "already-built": "Matrix already built for this version; nothing queued",
+    "dry-run": "Dry run: the matrix would be requested at",
+  };
+  return `${messages[request.status]}: ${request.zip}`;
+}
 export const MATRIX_DESTINATION_FOLDER = "Evaluation Matrices";
 export const MATRIX_LEDGER_FILE = join("evaluation-inbox", "matrix-collected.json");
 

@@ -15,6 +15,7 @@ import {
   VERDICT_REPORT,
   assertNonEmptyFile,
   confirmsArtifactMatch,
+  defaultQueueRoot,
   evaluationArchiveDir,
   extractVerdict,
   findReports,
@@ -27,6 +28,7 @@ import {
   sha256,
   verdictGuidance,
 } from "./evaluation-workflow.js";
+import { describeMatrixRequest, requestRunMatrix } from "./evaluation-matrices.js";
 
 // OneDrive briefly locks newly created folders while it registers them for sync.
 const TRANSIENT_RENAME_CODES = new Set(["EPERM", "EBUSY", "EACCES"]);
@@ -47,7 +49,7 @@ function renameWithRetry(from: string, to: string, attempts = 8): void {
 }
 
 function main(): void {
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(process.argv.slice(2), new Set(["no-matrix"]));
   const slug = requiredArg(args, "slug");
   const source = resolveInputPath(requiredArg(args, "source"));
   const inboxRoot = args.has("inbox-root")
@@ -179,6 +181,21 @@ function main(): void {
   console.log(`  Reports: ${REQUIRED_REPORTS.map((report) => basename(report)).join(", ")}`);
   console.log("");
   for (const line of verdictGuidance(automatedVerdict)) console.log(line);
+
+  if (automatedVerdict !== "Ready") return;
+  if (args.has("no-matrix")) {
+    console.log("Matrix request skipped (--no-matrix).");
+    return;
+  }
+  const queueRoot = args.has("queue-root")
+    ? resolveInputPath(requiredArg(args, "queue-root"))
+    : defaultQueueRoot();
+  try {
+    console.log(describeMatrixRequest(requestRunMatrix(manifestPath, queueRoot)));
+  } catch (error) {
+    console.error(`Matrix request failed (the evaluation is still archived): ${(error as Error).message}`);
+    console.error(`  Fix the cause, then run: npm run evaluation:request-matrix -- --slug ${slug} --version ${version}`);
+  }
 }
 
 try {

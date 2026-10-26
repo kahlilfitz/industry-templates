@@ -150,7 +150,9 @@ npm run evaluation:watch -- --slug <plugin-slug>     # archive the Cowork report
    `sharepoint/<Industry>/<slug>/Evaluation/<version>/` (Professional Services Waves 1 and 2:
    `sharepoint/Professional Services/Wave <n>/<Title Case Slug>/Evaluation/v<version>/`, the Retail
    layout). `sharepoint` is a gitignored link to the OneDrive-synced Industry Templates library; see
-   [SharePoint sync](docs/sharepoint-sync.md).
+   [SharePoint sync](docs/sharepoint-sync.md). On a `Ready` verdict it also copies the evaluated
+   ZIP into Cowork's matrix queue (`4 - Matrices/1 - Queue/<slug>-v<version>.zip`) to request the
+   evaluation matrix, never overwriting a queued file. `--no-matrix` turns this off.
 4. The watcher then runs `evaluation:fix`:
    - advisory items go to the submission's `BACKLOG.md`;
    - blocker and required items go to a Copilot CLI agent, which fixes them, bumps the version
@@ -163,9 +165,11 @@ recorded in the plugin's deployment doc. Human testing is not part of the proces
 
 ### Collect evaluation matrices
 
-After a passing evaluation, Cowork's matrix watcher processes requests in
-`<OneDrive>\Cowork Plugin Evals\4 - Matrices\1 - Queue` and writes a workbook and notes into
-`4 - Matrices\2 - Built`. Run the separate collector:
+After a passing evaluation, the archive step drops the matrix request into
+`<OneDrive>\Cowork Plugin Evals\4 - Matrices\1 - Queue` (or run
+`npm run evaluation:request-matrix -- --slug <slug> --version <version>`). Cowork's matrix watcher
+processes it and writes a workbook and notes into `4 - Matrices\2 - Built`. Run the separate
+collector:
 
 ```powershell
 npm run evaluation:watch-matrices

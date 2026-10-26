@@ -1,10 +1,21 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { type TestContext } from "node:test";
-import { MATRIX_BUILT_FOLDER, MATRIX_DESTINATION_FOLDER, MatrixWatcher, parseMatrixName, readMatrixLedger } from "./evaluation-matrices.js";
+import {
+  MATRIX_BUILT_FOLDER,
+  MATRIX_DESTINATION_FOLDER,
+  MATRIX_PROCESSED_FOLDER,
+  MATRIX_QUEUE_FOLDER,
+  MatrixWatcher,
+  describeMatrixRequest,
+  parseMatrixName,
+  readMatrixLedger,
+  requestMatrix,
+  requestRunMatrix,
+} from "./evaluation-matrices.js";
 import { ROOT, sha256, sharepointPluginDir } from "./evaluation-workflow.js";
 import { makeMos3Submission, write } from "./test-fixtures.js";
 
@@ -267,4 +278,140 @@ test("matrix CLI supports one-shot copying, dry runs and a nonzero exit for a fa
   const invalid = spawnSync(process.execPath, [...args, "--poll-seconds", "0"], { cwd: ROOT, encoding: "utf8" });
   assert.equal(invalid.status, 1);
   assert.match(invalid.stderr, /positive number/);
+});
+
+function matrixQueue(t: TestContext, verdict = "Ready") {
+  const root = mkdtempSync(join(tmpdir(), "evaluation-matrix-request-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const queueRoot = join(root, "queue");
+  for (const folder of [MATRIX_QUEUE_FOLDER, MATRIX_BUILT_FOLDER, MATRIX_PROCESSED_FOLDER]) {
+    mkdirSync(join(queueRoot, folder), { recursive: true });
+  }
+  const runDir = join(root, "inbox", SLUG, VERSION);
+  const artifactPath = join(runDir, `${SLUG}.zip`);
+  write(artifactPath, Buffer.from([0x50, 0x4b, 0x05, 0x06, 1, 2, 3]));
+  const digest = sha256(artifactPath);
+  const runPath = join(runDir, "evaluation-run.json");
+  const run = {
+    schemaVersion: 1, status: "archived", slug: SLUG, displayName: "T&E", industry: "Professional Services",
+    artifactVersion: VERSION, artifactFile: `${SLUG}.zip`, artifactSha256: digest, gitCommit: "abc", gitDirty: false,
+    preparedAt: "2026-10-23T00:00:00Z", coworkTaskName: "evaluate", automatedVerdict: verdict,
+  };
+  writeFileSync(runPath, `${JSON.stringify(run, null, 2)}\n`);
+  const target = join(queueRoot, MATRIX_QUEUE_FOLDER, `${SLUG}-v${VERSION}.zip`);
+  const options = { queueRoot, slug: SLUG, version: VERSION, artifactPath, digest };
+  return { root, queueRoot, runDir, runPath, artifactPath, digest, target, options };
+}
+
+test("a Ready run's matrix request copies the exact ZIP into the matrix queue once, with no staging left", (t) => {
+  const q = matrixQueue(t);
+  const dry = requestRunMatrix(q.runPath, q.queueRoot, true);
+  assert.equal(dry.status, "dry-run");
+  assert.equal(existsSync(q.target), false);
+  assert.equal(JSON.parse(readFileSync(q.runPath, "utf8")).matrixRequest, undefined);
+
+  const request = requestRunMatrix(q.runPath, q.queueRoot);
+  assert.equal(request.status, "queued");
+  assert.equal(request.zip, q.target);
+  assert.equal(sha256(q.target), q.digest);
+  assert.deepEqual(readdirSync(join(q.queueRoot, "4 - Matrices")).filter((name) => name.startsWith(".")), []);
+  assert.deepEqual(readdirSync(join(q.queueRoot, MATRIX_QUEUE_FOLDER)), [`${SLUG}-v${VERSION}.zip`]);
+  const recorded = JSON.parse(readFileSync(q.runPath, "utf8"));
+  assert.equal(recorded.matrixRequest.status, "queued");
+  assert.equal(recorded.matrixRequest.zip, q.target);
+  assert.match(describeMatrixRequest(request), /Matrix requested/);
+
+  assert.equal(requestRunMatrix(q.runPath, q.queueRoot).status, "already-queued");
+});
+
+test("a matrix request skips a version already processed or built and never overwrites a different ZIP", (t) => {
+  const q = matrixQueue(t);
+  const processed = join(q.queueRoot, MATRIX_PROCESSED_FOLDER, `${SLUG}-v${VERSION}.zip`);
+  write(processed, readFileSync(q.artifactPath));
+  assert.equal(requestMatrix(q.options).status, "already-processed");
+  write(processed, "different bytes");
+  assert.throws(() => requestMatrix(q.options), /different .*nothing overwritten/);
+  rmSync(processed);
+
+  mkdirSync(join(q.queueRoot, MATRIX_BUILT_FOLDER, SLUG, `v${VERSION} - 2026-10-23-1540`), { recursive: true });
+  assert.equal(requestMatrix(q.options).status, "already-built");
+  rmSync(join(q.queueRoot, MATRIX_BUILT_FOLDER, SLUG), { recursive: true });
+
+  write(q.target, "someone else's ZIP");
+  assert.throws(() => requestRunMatrix(q.runPath, q.queueRoot), /nothing overwritten/);
+  assert.equal(readFileSync(q.target, "utf8"), "someone else's ZIP");
+  assert.match(JSON.parse(readFileSync(q.runPath, "utf8")).matrixRequestError, /nothing overwritten/);
+  rmSync(q.target);
+  assert.equal(requestRunMatrix(q.runPath, q.queueRoot).status, "queued");
+  assert.equal(JSON.parse(readFileSync(q.runPath, "utf8")).matrixRequestError, undefined);
+});
+
+test("a matrix request refuses a changed ZIP, a missing queue folder and runs that are not archived Ready", (t) => {
+  const q = matrixQueue(t);
+  assert.throws(() => requestMatrix({ ...q.options, digest: "0".repeat(64) }), /no longer matches/);
+  assert.throws(() => requestMatrix({ ...q.options, queueRoot: join(q.root, "missing") }), /matrix queue folder does not exist/);
+  for (const queueRoot of [undefined, join(q.root, "missing")]) {
+    assert.throws(() => requestRunMatrix(q.runPath, queueRoot), /queue folder is not available/);
+    assert.match(JSON.parse(readFileSync(q.runPath, "utf8")).matrixRequestError, /queue folder is not available/);
+  }
+  for (const verdict of ["No-ship", "Blocked"]) {
+    const other = matrixQueue(t, verdict);
+    assert.throws(() => requestRunMatrix(other.runPath, other.queueRoot), new RegExp(`only an archived Ready run.*${verdict}`));
+    assert.equal(existsSync(other.target), false);
+  }
+  assert.equal(existsSync(q.target), false);
+});
+
+function archiveFixture(t: TestContext, verdict: string) {
+  const q = matrixQueue(t, verdict);
+  const run = JSON.parse(readFileSync(q.runPath, "utf8"));
+  writeFileSync(q.runPath, `${JSON.stringify({ ...run, status: "prepared", automatedVerdict: undefined }, null, 2)}\n`);
+  const source = join(q.root, "reports");
+  const body = `<p>${SLUG} ${VERSION}</p><p>Expected and observed SHA-256 ${q.digest}. SHA-256 check: MATCH</p><p>Automated verdict: ${verdict}</p>`;
+  for (const report of ["plugin-health.html", "behavioral-test-report.html", "recommendations.html"]) write(join(source, report), body);
+  const sharepointRoot = join(q.root, "library");
+  mkdirSync(sharepointRoot);
+  const args = ["--import", "tsx", join(ROOT, "scripts", "archive-evaluation.ts"), "--slug", SLUG, "--version", VERSION,
+    "--source", source, "--inbox-root", join(q.root, "inbox"), "--sharepoint-root", sharepointRoot, "--queue-root", q.queueRoot];
+  return { ...q, args };
+}
+
+test("archiving a Ready verdict requests the matrix; --no-matrix and other verdicts do not", (t) => {
+  const ready = archiveFixture(t, "Ready");
+  const output = execFileSync(process.execPath, ready.args, { cwd: ROOT, encoding: "utf8" });
+  assert.match(output, /Automated verdict: Ready/);
+  assert.match(output, /Matrix requested/);
+  assert.equal(sha256(ready.target), ready.digest);
+  assert.equal(JSON.parse(readFileSync(ready.runPath, "utf8")).matrixRequest.status, "queued");
+
+  const skipped = archiveFixture(t, "Ready");
+  assert.match(execFileSync(process.execPath, [...skipped.args, "--no-matrix"], { cwd: ROOT, encoding: "utf8" }), /Matrix request skipped/);
+  assert.equal(existsSync(skipped.target), false);
+
+  const noShip = archiveFixture(t, "No-ship");
+  const noShipOutput = execFileSync(process.execPath, noShip.args, { cwd: ROOT, encoding: "utf8" });
+  assert.doesNotMatch(noShipOutput, /Matrix/);
+  assert.equal(existsSync(noShip.target), false);
+
+  const conflict = archiveFixture(t, "Ready");
+  write(conflict.target, "someone else's ZIP");
+  const failed = spawnSync(process.execPath, conflict.args, { cwd: ROOT, encoding: "utf8" });
+  assert.equal(failed.status, 0, "a failed matrix request does not undo or fail the archive");
+  assert.match(failed.stderr, /Matrix request failed \(the evaluation is still archived\)/);
+  assert.equal(JSON.parse(readFileSync(conflict.runPath, "utf8")).status, "archived");
+  assert.equal(readFileSync(conflict.target, "utf8"), "someone else's ZIP");
+
+  const unavailable = archiveFixture(t, "Ready");
+  const missingQueue = [...unavailable.args.slice(0, -1), join(unavailable.root, "missing")];
+  const unavailableRun = spawnSync(process.execPath, missingQueue, { cwd: ROOT, encoding: "utf8" });
+  assert.equal(unavailableRun.status, 0);
+  assert.match(unavailableRun.stderr, /queue folder is not available[\s\S]*evaluation:request-matrix/);
+  assert.match(JSON.parse(readFileSync(unavailable.runPath, "utf8")).matrixRequestError, /queue folder is not available/);
+
+  const request = ["--import", "tsx", join(ROOT, "scripts", "request-matrix.ts"), "--slug", SLUG, "--version", VERSION,
+    "--inbox-root", join(skipped.root, "inbox"), "--queue-root", skipped.queueRoot];
+  assert.match(execFileSync(process.execPath, request, { cwd: ROOT, encoding: "utf8" }), /Matrix requested/);
+  assert.equal(sha256(skipped.target), skipped.digest);
+  const again = execFileSync(process.execPath, request, { cwd: ROOT, encoding: "utf8" });
+  assert.match(again, /already requested/);
 });

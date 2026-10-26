@@ -58,7 +58,15 @@ export type EvaluationRun = {
   queueSubmission?: QueueSubmission;
   /** Earlier queue submissions of this same ZIP, replaced by `prepare --requeue`. */
   queueHistory?: QueueSubmission[];
+  /** Set when a Ready run's ZIP was sent to Cowork's matrix queue (`4 - Matrices\1 - Queue`). */
+  matrixRequest?: MatrixRequest;
+  /** Why the matrix request after a Ready verdict failed; request it by hand with evaluation:request-matrix. */
+  matrixRequestError?: string;
 };
+
+export type MatrixRequestStatus = "queued" | "already-queued" | "already-processed" | "already-built" | "dry-run";
+
+export type MatrixRequest = { zip: string; status: MatrixRequestStatus; requestedAt: string };
 
 export type QueueSubmission = {
   zip: string;

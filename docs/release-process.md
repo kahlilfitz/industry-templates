@@ -16,7 +16,7 @@ part of it (owner, 2026-10-23: "remove human testing from the process"; "Publish
 | 1. Build the plugin | Contributor or agent | Follow [CONTRIBUTING.md](../CONTRIBUTING.md); `npm run check:submissions` |
 | 2. Package | Operator, or the fix step after clean fixes | `npm run evaluation:prepare -- --slug <slug>` |
 | 3. Evaluate in Cowork | Cowork (queue), or operator | Automatic from the queue folder; otherwise a new task with the ZIP and the prompt |
-| 4. Archive and fix | Watcher, then fix agent | `npm run evaluation:watch -- --slug <slug>` |
+| 4. Archive, request the matrix (Ready) and fix | Watcher, then fix agent | `npm run evaluation:watch -- --slug <slug>` |
 | 5. Publish decision | Owner | Record `Publish` in the plugin's deployment doc in SharePoint |
 | 6. Publish | Owner | Promote the evaluated ZIP byte for byte |
 
@@ -69,7 +69,7 @@ Test policy (owner, 2026-10-15):
 | `evaluation-inbox\<slug>\<version>\` | The plugin ZIP, the `evaluation-run.json` receipt, `cowork-prompt.txt` and `fix-brief.md` | No (local) |
 | `<OneDrive>\Documents\Cowork\Tasks\<task>\` | Cowork's `input\` and `output\` | No |
 | `<OneDrive>\Cowork Plugin Evals\` | Cowork's evaluation queue: `1 - To evaluate`, `2 - In progress`, `3 - Evaluated\<slug>\v<version> - <timestamp>\`, `4 - Needs attention` and `eval-ledger.md` | No |
-| `<OneDrive>\Cowork Plugin Evals\4 - Matrices\` | Cowork's matrix requests in `1 - Queue\` and completed workbook/notes pairs in `2 - Built\` | No |
+| `<OneDrive>\Cowork Plugin Evals\4 - Matrices\` | Matrix requests in `1 - Queue\` (dropped by the archive step after a Ready verdict), requests Cowork has taken in `3 - Processed\` and completed workbook/notes pairs in `2 - Built\` | No |
 | `sharepoint\<Industry>\<slug>\Evaluation\<version>\` | The archived ZIP and the three reports | No (SharePoint) |
 | `<SharePoint plugin folder>\Evaluation Matrices\` | Collected matrix workbooks and build notes, with their original versioned/timestamped names | No (SharePoint) |
 | `sharepoint\<Industry>\<slug>\` | The deployment doc (with the owner's Publish decision), the demo-data ZIP and promoted ZIPs | No (SharePoint) |
@@ -85,9 +85,33 @@ already in SharePoint are kept as history and are no longer updated.
 ## Collect evaluation matrices
 
 For passing evaluations, Cowork has a separate watcher that consumes matrix requests from
-`<OneDrive>\Cowork Plugin Evals\4 - Matrices\1 - Queue\` and writes completed outputs to
-`4 - Matrices\2 - Built\`. This repository's collector watches **Built**, not Queue; it neither
-requests nor builds matrices and does not change evaluation or publish decisions.
+`<OneDrive>\Cowork Plugin Evals\4 - Matrices\1 - Queue\`, moves each request to `3 - Processed\`
+and writes completed outputs to `4 - Matrices\2 - Built\`.
+
+**Requesting a matrix.** When `evaluation:archive` (and so `evaluation:watch`) archives a
+**Ready** verdict, it copies the frozen, hash-verified evaluated ZIP to
+`4 - Matrices\1 - Queue\<slug>-v<version>.zip`. Other verdicts request nothing. The request:
+
+- never overwrites: it stops, with nothing written, if `1 - Queue\` or `3 - Processed\` already
+  holds a different ZIP of that name;
+- is skipped when the same ZIP is already queued or processed, or `2 - Built\<slug>\v<version> - *`
+  already exists;
+- is staged in `4 - Matrices\` and hard-linked into `1 - Queue\` (which fails rather than
+  replaces), so Cowork never sees a partial ZIP;
+- is recorded as `matrixRequest` (or `matrixRequestError`, including an unavailable queue folder)
+  in the run's `evaluation-run.json`;
+- never undoes or fails the archive. If it fails, or the queue folder is unavailable, the
+  archive step prints the command to request it later.
+
+`--no-matrix` on `evaluation:archive` or `evaluation:watch` turns the request off. To request one
+by hand for an archived Ready run:
+
+```powershell
+npm run evaluation:request-matrix -- --slug <slug> --version <version>            # add --dry-run to preview
+```
+
+The collector below watches **Built**, not Queue; it does not build matrices and does not change
+evaluation or publish decisions.
 
 ```powershell
 npm run evaluation:watch-matrices
@@ -226,7 +250,7 @@ Rules:
 ## Step 4: archive and fix
 
 ```powershell
-npm run evaluation:watch -- --slug <slug>       # --no-fix: only archive; --no-prepare: fix but do not prepare; --model <id>: agent model
+npm run evaluation:watch -- --slug <slug>       # --no-fix: only archive; --no-prepare: fix but do not prepare; --no-matrix: do not request a matrix; --model <id>: agent model
 ```
 
 The watcher:
@@ -239,7 +263,9 @@ The watcher:
    layout: `<Industry>\Wave <n>\<Title Case Slug>\Evaluation\v<version>\`)
    (`evaluation:archive`). `recommendations.html` must state the slug, the version,
    `SHA-256 check: MATCH` and the verdict, or nothing is archived;
-4. runs the **fix step** (`evaluation:fix`).
+4. on a **Ready** verdict, **requests the evaluation matrix** by copying the evaluated ZIP into
+   Cowork's matrix queue ([Requesting a matrix](#collect-evaluation-matrices));
+5. runs the **fix step** (`evaluation:fix`).
 
 The fix step:
 
@@ -287,7 +313,10 @@ If there are no blocker or required items, the fix step does nothing and the plu
 
 - `npm run evaluation:archive -- --slug <slug> --source "<folder>"` archives a run. `<folder>` is
   the queue run folder (`3 - Evaluated\<slug>\v<version> - <timestamp>`) or a task's `output\`.
-  Timestamped report names are accepted.
+  Timestamped report names are accepted. A Ready verdict also requests the matrix (`--no-matrix`
+  turns this off; `--queue-root` points at another Cowork queue folder).
+- `npm run evaluation:request-matrix -- --slug <slug> --version <version>` requests the matrix for
+  an archived Ready run whose automatic request was skipped or failed.
 - `npm run evaluation:fix -- --slug <slug>` runs the fix step on an archived run. Add `--dry-run`
   to write the brief and the backlog without starting the agent.
 
@@ -295,7 +324,7 @@ If there are no blocker or required items, the fix step does nothing and the plu
 
 | Verdict | Meaning | Next |
 |---|---|---|
-| Ready | Every bar in the strategy is met | Step 5. This is not a publish signal |
+| Ready | Every bar in the strategy is met | The matrix is requested automatically; then step 5. This is not a publish signal |
 | No-ship | There is at least one blocker or required fix | The fix step runs; then step 2 for the new version |
 | Blocked | The evaluation could not complete, or the ZIP identity is unclear | Find out why. If the plugin must change, fix it and re-run as a new version. If not, the version stays; re-running an already archived version is not supported, so tell the owner |
 
